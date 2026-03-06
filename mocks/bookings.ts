@@ -1,0 +1,161 @@
+export type BookingStatus = 'waiting' | 'paid' | 'expired';
+
+export type BookingPriority = 1 | 2 | 3;
+
+export interface Booking {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  productCode: string;
+  projectId: string;
+  projectName: string;
+  status: BookingStatus;
+  bookingDate: string;
+  expiryDate: string;
+  amount: string;
+  amountValue: number;
+  priority: BookingPriority;
+}
+
+export const bookings: Booking[] = [
+  {
+    id: 'BK001',
+    customerName: 'Nguyễn Văn A',
+    customerPhone: '0901234567',
+    productCode: 'A1.01-15',
+    projectId: '1',
+    projectName: 'Masteri Thảo Điền',
+    status: 'waiting',
+    bookingDate: '2025-10-20',
+    expiryDate: '2025-10-27',
+    amount: '50.000.000',
+    amountValue: 50000000,
+    priority: 1,
+  },
+  {
+    id: 'BK002',
+    customerName: 'Trần Thị B',
+    customerPhone: '0912345678',
+    productCode: 'B2.05-08',
+    projectId: '2',
+    projectName: 'Vinhomes Central Park',
+    status: 'paid',
+    bookingDate: '2025-10-18',
+    expiryDate: '2025-10-25',
+    amount: '100.000.000',
+    amountValue: 100000000,
+    priority: 2,
+  },
+  {
+    id: 'BK003',
+    customerName: 'Lê Văn C',
+    customerPhone: '0923456789',
+    productCode: 'C3.10-12',
+    projectId: '3',
+    projectName: 'The Sun Avenue',
+    status: 'expired',
+    bookingDate: '2025-10-10',
+    expiryDate: '2025-10-17',
+    amount: '30.000.000',
+    amountValue: 30000000,
+    priority: 3,
+  },
+  {
+    id: 'BK004',
+    customerName: 'Phạm Thị D',
+    customerPhone: '0934567890',
+    productCode: 'A2.15-20',
+    projectId: '1',
+    projectName: 'Masteri Thảo Điền',
+    status: 'waiting',
+    bookingDate: '2025-10-22',
+    expiryDate: '2025-10-29',
+    amount: '45.000.000',
+    amountValue: 45000000,
+    priority: 1,
+  },
+  {
+    id: 'BK005',
+    customerName: 'Hoàng Văn E',
+    customerPhone: '0945678901',
+    productCode: 'B1.08-05',
+    projectId: '2',
+    projectName: 'Vinhomes Central Park',
+    status: 'paid',
+    bookingDate: '2025-10-19',
+    expiryDate: '2025-10-26',
+    amount: '80.000.000',
+    amountValue: 80000000,
+    priority: 2,
+  },
+  {
+    id: 'BK006',
+    customerName: 'Vũ Thị F',
+    customerPhone: '0956789012',
+    productCode: 'C2.12-18',
+    projectId: '3',
+    projectName: 'The Sun Avenue',
+    status: 'expired',
+    bookingDate: '2025-10-08',
+    expiryDate: '2025-10-15',
+    amount: '40.000.000',
+    amountValue: 40000000,
+    priority: 3,
+  },
+  {
+    id: 'BK007',
+    customerName: 'Đỗ Văn G',
+    customerPhone: '0967890123',
+    productCode: 'A3.05-10',
+    projectId: '1',
+    projectName: 'Masteri Thảo Điền',
+    status: 'waiting',
+    bookingDate: '2025-10-21',
+    expiryDate: '2025-10-28',
+    amount: '60.000.000',
+    amountValue: 60000000,
+    priority: 1,
+  },
+  {
+    id: 'BK008',
+    customerName: 'Bùi Thị H',
+    customerPhone: '0978901234',
+    productCode: 'B3.07-22',
+    projectId: '2',
+    projectName: 'Vinhomes Central Park',
+    status: 'paid',
+    bookingDate: '2025-10-17',
+    expiryDate: '2025-10-24',
+    amount: '90.000.000',
+    amountValue: 90000000,
+    priority: 2,
+  },
+  {
+    id: 'BK009',
+    customerName: 'Đinh Văn I',
+    customerPhone: '0989012345',
+    productCode: 'C1.15-09',
+    projectId: '3',
+    projectName: 'The Sun Avenue',
+    status: 'waiting',
+    bookingDate: '2025-10-23',
+    expiryDate: '2025-10-30',
+    amount: '35.000.000',
+    amountValue: 35000000,
+    priority: 3,
+  },
+  {
+    id: 'BK010',
+    customerName: 'Mai Thị K',
+    customerPhone: '0990123456',
+    productCode: 'A4.20-14',
+    projectId: '1',
+    projectName: 'Masteri Thảo Điền',
+    status: 'expired',
+    bookingDate: '2025-10-05',
+    expiryDate: '2025-10-12',
+    amount: '55.000.000',
+    amountValue: 55000000,
+    priority: 1,
+  },
+];

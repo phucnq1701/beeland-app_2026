@@ -1,0 +1,163 @@
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Colors from '@/constants/colors';
+
+export default function LoginScreen() {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const [companyCode, setCompanyCode] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleLogin = () => {
+    router.replace('/(tabs)/home');
+  };
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.content}>
+        <View style={styles.logoContainer}>
+          <View style={styles.logo}>
+            <Text style={styles.logoText}>BEELAND</Text>
+          </View>
+          <Text style={styles.welcomeText}>Đăng nhập</Text>
+          <Text style={styles.subText}>Vui lòng nhập thông tin để tiếp tục</Text>
+        </View>
+
+        <View style={styles.formContainer}>
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Mã công ty</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Nhập mã công ty"
+              placeholderTextColor={Colors.textLight}
+              value={companyCode}
+              onChangeText={setCompanyCode}
+              autoCapitalize="none"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Tài khoản</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Nhập tài khoản"
+              placeholderTextColor={Colors.textLight}
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Mật khẩu</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Nhập mật khẩu"
+              placeholderTextColor={Colors.textLight}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+          </View>
+
+          <TouchableOpacity style={styles.forgotPassword}>
+            <Text style={styles.forgotPasswordText}>Quên mật khẩu?</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.loginButton}
+            onPress={handleLogin}
+          >
+            <Text style={styles.loginButtonText}>Đăng nhập</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 48,
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    borderRadius: 20,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  logoText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: Colors.white,
+    letterSpacing: 1,
+  },
+  welcomeText: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  subText: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+  },
+  formContainer: {
+    width: '100%',
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: Colors.text,
+  },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginBottom: 24,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '500',
+  },
+  loginButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    padding: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+});
