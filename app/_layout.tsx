@@ -16,6 +16,9 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+      <Stack.Screen name="verify-otp" options={{ headerShown: false }} />
+      <Stack.Screen name="reset-password" options={{ headerShown: false }} />
       <Stack.Screen name="project/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="product/[id]" options={{ title: 'Chi tiết sản phẩm' }} />
       <Stack.Screen name="price-calculator/[id]" options={{ title: 'Tính giá sản phẩm' }} />
