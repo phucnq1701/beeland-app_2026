@@ -73,6 +73,13 @@ export default function LoginScreen() {
           >
             <Text style={styles.loginButtonText}>Đăng nhập</Text>
           </TouchableOpacity>
+
+          <View style={styles.registerRow}>
+            <Text style={styles.registerText}>Chưa có tài khoản? </Text>
+            <TouchableOpacity onPress={() => router.push('/register')}>
+              <Text style={styles.registerLink}>Đăng ký</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </View>
@@ -159,5 +166,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: Colors.white,
+  },
+  registerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  registerText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  registerLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary,
   },
 });
