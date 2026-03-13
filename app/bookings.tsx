@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -7,101 +7,256 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
-} from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { Search, Filter, X, ChevronRight, Calendar, Sparkles } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import Colors from '@/constants/colors';
-import { bookings, BookingStatus, BookingPriority } from '@/mocks/bookings';
-import { featuredProperties } from '@/mocks/properties';
+  ActivityIndicator,
+} from "react-native";
+import { Stack, useRouter } from "expo-router";
+import {
+  Search,
+  Filter,
+  X,
+  ChevronRight,
+  Calendar,
+  Sparkles,
+} from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { BlurView } from "expo-blur";
+import Colors from "@/constants/colors";
+import { bookings, BookingStatus, BookingPriority } from "@/mocks/bookings";
+import { featuredProperties } from "@/mocks/properties";
+import { UserService } from "./sevices/UserService";
+import { FilterService } from "./sevices/FilterService";
+import { ProjectService } from "./sevices/ProjectService";
 
 export default function BookingsScreen() {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedProject, setSelectedProject] = useState<string>('all');
-  const [selectedStatus, setSelectedStatus] = useState<BookingStatus | 'all'>('all');
+
+  const searchTimeout = useRef<any>(null);
+  const firstLoad = useRef(true);
+
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [selectedProject, setSelectedProject] = useState<string[]>([]);
+
+  const [selectedStatus, setSelectedStatus] = useState<BookingStatus | "all">(
+    "all"
+  );
+
   const [showFilters, setShowFilters] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const statusLabels: Record<BookingStatus | 'all', string> = {
-    all: 'Tất cả',
-    waiting: 'Chờ thanh toán',
-    paid: 'Đã thanh toán',
-    expired: 'Hết hạn',
+  const [statusList, setStatusList] = useState<any[]>([]);
+  const [duAn, setDuAn] = useState<any[]>([]);
+
+  const [data, setData] = useState<any[]>([]);
+  const [dataAll, setDataAll] = useState<any[]>([]);
+
+  const [selectTT, setSelectTT] = useState<any>("");
+
+  const [filterCondition, setFilterCondition] = useState({
+    TuNgay: "2000-01-01",
+    DenNgay: "2100-01-01",
+    DuAn: "",
+    MaTT: 0,
+    MaKhu: 0,
+    inputSearch: "",
+    Offset: 1,
+    Limit: 50,
+  });
+
+  /* ---------------- LOAD DATA ---------------- */
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      // const res = await UserService.getTransactions(filterCondition);
+
+      // setData(res?.data ?? []);
+      // setDataAll(res?.data ?? []);
+
+      const resTT = await FilterService.getStatusTransaction({});
+
+      let arr: any[] = [];
+      arr.push({ id: 0, title: "Tất cả", ColorWeb: "#8B5CF6" });
+
+      resTT?.data?.forEach((item) => {
+        arr.push({
+          id: item.MaTT,
+          title: item.TenTT,
+          ColorWeb: item.ColorWeb,
+        });
+      });
+
+      setStatusList(arr);
+
+      const resDA = await ProjectService.getProjects({});
+      setDuAn(resDA?.data ?? []);
+    } catch (err) {
+      console.log("loadData error", err);
+    }
+
+    setLoading(false);
   };
 
-  const statusColors: Record<BookingStatus, string> = {
-    waiting: '#F59E0B',
-    paid: '#10B981',
-    expired: '#EF4444',
+  const loadData2 = async (_filter: any) => {
+    setLoading(true);
+    try {
+      const res = await UserService.getTransactions(_filter);
+
+      setData(res?.data ?? []);
+      setDataAll(res?.data ?? []);
+    } catch (err) {
+      console.log("loadData2 error", err);
+    }
+    setLoading(false);
   };
 
-  const statusBgColors: Record<BookingStatus, string> = {
-    waiting: 'rgba(245, 158, 11, 0.2)',
-    paid: 'rgba(16, 185, 129, 0.2)',
-    expired: 'rgba(239, 68, 68, 0.2)',
+  /* ---------------- INIT ---------------- */
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  /* ---------------- SEARCH DEBOUNCE ---------------- */
+
+  useEffect(() => {
+    if (searchTimeout.current) {
+      clearTimeout(searchTimeout.current);
+    }
+
+    searchTimeout.current = setTimeout(() => {
+      const newFilter = {
+        ...filterCondition,
+        inputSearch: searchQuery,
+        Offset: 1,
+      };
+
+      setFilterCondition(newFilter);
+      loadData2(newFilter);
+    }, 500);
+
+    return () => clearTimeout(searchTimeout.current);
+  }, [searchQuery]);
+
+  /* ---------------- PROJECT FILTER ---------------- */
+
+  useEffect(() => {
+    if (firstLoad.current) {
+      firstLoad.current = false;
+      return;
+    }
+
+    const newFilter = {
+      ...filterCondition,
+      DuAn: selectedProjects.length
+        ? "," + selectedProjects.join(",") + ","
+        : "",
+      Offset: 1,
+    };
+
+    setFilterCondition(newFilter);
+
+    loadData2(newFilter);
+  }, [selectedProjects]);
+
+  /* ---------------- STATUS FILTER ---------------- */
+
+  const applyChangeFilter = (p: string, v: any) => {
+    const newFilter = {
+      ...filterCondition,
+      [p]: v,
+      MaTT: v,
+      Offset: 1,
+    };
+
+    setFilterCondition(newFilter);
+
+    loadData2(newFilter);
   };
 
-  const priorityLabels: Record<BookingPriority, string> = {
-    1: 'Ưu tiên 1',
-    2: 'Ưu tiên 2',
-    3: 'Ưu tiên 3',
+  /* ---------------- STATUS CLICK LOCAL ---------------- */
+
+  const handleTT = (trangThai: string) => {
+    setSelectTT(trangThai);
+
+    if (trangThai === "Tất cả") {
+      setData(dataAll);
+    } else {
+      const filtered = dataAll?.filter((item) => item?.tenTT === trangThai);
+      setData(filtered);
+    }
   };
 
-  const priorityColors: Record<BookingPriority, string> = {
-    1: '#FCA5A5',
-    2: '#FDBA74',
-    3: '#93C5FD',
-  };
-
-  const priorityBgColors: Record<BookingPriority, string> = {
-    1: 'rgba(252, 165, 165, 0.2)',
-    2: 'rgba(253, 186, 116, 0.2)',
-    3: 'rgba(147, 197, 253, 0.2)',
-  };
+  /* ---------------- MEMO ---------------- */
 
   const filteredBookings = useMemo(() => {
     return bookings.filter((booking) => {
       const matchesSearch =
-        searchQuery === '' ||
-        booking.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        searchQuery === "" ||
+        booking.customerName
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
         booking.customerPhone.includes(searchQuery) ||
         booking.productCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
         booking.id.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesProject =
-        selectedProject === 'all' || booking.projectId === selectedProject;
+        selectedProject === "all" || booking.projectId === selectedProject;
 
       const matchesStatus =
-        selectedStatus === 'all' || booking.status === selectedStatus;
+        selectedStatus === "all" || booking.status === selectedStatus;
 
       return matchesSearch && matchesProject && matchesStatus;
     });
   }, [searchQuery, selectedProject, selectedStatus]);
 
-  const stats = useMemo(() => {
-    return {
-      total: bookings.length,
-      waiting: bookings.filter((b) => b.status === 'waiting').length,
-      paid: bookings.filter((b) => b.status === 'paid').length,
-      expired: bookings.filter((b) => b.status === 'expired').length,
-    };
-  }, []);
+  /* ---------------- CLEAR FILTER ---------------- */
 
   const clearFilters = () => {
-    setSearchQuery('');
-    setSelectedProject('all');
-    setSelectedStatus('all');
+    setSearchQuery("");
+    setSelectedProject("all");
+    setSelectedStatus("all");
     setShowFilters(false);
   };
 
-  const hasActiveFilters = selectedProject !== 'all' || selectedStatus !== 'all';
+  const hasActiveFilters =
+    selectedProject !== "all" || selectedStatus !== "all";
 
+  const statusLabels: Record<BookingStatus | "all", string> = {
+    all: "Tất cả",
+    waiting: "Chờ thanh toán",
+    paid: "Đã thanh toán",
+    expired: "Hết hạn",
+  };
+
+  const statusColors: Record<any, string> = {
+    "Chờ duyệt": "#F59E0B",
+    "Đã duyệt": "#10B981",
+    "Hủy booking": "#EF4444",
+  };
+
+  const statusBgColors: Record<BookingStatus, string> = {
+    waiting: "rgba(245, 158, 11, 0.2)",
+    paid: "rgba(16, 185, 129, 0.2)",
+    expired: "rgba(239, 68, 68, 0.2)",
+  };
+
+  const priorityColors: Record<any, string> = {
+    "Chờ duyệt": "#FCA5A5",
+    "Đã duyệt": "#FDBA74",
+    "Huỷ booking": "#93C5FD",
+  };
+
+  const priorityBgColors: Record<any, string> = {
+    "Chờ duyệt": "rgba(252, 165, 165, 0.2)",
+    "Đã duyệt": "rgba(253, 186, 116, 0.2)",
+    "Huỷ booking": "rgba(147, 197, 253, 0.2)",
+  };
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: '',
+          title: "",
           headerStyle: {
             backgroundColor: Colors.background,
           },
@@ -145,25 +300,35 @@ export default function BookingsScreen() {
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
-            {searchQuery !== '' && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
+            {searchQuery !== "" && (
+              <TouchableOpacity onPress={() => setSearchQuery("")}>
                 <X color={Colors.textTertiary} size={20} />
               </TouchableOpacity>
             )}
           </BlurView>
 
           <TouchableOpacity
-            style={[styles.filterButton, hasActiveFilters && styles.filterButtonActive]}
+            style={[
+              styles.filterButton,
+              hasActiveFilters && styles.filterButtonActive,
+            ]}
             onPress={() => setShowFilters(!showFilters)}
           >
-            <BlurView intensity={hasActiveFilters ? 0 : 30} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView
+              intensity={hasActiveFilters ? 0 : 30}
+              tint="dark"
+              style={StyleSheet.absoluteFill}
+            />
             {hasActiveFilters && (
               <LinearGradient
                 colors={Colors.gradients.primary}
                 style={StyleSheet.absoluteFill}
               />
             )}
-            <Filter color={hasActiveFilters ? Colors.white : Colors.text} size={20} />
+            <Filter
+              color={hasActiveFilters ? Colors.white : Colors.text}
+              size={20}
+            />
           </TouchableOpacity>
         </View>
 
@@ -171,11 +336,12 @@ export default function BookingsScreen() {
         {showFilters && (
           <BlurView intensity={40} tint="dark" style={styles.filtersPanel}>
             <LinearGradient
-              colors={['rgba(255,255,255,0.05)', 'transparent']}
+              colors={["rgba(255,255,255,0.05)", "transparent"]}
               style={StyleSheet.absoluteFill}
             />
             <View style={styles.filterSection}>
               <Text style={styles.filterLabel}>Dự án</Text>
+
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -184,68 +350,101 @@ export default function BookingsScreen() {
                 <TouchableOpacity
                   style={[
                     styles.filterChip,
-                    selectedProject === 'all' && styles.filterChipActive,
+                    selectedProjects.length === 0 && styles.filterChipActive,
                   ]}
-                  onPress={() => setSelectedProject('all')}
+                  onPress={() => {
+                    setSelectedProjects([]);
+                  }}
                 >
                   <Text
                     style={[
                       styles.filterChipText,
-                      selectedProject === 'all' && styles.filterChipTextActive,
+                      selectedProjects.length === 0 &&
+                        styles.filterChipTextActive,
                     ]}
                   >
                     Tất cả
                   </Text>
                 </TouchableOpacity>
-                {featuredProperties.map((project) => (
-                  <TouchableOpacity
-                    key={project.id}
-                    style={[
-                      styles.filterChip,
-                      selectedProject === project.id && styles.filterChipActive,
-                    ]}
-                    onPress={() => setSelectedProject(project.id)}
-                  >
-                    <Text
+
+                {duAn.map((project) => {
+                  const active = selectedProjects.includes(project.MaDA);
+
+                  return (
+                    <TouchableOpacity
+                      key={project.MaDA}
                       style={[
-                        styles.filterChipText,
-                        selectedProject === project.id && styles.filterChipTextActive,
+                        styles.filterChip,
+                        active ? styles.filterChipActive : null,
                       ]}
+                      onPress={() => {
+                        if (active) {
+                          setSelectedProjects((prev) =>
+                            prev.filter((id) => id !== project.MaDA)
+                          );
+                        } else {
+                          setSelectedProjects((prev) => [
+                            ...prev,
+                            project.MaDA,
+                          ]);
+                        }
+                      }}
                     >
-                      {project.title}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          active ? styles.filterChipTextActive : null,
+                        ]}
+                      >
+                        {project.TenDA}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             </View>
 
             <View style={styles.filterSection}>
               <Text style={styles.filterLabel}>Trạng thái</Text>
-              <View style={styles.filterOptions}>
-                {(['all', 'waiting', 'paid', 'expired'] as const).map((status) => (
-                  <TouchableOpacity
-                    key={status}
-                    style={[
-                      styles.filterChip,
-                      selectedStatus === status && styles.filterChipActive,
-                    ]}
-                    onPress={() => setSelectedStatus(status)}
-                  >
-                    <Text
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterOptions}
+              >
+                <View style={styles.filterOptions}>
+                  {statusList.map((status) => (
+                    <TouchableOpacity
+                      key={status?.id}
                       style={[
-                        styles.filterChipText,
-                        selectedStatus === status && styles.filterChipTextActive,
+                        styles.filterChip,
+                        filterCondition?.MaTT === status?.id &&
+                          styles.filterChipActive,
                       ]}
+                      onPress={() => {
+                        applyChangeFilter("TrangThai", status?.id);
+                      }}
                     >
-                      {statusLabels[status]}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          filterCondition?.MaTT === status?.id &&
+                            styles.filterChipTextActive,
+                        ]}
+                      >
+                        {status?.title}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
             </View>
 
             {hasActiveFilters && (
-              <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
+              <TouchableOpacity
+                style={styles.clearButton}
+                onPress={clearFilters}
+              >
                 <Text style={styles.clearButtonText}>Xóa bộ lọc</Text>
               </TouchableOpacity>
             )}
@@ -253,15 +452,22 @@ export default function BookingsScreen() {
         )}
 
         {/* Stats Row - Clickable Status Tabs */}
-        <View style={styles.statsContainer}>
+        {/* <View style={styles.statsContainer}>
           <TouchableOpacity
             activeOpacity={0.7}
-            style={[styles.statCardWrapper, selectedStatus === 'all' && styles.statCardSelected]}
-            onPress={() => setSelectedStatus('all')}
+            style={[
+              styles.statCardWrapper,
+              selectedStatus === "all" && styles.statCardSelected,
+            ]}
+            onPress={() => setSelectedStatus("all")}
           >
             <BlurView intensity={30} tint="dark" style={styles.statCard}>
               <LinearGradient
-                colors={selectedStatus === 'all' ? ['rgba(139, 92, 246, 0.45)', 'rgba(139, 92, 246, 0.2)'] : ['rgba(139, 92, 246, 0.3)', 'rgba(139, 92, 246, 0.1)']}
+                colors={
+                  selectedStatus === "all"
+                    ? ["rgba(139, 92, 246, 0.45)", "rgba(139, 92, 246, 0.2)"]
+                    : ["rgba(139, 92, 246, 0.3)", "rgba(139, 92, 246, 0.1)"]
+                }
                 style={StyleSheet.absoluteFill}
               />
               <Text style={styles.statValue}>{stats.total}</Text>
@@ -270,134 +476,295 @@ export default function BookingsScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.7}
-            style={[styles.statCardWrapper, selectedStatus === 'waiting' && styles.statCardSelected]}
-            onPress={() => setSelectedStatus(selectedStatus === 'waiting' ? 'all' : 'waiting')}
+            style={[
+              styles.statCardWrapper,
+              selectedStatus === "waiting" && styles.statCardSelected,
+            ]}
+            onPress={() =>
+              setSelectedStatus(
+                selectedStatus === "waiting" ? "all" : "waiting"
+              )
+            }
           >
             <BlurView intensity={30} tint="dark" style={styles.statCard}>
               <LinearGradient
-                colors={selectedStatus === 'waiting' ? ['rgba(245, 158, 11, 0.45)', 'rgba(245, 158, 11, 0.2)'] : ['rgba(245, 158, 11, 0.3)', 'rgba(245, 158, 11, 0.1)']}
+                colors={
+                  selectedStatus === "waiting"
+                    ? ["rgba(245, 158, 11, 0.45)", "rgba(245, 158, 11, 0.2)"]
+                    : ["rgba(245, 158, 11, 0.3)", "rgba(245, 158, 11, 0.1)"]
+                }
                 style={StyleSheet.absoluteFill}
               />
-              <Text style={[styles.statValue, { color: Colors.iconYellow }]}>{stats.waiting}</Text>
+              <Text style={[styles.statValue, { color: Colors.iconYellow }]}>
+                {stats.waiting}
+              </Text>
               <Text style={styles.statLabel}>Chờ TT</Text>
             </BlurView>
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.7}
-            style={[styles.statCardWrapper, selectedStatus === 'paid' && styles.statCardSelected]}
-            onPress={() => setSelectedStatus(selectedStatus === 'paid' ? 'all' : 'paid')}
+            style={[
+              styles.statCardWrapper,
+              selectedStatus === "paid" && styles.statCardSelected,
+            ]}
+            onPress={() =>
+              setSelectedStatus(selectedStatus === "paid" ? "all" : "paid")
+            }
           >
             <BlurView intensity={30} tint="dark" style={styles.statCard}>
               <LinearGradient
-                colors={selectedStatus === 'paid' ? ['rgba(16, 185, 129, 0.45)', 'rgba(16, 185, 129, 0.2)'] : ['rgba(16, 185, 129, 0.3)', 'rgba(16, 185, 129, 0.1)']}
+                colors={
+                  selectedStatus === "paid"
+                    ? ["rgba(16, 185, 129, 0.45)", "rgba(16, 185, 129, 0.2)"]
+                    : ["rgba(16, 185, 129, 0.3)", "rgba(16, 185, 129, 0.1)"]
+                }
                 style={StyleSheet.absoluteFill}
               />
-              <Text style={[styles.statValue, { color: Colors.iconGreen }]}>{stats.paid}</Text>
+              <Text style={[styles.statValue, { color: Colors.iconGreen }]}>
+                {stats.paid}
+              </Text>
               <Text style={styles.statLabel}>Đã TT</Text>
             </BlurView>
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.7}
-            style={[styles.statCardWrapper, selectedStatus === 'expired' && styles.statCardSelected]}
-            onPress={() => setSelectedStatus(selectedStatus === 'expired' ? 'all' : 'expired')}
+            style={[
+              styles.statCardWrapper,
+              selectedStatus === "expired" && styles.statCardSelected,
+            ]}
+            onPress={() =>
+              setSelectedStatus(
+                selectedStatus === "expired" ? "all" : "expired"
+              )
+            }
           >
             <BlurView intensity={30} tint="dark" style={styles.statCard}>
               <LinearGradient
-                colors={selectedStatus === 'expired' ? ['rgba(239, 68, 68, 0.45)', 'rgba(239, 68, 68, 0.2)'] : ['rgba(239, 68, 68, 0.3)', 'rgba(239, 68, 68, 0.1)']}
+                colors={
+                  selectedStatus === "expired"
+                    ? ["rgba(239, 68, 68, 0.45)", "rgba(239, 68, 68, 0.2)"]
+                    : ["rgba(239, 68, 68, 0.3)", "rgba(239, 68, 68, 0.1)"]
+                }
                 style={StyleSheet.absoluteFill}
               />
-              <Text style={[styles.statValue, { color: Colors.error }]}>{stats.expired}</Text>
+              <Text style={[styles.statValue, { color: Colors.error }]}>
+                {stats.expired}
+              </Text>
               <Text style={styles.statLabel}>Hết hạn</Text>
             </BlurView>
           </TouchableOpacity>
+        </View> */}
+
+        <View style={styles.statsContainer}>
+          {/* TẤT CẢ */}
+          {/* <TouchableOpacity
+            activeOpacity={0.7}
+            style={[
+              styles.statCardWrapper,
+              filterCondition?.MaTT === 0 && styles.statCardSelected,
+            ]}
+            onPress={() => applyChangeFilter("TrangThai", 0)}
+          >
+            <BlurView intensity={30} tint="dark" style={styles.statCard}>
+              <LinearGradient
+                colors={
+                  filterCondition?.MaTT === 0
+                    ? ["rgba(139, 92, 246, 0.45)", "rgba(139, 92, 246, 0.2)"]
+                    : ["rgba(139, 92, 246, 0.3)", "rgba(139, 92, 246, 0.1)"]
+                }
+                style={StyleSheet.absoluteFill}
+              />
+              <Text style={styles.statValue}>{data?.length}</Text>
+              <Text style={styles.statLabel}>Tất cả</Text>
+            </BlurView>
+          </TouchableOpacity> */}
+
+          {/* STATUS LIST */}
+          {statusList
+            // .filter((s) => s.id !== 0)
+            .map((status) => {
+              const active = selectTT === status.title;
+
+              return (
+                <TouchableOpacity
+                  key={status.id}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.statCardWrapper,
+                    active && styles.statCardSelected,
+                  ]}
+                  onPress={() => handleTT(status?.title)}
+                >
+                  <BlurView intensity={30} tint="dark" style={styles.statCard}>
+                    <LinearGradient
+                      colors={
+                        active
+                          ? [`${status.ColorWeb}80`, `${status.ColorWeb}40`]
+                          : [`${status.ColorWeb}60`, `${status.ColorWeb}20`]
+                      }
+                      style={StyleSheet.absoluteFill}
+                    />
+
+                    <Text
+                      style={[styles.statValue, { color: status.ColorWeb }]}
+                    >
+                      {/* {statusCount[status.title] || 0} */}
+                      {status.id === 0
+                        ? dataAll?.length
+                        : dataAll?.filter(
+                            (item) => item?.tenTT === status.title
+                          )?.length}
+                    </Text>
+
+                    <Text style={styles.statLabel}>{status.title}</Text>
+                  </BlurView>
+                </TouchableOpacity>
+              );
+            })}
         </View>
 
         {/* Active filter indicator */}
-        {selectedStatus !== 'all' && (
+        {selectedStatus !== "all" && (
           <View style={styles.activeFilterRow}>
             <Text style={styles.activeFilterText}>
-              Đang lọc: {statusLabels[selectedStatus]} ({filteredBookings.length})
+              Đang lọc: {statusLabels[selectedStatus]} (
+              {filteredBookings.length})
             </Text>
-            <TouchableOpacity onPress={() => setSelectedStatus('all')}>
+            <TouchableOpacity onPress={() => setSelectedStatus("all")}>
               <X color={Colors.textSecondary} size={16} />
             </TouchableOpacity>
           </View>
         )}
 
         {/* Booking List */}
-        <View style={styles.listContainer}>
-          {filteredBookings.length === 0 ? (
-            <View style={styles.emptyState}>
-              <BlurView intensity={30} tint="dark" style={styles.emptyIconContainer}>
-                <Calendar color={Colors.textSecondary} size={48} />
-              </BlurView>
-              <Text style={styles.emptyText}>Không tìm thấy booking nào</Text>
-              <Text style={styles.emptySubtext}>
-                Thử thay đổi bộ lọc hoặc tìm kiếm khác
-              </Text>
-            </View>
-          ) : (
-            filteredBookings.map((booking) => (
-              <TouchableOpacity
-                key={booking.id}
-                style={styles.bookingCard}
-                activeOpacity={0.8}
-                onPress={() => router.push(`/booking/${booking.id}`)}
-              >
-                <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
-                  style={StyleSheet.absoluteFill}
-                />
-                
-                <View style={styles.cardLeft}>
-                  <View style={styles.cardHeader}>
-                    <View
-                      style={[
-                        styles.statusDot,
-                        { backgroundColor: statusColors[booking.status] },
-                      ]}
-                    />
-                    <Text style={styles.bookingId}>#{booking.id}</Text>
-                    <BlurView intensity={30} tint="dark" style={[styles.priorityBadge, { backgroundColor: priorityBgColors[booking.priority] }]}>
-                      <Text
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
+          </View>
+        ) : (
+          <View style={styles.listContainer}>
+            {data.length === 0 ? (
+              <View style={styles.emptyState}>
+                <BlurView
+                  intensity={30}
+                  tint="dark"
+                  style={styles.emptyIconContainer}
+                >
+                  <Calendar color={Colors.textSecondary} size={48} />
+                </BlurView>
+                <Text style={styles.emptyText}>Không tìm thấy booking nào</Text>
+                <Text style={styles.emptySubtext}>
+                  Thử thay đổi bộ lọc hoặc tìm kiếm khác
+                </Text>
+              </View>
+            ) : (
+              data.map((booking) => (
+                <TouchableOpacity
+                  key={booking.maPGC}
+                  style={styles.bookingCard}
+                  activeOpacity={0.8}
+                  // onPress={() => router.push(`/booking/${booking.maPGC}`)}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/booking/[id]",
+                      params: { id: booking.maPGC },
+                    })
+                  }
+                >
+                  <BlurView
+                    intensity={25}
+                    tint="dark"
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <LinearGradient
+                    colors={[
+                      "rgba(255,255,255,0.08)",
+                      "rgba(255,255,255,0.02)",
+                    ]}
+                    style={StyleSheet.absoluteFill}
+                  />
+
+                  <View style={styles.cardLeft}>
+                    <View style={styles.cardHeader}>
+                      <View
                         style={[
-                          styles.priorityText,
-                          { color: priorityColors[booking.priority] },
+                          styles.statusDot,
+                          { backgroundColor: statusColors[booking.tenTT] },
+                        ]}
+                      />
+                      <Text style={styles.bookingId}>#{booking.maSanPham}</Text>
+                      <BlurView
+                        intensity={30}
+                        tint="dark"
+                        style={[
+                          styles.priorityBadge,
+                          { backgroundColor: priorityBgColors[booking.tenTT] },
                         ]}
                       >
-                        {priorityLabels[booking.priority]}
+                        <Text
+                          style={[
+                            styles.priorityText,
+                            { color: priorityColors[booking.tenTT] },
+                          ]}
+                        >
+                          {booking?.tenTT}
+                        </Text>
+                      </BlurView>
+                    </View>
+
+                    <Text style={styles.customerName}>{booking.khachHang}</Text>
+                    <Text style={styles.productCode}>{booking.soPhieu}</Text>
+
+                    <View style={styles.dateRow}>
+                      <Text style={styles.dateText}>
+                        {new Date(booking.ngayGiuCho).toLocaleDateString(
+                          "vi-VN",
+                          { day: "2-digit", month: "2-digit", year: "numeric" }
+                        )}
                       </Text>
-                    </BlurView>
+                      <Text style={styles.dateSeparator}>•</Text>
+                      <Text style={styles.projectName} numberOfLines={1}>
+                        {booking.tenDA}
+                      </Text>
+                    </View>
                   </View>
-                  
-                  <Text style={styles.customerName}>{booking.customerName}</Text>
-                  <Text style={styles.productCode}>{booking.productCode}</Text>
-                  
-                  <View style={styles.dateRow}>
-                    <Text style={styles.dateText}>
-                      {new Date(booking.expiryDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
+
+                  <View style={styles.cardRight}>
+                    <Text style={styles.amount}>
+                      {new Intl.NumberFormat("vi-VN").format(
+                        booking.tongGiaGomVAT
+                      )}{" "}
+                      đ
                     </Text>
-                    <Text style={styles.dateSeparator}>•</Text>
-                    <Text style={styles.projectName} numberOfLines={1}>{booking.projectName}</Text>
-                  </View>
-                </View>
-                
-                <View style={styles.cardRight}>
-                  <Text style={styles.amount}>{booking.amount}</Text>
-                  <BlurView intensity={30} tint="dark" style={[styles.statusBadge, { backgroundColor: statusBgColors[booking.status] }]}>
-                    <Text
-                      style={[styles.statusText, { color: statusColors[booking.status] }]}
+                    <BlurView
+                      intensity={30}
+                      tint="dark"
+                      // style={[
+                      //   styles.statusBadge,
+                      //   { backgroundColor: statusBgColors[booking.status] },
+                      // ]}
+                    >
+                      {/* <Text
+                      style={[
+                        styles.statusText,
+                        { color: statusColors[booking.status] },
+                      ]}
                     >
                       {statusLabels[booking.status]}
-                    </Text>
-                  </BlurView>
-                  <ChevronRight color={Colors.textTertiary} size={20} style={{ marginTop: 4 }} />
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
+                    </Text> */}
+                    </BlurView>
+                    <ChevronRight
+                      color={Colors.textTertiary}
+                      size={20}
+                      style={{ marginTop: 4 }}
+                    />
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -409,31 +776,31 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   backgroundGradient: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
   },
   orb1: {
-    position: 'absolute',
+    position: "absolute",
     width: 250,
     height: 250,
     borderRadius: 125,
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    backgroundColor: "rgba(139, 92, 246, 0.15)",
     top: -50,
     right: -50,
-    filter: Platform.OS === 'web' ? 'blur(60px)' : undefined,
+    filter: Platform.OS === "web" ? "blur(60px)" : undefined,
   },
   orb2: {
-    position: 'absolute',
+    position: "absolute",
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: 'rgba(232, 111, 37, 0.1)',
+    backgroundColor: "rgba(232, 111, 37, 0.1)",
     bottom: 100,
     left: -50,
-    filter: Platform.OS === 'web' ? 'blur(50px)' : undefined,
+    filter: Platform.OS === "web" ? "blur(50px)" : undefined,
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -444,36 +811,36 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   greetingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     marginBottom: 4,
   },
   greeting: {
     fontSize: 14,
     color: Colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   headerTitle: {
     fontSize: 32,
-    fontWeight: '800',
+    fontWeight: "800",
     color: Colors.text,
     letterSpacing: -0.5,
   },
   searchSection: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
     marginBottom: 16,
   },
   searchContainer: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: 16,
     paddingHorizontal: 16,
     height: 52,
     gap: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.glass.border,
   },
@@ -486,9 +853,9 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.glass.border,
   },
@@ -499,7 +866,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 16,
     marginBottom: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.glass.border,
   },
@@ -508,12 +875,12 @@ const styles = StyleSheet.create({
   },
   filterLabel: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.text,
     marginBottom: 12,
   },
   filterOptions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
   },
   filterChip: {
@@ -530,7 +897,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.textSecondary,
   },
   filterChipTextActive: {
@@ -539,7 +906,7 @@ const styles = StyleSheet.create({
   clearButton: {
     marginTop: 8,
     paddingVertical: 12,
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 12,
     backgroundColor: Colors.glass.light,
     borderWidth: 1,
@@ -547,20 +914,20 @@ const styles = StyleSheet.create({
   },
   clearButtonText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.text,
   },
   statsContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
     marginBottom: 20,
   },
   statCardWrapper: {
     flex: 1,
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1.5,
-    borderColor: 'transparent',
+    borderColor: "transparent",
   },
   statCardSelected: {
     borderColor: Colors.primary,
@@ -578,47 +945,47 @@ const styles = StyleSheet.create({
   },
   statCard: {
     paddingVertical: 16,
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   activeFilterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 8,
     marginBottom: 12,
     paddingVertical: 6,
     paddingHorizontal: 14,
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    backgroundColor: "rgba(139, 92, 246, 0.1)",
     borderRadius: 20,
-    alignSelf: 'center',
+    alignSelf: "center",
   },
   activeFilterText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.primary,
   },
   statValue: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: "800",
     color: Colors.text,
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   listContainer: {
     gap: 10,
   },
   bookingCard: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderRadius: 20,
     padding: 16,
-    alignItems: 'center',
-    overflow: 'hidden',
+    alignItems: "center",
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.glass.border,
     ...Platform.select({
@@ -638,19 +1005,19 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   priorityBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   priorityText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   statusDot: {
     width: 8,
@@ -659,22 +1026,22 @@ const styles = StyleSheet.create({
   },
   bookingId: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.text,
   },
   customerName: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.text,
   },
   productCode: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   dateText: {
@@ -691,28 +1058,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardRight: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
     gap: 6,
     marginLeft: 12,
   },
   amount: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: Colors.primary,
   },
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 10,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   statusText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 60,
     gap: 16,
   },
@@ -720,20 +1087,31 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.glass.border,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.text,
   },
   emptySubtext: {
     fontSize: 14,
     color: Colors.textSecondary,
-    textAlign: 'center',
+    textAlign: "center",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop:100
+  },
+
+  loadingText: {
+    marginTop: 10,
+    color: Colors.textSecondary,
   },
 });

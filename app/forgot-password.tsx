@@ -1,42 +1,79 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Building2, Mail } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ArrowLeft, Building2, Mail } from "lucide-react-native";
+import Colors from "@/constants/colors";
+import { AuthService } from "./sevices/AuthService";
 
 export default function ForgotPasswordScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [companyCode, setCompanyCode] = useState<string>('');
-  const [email, setEmail] = useState<string>('');
+
+  const [companyCode, setCompanyCode] = useState("");
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const isValid = companyCode.trim().length > 0 && email.trim().length > 0;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!isValid) return;
-    console.log('[ForgotPassword] Submitting:', { companyCode, email });
-    router.push({
-      pathname: '/verify-otp',
-      params: { companyCode, email },
-    });
+
+    try {
+      setLoading(true);
+
+      const res = await AuthService.forgotPassword({
+        TenCTDKVT: companyCode.trim(),
+        Email: email.trim(),
+      });
+
+      console.log("Forgot password:", res);
+
+      if (res?.status === 200) {
+        Alert.alert("Thông báo", "OTP đã được gửi về email");
+
+        router.push({
+          pathname: "/verify-otp",
+          params: {
+            companyCode,
+            email,
+          },
+        });
+      } else {
+        Alert.alert("Lỗi", res?.message || "Không gửi được OTP");
+      }
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Lỗi", "Không kết nối được server");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
         >
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
-            testID="back-button"
           >
             <ArrowLeft size={24} color={Colors.text} />
           </TouchableOpacity>
@@ -45,7 +82,9 @@ export default function ForgotPasswordScreen() {
             <View style={styles.iconCircle}>
               <Mail size={32} color={Colors.primary} />
             </View>
+
             <Text style={styles.title}>Quên mật khẩu</Text>
+
             <Text style={styles.subtitle}>
               Nhập mã công ty và email để nhận mã xác thực OTP
             </Text>
@@ -54,8 +93,14 @@ export default function ForgotPasswordScreen() {
           <View style={styles.formContainer}>
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Mã công ty</Text>
+
               <View style={styles.inputWrapper}>
-                <Building2 size={20} color={Colors.textLight} style={styles.inputIcon} />
+                <Building2
+                  size={20}
+                  color={Colors.textLight}
+                  style={styles.inputIcon}
+                />
+
                 <TextInput
                   style={styles.input}
                   placeholder="Nhập mã công ty"
@@ -63,35 +108,45 @@ export default function ForgotPasswordScreen() {
                   value={companyCode}
                   onChangeText={setCompanyCode}
                   autoCapitalize="none"
-                  testID="company-code-input"
                 />
               </View>
             </View>
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Email</Text>
+
               <View style={styles.inputWrapper}>
-                <Mail size={20} color={Colors.textLight} style={styles.inputIcon} />
+                <Mail
+                  size={20}
+                  color={Colors.textLight}
+                  style={styles.inputIcon}
+                />
+
                 <TextInput
                   style={styles.input}
-                  placeholder="Nhập email của bạn"
+                  placeholder="Nhập email"
                   placeholderTextColor={Colors.textLight}
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
                   keyboardType="email-address"
-                  testID="email-input"
                 />
               </View>
             </View>
 
             <TouchableOpacity
-              style={[styles.submitButton, !isValid && styles.submitButtonDisabled]}
+              style={[
+                styles.submitButton,
+                (!isValid || loading) && styles.submitButtonDisabled,
+              ]}
               onPress={handleSubmit}
-              disabled={!isValid}
-              testID="submit-button"
+              disabled={!isValid || loading}
             >
-              <Text style={styles.submitButtonText}>Gửi mã OTP</Text>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.submitButtonText}>Gửi mã OTP</Text>
+              )}
             </TouchableOpacity>
           </View>
         </ScrollView>

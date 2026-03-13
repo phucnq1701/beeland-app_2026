@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -11,26 +11,35 @@ import {
   Modal,
   Image,
   ActivityIndicator,
-} from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { ChevronLeft, Save, ChevronDown, Check, ImagePlus, X, Users } from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker';
-import * as Contacts from 'expo-contacts';
-import Colors from '@/constants/colors';
-import { CustomerType } from '@/mocks/customers';
+} from "react-native";
+import { Stack, useRouter } from "expo-router";
+import {
+  ChevronLeft,
+  Save,
+  ChevronDown,
+  Check,
+  ImagePlus,
+  X,
+  Users,
+} from "lucide-react-native";
+import * as ImagePicker from "expo-image-picker";
+import * as Contacts from "expo-contacts";
+import Colors from "@/constants/colors";
+import { CustomerType } from "@/mocks/customers";
+import { CustomerService } from "../sevices/CustomerService";
 
 export default function CustomerNewScreen() {
   const router = useRouter();
 
   const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    cccd: '',
-    type: 'personal' as CustomerType,
-    company: '',
-    taxCode: '',
-    status: 'potential' as 'active' | 'potential' | 'inactive',
+    name: "",
+    phone: "",
+    email: "",
+    cccd: "",
+    type: "personal" as CustomerType,
+    company: "",
+    taxCode: "",
+    status: "potential" as "active" | "potential" | "inactive",
     images: [] as string[],
   });
 
@@ -39,54 +48,65 @@ export default function CustomerNewScreen() {
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [showContactsModal, setShowContactsModal] = useState(false);
   const [phoneContacts, setPhoneContacts] = useState<Contacts.Contact[]>([]);
-  const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
+  const [selectedContacts, setSelectedContacts] = useState<Set<string>>(
+    new Set()
+  );
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
 
   const statusOptions: {
-    value: 'active' | 'potential' | 'inactive';
+    value: "active" | "potential" | "inactive";
     label: string;
     color: string;
   }[] = [
-    { value: 'potential', label: 'Tiềm năng', color: '#F59E0B' },
-    { value: 'active', label: 'Đang giao dịch', color: '#10B981' },
-    { value: 'inactive', label: 'Không hoạt động', color: '#9CA3AF' },
+    { value: "potential", label: "Tiềm năng", color: "#F59E0B" },
+    { value: "active", label: "Đang giao dịch", color: "#10B981" },
+    { value: "inactive", label: "Không hoạt động", color: "#9CA3AF" },
   ];
 
   const getSelectedStatusLabel = () => {
-    return statusOptions.find((option) => option.value === formData.status)?.label || '';
+    return (
+      statusOptions.find((option) => option.value === formData.status)?.label ||
+      ""
+    );
   };
 
   const getSelectedStatusColor = () => {
-    return statusOptions.find((option) => option.value === formData.status)?.color || Colors.textSecondary;
+    return (
+      statusOptions.find((option) => option.value === formData.status)?.color ||
+      Colors.textSecondary
+    );
   };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
     if (!formData.name.trim()) {
-      newErrors.name = 'Vui lòng nhập tên khách hàng';
+      newErrors.name = "Vui lòng nhập tên khách hàng";
     }
 
     if (!formData.phone.trim()) {
-      newErrors.phone = 'Vui lòng nhập số điện thoại';
+      newErrors.phone = "Vui lòng nhập số điện thoại";
     } else if (!/^0\d{9}$/.test(formData.phone)) {
-      newErrors.phone = 'Số điện thoại không hợp lệ';
+      newErrors.phone = "Số điện thoại không hợp lệ";
     }
 
-    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Email không hợp lệ';
+    if (
+      formData.email.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)
+    ) {
+      newErrors.email = "Email không hợp lệ";
     }
 
     if (formData.cccd.trim() && !/^\d{12}$/.test(formData.cccd)) {
-      newErrors.cccd = 'Số CCCD phải có đúng 12 chữ số';
+      newErrors.cccd = "Số CCCD phải có đúng 12 chữ số";
     }
 
-    if (formData.type === 'business' && !formData.company.trim()) {
-      newErrors.company = 'Vui lòng nhập tên công ty';
+    if (formData.type === "business" && !formData.company.trim()) {
+      newErrors.company = "Vui lòng nhập tên công ty";
     }
 
-    if (formData.type === 'business' && !formData.taxCode.trim()) {
-      newErrors.taxCode = 'Vui lòng nhập mã số thuế';
+    if (formData.type === "business" && !formData.taxCode.trim()) {
+      newErrors.taxCode = "Vui lòng nhập mã số thuế";
     }
 
     setErrors(newErrors);
@@ -97,7 +117,7 @@ export default function CustomerNewScreen() {
     try {
       setIsPickingImage(true);
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ["images"],
         allowsMultipleSelection: true,
         quality: 0.8,
       });
@@ -110,11 +130,11 @@ export default function CustomerNewScreen() {
         });
       }
     } catch (error) {
-      console.error('Error picking images:', error);
-      if (Platform.OS === 'web') {
-        alert('Không thể chọn ảnh');
+      console.error("Error picking images:", error);
+      if (Platform.OS === "web") {
+        alert("Không thể chọn ảnh");
       } else {
-        Alert.alert('Lỗi', 'Không thể chọn ảnh');
+        Alert.alert("Lỗi", "Không thể chọn ảnh");
       }
     } finally {
       setIsPickingImage(false);
@@ -127,14 +147,17 @@ export default function CustomerNewScreen() {
   };
 
   const requestContactsPermission = async () => {
-    if (Platform.OS === 'web') {
-      alert('Chức năng này không khả dụng trên web');
+    if (Platform.OS === "web") {
+      alert("Chức năng này không khả dụng trên web");
       return false;
     }
 
     const { status } = await Contacts.requestPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Thông báo', 'Cần cấp quyền truy cập danh bạ để sử dụng chức năng này');
+    if (status !== "granted") {
+      Alert.alert(
+        "Thông báo",
+        "Cần cấp quyền truy cập danh bạ để sử dụng chức năng này"
+      );
       return false;
     }
     return true;
@@ -160,11 +183,11 @@ export default function CustomerNewScreen() {
         );
         setPhoneContacts(contactsWithPhone);
       }
-      
+
       setShowContactsModal(true);
     } catch (error) {
-      console.error('Error loading contacts:', error);
-      Alert.alert('Lỗi', 'Không thể tải danh bạ');
+      console.error("Error loading contacts:", error);
+      Alert.alert("Lỗi", "Không thể tải danh bạ");
     } finally {
       setIsLoadingContacts(false);
     }
@@ -182,49 +205,54 @@ export default function CustomerNewScreen() {
 
   const importSelectedContacts = () => {
     const contactsToImport = phoneContacts.filter((contact) => {
-      const contactId = (contact as any).id ?? `temp-${contact.name}-${Math.random()}`;
+      const contactId =
+        (contact as any).id ?? `temp-${contact.name}-${Math.random()}`;
       return selectedContacts.has(contactId);
     });
 
     if (contactsToImport.length === 0) {
-      if (Platform.OS === 'web') {
-        alert('Vui lòng chọn ít nhất một liên hệ');
+      if (Platform.OS === "web") {
+        alert("Vui lòng chọn ít nhất một liên hệ");
       } else {
-        Alert.alert('Thông báo', 'Vui lòng chọn ít nhất một liên hệ');
+        Alert.alert("Thông báo", "Vui lòng chọn ít nhất một liên hệ");
       }
       return;
     }
 
     if (contactsToImport.length === 1) {
       const contact = contactsToImport[0];
-      const phone = contact.phoneNumbers?.[0]?.number?.replace(/[^0-9]/g, '') || '';
-      const email = contact.emails?.[0]?.email || '';
-      
+      const phone =
+        contact.phoneNumbers?.[0]?.number?.replace(/[^0-9]/g, "") || "";
+      const email = contact.emails?.[0]?.email || "";
+
       setFormData({
         ...formData,
-        name: contact.name || '',
+        name: contact.name || "",
         phone: phone,
         email: email,
       });
     } else {
       const firstContact = contactsToImport[0];
-      const phone = firstContact.phoneNumbers?.[0]?.number?.replace(/[^0-9]/g, '') || '';
-      const email = firstContact.emails?.[0]?.email || '';
-      
+      const phone =
+        firstContact.phoneNumbers?.[0]?.number?.replace(/[^0-9]/g, "") || "";
+      const email = firstContact.emails?.[0]?.email || "";
+
       setFormData({
         ...formData,
-        name: firstContact.name || '',
+        name: firstContact.name || "",
         phone: phone,
         email: email,
       });
-      
-      if (Platform.OS === 'web') {
-        alert(`Đã nhập ${contactsToImport.length} liên hệ. Thông tin liên hệ đầu tiên đã được điền vào form. Bạn có thể tạo thêm khách hàng cho các liên hệ còn lại sau.`);
+
+      if (Platform.OS === "web") {
+        alert(
+          `Đã nhập ${contactsToImport.length} liên hệ. Thông tin liên hệ đầu tiên đã được điền vào form. Bạn có thể tạo thêm khách hàng cho các liên hệ còn lại sau.`
+        );
       } else {
         Alert.alert(
-          'Thông báo',
+          "Thông báo",
           `Đã nhập ${contactsToImport.length} liên hệ. Thông tin liên hệ đầu tiên đã được điền vào form. Bạn có thể tạo thêm khách hàng cho các liên hệ còn lại sau.`,
-          [{ text: 'OK' }]
+          [{ text: "OK" }]
         );
       }
     }
@@ -233,23 +261,49 @@ export default function CustomerNewScreen() {
     setShowContactsModal(false);
   };
 
-  const handleSave = () => {
-    if (!validateForm()) {
-      return;
-    }
+  const handleSave = async () => {
+    if (!validateForm()) return;
 
-    if (Platform.OS === 'web') {
-      alert('Tạo khách hàng thành công!');
-    } else {
-      Alert.alert(
-        'Thành công',
-        'Tạo khách hàng thành công!',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
-      return;
+    try {
+      const payload = {
+        maKH: 0,
+        hoTen: formData.name,
+        diDong: formData.phone,
+        email: formData.email,
+        soCMND: formData.cccd,
+        diaChi: "",
+        maNKH: 0,
+        maNguon: 0,
+        ghiChu: "",
+      };
+
+      const res = await CustomerService.addCustomer(payload);
+
+      if (res?.status === 2000) {
+        if (Platform.OS === "web") {
+          alert(res.message);
+          router.back();
+        } else {
+          Alert.alert("Thành công", res.message, [
+            { text: "OK", onPress: () => router.back() },
+          ]);
+        }
+      } else {
+        if (Platform.OS === "web") {
+          alert(res?.message || "Tạo khách hàng thất bại");
+        } else {
+          Alert.alert("Lỗi", res?.message || "Tạo khách hàng thất bại");
+        }
+      }
+    } catch (error) {
+      console.log("ADD CUSTOMER ERROR:", error);
+
+      if (Platform.OS === "web") {
+        alert("Không thể kết nối server");
+      } else {
+        Alert.alert("Lỗi", "Không thể kết nối server");
+      }
     }
-    
-    router.back();
   };
 
   return (
@@ -257,17 +311,17 @@ export default function CustomerNewScreen() {
       <Stack.Screen
         options={{
           headerShown: true,
-          title: 'Tạo khách hàng mới',
+          title: "Tạo khách hàng mới",
           headerStyle: {
             backgroundColor: Colors.primary,
           },
           headerTintColor: Colors.white,
           headerTitleStyle: {
-            fontWeight: '700',
+            fontWeight: "700",
             fontSize: 18,
           },
           headerLeft: () => (
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => router.back()}
               style={styles.headerBackButton}
             >
@@ -275,7 +329,7 @@ export default function CustomerNewScreen() {
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={handleSave}
               style={styles.headerSaveButton}
             >
@@ -298,15 +352,15 @@ export default function CustomerNewScreen() {
               style={[
                 styles.typeButton,
                 styles.typeButtonLeft,
-                formData.type === 'personal' && styles.typeButtonActive,
+                formData.type === "personal" && styles.typeButtonActive,
               ]}
-              onPress={() => setFormData({ ...formData, type: 'personal' })}
+              onPress={() => setFormData({ ...formData, type: "personal" })}
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.typeButtonText,
-                  formData.type === 'personal' && styles.typeButtonTextActive,
+                  formData.type === "personal" && styles.typeButtonTextActive,
                 ]}
               >
                 Cá nhân
@@ -316,15 +370,15 @@ export default function CustomerNewScreen() {
               style={[
                 styles.typeButton,
                 styles.typeButtonRight,
-                formData.type === 'business' && styles.typeButtonActive,
+                formData.type === "business" && styles.typeButtonActive,
               ]}
-              onPress={() => setFormData({ ...formData, type: 'business' })}
+              onPress={() => setFormData({ ...formData, type: "business" })}
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.typeButtonText,
-                  formData.type === 'business' && styles.typeButtonTextActive,
+                  formData.type === "business" && styles.typeButtonTextActive,
                 ]}
               >
                 Doanh nghiệp
@@ -336,7 +390,7 @@ export default function CustomerNewScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Thông tin cơ bản</Text>
-            {Platform.OS !== 'web' && (
+            {Platform.OS !== "web" && (
               <TouchableOpacity
                 style={styles.contactsButton}
                 onPress={loadContacts}
@@ -348,26 +402,32 @@ export default function CustomerNewScreen() {
                 ) : (
                   <>
                     <Users color={Colors.primary} size={18} />
-                    <Text style={styles.contactsButtonText}>Chọn từ danh bạ</Text>
+                    <Text style={styles.contactsButtonText}>
+                      Chọn từ danh bạ
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>
             )}
           </View>
-          
+
           <View style={styles.formGroup}>
             <Text style={styles.label}>
               Tên khách hàng <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
               style={[styles.input, errors.name && styles.inputError]}
-              placeholder={formData.type === 'personal' ? 'Nguyễn Văn A' : 'Công ty TNHH ABC'}
+              placeholder={
+                formData.type === "personal"
+                  ? "Nguyễn Văn A"
+                  : "Công ty TNHH ABC"
+              }
               placeholderTextColor={Colors.textSecondary}
               value={formData.name}
               onChangeText={(text) => {
                 setFormData({ ...formData, name: text });
                 if (errors.name) {
-                  setErrors({ ...errors, name: '' });
+                  setErrors({ ...errors, name: "" });
                 }
               }}
             />
@@ -386,12 +446,14 @@ export default function CustomerNewScreen() {
               onChangeText={(text) => {
                 setFormData({ ...formData, phone: text });
                 if (errors.phone) {
-                  setErrors({ ...errors, phone: '' });
+                  setErrors({ ...errors, phone: "" });
                 }
               }}
               keyboardType="phone-pad"
             />
-            {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+            {errors.phone && (
+              <Text style={styles.errorText}>{errors.phone}</Text>
+            )}
           </View>
 
           <View style={styles.formGroup}>
@@ -404,13 +466,15 @@ export default function CustomerNewScreen() {
               onChangeText={(text) => {
                 setFormData({ ...formData, email: text });
                 if (errors.email) {
-                  setErrors({ ...errors, email: '' });
+                  setErrors({ ...errors, email: "" });
                 }
               }}
               keyboardType="email-address"
               autoCapitalize="none"
             />
-            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+            {errors.email && (
+              <Text style={styles.errorText}>{errors.email}</Text>
+            )}
           </View>
 
           <View style={styles.formGroup}>
@@ -421,11 +485,11 @@ export default function CustomerNewScreen() {
               placeholderTextColor={Colors.textSecondary}
               value={formData.cccd}
               onChangeText={(text) => {
-                const numericText = text.replace(/[^0-9]/g, '');
+                const numericText = text.replace(/[^0-9]/g, "");
                 if (numericText.length <= 12) {
                   setFormData({ ...formData, cccd: numericText });
                   if (errors.cccd) {
-                    setErrors({ ...errors, cccd: '' });
+                    setErrors({ ...errors, cccd: "" });
                   }
                 }
               }}
@@ -436,10 +500,10 @@ export default function CustomerNewScreen() {
           </View>
         </View>
 
-        {formData.type === 'business' && (
+        {formData.type === "business" && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Thông tin doanh nghiệp</Text>
-            
+
             <View style={styles.formGroup}>
               <Text style={styles.label}>
                 Tên công ty <Text style={styles.required}>*</Text>
@@ -452,11 +516,13 @@ export default function CustomerNewScreen() {
                 onChangeText={(text) => {
                   setFormData({ ...formData, company: text });
                   if (errors.company) {
-                    setErrors({ ...errors, company: '' });
+                    setErrors({ ...errors, company: "" });
                   }
                 }}
               />
-              {errors.company && <Text style={styles.errorText}>{errors.company}</Text>}
+              {errors.company && (
+                <Text style={styles.errorText}>{errors.company}</Text>
+              )}
             </View>
 
             <View style={styles.formGroup}>
@@ -471,12 +537,14 @@ export default function CustomerNewScreen() {
                 onChangeText={(text) => {
                   setFormData({ ...formData, taxCode: text });
                   if (errors.taxCode) {
-                    setErrors({ ...errors, taxCode: '' });
+                    setErrors({ ...errors, taxCode: "" });
                   }
                 }}
                 keyboardType="number-pad"
               />
-              {errors.taxCode && <Text style={styles.errorText}>{errors.taxCode}</Text>}
+              {errors.taxCode && (
+                <Text style={styles.errorText}>{errors.taxCode}</Text>
+              )}
             </View>
           </View>
         )}
@@ -505,7 +573,7 @@ export default function CustomerNewScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Hình ảnh</Text>
-          
+
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -611,11 +679,14 @@ export default function CustomerNewScreen() {
 
               <ScrollView style={styles.contactsList}>
                 {phoneContacts.map((contact) => {
-                  const contactId = (contact as any).id ?? `temp-${contact.name}-${Math.random()}`;
-                  
+                  const contactId =
+                    (contact as any).id ??
+                    `temp-${contact.name}-${Math.random()}`;
+
                   const isSelected = selectedContacts.has(contactId);
-                  const phone = contact.phoneNumbers?.[0]?.number || 'Không có SĐT';
-                  const email = contact.emails?.[0]?.email || 'Không có email';
+                  const phone =
+                    contact.phoneNumbers?.[0]?.number || "Không có SĐT";
+                  const email = contact.emails?.[0]?.email || "Không có email";
 
                   return (
                     <TouchableOpacity
@@ -634,7 +705,9 @@ export default function CustomerNewScreen() {
                             isSelected && styles.contactCheckboxSelected,
                           ]}
                         >
-                          {isSelected && <Check color={Colors.white} size={16} />}
+                          {isSelected && (
+                            <Check color={Colors.white} size={16} />
+                          )}
                         </View>
                         <View style={styles.contactInfo}>
                           <Text style={styles.contactName}>{contact.name}</Text>
@@ -660,7 +733,7 @@ export default function CustomerNewScreen() {
           </View>
         </Modal>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.saveButton}
           onPress={handleSave}
           activeOpacity={0.8}
@@ -695,43 +768,43 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.text,
   },
   contactsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: "#EFF6FF",
     borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.primary,
   },
   contactsButtonText: {
     fontSize: 13,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.primary,
   },
   typeContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.border,
   },
   typeButton: {
     flex: 1,
     paddingVertical: 14,
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: Colors.white,
   },
   typeButtonLeft: {
@@ -744,7 +817,7 @@ const styles = StyleSheet.create({
   },
   typeButtonText: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   typeButtonTextActive: {
@@ -755,12 +828,12 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
     marginBottom: 8,
   },
   required: {
-    color: '#EF4444',
+    color: "#EF4444",
   },
   input: {
     backgroundColor: Colors.white,
@@ -773,18 +846,18 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   inputError: {
-    borderColor: '#EF4444',
+    borderColor: "#EF4444",
   },
   errorText: {
     fontSize: 13,
-    color: '#EF4444',
+    color: "#EF4444",
     marginTop: 6,
     marginLeft: 4,
   },
   dropdownButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: Colors.white,
     borderRadius: 12,
     paddingHorizontal: 16,
@@ -793,13 +866,13 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   dropdownButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   dropdownButtonText: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   statusIndicator: {
@@ -809,20 +882,20 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
     padding: 24,
   },
   modalContent: {
     backgroundColor: Colors.white,
     borderRadius: 16,
     padding: 20,
-    width: '100%',
+    width: "100%",
     maxWidth: 400,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 12,
@@ -831,21 +904,21 @@ const styles = StyleSheet.create({
         elevation: 8,
       },
       web: {
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)",
       },
     }),
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.text,
     marginBottom: 16,
-    textAlign: 'center',
+    textAlign: "center",
   },
   modalOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 14,
     paddingHorizontal: 12,
     borderRadius: 10,
@@ -853,19 +926,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modalOptionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   modalOptionText: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 10,
     backgroundColor: Colors.primary,
     paddingVertical: 16,
@@ -888,7 +961,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     fontSize: 16,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.white,
   },
   imagesScrollContent: {
@@ -899,43 +972,43 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 12,
     borderWidth: 2,
-    borderStyle: 'dashed',
+    borderStyle: "dashed",
     borderColor: Colors.primary,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#EFF6FF",
+    justifyContent: "center",
+    alignItems: "center",
     gap: 8,
   },
   addImageText: {
     fontSize: 13,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.primary,
   },
   imageContainer: {
-    position: 'relative',
+    position: "relative",
     width: 120,
     height: 120,
   },
   customerImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   removeImageButton: {
-    position: 'absolute',
+    position: "absolute",
     top: 6,
     right: 6,
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.3,
         shadowRadius: 4,
@@ -944,23 +1017,23 @@ const styles = StyleSheet.create({
         elevation: 4,
       },
       web: {
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
+        boxShadow: "0 2px 4px rgba(0, 0, 0, 0.3)",
       },
     }),
   },
   contactsModalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
   },
   contactsModalContent: {
     backgroundColor: Colors.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '80%',
+    maxHeight: "80%",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: -4 },
         shadowOpacity: 0.2,
         shadowRadius: 12,
@@ -971,16 +1044,16 @@ const styles = StyleSheet.create({
     }),
   },
   contactsModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 24,
     paddingTop: 24,
     paddingBottom: 12,
   },
   contactsModalTitle: {
     fontSize: 20,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.text,
   },
   closeButton: {
@@ -1002,15 +1075,15 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: "transparent",
   },
   contactItemSelected: {
     borderColor: Colors.primary,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: "#EFF6FF",
   },
   contactItemContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   contactCheckbox: {
@@ -1019,8 +1092,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 2,
     borderColor: Colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   contactCheckboxSelected: {
     backgroundColor: Colors.primary,
@@ -1031,7 +1104,7 @@ const styles = StyleSheet.create({
   },
   contactName: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
     marginBottom: 4,
   },
@@ -1049,7 +1122,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     paddingVertical: 16,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
     ...Platform.select({
       ios: {
         shadowColor: Colors.primary,
@@ -1064,7 +1137,7 @@ const styles = StyleSheet.create({
   },
   importButtonText: {
     fontSize: 16,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.white,
   },
 });

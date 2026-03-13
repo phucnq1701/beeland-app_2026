@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,20 +6,39 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-} from 'react-native';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import { Search, List, Grid3x3, Filter, ChevronLeft, ChevronDown, ChevronUp, ChevronRight, LayoutDashboard } from 'lucide-react-native';
-import { overviewBlocks, statusConfig, getOverviewStats, UnitStatus } from '@/mocks/overviewUnits';
-import Colors from '@/constants/colors';
-import { products, Product } from '@/mocks/properties';
+  ActivityIndicator,
+} from "react-native";
+import { Stack, useRouter, useLocalSearchParams } from "expo-router";
+import {
+  Search,
+  List,
+  Grid3x3,
+  Filter,
+  ChevronLeft,
+  ChevronDown,
+  ChevronUp,
+  ChevronRight,
+  LayoutDashboard,
+} from "lucide-react-native";
+import {
+  overviewBlocks,
+  statusConfig,
+  getOverviewStats,
+  UnitStatus,
+} from "@/mocks/overviewUnits";
+import Colors from "@/constants/colors";
+import { products, Product } from "@/mocks/properties";
+import { ProductService } from "./sevices/ProductService";
+import { ProjectService } from "./sevices/ProjectService";
+import { FilterService } from "./sevices/FilterService";
 
-type ViewMode = 'list' | 'grid' | 'overview';
+type ViewMode = "list" | "grid" | "overview";
 
 type Unit = {
   id: string;
   floor: string;
   column: string;
-  status: 'available' | 'locked' | 'sold' | 'deposit';
+  status: "available" | "locked" | "sold" | "deposit";
 };
 
 type Block = {
@@ -34,157 +53,284 @@ type Block = {
 
 export default function ProductsScreen() {
   const { showFavorites } = useLocalSearchParams<{ showFavorites?: string }>();
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [filterExpanded, setFilterExpanded] = useState<boolean>(false);
-  const [selectedProject, setSelectedProject] = useState<string>('all');
-  const [selectedStatus, setSelectedStatus] = useState<Product['status'] | 'all'>('all');
+  const [selectedStatus, setSelectedStatus] = useState<
+    Product["status"] | "all"
+  >("all");
   const [currentBlockIndex, setCurrentBlockIndex] = useState<number>(0);
-  const [selectedOverviewStatus, setSelectedOverviewStatus] = useState<UnitStatus | 'all'>('all');
-  const [onlyShowFavorites, setOnlyShowFavorites] = useState<boolean>(showFavorites === 'true');
+  const [selectedOverviewStatus, setSelectedOverviewStatus] = useState<
+    UnitStatus | "all"
+  >("all");
+  const [onlyShowFavorites, setOnlyShowFavorites] = useState<boolean>(
+    showFavorites === "true"
+  );
   const router = useRouter();
+  const { MaDA } = useLocalSearchParams();
+
+  const [products2, setProducts2] = useState<any[]>([]);
+  const [duAn, setDuAn] = useState<any[]>([]);
+  const [khuVuc, setKhuVuc] = useState<any[]>([]);
+  const [TrangThai, setTrangThai] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const [filterCondition, setFilterCondition] = useState({
+    MaDA: Number(MaDA) ?? null,
+    MaKhu: null,
+    MaPK: null,
+    MaTT: null,
+    KyHieu: "",
+  });
+
+  const applyChangeFilter = (p, v) => {
+    let _filter = filterCondition;
+    switch (p) {
+      case "MaDA":
+        _filter[p] = v;
+        _filter.MaKhu = null;
+        loadProducts2(_filter);
+        break;
+
+      case "MaKhu":
+        _filter[p] = v;
+        loadProducts2(_filter);
+        break;
+
+      case "TrangThai":
+        _filter[p] = v;
+        _filter.MaTT = v;
+        loadProducts2(_filter);
+        break;
+
+      default:
+        _filter[p] = v;
+        break;
+    }
+    setFilterCondition(_filter);
+  };
+
+  const loadDataByDA = async (MaDA) => {
+    const resListKhu = await ProductService.getKhuVuc({ MaDa: MaDA });
+    setKhuVuc(resListKhu?.data || []);
+  };
+
+  console.log(filterCondition);
+  
+
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+
+      const resDA = await ProjectService.getProjects({});
+      setDuAn(resDA?.data || []);
+      loadDataByDA(Number(MaDA) ?? resDA?.data?.[0]?.MaDA);
+
+      const resTT = await FilterService.getStatusSP({});
+      setTrangThai(resTT?.data || []);
+
+      let filter = {
+        MaDA: Number(MaDA) ?? resDA?.data?.[0]?.MaDA ?? -1,
+        MaKhu: filterCondition.MaKhu,
+        MaPK: filterCondition.MaPK,
+        MaTT: null,
+        KyHieu: filterCondition?.KyHieu,
+        Limit: 16,
+        offSet: 1,
+      };
+      setFilterCondition(filter);
+      const res = await ProductService.getProducts(filter);
+      setProducts2(res?.data || []);
+      console.log(res?.data?.[0], "res DA");
+    } catch (error) {
+      console.log("error load products", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadProducts2 = async (_filter) => {
+    try {
+      setLoading(true);
+
+      let filter = {
+        MaDA: _filter.MaDA,
+        MaKhu: _filter.MaKhu,
+        MaPK: _filter.MaPK,
+        MaTT: null,
+        KyHieu: _filter?.KyHieu,
+        Limit: 16,
+        offSet: 1,
+      };
+      loadDataByDA(_filter.MaDA);
+
+      const res = await ProductService.getProducts(filter);
+      console.log(res?.data, "res products");
+
+      setProducts2(res?.data || []);
+    } catch (error) {
+      console.log("error load products", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
 
   const blocks: Block[] = [
     {
-      name: 'Block A1',
+      name: "Block A1",
       units: [
-        { id: '01-19', floor: 'T19', column: '01', status: 'deposit' },
-        { id: '04-18', floor: 'T18', column: '04', status: 'sold' },
-        { id: '05-17', floor: 'T17', column: '05', status: 'sold' },
-        { id: '03-16', floor: 'T16', column: '03', status: 'locked' },
-        { id: '01-15', floor: 'T15', column: '01', status: 'deposit' },
-        { id: '01-14', floor: 'T14', column: '01', status: 'locked' },
-        { id: '02-14', floor: 'T14', column: '02', status: 'available' },
-        { id: '04-13', floor: 'T13', column: '04', status: 'available' },
-        { id: '03-12', floor: 'T12', column: '03', status: 'available' },
+        { id: "01-19", floor: "T19", column: "01", status: "deposit" },
+        { id: "04-18", floor: "T18", column: "04", status: "sold" },
+        { id: "05-17", floor: "T17", column: "05", status: "sold" },
+        { id: "03-16", floor: "T16", column: "03", status: "locked" },
+        { id: "01-15", floor: "T15", column: "01", status: "deposit" },
+        { id: "01-14", floor: "T14", column: "01", status: "locked" },
+        { id: "02-14", floor: "T14", column: "02", status: "available" },
+        { id: "04-13", floor: "T13", column: "04", status: "available" },
+        { id: "03-12", floor: "T12", column: "03", status: "available" },
       ],
       stats: { total: 10, available: 4, deposit: 3 },
     },
     {
-      name: 'Block B2',
+      name: "Block B2",
       units: [
-        { id: '01-26', floor: 'T26', column: '01', status: 'available' },
-        { id: '05-24', floor: 'T24', column: '05', status: 'available' },
-        { id: '03-23', floor: 'T23', column: '03', status: 'deposit' },
-        { id: '01-22', floor: 'T22', column: '01', status: 'locked' },
-        { id: '02-21', floor: 'T21', column: '02', status: 'available' },
-        { id: '04-20', floor: 'T20', column: '04', status: 'sold' },
-        { id: '01-19', floor: 'T19', column: '01', status: 'deposit' },
-        { id: '04-18', floor: 'T18', column: '04', status: 'sold' },
+        { id: "01-26", floor: "T26", column: "01", status: "available" },
+        { id: "05-24", floor: "T24", column: "05", status: "available" },
+        { id: "03-23", floor: "T23", column: "03", status: "deposit" },
+        { id: "01-22", floor: "T22", column: "01", status: "locked" },
+        { id: "02-21", floor: "T21", column: "02", status: "available" },
+        { id: "04-20", floor: "T20", column: "04", status: "sold" },
+        { id: "01-19", floor: "T19", column: "01", status: "deposit" },
+        { id: "04-18", floor: "T18", column: "04", status: "sold" },
       ],
       stats: { total: 10, available: 4, deposit: 2 },
     },
   ];
 
-  const projects = ['Masteri Thảo Điền', 'Vinhomes Central Park', 'The Sun Avenue'];
-  const statuses: Array<{value: Product['status'] | 'all', label: string}> = [
-    { value: 'all', label: 'Tất cả' },
-    { value: 'available', label: 'Đã cọc' },
-    { value: 'pending', label: 'HĐMB chờ...' },
-    { value: 'cancelled', label: 'Hủy bỏ' },
-  ];
-
-  const getStatusLabel = (status: Product['status']) => {
-    switch (status) {
-      case 'available':
-        return 'Đã cọc';
-      case 'cancelled':
-        return 'Hủy bỏ';
-      case 'pending':
-        return 'HĐMB chờ...';
-      default:
-        return '';
-    }
+  const getStatusLabel = (status: number) => {
+    const item = TrangThai.find((i) => i.MaTT === status);
+    return item?.TenTT || "";
   };
 
-  const getStatusColor = (status: Product['status']) => {
-    switch (status) {
-      case 'available':
-        return '#10B981';
-      case 'cancelled':
-        return '#9CA3AF';
-      case 'pending':
-        return '#F59E0B';
-      default:
-        return '#9CA3AF';
-    }
+  const getStatusColor = (status: number) => {
+    const item = TrangThai.find((i) => i.MaTT === status);
+    return item?.ColorWeb || "#9CA3AF";
   };
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch = searchQuery
       ? product.code.toLowerCase().includes(searchQuery.toLowerCase())
       : true;
-    
-    const matchesStatus = selectedStatus === 'all' || product.status === selectedStatus;
-    
+
+    const matchesStatus =
+      selectedStatus === "all" || product.status === selectedStatus;
+
     const matchesFavorites = onlyShowFavorites ? false : true;
-    
+
     return matchesSearch && matchesStatus && matchesFavorites;
   });
 
   const handlePressProduct = (id: string) => {
-    console.log('[Products] Navigate to product detail', { id });
-    router.push({ pathname: '/product/[id]', params: { id } });
+    console.log("[Products] Navigate to product detail", { id });
+    router.push({ pathname: "/product/[id]", params: { id } });
   };
 
-
-
-  const getUnitStatusColor = (status: Unit['status']) => {
+  const getUnitStatusColor = (status: Unit["status"]) => {
     switch (status) {
-      case 'deposit':
-        return '#10B981';
-      case 'locked':
-        return '#F59E0B';
-      case 'sold':
-        return '#EF4444';
-      case 'available':
-        return '#3B82F6';
+      case "deposit":
+        return "#10B981";
+      case "locked":
+        return "#F59E0B";
+      case "sold":
+        return "#EF4444";
+      case "available":
+        return "#3B82F6";
       default:
-        return '#9CA3AF';
+        return "#9CA3AF";
     }
   };
 
-  const _getUnitStatusLabel = (status: Unit['status']) => {
+  const _getUnitStatusLabel = (status: Unit["status"]) => {
     switch (status) {
-      case 'deposit':
-        return 'Cọc';
-      case 'locked':
-        return 'Lock';
-      case 'sold':
-        return 'Đã bán';
-      case 'available':
-        return 'Còn trống';
+      case "deposit":
+        return "Cọc";
+      case "locked":
+        return "Lock";
+      case "sold":
+        return "Đã bán";
+      case "available":
+        return "Còn trống";
       default:
-        return '';
+        return "";
     }
   };
 
   const currentBlock = blocks[currentBlockIndex];
-  const floors = ['T19', 'T18', 'T17', 'T16', 'T15', 'T14', 'T13', 'T12'];
-  const columns = ['01', '02', '03', '04', '05'];
+  const floors = ["T19", "T18", "T17", "T16", "T15", "T14", "T13", "T12"];
+  const columns = ["01", "02", "03", "04", "05"];
 
   const currentOverviewBlock = overviewBlocks[0];
   const overviewStats = getOverviewStats(currentOverviewBlock);
 
-  const statusSummaryItems: Array<{ key: UnitStatus | 'all'; label: string; count: number; color: string }> = [
-    { key: 'all', label: 'TỔNG', count: overviewStats.total, color: '#3B82F6' },
-    { key: 'available', label: 'TRỐNG', count: overviewStats.available, color: '#22C55E' },
-    { key: 'holding', label: 'GIỮ CHỖ', count: overviewStats.holding, color: '#F59E0B' },
-    { key: 'pending_kitchen', label: 'BẾP CHỜ', count: overviewStats.pendingKitchen, color: '#F97316' },
-    { key: 'sold', label: 'ĐÃ BÁN', count: overviewStats.sold, color: '#EF4444' },
-    { key: 'deposit', label: 'ĐÃ CỌC', count: overviewStats.deposit, color: '#3B82F6' },
+  const statusSummaryItems: Array<{
+    key: UnitStatus | "all";
+    label: string;
+    count: number;
+    color: string;
+  }> = [
+    { key: "all", label: "TỔNG", count: overviewStats.total, color: "#3B82F6" },
+    {
+      key: "available",
+      label: "TRỐNG",
+      count: overviewStats.available,
+      color: "#22C55E",
+    },
+    {
+      key: "holding",
+      label: "GIỮ CHỖ",
+      count: overviewStats.holding,
+      color: "#F59E0B",
+    },
+    {
+      key: "pending_kitchen",
+      label: "BẾP CHỜ",
+      count: overviewStats.pendingKitchen,
+      color: "#F97316",
+    },
+    {
+      key: "sold",
+      label: "ĐÃ BÁN",
+      count: overviewStats.sold,
+      color: "#EF4444",
+    },
+    {
+      key: "deposit",
+      label: "ĐÃ CỌC",
+      count: overviewStats.deposit,
+      color: "#3B82F6",
+    },
   ];
 
   const renderOverviewView = () => (
     <View style={styles.overviewContainer}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statusSummaryScroll} contentContainerStyle={styles.statusSummaryContent}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.statusSummaryScroll}
+        contentContainerStyle={styles.statusSummaryContent}
+      >
         {statusSummaryItems.map((item) => (
           <TouchableOpacity
             key={item.key}
             style={[
               styles.statusSummaryItem,
               { backgroundColor: item.color },
-              selectedOverviewStatus === item.key && styles.statusSummaryItemActive,
+              selectedOverviewStatus === item.key &&
+                styles.statusSummaryItemActive,
             ]}
             onPress={() => setSelectedOverviewStatus(item.key)}
             activeOpacity={0.8}
@@ -196,9 +342,10 @@ export default function ProductsScreen() {
       </ScrollView>
 
       {currentOverviewBlock.floors.map((floor) => {
-        const filteredUnits = selectedOverviewStatus === 'all'
-          ? floor.units
-          : floor.units.filter((u) => u.status === selectedOverviewStatus);
+        const filteredUnits =
+          selectedOverviewStatus === "all"
+            ? floor.units
+            : floor.units.filter((u) => u.status === selectedOverviewStatus);
 
         if (filteredUnits.length === 0) return null;
 
@@ -214,11 +361,16 @@ export default function ProductsScreen() {
                 return (
                   <TouchableOpacity
                     key={unit.id}
-                    style={[styles.unitCard, { backgroundColor: config.bgColor }]}
+                    style={[
+                      styles.unitCard,
+                      { backgroundColor: config.bgColor },
+                    ]}
                     onPress={() => handlePressProduct(unit.id)}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.unitCode} numberOfLines={1}>{unit.code}</Text>
+                    <Text style={styles.unitCode} numberOfLines={1}>
+                      {unit.code}
+                    </Text>
                     <Text style={styles.unitPrice}>{unit.price}</Text>
                   </TouchableOpacity>
                 );
@@ -236,19 +388,19 @@ export default function ProductsScreen() {
         <Text style={styles.legendTitle}>Trạng thái:</Text>
         <View style={styles.legendItems}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+            <View style={[styles.legendDot, { backgroundColor: "#10B981" }]} />
             <Text style={styles.legendText}>Cọc</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+            <View style={[styles.legendDot, { backgroundColor: "#F59E0B" }]} />
             <Text style={styles.legendText}>Lock</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+            <View style={[styles.legendDot, { backgroundColor: "#EF4444" }]} />
             <Text style={styles.legendText}>Đã bán</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#3B82F6' }]} />
+            <View style={[styles.legendDot, { backgroundColor: "#3B82F6" }]} />
             <Text style={styles.legendText}>Còn trống</Text>
           </View>
         </View>
@@ -256,7 +408,7 @@ export default function ProductsScreen() {
 
       <View style={styles.blockCard}>
         <Text style={styles.blockTitle}>{currentBlock.name}</Text>
-        
+
         <View style={styles.grid}>
           <View style={styles.gridRow}>
             <View style={[styles.gridCell, styles.headerCell]}>
@@ -305,7 +457,9 @@ export default function ProductsScreen() {
 
         <View style={styles.blockNavigation}>
           <TouchableOpacity
-            onPress={() => setCurrentBlockIndex(Math.max(0, currentBlockIndex - 1))}
+            onPress={() =>
+              setCurrentBlockIndex(Math.max(0, currentBlockIndex - 1))
+            }
             disabled={currentBlockIndex === 0}
             style={[
               styles.navButton,
@@ -314,7 +468,7 @@ export default function ProductsScreen() {
             activeOpacity={0.7}
           >
             <ChevronLeft
-              color={currentBlockIndex === 0 ? '#D1D5DB' : Colors.text}
+              color={currentBlockIndex === 0 ? "#D1D5DB" : Colors.text}
               size={20}
             />
           </TouchableOpacity>
@@ -333,45 +487,59 @@ export default function ProductsScreen() {
 
           <TouchableOpacity
             onPress={() =>
-              setCurrentBlockIndex(Math.min(blocks.length - 1, currentBlockIndex + 1))
+              setCurrentBlockIndex(
+                Math.min(blocks.length - 1, currentBlockIndex + 1)
+              )
             }
             disabled={currentBlockIndex === blocks.length - 1}
             style={[
               styles.navButton,
-              currentBlockIndex === blocks.length - 1 && styles.navButtonDisabled,
+              currentBlockIndex === blocks.length - 1 &&
+                styles.navButtonDisabled,
             ]}
             activeOpacity={0.7}
           >
             <ChevronRight
-              color={currentBlockIndex === blocks.length - 1 ? '#D1D5DB' : Colors.text}
+              color={
+                currentBlockIndex === blocks.length - 1
+                  ? "#D1D5DB"
+                  : Colors.text
+              }
               size={20}
             />
           </TouchableOpacity>
         </View>
 
         <Text style={styles.blockStats}>
-          {currentBlock.name}: {currentBlock.stats.total} căn • {currentBlock.stats.available} trống • {currentBlock.stats.deposit} cọc
+          {currentBlock.name}: {currentBlock.stats.total} căn •{" "}
+          {currentBlock.stats.available} trống • {currentBlock.stats.deposit}{" "}
+          cọc
         </Text>
       </View>
     </View>
   );
+
+  const formatCurrency = (num) => {
+    if (!num) return "0 đ";
+    return new Intl.NumberFormat("vi-VN").format(Math.round(num));
+  };
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
           headerShown: true,
-          title: 'Sản phẩm',
+          title: "Sản phẩm",
           headerStyle: {
             backgroundColor: Colors.primary,
           },
           headerTintColor: Colors.white,
           headerTitleStyle: {
-            fontWeight: '700',
+            fontWeight: "700",
             fontSize: 18,
           },
           headerLeft: () => (
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => router.back()}
               style={styles.headerBackButton}
             >
@@ -381,25 +549,51 @@ export default function ProductsScreen() {
           headerRight: () => (
             <View style={styles.headerViewMode}>
               <TouchableOpacity
-                style={[styles.headerViewBtn, viewMode === 'list' && styles.headerViewBtnActive]}
-                onPress={() => setViewMode('list')}
+                style={[
+                  styles.headerViewBtn,
+                  viewMode === "list" && styles.headerViewBtnActive,
+                ]}
+                onPress={() => setViewMode("list")}
                 activeOpacity={0.8}
               >
-                <List color={viewMode === 'list' ? Colors.white : 'rgba(255,255,255,0.5)'} size={18} />
+                <List
+                  color={
+                    viewMode === "list" ? Colors.white : "rgba(255,255,255,0.5)"
+                  }
+                  size={18}
+                />
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.headerViewBtn, viewMode === 'grid' && styles.headerViewBtnActive]}
-                onPress={() => setViewMode('grid')}
+                style={[
+                  styles.headerViewBtn,
+                  viewMode === "grid" && styles.headerViewBtnActive,
+                ]}
+                onPress={() => setViewMode("grid")}
                 activeOpacity={0.8}
               >
-                <Grid3x3 color={viewMode === 'grid' ? Colors.white : 'rgba(255,255,255,0.5)'} size={18} />
+                <Grid3x3
+                  color={
+                    viewMode === "grid" ? Colors.white : "rgba(255,255,255,0.5)"
+                  }
+                  size={18}
+                />
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.headerViewBtn, viewMode === 'overview' && styles.headerViewBtnActive]}
-                onPress={() => setViewMode('overview')}
+                style={[
+                  styles.headerViewBtn,
+                  viewMode === "overview" && styles.headerViewBtnActive,
+                ]}
+                onPress={() => setViewMode("overview")}
                 activeOpacity={0.8}
               >
-                <LayoutDashboard color={viewMode === 'overview' ? Colors.white : 'rgba(255,255,255,0.5)'} size={18} />
+                <LayoutDashboard
+                  color={
+                    viewMode === "overview"
+                      ? Colors.white
+                      : "rgba(255,255,255,0.5)"
+                  }
+                  size={18}
+                />
               </TouchableOpacity>
             </View>
           ),
@@ -423,8 +617,8 @@ export default function ProductsScreen() {
             />
           </View>
 
-          <TouchableOpacity 
-            style={styles.filterButton} 
+          <TouchableOpacity
+            style={styles.filterButton}
             activeOpacity={0.7}
             onPress={() => setFilterExpanded(!filterExpanded)}
           >
@@ -442,74 +636,120 @@ export default function ProductsScreen() {
           <View style={styles.filterPanel}>
             <View style={styles.filterSection}>
               <Text style={styles.filterSectionTitle}>Dự án</Text>
-              <View style={styles.filterOptionsGrid}>
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    selectedProject === 'all' && styles.filterOptionActive,
-                  ]}
-                  onPress={() => setSelectedProject('all')}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.filterOptionText,
-                      selectedProject === 'all' && styles.filterOptionTextActive,
-                    ]}
-                  >
-                    Tất cả
-                  </Text>
-                </TouchableOpacity>
-                {projects.map((project) => (
-                  <TouchableOpacity
-                    key={project}
-                    style={[
-                      styles.filterOption,
-                      selectedProject === project && styles.filterOptionActive,
-                    ]}
-                    onPress={() => setSelectedProject(project)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
+              <ScrollView style={{ maxHeight: 200 }}>
+                <View style={styles.filterOptionsGrid}>
+                  {duAn.map((project) => (
+                    <TouchableOpacity
+                      key={project?.MaDA}
                       style={[
-                        styles.filterOptionText,
-                        selectedProject === project && styles.filterOptionTextActive,
+                        styles.filterOption,
+                        filterCondition?.MaDA === project?.MaDA &&
+                          styles.filterOptionActive,
                       ]}
+                      onPress={() => {
+                        applyChangeFilter("MaDA", project?.MaDA);
+                      }}
+                      activeOpacity={0.7}
                     >
-                      {project}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                      <Text
+                        style={[
+                          styles.filterOptionText,
+                          filterCondition?.MaDA === project?.MaDA &&
+                            styles.filterOptionTextActive,
+                        ]}
+                      >
+                        {project?.TenDA}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>Khu Vực</Text>
+              <ScrollView style={{ maxHeight: 200 }}>
+                <View style={styles.filterOptionsGrid}>
+                  {khuVuc.map((project) => (
+                    <TouchableOpacity
+                      key={project?.MaKhu}
+                      style={[
+                        styles.filterOption,
+                        filterCondition?.MaKhu === project?.MaKhu &&
+                          styles.filterOptionActive,
+                      ]}
+                      onPress={() => {
+                        applyChangeFilter("MaKhu", project?.MaKhu);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.filterOptionText,
+                          filterCondition?.MaKhu === project?.MaKhu &&
+                            styles.filterOptionTextActive,
+                        ]}
+                      >
+                        {project?.TenKhu}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
             </View>
 
             <View style={styles.filterSection}>
               <Text style={styles.filterSectionTitle}>Trạng thái</Text>
               <View style={styles.filterOptionsGrid}>
-                {statuses.map((status) => (
+                <TouchableOpacity
+                  key={null}
+                  style={[
+                    styles.filterOption,
+                    filterCondition?.MaTT === null && styles.filterOptionActive,
+                  ]}
+                  onPress={() => {
+                    applyChangeFilter("TrangThai", null);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      filterCondition?.MaTT === null &&
+                        styles.filterOptionTextActive,
+                    ]}
+                  >
+                    Tất cả
+                  </Text>
+                </TouchableOpacity>
+                {TrangThai.map((status) => (
                   <TouchableOpacity
-                    key={status.value}
+                    key={status.MaTT}
                     style={[
                       styles.filterOption,
-                      selectedStatus === status.value && styles.filterOptionActive,
+                      filterCondition?.MaTT === status.MaTT &&
+                        styles.filterOptionActive,
                     ]}
-                    onPress={() => setSelectedStatus(status.value)}
+                    onPress={() => {
+                      applyChangeFilter("TrangThai", status.MaTT);
+                    }}
                     activeOpacity={0.7}
                   >
                     <Text
                       style={[
                         styles.filterOptionText,
-                        selectedStatus === status.value && styles.filterOptionTextActive,
+                        filterCondition?.MaTT === status.MaTT &&
+                          styles.filterOptionTextActive,
                       ]}
                     >
-                      {status.label}
+                      {status.TenTT}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
 
-            <View style={styles.filterSection}>
+            {/* <View style={styles.filterSection}>
               <Text style={styles.filterSectionTitle}>Yêu thích</Text>
               <View style={styles.filterOptionsGrid}>
                 <TouchableOpacity
@@ -547,47 +787,72 @@ export default function ProductsScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </View> */}
           </View>
         )}
 
-        {viewMode === 'list' ? (
+        {viewMode === "list" ? (
           <>
-            <View style={styles.productTable}>
-          <View style={styles.tableHeader}>
-            <Text style={[styles.tableHeaderText, styles.colStatus]}>Trạng thái</Text>
-            <Text style={[styles.tableHeaderText, styles.colCode]}>Mã sản phẩm</Text>
-            <Text style={[styles.tableHeaderText, styles.colPrice]}>Tổng giá trị gốm PBT</Text>
-          </View>
-
-          {filteredProducts.map((product) => (
-            <TouchableOpacity
-              key={product.id}
-              style={styles.tableRow}
-              activeOpacity={0.7}
-              onPress={() => handlePressProduct(product.id)}
-            >
-              <View style={[styles.colStatus, styles.statusBadgeContainer]}>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusColor(product.status) },
-                  ]}
-                >
-                  <Text style={styles.statusBadgeText}>
-                    {getStatusLabel(product.status)}
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+                <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
+              </View>
+            ) : (
+              <View style={styles.productTable}>
+                <View style={styles.tableHeader}>
+                  <Text style={[styles.tableHeaderText, styles.colStatus]}>
+                    Trạng thái
+                  </Text>
+                  <Text style={[styles.tableHeaderText, styles.colCode]}>
+                    Mã sản phẩm
+                  </Text>
+                  <Text style={[styles.tableHeaderText, styles.colPrice]}>
+                    Tổng giá trị gốm PBT
                   </Text>
                 </View>
+
+                {products2.map((product) => (
+                  // {filteredProducts.map((product) => (
+
+                  <TouchableOpacity
+                    key={product.maSP}
+                    style={styles.tableRow}
+                    activeOpacity={0.7}
+                    onPress={() => handlePressProduct(product.maSP)}
+                  >
+                    <View
+                      style={[styles.colStatus, styles.statusBadgeContainer]}
+                    >
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          { backgroundColor: getStatusColor(product.maTT) },
+                        ]}
+                      >
+                        <Text style={styles.statusBadgeText}>
+                          {getStatusLabel(product.maTT)}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.tableText, styles.colCode]}>
+                      {product.maSanPham}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.tableText,
+                        styles.colPrice,
+                        styles.priceText,
+                      ]}
+                    >
+                      {formatCurrency(product?.tongGiaGomPBT)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-              <Text style={[styles.tableText, styles.colCode]}>{product.code}</Text>
-              <Text style={[styles.tableText, styles.colPrice, styles.priceText]}>
-                {product.price}
-              </Text>
-            </TouchableOpacity>
-          ))}
-            </View>
+            )}
           </>
-        ) : viewMode === 'grid' ? (
+        ) : viewMode === "grid" ? (
           renderGridView()
         ) : (
           renderOverviewView()
@@ -606,8 +871,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   headerViewMode: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     marginRight: 8,
   },
@@ -616,25 +881,25 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   headerViewBtnActive: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: "rgba(255,255,255,0.25)",
   },
   content: {
     flex: 1,
   },
   scrollContent: {
-    padding: 24,
+    padding: 15,
     paddingBottom: 40,
   },
   searchAndFilterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     marginBottom: 16,
   },
   searchContainer: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: Colors.white,
     borderRadius: 12,
     paddingHorizontal: 16,
@@ -649,26 +914,26 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   controlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 12,
   },
   viewModeLabel: {
     fontSize: 15,
     color: Colors.text,
-    fontWeight: '500' as const,
+    fontWeight: "500" as const,
   },
   viewModeContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderRadius: 8,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.border,
   },
   viewModeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 10,
     gap: 8,
@@ -688,15 +953,15 @@ const styles = StyleSheet.create({
   },
   viewModeText: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   viewModeTextActive: {
     color: Colors.white,
   },
   filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -707,7 +972,7 @@ const styles = StyleSheet.create({
   },
   filterText: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.primary,
   },
   productCount: {
@@ -716,19 +981,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   productCountBold: {
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.primary,
   },
   productTable: {
     backgroundColor: Colors.white,
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.border,
   },
   tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#F9FAFB',
+    flexDirection: "row",
+    backgroundColor: "#F9FAFB",
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
@@ -736,17 +1001,17 @@ const styles = StyleSheet.create({
   },
   tableHeaderText: {
     fontSize: 13,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.textSecondary,
   },
   tableRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    alignItems: 'center',
-    position: 'relative' as const,
+    alignItems: "center",
+    position: "relative" as const,
   },
   tableText: {
     fontSize: 14,
@@ -759,12 +1024,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   colPrice: {
-    width: 90,
-    textAlign: 'right' as const,
+    width: 100,
+    textAlign: "right" as const,
     paddingRight: 4,
   },
   statusBadgeContainer: {
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -773,11 +1038,11 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     fontSize: 12,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.white,
   },
   priceText: {
-    fontWeight: '500' as const,
+    fontWeight: "500" as const,
   },
   filterPanel: {
     backgroundColor: Colors.white,
@@ -792,13 +1057,13 @@ const styles = StyleSheet.create({
   },
   filterSectionTitle: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
     marginBottom: 12,
   },
   filterOptionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   filterOption: {
@@ -815,7 +1080,7 @@ const styles = StyleSheet.create({
   },
   filterOptionText: {
     fontSize: 14,
-    fontWeight: '500' as const,
+    fontWeight: "500" as const,
     color: Colors.text,
   },
   filterOptionTextActive: {
@@ -833,18 +1098,18 @@ const styles = StyleSheet.create({
   },
   legendTitle: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
     marginBottom: 12,
   },
   legendItems: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 16,
   },
   legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   legendDot: {
@@ -857,7 +1122,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   blockCard: {
-    backgroundColor: '#FEF7F3',
+    backgroundColor: "#FEF7F3",
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
@@ -865,7 +1130,7 @@ const styles = StyleSheet.create({
   },
   blockTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.text,
     marginBottom: 16,
   },
@@ -873,63 +1138,63 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   gridRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
   },
   gridCell: {
     flex: 1,
     aspectRatio: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   headerCell: {
-    backgroundColor: '#F3E8DC',
+    backgroundColor: "#F3E8DC",
     borderRadius: 6,
   },
   headerCellText: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   floorCell: {
-    backgroundColor: '#E8EAF6',
+    backgroundColor: "#E8EAF6",
     borderRadius: 6,
   },
   floorCellText: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   unitCell: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
     borderRadius: 6,
   },
   unitCellText: {
     fontSize: 12,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.white,
   },
   emptyCell: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: "#E5E7EB",
   },
   emptyCellText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: "#9CA3AF",
   },
   blockNavigation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 16,
     marginTop: 16,
     marginBottom: 12,
@@ -941,18 +1206,18 @@ const styles = StyleSheet.create({
     opacity: 0.3,
   },
   progressBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     paddingHorizontal: 16,
   },
   progressDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#D1D5DB',
+    backgroundColor: "#D1D5DB",
     flex: 1,
     maxWidth: 60,
   },
@@ -962,7 +1227,7 @@ const styles = StyleSheet.create({
   blockStats: {
     fontSize: 14,
     color: Colors.textSecondary,
-    textAlign: 'center' as const,
+    textAlign: "center" as const,
   },
   overviewContainer: {
     gap: 16,
@@ -978,13 +1243,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 10,
-    alignItems: 'center' as const,
+    alignItems: "center" as const,
     minWidth: 72,
   },
   statusSummaryItemActive: {
     borderWidth: 2.5,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -992,69 +1257,80 @@ const styles = StyleSheet.create({
   },
   statusSummaryLabel: {
     fontSize: 10,
-    fontWeight: '700' as const,
-    color: '#FFFFFF',
+    fontWeight: "700" as const,
+    color: "#FFFFFF",
     letterSpacing: 0.3,
     marginBottom: 2,
   },
   statusSummaryCount: {
     fontSize: 18,
-    fontWeight: '800' as const,
-    color: '#FFFFFF',
+    fontWeight: "800" as const,
+    color: "#FFFFFF",
   },
   floorSection: {
     backgroundColor: Colors.white,
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.border,
   },
   floorHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: "#F8FAFC",
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
     gap: 6,
   },
   floorName: {
     fontSize: 16,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.text,
   },
   floorCount: {
     fontSize: 14,
-    fontWeight: '500' as const,
+    fontWeight: "500" as const,
     color: Colors.textSecondary,
   },
   unitsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     padding: 8,
     gap: 6,
   },
   unitCard: {
-    width: '23%' as unknown as number,
-    flexBasis: '23%' as unknown as number,
+    width: "23%" as unknown as number,
+    flexBasis: "23%" as unknown as number,
     flexGrow: 0,
     paddingVertical: 10,
     paddingHorizontal: 6,
     borderRadius: 8,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
   },
   unitCode: {
     fontSize: 11,
-    fontWeight: '700' as const,
-    color: '#FFFFFF',
+    fontWeight: "700" as const,
+    color: "#FFFFFF",
     marginBottom: 2,
   },
   unitPrice: {
     fontSize: 10,
-    fontWeight: '500' as const,
-    color: 'rgba(255,255,255,0.85)',
+    fontWeight: "500" as const,
+    color: "rgba(255,255,255,0.85)",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 100,
+  },
+
+  loadingText: {
+    marginTop: 10,
+    color: Colors.textSecondary,
   },
 });

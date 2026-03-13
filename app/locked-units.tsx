@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,123 +7,202 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
-} from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Search, Filter, X, Clock, Calendar, Timer } from 'lucide-react-native';
-import Colors from '@/constants/colors';
-import { lockedUnits } from '@/mocks/lockedUnits';
+  ActivityIndicator,
+} from "react-native";
+import { Stack, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Search, Filter, X } from "lucide-react-native";
+
+import Colors from "@/constants/colors";
+import { ProjectService } from "./sevices/ProjectService";
+import { BookingService } from "./sevices/BookingService";
 
 export default function LockedUnitsScreen() {
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedProject, setSelectedProject] = useState<string>('all');
-  const [selectedStatus, setSelectedStatus] = useState<string>('active');
-  const [showFilter, setShowFilter] = useState<boolean>(false);
-  const [currentTime, setCurrentTime] = useState<Date>(new Date());
-  const insets = useSafeAreaInsets();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const [duAn, setDuAn] = useState<any[]>([]);
+  const [dataLook, setDataLook] = useState<any[]>([]);
+  const [totalRows, setTotalRows] = useState(0);
+
+  const [showFilter, setShowFilter] = useState(false);
+
+  const [searchInput, setSearchInput] = useState("");
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+
+  const [filterCondition, setFilterCondition] = useState({
+    TuNgay: "2000-01-01",
+    DenNgay: "2100-01-01",
+    DuAn: "",
+    inputSearch: "",
+    Offset: 1,
+    Limit: 10,
+  });
+
+  /**
+   * LOAD PROJECTS
+   */
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
+    const loadProjects = async () => {
+      try {
+        const res = await ProjectService.getProjects({});
+        setDuAn(res?.data || []);
+      } catch (error) {
+        console.log("load project error", error);
+      }
+    };
 
-    return () => clearInterval(interval);
+    loadProjects();
   }, []);
 
-  const projects = useMemo(() => {
-    const uniqueProjects = Array.from(
-      new Set(lockedUnits.map((unit) => unit.projectId))
-    ).map((id) => {
-      const unit = lockedUnits.find((u) => u.projectId === id);
-      return {
-        id,
-        name: unit?.projectName || '',
-      };
-    });
+  /**
+   * SEARCH DEBOUNCE
+   */
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilterCondition((prev) => ({
+        ...prev,
+        inputSearch: searchInput,
+        Offset: 1,
+        Limit: 10,
+      }));
+    }, 500);
 
-    return [{ id: 'all', name: 'Tất cả dự án' }, ...uniqueProjects];
-  }, []);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
-  const getRemainingMinutes = (unit: typeof lockedUnits[0]): number => {
-    const elapsedMinutes = Math.floor(
-      (currentTime.getTime() - unit.lockTime.getTime()) / (1000 * 60)
-    );
-    const remaining = unit.lockDurationMinutes - elapsedMinutes;
-    return Math.max(0, remaining);
+  /**
+   * PROJECT FILTER
+   */
+  useEffect(() => {
+    setFilterCondition((prev) => ({
+      ...prev,
+      DuAn: selectedProjects.length
+        ? "," + selectedProjects.join(",") + ","
+        : "",
+      Offset: 1,
+      Limit: 10,
+    }));
+  }, [selectedProjects]);
+
+  /**
+   * CALL API WHEN FILTER CHANGES
+   */
+  useEffect(() => {
+    fetchLockList(false);
+  }, [filterCondition.DuAn, filterCondition.inputSearch]);
+
+  /**
+   * API CALL
+   */
+  const fetchLockList = async (isLoadMore = false) => {
+    try {
+      if (isLoadMore) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+      const res = await BookingService.getLockList(filterCondition);
+
+      const list = res?.data || [];
+      console.log(list, "hhhhhhhh");
+
+      setTotalRows(list?.[0]?.totalRows || 0);
+
+      if (isLoadMore) {
+        setDataLook((prev) => [...prev, ...list]);
+      } else {
+        setDataLook(list);
+      }
+    } catch (error) {
+      console.log("getLockList error", error);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
   };
 
-  const filteredUnits = useMemo(() => {
-    const filtered = lockedUnits.filter((unit) => {
-      const matchesSearch =
-        unit.productCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        unit.projectName.toLowerCase().includes(searchQuery.toLowerCase());
+  /**
+   * LOAD MORE
+   */
+  const loadMore = () => {
+    if (loadingMore || loading) return;
 
-      const matchesProject =
-        selectedProject === 'all' || unit.projectId === selectedProject;
+    if (dataLook.length >= totalRows) return;
 
-      const remainingMinutes = getRemainingMinutes(unit);
-      const isActive = remainingMinutes > 0;
+    const newLimit = filterCondition.Limit + 10;
 
-      const matchesStatus =
-        selectedStatus === 'all' ||
-        (selectedStatus === 'active' && isActive) ||
-        (selectedStatus === 'expired' && !isActive);
+    setFilterCondition((prev) => ({
+      ...prev,
+      Limit: newLimit,
+    }));
 
-      return matchesSearch && matchesProject && matchesStatus;
-    });
+    fetchLockList(true);
+  };
 
-    return filtered.sort((a, b) => {
-      const remainingA = getRemainingMinutes(a);
-      const remainingB = getRemainingMinutes(b);
-      return remainingB - remainingA;
-    });
-  }, [searchQuery, selectedProject, selectedStatus, currentTime, getRemainingMinutes]);
+  /**
+   * FORMAT TIME
+   */
+  const formatLockTime = (dateStr: string) => {
+    const d = new Date(dateStr);
 
-  function formatLockTime(date: Date): string {
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const year = date.getFullYear();
+    const h = String(d.getHours()).padStart(2, "0");
+    const m = String(d.getMinutes()).padStart(2, "0");
 
-    return `${hours}:${minutes} - ${day}/${month}/${year}`;
-  }
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
 
-  function formatRemainingTime(minutes: number): string {
+    return `${h}:${m} - ${day}/${month}/${year}`;
+  };
+
+  const formatRemaining = (minutes: number) => {
+    if (minutes <= 0) return "Đã hết hạn";
+
     if (minutes >= 60) {
-      const hours = Math.floor(minutes / 60);
-      const mins = minutes % 60;
-      return `${hours}h ${mins}m`;
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      return `${h}h ${m}m`;
     }
+
     return `${minutes} phút`;
-  }
+  };
+
+  const getStatusColor = (progress: number) => {
+    if (progress > 0.5) return "#10B981";
+    if (progress > 0.25) return "#F59E0B";
+    return "#EF4444";
+  };
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Căn đã lock',
-          headerStyle: {
-            backgroundColor: Colors.white,
-          },
+          title: "Căn đã lock",
+          headerStyle: { backgroundColor: Colors.white },
           headerTintColor: Colors.text,
           headerShadowVisible: false,
         }}
       />
 
+      {/* SEARCH */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputWrapper}>
           <Search color={Colors.textSecondary} size={20} />
+
           <TextInput
             style={styles.searchInput}
-            placeholder="Tìm kiếm theo mã căn, dự án..."
+            placeholder="Tìm kiếm mã căn..."
             placeholderTextColor={Colors.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
+            value={searchInput}
+            onChangeText={setSearchInput}
           />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
+
+          {searchInput.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchInput("")}>
               <X color={Colors.textSecondary} size={20} />
             </TouchableOpacity>
           )}
@@ -132,445 +211,366 @@ export default function LockedUnitsScreen() {
         <TouchableOpacity
           style={[
             styles.filterButton,
-            (selectedProject !== 'all' || selectedStatus !== 'active') && styles.filterButtonActive,
+            selectedProjects.length > 0 && styles.filterButtonActive,
           ]}
           onPress={() => setShowFilter(!showFilter)}
         >
           <Filter
-            color={(selectedProject !== 'all' || selectedStatus !== 'active') ? Colors.white : Colors.text}
             size={20}
+            color={selectedProjects.length > 0 ? Colors.white : Colors.text}
           />
         </TouchableOpacity>
       </View>
 
+      {/* FILTER */}
       {showFilter && (
         <View style={styles.filterContainer}>
-          <View style={styles.filterSection}>
-            <Text style={styles.filterSectionTitle}>Trạng thái</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterScrollContent}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.filterChip,
-                  selectedStatus === 'all' && styles.filterChipActive,
-                ]}
-                onPress={() => setSelectedStatus('all')}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    selectedStatus === 'all' && styles.filterChipTextActive,
-                  ]}
-                >
-                  Tất cả
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.filterChip,
-                  selectedStatus === 'active' && styles.filterChipActive,
-                ]}
-                onPress={() => setSelectedStatus('active')}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    selectedStatus === 'active' && styles.filterChipTextActive,
-                  ]}
-                >
-                  Còn hạn
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.filterChip,
-                  selectedStatus === 'expired' && styles.filterChipActive,
-                ]}
-                onPress={() => setSelectedStatus('expired')}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    selectedStatus === 'expired' && styles.filterChipTextActive,
-                  ]}
-                >
-                  Hết hạn
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
+          <Text style={styles.filterTitle}>Dự án</Text>
 
-          <View style={styles.filterSection}>
-            <Text style={styles.filterSectionTitle}>Dự án</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterScrollContent}
-            >
-              {projects.map((project) => (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScroll}
+          >
+            {duAn.map((project) => {
+              const active = selectedProjects.includes(project.MaDA);
+
+              return (
                 <TouchableOpacity
-                  key={project.id}
-                  style={[
-                    styles.filterChip,
-                    selectedProject === project.id && styles.filterChipActive,
-                  ]}
-                  onPress={() => setSelectedProject(project.id)}
+                  key={project.MaDA}
+                  style={[styles.filterChip, active && styles.filterChipActive]}
+                  onPress={() => {
+                    if (active) {
+                      setSelectedProjects((prev) =>
+                        prev.filter((id) => id !== project.MaDA)
+                      );
+                    } else {
+                      setSelectedProjects((prev) => [...prev, project.MaDA]);
+                    }
+                  }}
                 >
                   <Text
                     style={[
                       styles.filterChipText,
-                      selectedProject === project.id &&
-                        styles.filterChipTextActive,
+                      active && styles.filterChipTextActive,
                     ]}
                   >
-                    {project.name}
+                    {project.TenDA}
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
+              );
+            })}
+          </ScrollView>
         </View>
       )}
 
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + 20 },
-        ]}
-      >
-        <Text style={styles.resultText}>
-          {filteredUnits.length} căn {selectedStatus === 'active' ? 'còn hạn' : selectedStatus === 'expired' ? 'hết hạn' : ''}
-        </Text>
+      {/* LIST */}
 
-        {filteredUnits.map((unit) => {
-          const remainingMinutes = getRemainingMinutes(unit);
-          const progress = remainingMinutes / unit.lockDurationMinutes;
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + 20 },
+          ]}
+          onMomentumScrollEnd={(e) => {
+            const { layoutMeasurement, contentOffset, contentSize } =
+              e.nativeEvent;
 
-          return (
-            <TouchableOpacity
-              key={unit.id}
-              style={styles.unitCard}
-              activeOpacity={0.7}
-              onPress={() => {
-                const remaining = getRemainingMinutes(unit);
-                router.push({
-                  pathname: '/product/[id]',
-                  params: { 
-                    id: unit.id,
-                    lockMinutes: remaining.toString(),
-                  },
-                });
-              }}
-            >
-              <View style={styles.unitHeader}>
-                <View style={styles.unitHeaderLeft}>
-                  <Text style={styles.projectName}>{unit.projectName}</Text>
-                  <Text style={styles.productCode}>{unit.productCode}</Text>
-                </View>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: remainingMinutes > 0 ? getStatusColor(progress) : '#6B7280' },
-                  ]}
-                >
-                  <Clock color={Colors.white} size={14} />
-                  <Text style={styles.statusBadgeText}>
-                    {remainingMinutes > 0 ? 'Còn hạn' : 'Hết hạn'}
-                  </Text>
-                </View>
-              </View>
+            const isEnd =
+              layoutMeasurement.height + contentOffset.y >=
+              contentSize.height - 20;
 
-              <View style={styles.divider} />
+            if (isEnd) loadMore();
+          }}
+        >
+          <Text style={styles.resultText}>
+            {loading ? "Đang tải..." : `${dataLook.length}/${totalRows} căn`}
+          </Text>
 
-              <View style={styles.unitDetails}>
-                <View style={styles.detailRow}>
-                  <View style={styles.detailLeft}>
-                    <Calendar color={Colors.textSecondary} size={16} />
-                    <Text style={styles.detailLabel}>Thời gian lock</Text>
+          {dataLook.map((item: any) => {
+            const remainingMinutes = item.thoiGianConLai || 0;
+            const lockDuration = item.thoiGianLock || 30;
+
+            const progress = remainingMinutes / lockDuration;
+
+            const isActive = remainingMinutes > 0;
+
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.unitCard}
+                activeOpacity={0.7}
+                onPress={() =>
+                  router.push({
+                    pathname: "/locked/[id]",
+                    params: { id: item.id, maSP: item?.maSP },
+                  })
+                }
+              >
+                <View style={styles.unitHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.projectName}>{item.tenDA}</Text>
+                    <Text style={styles.productCode}>{item.kyHieu}</Text>
                   </View>
-                  <Text style={styles.detailValue}>
-                    {formatLockTime(unit.lockTime)}
-                  </Text>
-                </View>
 
-                <View style={styles.detailRow}>
-                  <View style={styles.detailLeft}>
-                    <Timer color={Colors.textSecondary} size={16} />
-                    <Text style={styles.detailLabel}>
-                      {remainingMinutes > 0 ? 'Thời gian còn lại' : 'Trạng thái'}
-                    </Text>
-                  </View>
-                  <Text
-                    style={[
-                      styles.detailValue,
-                      styles.remainingTime,
-                      { color: remainingMinutes > 0 ? getStatusColor(progress) : '#6B7280' },
-                    ]}
-                  >
-                    {remainingMinutes > 0 ? formatRemainingTime(remainingMinutes) : 'Đã hết hạn'}
-                  </Text>
-                </View>
-              </View>
-
-              {remainingMinutes > 0 && (
-                <View style={styles.progressBarContainer}>
                   <View
                     style={[
-                      styles.progressBar,
+                      styles.statusBadge,
                       {
-                        width: `${progress * 100}%`,
-                        backgroundColor: getStatusColor(progress),
+                        backgroundColor: isActive
+                          ? getStatusColor(progress)
+                          : "#6B7280",
                       },
                     ]}
-                  />
+                  >
+                    <Text style={styles.statusBadgeText}>
+                      {isActive ? "Còn hạn" : "Hết hạn"}
+                    </Text>
+                  </View>
                 </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
 
-        {filteredUnits.length === 0 && (
-          <View style={styles.emptyContainer}>
-            <Clock color={Colors.textSecondary} size={64} />
-            <Text style={styles.emptyTitle}>Không có căn đang lock</Text>
-            <Text style={styles.emptyDescription}>
-              {searchQuery || selectedProject !== 'all'
-                ? 'Không tìm thấy căn nào phù hợp với bộ lọc'
-                : 'Bạn chưa lock căn nào'}
+                <View style={styles.divider} />
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Thời gian lock</Text>
+                  <Text style={styles.detailValue}>
+                    {formatLockTime(item.ngayLock)}
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Thời gian còn lại</Text>
+                  <Text
+                    style={[
+                      styles.remainingTime,
+                      {
+                        color: isActive ? getStatusColor(progress) : "#6B7280",
+                      },
+                    ]}
+                  >
+                    {formatRemaining(remainingMinutes)}
+                  </Text>
+                </View>
+
+                {isActive && (
+                  <View style={styles.progressBarContainer}>
+                    <View
+                      style={[
+                        styles.progressBar,
+                        {
+                          width: `${progress * 100}%`,
+                          backgroundColor: getStatusColor(progress),
+                        },
+                      ]}
+                    />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+
+          {loadingMore && (
+            <Text style={{ textAlign: "center", padding: 20 }}>
+              Đang tải thêm...
             </Text>
-          </View>
-        )}
-      </ScrollView>
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }
-
-function getStatusColor(progress: number): string {
-  if (progress > 0.5) return '#10B981';
-  if (progress > 0.25) return '#F59E0B';
-  return '#EF4444';
-}
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
+
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     paddingHorizontal: 24,
     paddingVertical: 16,
     backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
+
   searchInputWrapper: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     backgroundColor: Colors.background,
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 48,
   },
+
   searchInput: {
     flex: 1,
     fontSize: 15,
     color: Colors.text,
     padding: 0,
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      },
-    }),
+    ...Platform.select({ web: { outlineStyle: "none" } }),
   },
+
   filterButton: {
     width: 48,
     height: 48,
     borderRadius: 12,
     backgroundColor: Colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
+
   filterButtonActive: {
     backgroundColor: Colors.primary,
   },
+
   filterContainer: {
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
     paddingVertical: 12,
-    gap: 12,
+    backgroundColor: Colors.white,
   },
-  filterSection: {
-    gap: 8,
-  },
-  filterSectionTitle: {
+
+  filterTitle: {
+    paddingHorizontal: 24,
     fontSize: 13,
-    fontWeight: '600' as const,
+    fontWeight: "600",
     color: Colors.textSecondary,
-    paddingHorizontal: 24,
+    marginBottom: 10,
   },
-  filterScrollContent: {
+
+  filterScroll: {
     paddingHorizontal: 24,
     gap: 8,
   },
+
   filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: Colors.background,
     borderWidth: 1,
     borderColor: Colors.border,
+    backgroundColor: Colors.background,
   },
+
   filterChipActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
+
   filterChipText: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: "600",
     color: Colors.text,
   },
+
   filterChipTextActive: {
     color: Colors.white,
   },
-  content: {
-    flex: 1,
-  },
+
+  content: { flex: 1 },
+
   scrollContent: {
     paddingHorizontal: 24,
     paddingTop: 20,
   },
+
   resultText: {
     fontSize: 14,
     color: Colors.textSecondary,
     marginBottom: 16,
-    fontWeight: '500' as const,
+    fontWeight: "500",
   },
+
   unitCard: {
     backgroundColor: Colors.white,
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 4,
-      },
-      web: {
-        boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
-      },
-    }),
   },
-  unitHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  unitHeaderLeft: {
-    flex: 1,
-  },
+
   projectName: {
     fontSize: 16,
-    fontWeight: '700' as const,
+    fontWeight: "700",
     color: Colors.text,
-    marginBottom: 4,
   },
+
   productCode: {
     fontSize: 18,
-    fontWeight: '800' as const,
+    fontWeight: "800",
     color: Colors.primary,
-    letterSpacing: 0.5,
+    marginTop: 6,
   },
+
+  unitHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
     borderRadius: 20,
+    height: 30,
   },
+
   statusBadgeText: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: Colors.white,
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
   },
+
   divider: {
     height: 1,
     backgroundColor: Colors.border,
-    marginBottom: 16,
+    marginVertical: 14,
   },
-  unitDetails: {
-    gap: 12,
-    marginBottom: 16,
-  },
+
   detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
   },
-  detailLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
+
   detailLabel: {
-    fontSize: 14,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
-  detailValue: {
     fontSize: 14,
-    color: Colors.text,
-    fontWeight: '600' as const,
   },
+
+  detailValue: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
   remainingTime: {
-    fontSize: 16,
-    fontWeight: '800' as const,
+    fontSize: 18,
+    fontWeight: "800",
   },
+
   progressBarContainer: {
     height: 6,
     backgroundColor: Colors.background,
     borderRadius: 3,
-    overflow: 'hidden',
+    marginTop: 14,
   },
+
   progressBar: {
-    height: '100%',
+    height: "100%",
     borderRadius: 3,
   },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 80,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    marginTop: 24,
-    marginBottom: 8,
-  },
-  emptyDescription: {
-    fontSize: 15,
+
+  loadingText: {
+    marginTop: 10,
     color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 32,
   },
 });
