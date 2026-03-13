@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,13 +8,25 @@ import {
   Platform,
   Animated,
   Pressable,
-} from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { Bell, Package, FolderOpen, Settings as SettingsIcon, MessageCircle, ChevronDown, Check } from 'lucide-react-native';
-import Colors from '@/constants/colors';
-import { notifications as initialNotifications, Notification } from '@/mocks/notifications';
+} from "react-native";
+import { Stack, useLocalSearchParams } from "expo-router";
+import {
+  Bell,
+  Package,
+  FolderOpen,
+  Settings as SettingsIcon,
+  MessageCircle,
+  ChevronDown,
+  Check,
+} from "lucide-react-native";
+import Colors from "@/constants/colors";
+import {
+  notifications as initialNotifications,
+  Notification,
+} from "@/mocks/notifications";
+import { NotificationService } from "./sevices/NotificationService";
 
-type FilterType = 'all' | Notification['type'];
+type FilterType = "all" | Notification["type"];
 
 interface FilterOption {
   key: FilterType;
@@ -25,30 +37,80 @@ interface FilterOption {
 }
 
 const FILTER_OPTIONS: FilterOption[] = [
-  { key: 'all', label: 'Tất cả', icon: <Bell color={Colors.textSecondary} size={18} />, color: Colors.textSecondary, bg: '#F3F4F6' },
-  { key: 'project', label: 'Dự án', icon: <FolderOpen color={Colors.primary} size={18} />, color: Colors.primary, bg: '#FFF4ED' },
-  { key: 'product', label: 'Sản phẩm', icon: <Package color="#10B981" size={18} />, color: '#10B981', bg: '#ECFDF5' },
-  { key: 'message', label: 'Tin nhắn', icon: <MessageCircle color="#3B82F6" size={18} />, color: '#3B82F6', bg: '#EFF6FF' },
-  { key: 'system', label: 'Hệ thống', icon: <SettingsIcon color="#6366F1" size={18} />, color: '#6366F1', bg: '#EEF2FF' },
+  {
+    key: "all",
+    label: "Tất cả",
+    icon: <Bell color={Colors.textSecondary} size={18} />,
+    color: Colors.textSecondary,
+    bg: "#F3F4F6",
+  },
+  {
+    key: "project",
+    label: "Dự án",
+    icon: <FolderOpen color={Colors.primary} size={18} />,
+    color: Colors.primary,
+    bg: "#FFF4ED",
+  },
+  {
+    key: "product",
+    label: "Sản phẩm",
+    icon: <Package color="#10B981" size={18} />,
+    color: "#10B981",
+    bg: "#ECFDF5",
+  },
+  {
+    key: "message",
+    label: "Tin nhắn",
+    icon: <MessageCircle color="#3B82F6" size={18} />,
+    color: "#3B82F6",
+    bg: "#EFF6FF",
+  },
+  {
+    key: "system",
+    label: "Hệ thống",
+    icon: <SettingsIcon color="#6366F1" size={18} />,
+    color: "#6366F1",
+    bg: "#EEF2FF",
+  },
 ];
 
 export default function NotificationsScreen() {
-  const { showUnreadOnly } = useLocalSearchParams<{ showUnreadOnly?: string }>();
-  const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
-  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const { showUnreadOnly } = useLocalSearchParams<{
+    showUnreadOnly?: string;
+  }>();
+  const [notifications, setNotifications] =
+    useState<Notification[]>(initialNotifications);
+  const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [showDropdown, setShowDropdown] = useState<boolean>(false);
   const dropdownAnim = useRef(new Animated.Value(0)).current;
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  const filteredByType = activeFilter === 'all'
-    ? notifications
-    : notifications.filter((n) => n.type === activeFilter);
+  const [data, setData] = useState([]);
 
-  const displayedNotifications = showUnreadOnly === 'true'
-    ? filteredByType.filter((n) => !n.isRead)
-    : filteredByType;
+  const loadData = async () => {
+    let res = await NotificationService.getNotifications({
+      TypeNoti: "giucho",
+    });
+    setData(res?.data ?? []);
+  };
 
-  const activeOption = FILTER_OPTIONS.find((o) => o.key === activeFilter) ?? FILTER_OPTIONS[0];
+  console.log(data);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+  const filteredByType =
+    activeFilter === "all"
+      ? notifications
+      : notifications.filter((n) => n.type === activeFilter);
+
+  const displayedNotifications =
+    showUnreadOnly === "true"
+      ? filteredByType.filter((n) => !n.isRead)
+      : filteredByType;
+
+  const activeOption =
+    FILTER_OPTIONS.find((o) => o.key === activeFilter) ?? FILTER_OPTIONS[0];
   const filteredCount = displayedNotifications.length;
 
   const toggleDropdown = () => {
@@ -79,61 +141,95 @@ export default function NotificationsScreen() {
   };
 
   const handleNotificationPress = (notification: Notification) => {
-    console.log('[Notifications] Notification pressed', { id: notification.id });
-    
+    console.log("[Notifications] Notification pressed", {
+      id: notification.id,
+    });
+
     setNotifications((prev) =>
-      prev.map((n) =>
-        n.id === notification.id ? { ...n, isRead: true } : n
-      )
+      prev.map((n) => (n.id === notification.id ? { ...n, isRead: true } : n))
     );
   };
 
   const handleMarkAllAsRead = () => {
-    console.log('[Notifications] Mark all as read');
+    console.log("[Notifications] Mark all as read");
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
   };
 
-  const getIconByType = (type: Notification['type']) => {
+  const getIconByType = (type: Notification["type"]) => {
     switch (type) {
-      case 'project':
+      case "project":
         return <FolderOpen color={Colors.primary} size={20} />;
-      case 'product':
+      case "product":
         return <Package color="#10B981" size={20} />;
-      case 'message':
+      case "message":
         return <MessageCircle color="#3B82F6" size={20} />;
-      case 'system':
+      case "system":
         return <SettingsIcon color="#6366F1" size={20} />;
       default:
         return <Bell color={Colors.textSecondary} size={20} />;
     }
   };
 
-  const getIconBgByType = (type: Notification['type']) => {
+  const getIconBgByType = (type: Notification["type"]) => {
     switch (type) {
-      case 'project':
-        return '#FFF4ED';
-      case 'product':
-        return '#ECFDF5';
-      case 'message':
-        return '#EFF6FF';
-      case 'system':
-        return '#EEF2FF';
+      case "project":
+        return "#FFF4ED";
+      case "product":
+        return "#ECFDF5";
+      case "message":
+        return "#EFF6FF";
+      case "system":
+        return "#EEF2FF";
       default:
         return Colors.background;
     }
+  };
+
+  const formatTimeFacebook = (dateString: string) => {
+    const now = new Date();
+    const date = new Date(dateString);
+
+    const diff = now.getTime() - date.getTime();
+
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (seconds < 60) {
+      return "Vừa xong";
+    }
+
+    if (minutes < 60) {
+      return `${minutes} phút trước`;
+    }
+
+    if (hours < 24) {
+      return `${hours} giờ trước`;
+    }
+
+    if (days === 1) {
+      return "Hôm qua";
+    }
+
+    if (days < 7) {
+      return `${days} ngày trước`;
+    }
+
+    return date.toLocaleDateString("vi-VN");
   };
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Thông báo',
+          title: "Thông báo",
           headerStyle: {
             backgroundColor: Colors.white,
           },
           headerTintColor: Colors.text,
           headerTitleStyle: {
-            fontWeight: '700',
+            fontWeight: "700",
             fontSize: 18,
           },
           headerShadowVisible: false,
@@ -143,10 +239,12 @@ export default function NotificationsScreen() {
       <View style={styles.header}>
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>
-            {unreadCount > 0 ? `${unreadCount} thông báo chưa đọc` : 'Không có thông báo mới'}
+            {data?.length > 0
+              ? `${data?.length} thông báo chưa đọc`
+              : "Không có thông báo mới"}
           </Text>
         </View>
-        {unreadCount > 0 && (
+        {data?.length > 0 && (
           <TouchableOpacity
             style={styles.markAllButton}
             onPress={handleMarkAllAsRead}
@@ -156,11 +254,14 @@ export default function NotificationsScreen() {
         )}
       </View>
 
-      <View style={styles.filterBar}>
+      {/* <View style={styles.filterBar}>
         <TouchableOpacity
           style={[
             styles.filterButton,
-            activeFilter !== 'all' && { borderColor: activeOption.color, backgroundColor: activeOption.bg },
+            activeFilter !== "all" && {
+              borderColor: activeOption.color,
+              backgroundColor: activeOption.bg,
+            },
           ]}
           activeOpacity={0.7}
           onPress={toggleDropdown}
@@ -169,18 +270,23 @@ export default function NotificationsScreen() {
           <Text
             style={[
               styles.filterButtonText,
-              activeFilter !== 'all' && { color: activeOption.color, fontWeight: '600' as const },
+              activeFilter !== "all" && {
+                color: activeOption.color,
+                fontWeight: "600" as const,
+              },
             ]}
           >
             {activeOption.label}
           </Text>
           <ChevronDown
-            color={activeFilter !== 'all' ? activeOption.color : Colors.textSecondary}
+            color={
+              activeFilter !== "all" ? activeOption.color : Colors.textSecondary
+            }
             size={16}
           />
         </TouchableOpacity>
         <Text style={styles.filterCount}>{filteredCount} thông báo</Text>
-      </View>
+      </View> */}
 
       {showDropdown && (
         <>
@@ -207,30 +313,40 @@ export default function NotificationsScreen() {
               },
             ]}
           >
-            {FILTER_OPTIONS.map((option, index) => {
+            {/* {FILTER_OPTIONS.map((option, index) => {
               const isActive = activeFilter === option.key;
-              const count = option.key === 'all'
-                ? notifications.length
-                : notifications.filter((n) => n.type === option.key).length;
+              const count =
+                option.key === "all"
+                  ? notifications.length
+                  : notifications.filter((n) => n.type === option.key).length;
               return (
                 <TouchableOpacity
                   key={option.key}
                   style={[
                     styles.dropdownItem,
                     isActive && { backgroundColor: option.bg },
-                    index < FILTER_OPTIONS.length - 1 && styles.dropdownItemBorder,
+                    index < FILTER_OPTIONS.length - 1 &&
+                      styles.dropdownItemBorder,
                   ]}
                   activeOpacity={0.6}
                   onPress={() => selectFilter(option.key)}
                 >
-                  <View style={[styles.dropdownItemIcon, { backgroundColor: option.bg }]}>
+                  <View
+                    style={[
+                      styles.dropdownItemIcon,
+                      { backgroundColor: option.bg },
+                    ]}
+                  >
                     {option.icon}
                   </View>
                   <View style={styles.dropdownItemContent}>
                     <Text
                       style={[
                         styles.dropdownItemLabel,
-                        isActive && { color: option.color, fontWeight: '700' as const },
+                        isActive && {
+                          color: option.color,
+                          fontWeight: "700" as const,
+                        },
                       ]}
                     >
                       {option.label}
@@ -240,7 +356,7 @@ export default function NotificationsScreen() {
                   {isActive && <Check color={option.color} size={18} />}
                 </TouchableOpacity>
               );
-            })}
+            })} */}
           </Animated.View>
         </>
       )}
@@ -250,42 +366,45 @@ export default function NotificationsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {displayedNotifications.map((notification) => (
+        {data.map((notification) => (
           <TouchableOpacity
-            key={notification.id}
+            key={notification.ID}
             style={[
               styles.notificationCard,
-              !notification.isRead && styles.notificationCardUnread,
+              // !notification.isRead && styles.notificationCardUnread,
             ]}
             activeOpacity={0.7}
             onPress={() => handleNotificationPress(notification)}
           >
-            <View
+            {/* <View
               style={[
                 styles.iconContainer,
                 { backgroundColor: getIconBgByType(notification.type) },
               ]}
             >
               {getIconByType(notification.type)}
-            </View>
+            </View> */}
 
             <View style={styles.notificationContent}>
               <View style={styles.notificationHeader}>
                 <Text
                   style={[
                     styles.notificationTitle,
-                    !notification.isRead && styles.notificationTitleUnread,
+                    // !notification.isRead && styles.notificationTitleUnread,
                   ]}
                   numberOfLines={1}
                 >
-                  {notification.title}
+                  {notification.Title}
                 </Text>
-                {!notification.isRead && <View style={styles.unreadBadge} />}
+                {/* {!notification.isRead && <View style={styles.unreadBadge} />} */}
               </View>
               <Text style={styles.notificationDescription} numberOfLines={2}>
-                {notification.description}
+                {notification.Content}
               </Text>
-              <Text style={styles.notificationTime}>{notification.time}</Text>
+
+              <Text style={styles.notificationTime}>
+                {formatTimeFacebook(notification.NgayNhap)}
+              </Text>
             </View>
           </TouchableOpacity>
         ))}
@@ -300,9 +419,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 24,
     paddingVertical: 16,
     backgroundColor: Colors.white,
@@ -314,7 +433,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.textSecondary,
   },
   markAllButton: {
@@ -323,13 +442,13 @@ const styles = StyleSheet.create({
   },
   markAllText: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.primary,
   },
   filterBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 10,
     backgroundColor: Colors.white,
@@ -337,33 +456,33 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.border,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: "#F9FAFB",
   },
   filterButtonText: {
     fontSize: 13,
-    fontWeight: '500' as const,
+    fontWeight: "500" as const,
     color: Colors.textSecondary,
   },
   filterCount: {
     fontSize: 12,
     color: Colors.textLight,
-    fontWeight: '500' as const,
+    fontWeight: "500" as const,
   },
   dropdownOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 99,
   },
   dropdownContainer: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 152 : 148,
+    position: "absolute",
+    top: Platform.OS === "ios" ? 152 : 148,
     left: 16,
     right: 16,
     backgroundColor: Colors.white,
@@ -371,7 +490,7 @@ const styles = StyleSheet.create({
     zIndex: 100,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.12,
         shadowRadius: 24,
@@ -380,13 +499,13 @@ const styles = StyleSheet.create({
         elevation: 12,
       },
       web: {
-        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
+        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.12)",
       },
     }),
   },
   dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 14,
     gap: 12,
@@ -399,24 +518,24 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   dropdownItemContent: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   dropdownItemLabel: {
     fontSize: 15,
-    fontWeight: '500' as const,
+    fontWeight: "500" as const,
     color: Colors.text,
   },
   dropdownItemCount: {
     fontSize: 13,
     color: Colors.textLight,
-    fontWeight: '500' as const,
+    fontWeight: "500" as const,
   },
   content: {
     flex: 1,
@@ -425,7 +544,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   notificationCard: {
-    flexDirection: 'row',
+    flexDirection: "row",
     backgroundColor: Colors.white,
     marginHorizontal: 16,
     marginVertical: 6,
@@ -434,7 +553,7 @@ const styles = StyleSheet.create({
     gap: 16,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 8,
@@ -443,39 +562,39 @@ const styles = StyleSheet.create({
         elevation: 2,
       },
       web: {
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)",
       },
     }),
   },
   notificationCardUnread: {
-    backgroundColor: '#FFFBEB',
+    backgroundColor: "#FFFBEB",
     borderWidth: 1,
-    borderColor: '#FEF3C7',
+    borderColor: "#FEF3C7",
   },
   iconContainer: {
     width: 48,
     height: 48,
     borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   notificationContent: {
     flex: 1,
     gap: 6,
   },
   notificationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   notificationTitle: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   notificationTitleUnread: {
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
   },
   unreadBadge: {
     width: 8,

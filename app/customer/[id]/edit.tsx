@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -11,80 +11,175 @@ import {
   Modal,
   Image,
   ActivityIndicator,
-} from 'react-native';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Save, ChevronDown, Check, ImagePlus, X } from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker';
-import Colors from '@/constants/colors';
-import { customers, CustomerType } from '@/mocks/customers';
+} from "react-native";
+import { Stack, useRouter, useLocalSearchParams } from "expo-router";
+import {
+  ChevronLeft,
+  Save,
+  ChevronDown,
+  Check,
+  ImagePlus,
+  X,
+} from "lucide-react-native";
+import * as ImagePicker from "expo-image-picker";
+import Colors from "@/constants/colors";
+import { customers, CustomerType } from "@/mocks/customers";
+import { CustomerService } from "@/app/sevices/CustomerService";
 
 export default function CustomerEditScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-  
+
   const existingCustomer = customers.find((c) => c.id === id);
 
   const [formData, setFormData] = useState({
-    name: existingCustomer?.name || '',
-    phone: existingCustomer?.phone || '',
-    email: existingCustomer?.email || '',
-    cccd: '',
-    type: (existingCustomer?.type || 'personal') as CustomerType,
-    company: existingCustomer?.company || '',
-    taxCode: existingCustomer?.taxCode || '',
-    status: existingCustomer?.status || 'potential',
+    name: existingCustomer?.name || "",
+    phone: existingCustomer?.phone || "",
+    email: existingCustomer?.email || "",
+    cccd: "",
+    type: (existingCustomer?.type || "personal") as CustomerType,
+    company: existingCustomer?.company || "",
+    taxCode: existingCustomer?.taxCode || "",
+    status: existingCustomer?.status || "potential",
     images: existingCustomer?.images || [],
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [isPickingImage, setIsPickingImage] = useState(false);
+  const [customer, setCustomer] = useState<any>(null);
+
+  const getCustomer = async () => {
+    try {
+      const res = await CustomerService.getCustomer({ MaKH: id });
+
+      if (res?.data?.length) {
+        const item = res.data[0];
+
+        setCustomer(item);
+
+        setFormData((prev) => ({
+          ...prev,
+          name: item.tenKH || "",
+          phone: item.diDong || "",
+          email: item.email || "",
+          cccd: item.soCMND || "",
+          
+        }));
+      }
+    } catch (err) {
+      console.log(err);
+    }
+  };
+  useEffect(() => {
+    getCustomer();
+  }, []);
+
+  const handleSave = async () => {
+    if (!validateForm()) return;
+
+    try {
+      const payload = {
+        maKH: customer?.maKH || 0,
+        hoTen: formData.name,
+        diDong: formData.phone,
+        email: formData.email,
+        soCMND:formData.cccd,
+        diaChi: "",
+        maNKH: 0,
+        maNguon: 0,
+        ghiChu: "",
+      };
+
+      console.log(payload,'payload');
+      
+
+      const res = await CustomerService.addCustomer(payload);
+
+      console.log(res);
+      
+
+      if (res?.status === 2000) {
+        if (Platform.OS === "web") {
+          alert(res.message);
+          router.back();
+        } else {
+          Alert.alert("Thành công", res.message, [
+            { text: "OK", onPress: () => router.back() },
+          ]);
+        }
+      } else {
+        if (Platform.OS === "web") {
+          alert(res?.message || "Thao tác thất bại");
+        } else {
+          Alert.alert("Lỗi", res?.message || "Thao tác thất bại");
+        }
+      }
+    } catch (error) {
+      console.log("SAVE CUSTOMER ERROR:", error);
+
+      if (Platform.OS === "web") {
+        alert("Không thể kết nối server");
+      } else {
+        Alert.alert("Lỗi", "Không thể kết nối server");
+      }
+    }
+  };
 
   const statusOptions: {
-    value: 'active' | 'potential' | 'inactive';
+    value: "active" | "potential" | "inactive";
     label: string;
     color: string;
   }[] = [
-    { value: 'potential', label: 'Tiềm năng', color: '#F59E0B' },
-    { value: 'active', label: 'Đang giao dịch', color: '#10B981' },
-    { value: 'inactive', label: 'Không hoạt động', color: '#9CA3AF' },
+    { value: "potential", label: "Tiềm năng", color: "#F59E0B" },
+    { value: "active", label: "Đang giao dịch", color: "#10B981" },
+    { value: "inactive", label: "Không hoạt động", color: "#9CA3AF" },
   ];
 
   const getSelectedStatusLabel = () => {
-    return statusOptions.find((option) => option.value === formData.status)?.label || '';
+    return (
+      statusOptions.find((option) => option.value === formData.status)?.label ||
+      ""
+    );
   };
 
   const getSelectedStatusColor = () => {
-    return statusOptions.find((option) => option.value === formData.status)?.color || Colors.textSecondary;
+    return (
+      statusOptions.find((option) => option.value === formData.status)?.color ||
+      Colors.textSecondary
+    );
   };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
     if (!formData.name.trim()) {
-      newErrors.name = 'Vui lòng nhập tên khách hàng';
+      newErrors.name = "Vui lòng nhập tên khách hàng";
     }
 
     if (!formData.phone.trim()) {
-      newErrors.phone = 'Vui lòng nhập số điện thoại';
+      newErrors.phone = "Vui lòng nhập số điện thoại";
     } else if (!/^0\d{9}$/.test(formData.phone)) {
-      newErrors.phone = 'Số điện thoại không hợp lệ';
+      newErrors.phone = "Số điện thoại không hợp lệ";
     }
 
-    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Email không hợp lệ';
+    if (
+      formData.email.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)
+    ) {
+      newErrors.email = "Email không hợp lệ";
     }
 
     if (formData.cccd.trim() && !/^\d{12}$/.test(formData.cccd)) {
-      newErrors.cccd = 'Số CCCD phải có đúng 12 chữ số';
+      newErrors.cccd = "Số CCCD phải có đúng 12 chữ số";
     }
 
-    if (formData.type === 'business' && !formData.company.trim()) {
-      newErrors.company = 'Vui lòng nhập tên công ty';
+    if (formData.type === "business" && !formData.company.trim()) {
+      newErrors.company = "Vui lòng nhập tên công ty";
     }
 
-    if (formData.type === 'business' && !formData.taxCode.trim()) {
-      newErrors.taxCode = 'Vui lòng nhập mã số thuế';
+    if (formData.type === "business" && !formData.taxCode.trim()) {
+      newErrors.taxCode = "Vui lòng nhập mã số thuế";
     }
 
     setErrors(newErrors);
@@ -95,7 +190,7 @@ export default function CustomerEditScreen() {
     try {
       setIsPickingImage(true);
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ["images"],
         allowsMultipleSelection: true,
         quality: 0.8,
       });
@@ -108,11 +203,11 @@ export default function CustomerEditScreen() {
         });
       }
     } catch (error) {
-      console.error('Error picking images:', error);
-      if (Platform.OS === 'web') {
-        alert('Không thể chọn ảnh');
+      console.error("Error picking images:", error);
+      if (Platform.OS === "web") {
+        alert("Không thể chọn ảnh");
       } else {
-        Alert.alert('Lỗi', 'Không thể chọn ảnh');
+        Alert.alert("Lỗi", "Không thể chọn ảnh");
       }
     } finally {
       setIsPickingImage(false);
@@ -124,41 +219,22 @@ export default function CustomerEditScreen() {
     setFormData({ ...formData, images: updatedImages });
   };
 
-  const handleSave = () => {
-    if (!validateForm()) {
-      return;
-    }
-
-    if (Platform.OS === 'web') {
-      alert('Cập nhật khách hàng thành công!');
-    } else {
-      Alert.alert(
-        'Thành công',
-        'Cập nhật khách hàng thành công!',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
-      return;
-    }
-    
-    router.back();
-  };
-
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
           headerShown: true,
-          title: 'Chỉnh sửa khách hàng',
+          title: "Chỉnh sửa khách hàng",
           headerStyle: {
             backgroundColor: Colors.primary,
           },
           headerTintColor: Colors.white,
           headerTitleStyle: {
-            fontWeight: '700',
+            fontWeight: "700",
             fontSize: 18,
           },
           headerLeft: () => (
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => router.back()}
               style={styles.headerBackButton}
             >
@@ -166,7 +242,7 @@ export default function CustomerEditScreen() {
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={handleSave}
               style={styles.headerSaveButton}
             >
@@ -189,15 +265,15 @@ export default function CustomerEditScreen() {
               style={[
                 styles.typeButton,
                 styles.typeButtonLeft,
-                formData.type === 'personal' && styles.typeButtonActive,
+                formData.type === "personal" && styles.typeButtonActive,
               ]}
-              onPress={() => setFormData({ ...formData, type: 'personal' })}
+              onPress={() => setFormData({ ...formData, type: "personal" })}
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.typeButtonText,
-                  formData.type === 'personal' && styles.typeButtonTextActive,
+                  formData.type === "personal" && styles.typeButtonTextActive,
                 ]}
               >
                 Cá nhân
@@ -207,15 +283,15 @@ export default function CustomerEditScreen() {
               style={[
                 styles.typeButton,
                 styles.typeButtonRight,
-                formData.type === 'business' && styles.typeButtonActive,
+                formData.type === "business" && styles.typeButtonActive,
               ]}
-              onPress={() => setFormData({ ...formData, type: 'business' })}
+              onPress={() => setFormData({ ...formData, type: "business" })}
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.typeButtonText,
-                  formData.type === 'business' && styles.typeButtonTextActive,
+                  formData.type === "business" && styles.typeButtonTextActive,
                 ]}
               >
                 Doanh nghiệp
@@ -226,20 +302,24 @@ export default function CustomerEditScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Thông tin cơ bản</Text>
-          
+
           <View style={styles.formGroup}>
             <Text style={styles.label}>
               Tên khách hàng <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
               style={[styles.input, errors.name && styles.inputError]}
-              placeholder={formData.type === 'personal' ? 'Nguyễn Văn A' : 'Công ty TNHH ABC'}
+              placeholder={
+                formData.type === "personal"
+                  ? "Nguyễn Văn A"
+                  : "Công ty TNHH ABC"
+              }
               placeholderTextColor={Colors.textSecondary}
               value={formData.name}
               onChangeText={(text) => {
                 setFormData({ ...formData, name: text });
                 if (errors.name) {
-                  setErrors({ ...errors, name: '' });
+                  setErrors({ ...errors, name: "" });
                 }
               }}
             />
@@ -258,12 +338,14 @@ export default function CustomerEditScreen() {
               onChangeText={(text) => {
                 setFormData({ ...formData, phone: text });
                 if (errors.phone) {
-                  setErrors({ ...errors, phone: '' });
+                  setErrors({ ...errors, phone: "" });
                 }
               }}
               keyboardType="phone-pad"
             />
-            {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+            {errors.phone && (
+              <Text style={styles.errorText}>{errors.phone}</Text>
+            )}
           </View>
 
           <View style={styles.formGroup}>
@@ -276,13 +358,15 @@ export default function CustomerEditScreen() {
               onChangeText={(text) => {
                 setFormData({ ...formData, email: text });
                 if (errors.email) {
-                  setErrors({ ...errors, email: '' });
+                  setErrors({ ...errors, email: "" });
                 }
               }}
               keyboardType="email-address"
               autoCapitalize="none"
             />
-            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+            {errors.email && (
+              <Text style={styles.errorText}>{errors.email}</Text>
+            )}
           </View>
 
           <View style={styles.formGroup}>
@@ -293,11 +377,11 @@ export default function CustomerEditScreen() {
               placeholderTextColor={Colors.textSecondary}
               value={formData.cccd}
               onChangeText={(text) => {
-                const numericText = text.replace(/[^0-9]/g, '');
+                const numericText = text.replace(/[^0-9]/g, "");
                 if (numericText.length <= 12) {
                   setFormData({ ...formData, cccd: numericText });
                   if (errors.cccd) {
-                    setErrors({ ...errors, cccd: '' });
+                    setErrors({ ...errors, cccd: "" });
                   }
                 }
               }}
@@ -308,10 +392,10 @@ export default function CustomerEditScreen() {
           </View>
         </View>
 
-        {formData.type === 'business' && (
+        {formData.type === "business" && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Thông tin doanh nghiệp</Text>
-            
+
             <View style={styles.formGroup}>
               <Text style={styles.label}>
                 Tên công ty <Text style={styles.required}>*</Text>
@@ -324,11 +408,13 @@ export default function CustomerEditScreen() {
                 onChangeText={(text) => {
                   setFormData({ ...formData, company: text });
                   if (errors.company) {
-                    setErrors({ ...errors, company: '' });
+                    setErrors({ ...errors, company: "" });
                   }
                 }}
               />
-              {errors.company && <Text style={styles.errorText}>{errors.company}</Text>}
+              {errors.company && (
+                <Text style={styles.errorText}>{errors.company}</Text>
+              )}
             </View>
 
             <View style={styles.formGroup}>
@@ -343,12 +429,14 @@ export default function CustomerEditScreen() {
                 onChangeText={(text) => {
                   setFormData({ ...formData, taxCode: text });
                   if (errors.taxCode) {
-                    setErrors({ ...errors, taxCode: '' });
+                    setErrors({ ...errors, taxCode: "" });
                   }
                 }}
                 keyboardType="number-pad"
               />
-              {errors.taxCode && <Text style={styles.errorText}>{errors.taxCode}</Text>}
+              {errors.taxCode && (
+                <Text style={styles.errorText}>{errors.taxCode}</Text>
+              )}
             </View>
           </View>
         )}
@@ -377,7 +465,7 @@ export default function CustomerEditScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Hình ảnh</Text>
-          
+
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -459,7 +547,7 @@ export default function CustomerEditScreen() {
           </TouchableOpacity>
         </Modal>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.saveButton}
           onPress={handleSave}
           activeOpacity={0.8}
@@ -495,21 +583,21 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.text,
     marginBottom: 16,
   },
   typeContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.border,
   },
   typeButton: {
     flex: 1,
     paddingVertical: 14,
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: Colors.white,
   },
   typeButtonLeft: {
@@ -522,7 +610,7 @@ const styles = StyleSheet.create({
   },
   typeButtonText: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   typeButtonTextActive: {
@@ -533,12 +621,12 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
     marginBottom: 8,
   },
   required: {
-    color: '#EF4444',
+    color: "#EF4444",
   },
   input: {
     backgroundColor: Colors.white,
@@ -551,18 +639,18 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   inputError: {
-    borderColor: '#EF4444',
+    borderColor: "#EF4444",
   },
   errorText: {
     fontSize: 13,
-    color: '#EF4444',
+    color: "#EF4444",
     marginTop: 6,
     marginLeft: 4,
   },
   dropdownButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: Colors.white,
     borderRadius: 12,
     paddingHorizontal: 16,
@@ -571,13 +659,13 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   dropdownButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   dropdownButtonText: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   statusIndicator: {
@@ -587,20 +675,20 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
     padding: 24,
   },
   modalContent: {
     backgroundColor: Colors.white,
     borderRadius: 16,
     padding: 20,
-    width: '100%',
+    width: "100%",
     maxWidth: 400,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 12,
@@ -609,21 +697,21 @@ const styles = StyleSheet.create({
         elevation: 8,
       },
       web: {
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)",
       },
     }),
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.text,
     marginBottom: 16,
-    textAlign: 'center',
+    textAlign: "center",
   },
   modalOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 14,
     paddingHorizontal: 12,
     borderRadius: 10,
@@ -631,19 +719,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modalOptionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   modalOptionText: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 10,
     backgroundColor: Colors.primary,
     paddingVertical: 16,
@@ -666,7 +754,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     fontSize: 16,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.white,
   },
   imagesScrollContent: {
@@ -677,43 +765,43 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 12,
     borderWidth: 2,
-    borderStyle: 'dashed',
+    borderStyle: "dashed",
     borderColor: Colors.primary,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#EFF6FF",
+    justifyContent: "center",
+    alignItems: "center",
     gap: 8,
   },
   addImageText: {
     fontSize: 13,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.primary,
   },
   imageContainer: {
-    position: 'relative',
+    position: "relative",
     width: 120,
     height: 120,
   },
   customerImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   removeImageButton: {
-    position: 'absolute',
+    position: "absolute",
     top: 6,
     right: 6,
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.3,
         shadowRadius: 4,
@@ -722,7 +810,7 @@ const styles = StyleSheet.create({
         elevation: 4,
       },
       web: {
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
+        boxShadow: "0 2px 4px rgba(0, 0, 0, 0.3)",
       },
     }),
   },

@@ -1,67 +1,65 @@
-import React from 'react';
+
+
+import React from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Image,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { FileText, ImageIcon, Package, ArrowLeft } from 'lucide-react-native';
-import Colors from '@/constants/colors';
-import { featuredProperties } from '@/mocks/properties';
-import { LinearGradient } from 'expo-linear-gradient';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { FileText, ImageIcon, Package, ArrowLeft } from "lucide-react-native";
+import Colors from "@/constants/colors";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function ProjectOptionsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { project } = useLocalSearchParams<{ project: any }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  
-  const project = featuredProperties.find((p) => p.id === id);
 
-  if (!project) {
-    return null;
-  }
+  const projectData = project ? JSON.parse(project) : null;
+
+  if (!projectData) return null;
 
   const options = [
     {
-      id: 'products',
-      title: 'Sản phẩm',
+      id: "products",
+      title: "Sản phẩm",
       icon: Package,
-      gradient: ['#8B5CF6', '#6D28D9'] as const,
-      onPress: () => router.push('/products'),
+      gradient: ["#8B5CF6", "#6D28D9"] as const,
+      onPress: () =>
+        router.push(`/products?MaDA=${projectData.MaDA}` as any),
     },
     {
-      id: 'documents',
-      title: 'Tài liệu',
+      id: "documents",
+      title: "Tài liệu",
       icon: FileText,
-      gradient: ['#3B82F6', '#1D4ED8'] as const,
-      onPress: () => router.push(`/folders/${id}` as any),
+      gradient: ["#3B82F6", "#1D4ED8"] as const,
+      onPress: () => router.push(`/folders/${projectData.MaDA}` as any),
     },
     {
-      id: 'gallery',
-      title: 'Thư viện Ảnh',
+      id: "gallery",
+      title: "Thư viện ảnh",
       icon: ImageIcon,
-      gradient: ['#10B981', '#047857'] as const,
-      onPress: () => router.push(`/photo-gallery?projectId=${id}` as any),
+      gradient: ["#10B981", "#047857"] as const,
+      onPress: () =>
+        router.push(`/photo-gallery?projectId=${projectData.MaDA}` as any),
     },
   ];
 
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-        }}
-      />
+      <Stack.Screen options={{ headerShown: false }} />
 
       <Image
-        source={{ uri: project.image }}
+        source={{ uri: projectData.icon }}
         style={styles.backgroundImage}
       />
+
       <LinearGradient
-        colors={['rgba(0,0,0,0.4)', 'rgba(0,0,0,0.8)']}
+        colors={["rgba(0,0,0,0.4)", "rgba(0,0,0,0.85)"]}
         style={styles.overlay}
       />
 
@@ -77,9 +75,13 @@ export default function ProjectOptionsScreen() {
 
       <View style={[styles.content, { paddingTop: insets.top + 60 }]}>
         <View style={styles.header}>
-          <Text style={styles.projectTitle}>{project.title}</Text>
-          <Text style={styles.projectLocation}>{project.location}</Text>
-          <Text style={styles.projectPrice}>{project.price}</Text>
+          <Text style={styles.projectTitle}>{projectData.TenDA}</Text>
+
+          <Text style={styles.projectLocation}>
+            {projectData.district}, {projectData.city}
+          </Text>
+
+          <Text style={styles.projectPrice}>{projectData.sub_title}</Text>
         </View>
 
         <View style={styles.optionsContainer}>
@@ -95,8 +97,13 @@ export default function ProjectOptionsScreen() {
                 style={styles.optionGradient}
               >
                 <View style={styles.iconContainer}>
-                  <option.icon color={Colors.white} size={40} strokeWidth={1.5} />
+                  <option.icon
+                    color={Colors.white}
+                    size={40}
+                    strokeWidth={1.5}
+                  />
                 </View>
+
                 <Text style={styles.optionTitle}>{option.title}</Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -110,89 +117,103 @@ export default function ProjectOptionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: "#000",
   },
+
   backgroundImage: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
+    position: "absolute",
+    width: "100%",
+    height: "100%",
   },
+
   overlay: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
+    position: "absolute",
+    width: "100%",
+    height: "100%",
   },
+
   content: {
     flex: 1,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
     paddingBottom: 60,
     paddingHorizontal: 24,
   },
+
   header: {
     gap: 8,
   },
+
   projectTitle: {
     fontSize: 32,
-    fontWeight: '700' as const,
+    fontWeight: "700",
     color: Colors.white,
     marginBottom: 4,
   },
+
   projectLocation: {
     fontSize: 16,
     color: Colors.white,
     opacity: 0.9,
   },
+
   projectPrice: {
-    fontSize: 20,
-    fontWeight: '600' as const,
+    fontSize: 18,
+    fontWeight: "600",
     color: Colors.white,
     marginTop: 8,
   },
+
   optionsContainer: {
     gap: 16,
   },
+
   optionCard: {
     borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
+    overflow: "hidden",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 12,
   },
+
   optionGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 24,
     gap: 20,
   },
+
   iconContainer: {
     width: 64,
     height: 64,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: "rgba(255,255,255,0.2)",
     borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
+
   optionTitle: {
     fontSize: 22,
-    fontWeight: '700' as const,
+    fontWeight: "700",
     color: Colors.white,
     flex: 1,
   },
+
   backButton: {
-    position: 'absolute',
+    position: "absolute",
     left: 16,
     zIndex: 10,
   },
+
   backButtonInner: {
     width: 44,
     height: 44,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: "rgba(0,0,0,0.4)",
     borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: "rgba(255,255,255,0.2)",
   },
 });

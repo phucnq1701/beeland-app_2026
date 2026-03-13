@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,13 +7,13 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
-} from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { CreditCard, ChevronRight, Check } from 'lucide-react-native';
-import Colors from '@/constants/colors';
-import { customers } from '@/mocks/customers';
+} from "react-native";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { CreditCard, ChevronRight, Check } from "lucide-react-native";
+import Colors from "@/constants/colors";
+import { customers } from "@/mocks/customers";
 
-type PaymentMethod = 'bank_transfer';
+type PaymentMethod = "bank_transfer";
 
 interface PaymentOption {
   id: PaymentMethod;
@@ -26,33 +26,37 @@ interface PaymentOption {
 
 const paymentOptions: PaymentOption[] = [
   {
-    id: 'bank_transfer',
+    id: "bank_transfer",
     icon: CreditCard,
-    title: 'Chuyển khoản ngân hàng',
-    subtitle: 'Thanh toán qua QR Code hoặc số tài khoản',
-    color: '#3B82F6',
-    bgColor: '#EFF6FF',
+    title: "Chuyển khoản ngân hàng",
+    subtitle: "Thanh toán qua QR Code hoặc số tài khoản",
+    color: "#3B82F6",
+    bgColor: "#EFF6FF",
   },
 ];
 
 export default function PaymentMethodScreen() {
   const router = useRouter();
+  const { bookingId } = useLocalSearchParams();
   const { customerId } = useLocalSearchParams<{ customerId: string }>();
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(
+    null
+  );
 
   const customer = customers.find((c) => c.id === customerId);
 
   const handleContinue = () => {
     if (!selectedMethod) {
-      Alert.alert('Thông báo', 'Vui lòng chọn phương thức thanh toán');
+      Alert.alert("Thông báo", "Vui lòng chọn phương thức thanh toán");
       return;
     }
 
     router.push({
-      pathname: '/booking/qr-payment',
-      params: { 
-        customerId: customerId || '',
+      pathname: "/booking/qr-payment",
+      params: {
+        customerId: customerId || "",
         paymentMethod: selectedMethod,
+        bookingId: bookingId,
       },
     });
   };
@@ -61,7 +65,7 @@ export default function PaymentMethodScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Phương thức thanh toán',
+          title: "Phương thức thanh toán",
           headerStyle: {
             backgroundColor: Colors.white,
           },
@@ -189,7 +193,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.text,
     marginBottom: 8,
   },
@@ -207,24 +211,24 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   customerInfoHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 8,
   },
   customerInfoLabel: {
     fontSize: 14,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
+    fontWeight: "500" as const,
   },
   customerInfoValue: {
     fontSize: 16,
     color: Colors.text,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
   },
   customerInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   customerInfoDetail: {
     fontSize: 14,
@@ -238,14 +242,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     borderWidth: 2,
     borderColor: Colors.border,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 8,
@@ -254,26 +258,26 @@ const styles = StyleSheet.create({
         elevation: 2,
       },
       web: {
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)",
       },
     }),
   },
   optionCardSelected: {
     borderColor: Colors.primary,
-    backgroundColor: '#F0F9FF',
+    backgroundColor: "#F0F9FF",
   },
   optionContent: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 16,
   },
   optionIconContainer: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   optionTextContainer: {
     flex: 1,
@@ -281,7 +285,7 @@ const styles = StyleSheet.create({
   },
   optionTitle: {
     fontSize: 16,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.text,
   },
   optionSubtitle: {
@@ -297,28 +301,28 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   noteCard: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: "#FEF3C7",
     borderRadius: 12,
     padding: 16,
     gap: 8,
   },
   noteTitle: {
     fontSize: 15,
-    fontWeight: '700' as const,
-    color: '#92400E',
+    fontWeight: "700" as const,
+    color: "#92400E",
     marginBottom: 4,
   },
   noteText: {
     fontSize: 13,
-    color: '#92400E',
+    color: "#92400E",
     lineHeight: 20,
   },
   bottomContainer: {
-    position: 'absolute' as const,
+    position: "absolute" as const,
     bottom: 0,
     left: 0,
     right: 0,
@@ -328,7 +332,7 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: -2 },
         shadowOpacity: 0.1,
         shadowRadius: 8,
@@ -337,7 +341,7 @@ const styles = StyleSheet.create({
         elevation: 8,
       },
       web: {
-        boxShadow: '0 -2px 8px rgba(0, 0, 0, 0.1)',
+        boxShadow: "0 -2px 8px rgba(0, 0, 0, 0.1)",
       },
     }),
   },
@@ -345,15 +349,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   continueButtonDisabled: {
     backgroundColor: Colors.border,
   },
   continueButtonText: {
     fontSize: 16,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.white,
   },
   continueButtonTextDisabled: {
