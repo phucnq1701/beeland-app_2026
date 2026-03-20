@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
+  Modal,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { DollarSign, Calendar, CreditCard, Banknote, ChevronDown, X } from 'lucide-react-native';
 import { paymentReportData } from '@/mocks/reports';
-import { Modal } from 'react-native';
+import ReportFilterBar, { filterByProjectAndDate } from '@/components/ReportFilterBar';
 
 type FilterType = 'all' | 'booking' | 'deposit' | 'contract' | 'installment';
 
@@ -33,12 +34,27 @@ const typeLabels: Record<string, { label: string; color: string; bg: string }> =
 export default function PaymentReportScreen() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [showFilter, setShowFilter] = useState(false);
+  const [selectedProject, setSelectedProject] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
-  const filtered = filter === 'all'
-    ? paymentReportData
-    : paymentReportData.filter(item => item.type === filter);
+  const filtered = useMemo(() => {
+    let data = filter === 'all'
+      ? paymentReportData
+      : paymentReportData.filter(item => item.type === filter);
+
+    data = filterByProjectAndDate(data, selectedProject, fromDate, toDate, (item) => item.paymentDate);
+    return data;
+  }, [filter, selectedProject, fromDate, toDate]);
 
   const selectedLabel = filterOptions.find(f => f.id === filter)?.label || 'Tất cả';
+
+  const handleReset = useCallback(() => {
+    setSelectedProject('all');
+    setFromDate('');
+    setToDate('');
+    setFilter('all');
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -57,14 +73,14 @@ export default function PaymentReportScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.summaryRow}>
-          <View style={[styles.summaryCard, { borderLeftColor: '#10B981' }]}>  
+          <View style={[styles.summaryCard, { borderLeftColor: '#10B981' }]}>
             <DollarSign color="#10B981" size={20} />
             <View>
               <Text style={styles.summaryValue}>11.15 tỷ</Text>
               <Text style={styles.summaryLabel}>Tổng thu</Text>
             </View>
           </View>
-          <View style={[styles.summaryCard, { borderLeftColor: '#3B82F6' }]}>  
+          <View style={[styles.summaryCard, { borderLeftColor: '#3B82F6' }]}>
             <CreditCard color="#3B82F6" size={20} />
             <View>
               <Text style={styles.summaryValue}>{filtered.length}</Text>
@@ -72,6 +88,16 @@ export default function PaymentReportScreen() {
             </View>
           </View>
         </View>
+
+        <ReportFilterBar
+          selectedProject={selectedProject}
+          onProjectChange={setSelectedProject}
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromDateChange={setFromDate}
+          onToDateChange={setToDate}
+          onReset={handleReset}
+        />
 
         <TouchableOpacity
           style={styles.filterBtn}
@@ -84,6 +110,11 @@ export default function PaymentReportScreen() {
         </TouchableOpacity>
 
         <View style={styles.listContainer}>
+          {filtered.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>Không có dữ liệu phù hợp</Text>
+            </View>
+          )}
           {filtered.map((item) => {
             const typeInfo = typeLabels[item.type];
             return (
@@ -187,6 +218,8 @@ const styles = StyleSheet.create({
   amountText: { fontSize: 13, fontWeight: '700' as const, color: Colors.primary },
   dateText: { fontSize: 12, color: Colors.textSecondary },
   methodText: { fontSize: 12, color: Colors.textSecondary },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyText: { fontSize: 14, color: Colors.textSecondary, fontWeight: '500' as const },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 30, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },

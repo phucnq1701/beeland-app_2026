@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { FileText, CheckCircle, Clock, ChevronDown, X, Calendar } from 'lucide-react-native';
 import { contractReportData } from '@/mocks/reports';
+import ReportFilterBar, { filterByProjectAndDate } from '@/components/ReportFilterBar';
 
 type FilterType = 'all' | 'active' | 'completed' | 'pending' | 'cancelled';
 
@@ -33,14 +34,29 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
 export default function ContractReportScreen() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [showFilter, setShowFilter] = useState(false);
+  const [selectedProject, setSelectedProject] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
-  const filtered = filter === 'all'
-    ? contractReportData
-    : contractReportData.filter(item => item.status === filter);
+  const filtered = useMemo(() => {
+    let data = filter === 'all'
+      ? contractReportData
+      : contractReportData.filter(item => item.status === filter);
 
-  const activeCount = contractReportData.filter(c => c.status === 'active').length;
-  const completedCount = contractReportData.filter(c => c.status === 'completed').length;
+    data = filterByProjectAndDate(data, selectedProject, fromDate, toDate, (item) => item.signDate);
+    return data;
+  }, [filter, selectedProject, fromDate, toDate]);
+
+  const activeCount = filtered.filter(c => c.status === 'active').length;
+  const completedCount = filtered.filter(c => c.status === 'completed').length;
   const selectedLabel = filterOptions.find(f => f.id === filter)?.label || 'Tất cả';
+
+  const handleReset = useCallback(() => {
+    setSelectedProject('all');
+    setFromDate('');
+    setToDate('');
+    setFilter('all');
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -63,7 +79,7 @@ export default function ContractReportScreen() {
             <View style={[styles.statIcon, { backgroundColor: '#EFF6FF' }]}>
               <FileText color="#3B82F6" size={18} />
             </View>
-            <Text style={styles.statValue}>{contractReportData.length}</Text>
+            <Text style={styles.statValue}>{filtered.length}</Text>
             <Text style={styles.statLabel}>Tổng HĐ</Text>
           </View>
           <View style={styles.statItem}>
@@ -82,6 +98,16 @@ export default function ContractReportScreen() {
           </View>
         </View>
 
+        <ReportFilterBar
+          selectedProject={selectedProject}
+          onProjectChange={setSelectedProject}
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromDateChange={setFromDate}
+          onToDateChange={setToDate}
+          onReset={handleReset}
+        />
+
         <TouchableOpacity
           style={styles.filterBtn}
           onPress={() => setShowFilter(true)}
@@ -93,6 +119,11 @@ export default function ContractReportScreen() {
         </TouchableOpacity>
 
         <View style={styles.listContainer}>
+          {filtered.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>Không có dữ liệu phù hợp</Text>
+            </View>
+          )}
           {filtered.map((item) => {
             const status = statusConfig[item.status];
             return (
@@ -191,6 +222,8 @@ const styles = StyleSheet.create({
   footerItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   contractValue: { fontSize: 13, fontWeight: '700' as const, color: Colors.primary },
   signDate: { fontSize: 12, color: Colors.textSecondary },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyText: { fontSize: 14, color: Colors.textSecondary, fontWeight: '500' as const },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 30, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,18 +7,17 @@ import {
   TouchableOpacity,
   Platform,
   Dimensions,
-  Modal,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 import Colors from '@/constants/colors';
-import { TrendingUp, ShoppingBag, ChevronDown, X } from 'lucide-react-native';
+import { TrendingUp, ShoppingBag } from 'lucide-react-native';
 import {
   salesReportData,
   revenueByProjectData,
   summaryStats,
 } from '@/mocks/reports';
-import { featuredProperties } from '@/mocks/properties';
+import ReportFilterBar from '@/components/ReportFilterBar';
 
 const { width } = Dimensions.get('window');
 const CHART_WIDTH = width - 48;
@@ -28,14 +27,14 @@ type TabType = 'transactions' | 'revenue' | 'projects';
 export default function SalesReportScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('transactions');
   const [selectedProject, setSelectedProject] = useState<string>('all');
-  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
-  const projects = [
-    { id: 'all', name: 'Tất cả dự án' },
-    ...featuredProperties.map(p => ({ id: p.id, name: p.title }))
-  ];
-
-  const selectedProjectName = projects.find(p => p.id === selectedProject)?.name || 'Tất cả dự án';
+  const handleReset = useCallback(() => {
+    setSelectedProject('all');
+    setFromDate('');
+    setToDate('');
+  }, []);
 
   const chartConfig = {
     backgroundColor: Colors.white,
@@ -100,15 +99,15 @@ export default function SalesReportScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.filterBtn}
-          onPress={() => setShowProjectModal(true)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.filterBtnLabel}>Dự án: </Text>
-          <Text style={styles.filterBtnValue} numberOfLines={1}>{selectedProjectName}</Text>
-          <ChevronDown color={Colors.textSecondary} size={16} />
-        </TouchableOpacity>
+        <ReportFilterBar
+          selectedProject={selectedProject}
+          onProjectChange={setSelectedProject}
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromDateChange={setFromDate}
+          onToDateChange={setToDate}
+          onReset={handleReset}
+        />
 
         <View style={styles.tabsContainer}>
           {(['transactions', 'revenue', 'projects'] as TabType[]).map((tab) => {
@@ -209,31 +208,6 @@ export default function SalesReportScreen() {
           </>
         )}
       </ScrollView>
-
-      <Modal visible={showProjectModal} transparent animationType="slide" onRequestClose={() => setShowProjectModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Chọn dự án</Text>
-              <TouchableOpacity onPress={() => setShowProjectModal(false)}>
-                <X color={Colors.textSecondary} size={24} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalList}>
-              {projects.map((project) => (
-                <TouchableOpacity
-                  key={project.id}
-                  style={[styles.modalItem, selectedProject === project.id && styles.modalItemActive]}
-                  onPress={() => { setSelectedProject(project.id); setShowProjectModal(false); }}
-                >
-                  <Text style={[styles.modalItemText, selectedProject === project.id && styles.modalItemTextActive]}>{project.name}</Text>
-                  {selectedProject === project.id && <View style={styles.modalCheck} />}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -254,13 +228,6 @@ const styles = StyleSheet.create({
   },
   summaryValue: { fontSize: 18, fontWeight: '800' as const, color: Colors.text },
   summaryLabel: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500' as const },
-  filterBtn: {
-    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
-    backgroundColor: Colors.white, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
-    marginBottom: 16, gap: 4, borderWidth: 1, borderColor: Colors.border, maxWidth: '80%' as any,
-  },
-  filterBtnLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' as const },
-  filterBtnValue: { fontSize: 13, color: Colors.text, fontWeight: '600' as const, flex: 1 },
   tabsContainer: {
     flexDirection: 'row', backgroundColor: Colors.white, borderRadius: 12, padding: 4,
     marginBottom: 20, gap: 4,
@@ -304,14 +271,4 @@ const styles = StyleSheet.create({
   projectItemRight: { alignItems: 'flex-end' },
   projectRevenue: { fontSize: 16, fontWeight: '700' as const, color: Colors.text, marginBottom: 2 },
   projectPercentage: { fontSize: 12, fontWeight: '600' as const, color: Colors.textSecondary },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '70%', paddingBottom: 30 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  modalTitle: { fontSize: 17, fontWeight: '700' as const, color: Colors.text },
-  modalList: { padding: 8 },
-  modalItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 10 },
-  modalItemActive: { backgroundColor: '#F8F8F8' },
-  modalItemText: { fontSize: 15, color: Colors.text, fontWeight: '500' as const, flex: 1 },
-  modalItemTextActive: { color: Colors.primary, fontWeight: '600' as const },
-  modalCheck: { width: 18, height: 18, borderRadius: 9, backgroundColor: Colors.primary },
 });

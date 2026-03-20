@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { AlertTriangle, Clock, CheckCircle, ChevronDown, X } from 'lucide-react-native';
 import { debtReportData } from '@/mocks/reports';
+import ReportFilterBar, { filterByProjectAndDate } from '@/components/ReportFilterBar';
 
 type FilterType = 'all' | 'overdue' | 'upcoming' | 'on_time';
 
@@ -31,14 +32,29 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; i
 export default function DebtReportScreen() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [showFilter, setShowFilter] = useState(false);
+  const [selectedProject, setSelectedProject] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
-  const filtered = filter === 'all'
-    ? debtReportData
-    : debtReportData.filter(item => item.status === filter);
+  const filtered = useMemo(() => {
+    let data = filter === 'all'
+      ? debtReportData
+      : debtReportData.filter(item => item.status === filter);
 
-  const overdueCount = debtReportData.filter(d => d.status === 'overdue').length;
+    data = filterByProjectAndDate(data, selectedProject, fromDate, toDate, (item) => item.dueDate);
+    return data;
+  }, [filter, selectedProject, fromDate, toDate]);
+
+  const overdueCount = filtered.filter(d => d.status === 'overdue').length;
   const totalDebt = '18.1 tỷ';
   const selectedLabel = filterOptions.find(f => f.id === filter)?.label || 'Tất cả';
+
+  const handleReset = useCallback(() => {
+    setSelectedProject('all');
+    setFromDate('');
+    setToDate('');
+    setFilter('all');
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -73,6 +89,16 @@ export default function DebtReportScreen() {
           </View>
         </View>
 
+        <ReportFilterBar
+          selectedProject={selectedProject}
+          onProjectChange={setSelectedProject}
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromDateChange={setFromDate}
+          onToDateChange={setToDate}
+          onReset={handleReset}
+        />
+
         <TouchableOpacity
           style={styles.filterBtn}
           onPress={() => setShowFilter(true)}
@@ -84,6 +110,11 @@ export default function DebtReportScreen() {
         </TouchableOpacity>
 
         <View style={styles.listContainer}>
+          {filtered.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>Không có dữ liệu phù hợp</Text>
+            </View>
+          )}
           {filtered.map((item) => {
             const status = statusConfig[item.status];
             const StatusIcon = status.icon;
@@ -203,6 +234,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2', borderRadius: 8, padding: 10,
   },
   overdueText: { fontSize: 12, color: '#EF4444', fontWeight: '600' as const },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyText: { fontSize: 14, color: Colors.textSecondary, fontWeight: '500' as const },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 30, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
