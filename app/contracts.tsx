@@ -19,7 +19,6 @@ import {
   Calendar,
   X,
   ChevronRight,
-  User,
   Building2,
   Hash,
   SlidersHorizontal,
@@ -110,114 +109,55 @@ const DEMO_CONTRACTS: Contract[] = [
   },
 ];
 
-const ContractCard = React.memo(({ item, index, onPress }: { item: Contract; index: number; onPress: () => void }) => {
+const ContractCard = React.memo(({ item, onPress }: { item: Contract; onPress: () => void }) => {
   const sColor = getStatusColor(item.trangThai, item.colorTT);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 350,
-        delay: index * 60,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 350,
-        delay: index * 60,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [fadeAnim, slideAnim, index]);
 
   return (
-    <Animated.View
-      style={{
-        opacity: fadeAnim,
-        transform: [{ translateY: slideAnim }],
-      }}
+    <TouchableOpacity
+      style={styles.contractCard}
+      activeOpacity={0.65}
+      testID={`contract-card-${item.maHD}`}
+      onPress={onPress}
     >
-      <TouchableOpacity
-        style={styles.contractCard}
-        activeOpacity={0.65}
-        testID={`contract-card-${index}`}
-        onPress={onPress}
-      >
-        <View style={styles.cardHeader}>
-          <View style={[styles.statusIndicator, { backgroundColor: sColor }]} />
-          <View style={styles.headerContent}>
-            <View style={styles.headerTop}>
-              <View style={[styles.contractIconWrap, { backgroundColor: `${sColor}12` }]}>
-                <FileText color={sColor} size={18} />
-              </View>
-              <View style={styles.headerInfo}>
-                <Text style={styles.contractNumber} numberOfLines={1}>
-                  {item.soHopDong || "—"}
-                </Text>
-                <View style={styles.projectRow}>
-                  <Building2 color={Colors.textTertiary} size={11} />
-                  <Text style={styles.projectName} numberOfLines={1}>
-                    {item.tenDA || "—"}
-                  </Text>
-                </View>
-              </View>
-              {item.trangThai ? (
-                <View style={[styles.statusChip, { backgroundColor: `${sColor}14` }]}>
-                  <View style={[styles.statusDot, { backgroundColor: sColor }]} />
-                  <Text style={[styles.statusLabel, { color: sColor }]}>
-                    {item.trangThai}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+      <View style={[styles.statusIndicator, { backgroundColor: sColor }]} />
+      <View style={styles.cardBody}>
+        <View style={styles.rowTop}>
+          <View style={styles.rowTopLeft}>
+            <Text style={styles.contractNumber} numberOfLines={1}>
+              {item.soHopDong || "—"}
+            </Text>
+            <Text style={styles.customerName} numberOfLines={1}>
+              {item.tenKH || "—"}
+            </Text>
           </View>
+          {item.trangThai ? (
+            <View style={[styles.statusChip, { backgroundColor: `${sColor}18` }]}>
+              <View style={[styles.statusDot, { backgroundColor: sColor }]} />
+              <Text style={[styles.statusLabel, { color: sColor }]}>
+                {item.trangThai}
+              </Text>
+            </View>
+          ) : null}
         </View>
-
-        <View style={styles.cardContent}>
-          <View style={styles.infoGrid}>
-            <View style={styles.infoItem}>
-              <View style={[styles.infoIconWrap, { backgroundColor: "rgba(59,130,246,0.08)" }]}>
-                <User color="#3B82F6" size={13} />
-              </View>
-              <View style={styles.infoText}>
-                <Text style={styles.infoLabel}>Khách hàng</Text>
-                <Text style={styles.infoValue} numberOfLines={1}>
-                  {item.tenKH || "—"}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.infoItem}>
-              <View style={[styles.infoIconWrap, { backgroundColor: "rgba(16,185,129,0.08)" }]}>
-                <Calendar color="#10B981" size={13} />
-              </View>
-              <View style={styles.infoText}>
-                <Text style={styles.infoLabel}>Ngày ký</Text>
-                <Text style={styles.infoValue}>
-                  {formatDate(item.ngayKy) || "—"}
-                </Text>
-              </View>
-            </View>
+        <View style={styles.rowBottom}>
+          <View style={styles.metaRow}>
+            <Building2 color={Colors.textTertiary} size={11} />
+            <Text style={styles.metaText} numberOfLines={1}>{item.tenDA || "—"}</Text>
           </View>
-
-          <View style={styles.cardDivider} />
-
-          <View style={styles.bottomRow}>
-            <View style={styles.productTag}>
-              <Hash color={Colors.primary} size={12} />
-              <Text style={styles.productTagText}>{item.maSP || "—"}</Text>
-            </View>
-            <View style={styles.priceSection}>
-              <Text style={styles.priceLabel}>Giá trị HĐ</Text>
-              <Text style={styles.priceValue}>{formatCurrency(item.tongGiaTri)}</Text>
-            </View>
-            <ChevronRight color={Colors.textLight} size={18} />
+          <View style={styles.metaRow}>
+            <Hash color={Colors.primary} size={11} />
+            <Text style={[styles.metaText, { color: Colors.primary, fontWeight: "600" as const }]}>{item.maSP || "—"}</Text>
           </View>
+          <View style={styles.metaRow}>
+            <Calendar color={Colors.textTertiary} size={11} />
+            <Text style={styles.metaText}>{formatDate(item.ngayKy) || "—"}</Text>
+          </View>
+          <View style={{ flex: 1 }} />
+          <Text style={styles.priceValue}>{formatCurrency(item.tongGiaTri)}</Text>
+          <ChevronRight color={Colors.textLight} size={16} />
         </View>
-      </TouchableOpacity>
-    </Animated.View>
+      </View>
+    </TouchableOpacity>
   );
 });
 
@@ -397,8 +337,8 @@ export default function ContractsScreen() {
   }, [router]);
 
   const renderContract = useCallback(
-    ({ item, index }: { item: Contract; index: number }) => (
-      <ContractCard item={item} index={index} onPress={() => handleContractPress(item)} />
+    ({ item }: { item: Contract }) => (
+      <ContractCard item={item} onPress={() => handleContractPress(item)} />
     ),
     [handleContractPress]
   );
@@ -408,27 +348,7 @@ export default function ContractsScreen() {
     []
   );
 
-  const totalValue = useMemo(() => {
-    return contracts.reduce((sum, c) => sum + (c.tongGiaTri || 0), 0);
-  }, [contracts]);
 
-  const ListHeaderComponent = useMemo(
-    () =>
-      contracts.length > 0 ? (
-        <View style={styles.summaryBar}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryCount}>{contracts.length}</Text>
-            <Text style={styles.summaryLabel}>Hợp đồng</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryAmount}>{formatCurrency(totalValue)}</Text>
-            <Text style={styles.summaryLabel}>Tổng giá trị</Text>
-          </View>
-        </View>
-      ) : null,
-    [contracts.length, totalValue]
-  );
 
   const ListEmptyComponent = useMemo(
     () => (
@@ -622,9 +542,8 @@ export default function ContractsScreen() {
           keyExtractor={keyExtractor}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={ListHeaderComponent}
           ListEmptyComponent={ListEmptyComponent}
-          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         />
       )}
     </View>
@@ -774,49 +693,7 @@ const styles = StyleSheet.create({
     fontWeight: "600" as const,
     color: Colors.error,
   },
-  summaryBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 14,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-      },
-      android: { elevation: 2 },
-      web: { boxShadow: "0 2px 8px rgba(0,0,0,0.05)" },
-    }),
-  },
-  summaryItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-  summaryDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: "rgba(0,0,0,0.06)",
-  },
-  summaryCount: {
-    fontSize: 22,
-    fontWeight: "800" as const,
-    color: Colors.primary,
-  },
-  summaryAmount: {
-    fontSize: 16,
-    fontWeight: "800" as const,
-    color: Colors.accent.green,
-  },
-  summaryLabel: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-    marginTop: 2,
-    fontWeight: "500" as const,
-  },
+
   loadingWrap: {
     flex: 1,
     justifyContent: "center",
@@ -829,161 +706,90 @@ const styles = StyleSheet.create({
     fontWeight: "500" as const,
   },
   listContent: {
-    padding: 16,
+    padding: 12,
     paddingBottom: 40,
   },
   contractCard: {
+    flexDirection: "row",
     backgroundColor: Colors.white,
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: "hidden",
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.07,
-        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
       },
-      android: { elevation: 3 },
-      web: { boxShadow: "0 3px 12px rgba(0,0,0,0.07)" },
+      android: { elevation: 2 },
+      web: { boxShadow: "0 2px 6px rgba(0,0,0,0.05)" },
     }),
-  },
-  cardHeader: {
-    flexDirection: "row",
   },
   statusIndicator: {
     width: 4,
-    borderTopLeftRadius: 16,
   },
-  headerContent: {
+  cardBody: {
     flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: "rgba(0,0,0,0.012)",
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.04)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  headerTop: {
+  rowTop: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 6,
   },
-  contractIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerInfo: {
+  rowTopLeft: {
     flex: 1,
-    marginLeft: 10,
     marginRight: 8,
   },
   contractNumber: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700" as const,
     color: Colors.text,
     letterSpacing: -0.2,
   },
-  projectRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 3,
-  },
-  projectName: {
+  customerName: {
     fontSize: 12,
-    color: Colors.textTertiary,
+    color: Colors.textSecondary,
     fontWeight: "500" as const,
+    marginTop: 2,
   },
   statusChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   statusDot: {
-    width: 6,
-    height: 6,
+    width: 5,
+    height: 5,
     borderRadius: 3,
   },
   statusLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700" as const,
   },
-  cardContent: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 14,
-  },
-  infoGrid: {
+  rowBottom: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 10,
   },
-  infoItem: {
-    flex: 1,
+  metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 3,
   },
-  infoIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  infoText: {
-    flex: 1,
-  },
-  infoLabel: {
+  metaText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-    fontWeight: "500" as const,
-    marginBottom: 2,
-  },
-  infoValue: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: "rgba(0,0,0,0.04)",
-    marginVertical: 12,
-  },
-  bottomRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  productTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(232,111,37,0.08)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  productTagText: {
-    fontSize: 13,
-    fontWeight: "700" as const,
-    color: Colors.primary,
-  },
-  priceSection: {
-    flex: 1,
-    alignItems: "flex-end",
-    marginRight: 8,
-  },
-  priceLabel: {
-    fontSize: 10,
     color: Colors.textTertiary,
     fontWeight: "500" as const,
   },
   priceValue: {
-    fontSize: 15,
-    fontWeight: "800" as const,
+    fontSize: 13,
+    fontWeight: "700" as const,
     color: Colors.accent.green,
     letterSpacing: -0.3,
   },
