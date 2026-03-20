@@ -71,7 +71,7 @@ export default function ProjectOptionsScreen() {
         <Image
           source={{
             uri:
-              projectData.icon || DEFAULT_PROJECT_IMAGE,
+              (projectData.icon && projectData.icon.trim() !== '') ? projectData.icon : DEFAULT_PROJECT_IMAGE,
           }}
           style={styles.projectImage}
           contentFit="cover"
