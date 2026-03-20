@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   TextInput,
   Platform,
@@ -20,10 +20,11 @@ import {
   User,
   Plus,
   Eye,
-  Trash,
+  Trash2,
+  Users,
+  X,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { customers, CustomerType } from "@/mocks/customers";
 import { CustomerService } from "./sevices/CustomerService";
 
 type TabType = "personal" | "business";
@@ -37,92 +38,157 @@ export default function CustomersScreen() {
 
   const loadData = async (search = "") => {
     setLoading(true);
-
     try {
       let res = await CustomerService.getCustomers(search);
       const list = Array.isArray(res?.data) ? res.data : [];
-
       setDataKH(list);
     } catch (error) {
       console.log("ERROR:", error);
       setDataKH([]);
     }
-
     setLoading(false);
   };
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadData(searchQuery);
+      void loadData(searchQuery);
     }, 500);
-
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const handleDeleteKH = async (maKH) => {
-    let res:any;
-    Alert.alert("Xác nhận", "Bạn có muốn xoá khách hàng?", [
-      {
-        text: "Có",
-        onPress: async () => {
-          try {
-            res = await CustomerService.delete({ MaKH: [maKH] });
-            console.log(res);
 
-            if (res?.status === 2000) {
-              loadData(searchQuery);
-              Alert.alert("Thành công", res?.message);
-            } else {
-              Alert.alert("Lỗi", res?.message);
+
+  const handleDeleteKH = useCallback(
+    (maKH: any) => {
+      Alert.alert("Xác nhận xoá", "Bạn có chắc muốn xoá khách hàng này?", [
+        {
+          text: "Xoá",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const res = await CustomerService.delete({ MaKH: [maKH] });
+              if (res?.status === 2000) {
+                void loadData(searchQuery);
+                Alert.alert("Thành công", res?.message);
+              } else {
+                Alert.alert("Lỗi", res?.message);
+              }
+            } catch (error) {
+              console.log("delete error:", error);
+              Alert.alert("Lỗi", "Không thể xoá khách hàng");
             }
-          } catch (error) {
-            console.log("delete error:", error);
-            Alert.alert("Lỗi", res?.message);
-          }
+          },
         },
-      },
-      {
-        text: "Không",
-        style: "cancel",
-      },
-    ]);
-  };
+        { text: "Huỷ", style: "cancel" },
+      ]);
+    },
+    [searchQuery]
+  );
 
-  const filteredCustomers = customers.filter((customer) => {
-    const matchesTab = customer.type === activeTab;
-    const matchesSearch = searchQuery
-      ? customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        customer.phone.includes(searchQuery) ||
-        customer.email.toLowerCase().includes(searchQuery.toLowerCase())
-      : true;
-    return matchesTab && matchesSearch;
-  });
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "#10B981";
-      case "potential":
-        return "#F59E0B";
-      case "inactive":
-        return "#9CA3AF";
-      default:
-        return "#9CA3AF";
+  const getInitials = (name: string) => {
+    if (!name) return "?";
+    const parts = name.trim().split(" ");
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     }
+    return name[0].toUpperCase();
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "active":
-        return "Đang giao dịch";
-      case "potential":
-        return "Tiềm năng";
-      case "inactive":
-        return "Không hoạt động";
-      default:
-        return "";
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      "#E86F25",
+      "#3B82F6",
+      "#10B981",
+      "#8B5CF6",
+      "#EC4899",
+      "#F59E0B",
+      "#06B6D4",
+    ];
+    let hash = 0;
+    for (let i = 0; i < (name || "").length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
+    return colors[Math.abs(hash) % colors.length];
   };
+
+  const renderCustomerItem = useCallback(
+    ({ item: customer }: { item: any }) => {
+      const avatarBg = getAvatarColor(customer.tenKH || "");
+      return (
+        <TouchableOpacity
+          style={styles.customerCard}
+          onPress={() => router.push(`/customer/${customer.maKH}`)}
+          activeOpacity={0.7}
+          testID={`customer-card-${customer.maKH}`}
+        >
+          <View style={styles.cardTopRow}>
+            <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
+              <Text style={styles.avatarText}>
+                {getInitials(customer.tenKH)}
+              </Text>
+            </View>
+
+            <View style={styles.cardInfo}>
+              <Text style={styles.customerName} numberOfLines={1}>
+                {customer.tenKH}
+              </Text>
+              {customer?.company ? (
+                <Text style={styles.customerCompany} numberOfLines={1}>
+                  {customer.company}
+                </Text>
+              ) : null}
+            </View>
+
+            <TouchableOpacity
+              onPress={() => handleDeleteKH(customer?.maKH)}
+              activeOpacity={0.6}
+              style={styles.deleteBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Trash2 size={16} color="#EF4444" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.cardDivider} />
+
+          <View style={styles.contactRow}>
+            <View style={styles.contactItem}>
+              <View style={styles.contactIconWrap}>
+                <Phone color={Colors.primary} size={14} />
+              </View>
+              <Text style={styles.contactText} numberOfLines={1}>
+                {customer.diDong || "—"}
+              </Text>
+            </View>
+            <View style={styles.contactItem}>
+              <View style={styles.contactIconWrap}>
+                <Mail color={Colors.accent.blue} size={14} />
+              </View>
+              <Text style={styles.contactText} numberOfLines={1}>
+                {customer.email || "—"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.cardFooter}>
+            <Text style={styles.dateText}>
+              {new Date(customer.ngayDangKy).toLocaleDateString("vi-VN")}
+            </Text>
+            <View style={styles.viewDetailBtn}>
+              <Eye color={Colors.primary} size={15} />
+              <Text style={styles.viewDetailText}>Chi tiết</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [handleDeleteKH, router]
+  );
+
+  const keyExtractor = useCallback(
+    (item: any) => item.maKH?.toString(),
+    []
+  );
 
   return (
     <View style={styles.container}>
@@ -130,18 +196,13 @@ export default function CustomersScreen() {
         options={{
           headerShown: true,
           title: "Khách hàng",
-          headerStyle: {
-            backgroundColor: Colors.primary,
-          },
+          headerStyle: { backgroundColor: Colors.primary },
           headerTintColor: Colors.white,
-          headerTitleStyle: {
-            fontWeight: "700",
-            fontSize: 18,
-          },
+          headerTitleStyle: { fontWeight: "700", fontSize: 18 },
           headerLeft: () => (
             <TouchableOpacity
               onPress={() => router.back()}
-              style={styles.headerBackButton}
+              style={styles.headerBtn}
             >
               <ChevronLeft color={Colors.white} size={24} />
             </TouchableOpacity>
@@ -149,7 +210,7 @@ export default function CustomersScreen() {
           headerRight: () => (
             <TouchableOpacity
               onPress={() => router.push("/customer/new")}
-              style={styles.headerAddButton}
+              style={styles.headerBtn}
             >
               <Plus color={Colors.white} size={24} />
             </TouchableOpacity>
@@ -157,192 +218,95 @@ export default function CustomersScreen() {
         }}
       />
 
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            styles.tabLeft,
-            activeTab === "personal" && styles.tabActive,
-          ]}
-          onPress={() => setActiveTab("personal")}
-          activeOpacity={0.8}
-        >
-          <User
-            color={activeTab === "personal" ? Colors.white : Colors.text}
-            size={20}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "personal" && styles.tabTextActive,
-            ]}
+      <View style={styles.topSection}>
+        <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "personal" && styles.tabActive]}
+            onPress={() => setActiveTab("personal")}
+            activeOpacity={0.8}
           >
-            Cá nhân
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            styles.tabRight,
-            activeTab === "business" && styles.tabActive,
-          ]}
-          onPress={() => setActiveTab("business")}
-          activeOpacity={0.8}
-        >
-          <Building2
-            color={activeTab === "business" ? Colors.white : Colors.text}
-            size={20}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "business" && styles.tabTextActive,
-            ]}
+            <User
+              color={activeTab === "personal" ? Colors.white : Colors.textSecondary}
+              size={18}
+            />
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === "personal" && styles.tabLabelActive,
+              ]}
+            >
+              Cá nhân
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "business" && styles.tabActive]}
+            onPress={() => setActiveTab("business")}
+            activeOpacity={0.8}
           >
-            Doanh nghiệp
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <View style={styles.searchContainer}>
-          <Search color={Colors.textSecondary} size={20} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Tìm kiếm theo tên, số điện thoại, email..."
-            placeholderTextColor={Colors.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+            <Building2
+              color={activeTab === "business" ? Colors.white : Colors.textSecondary}
+              size={18}
+            />
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === "business" && styles.tabLabelActive,
+              ]}
+            >
+              Doanh nghiệp
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.resultCount}>
-          Hiển thị <Text style={styles.resultCountBold}>{dataKH?.length}</Text>{" "}
-          khách hàng
-        </Text>
-        {loading ? (
-          <View
-            style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
-          >
-            <ActivityIndicator size="large" color="#f5ca1c" />
-            <Text style={{ marginTop: 10 }}>Đang tải dữ liệu...</Text>
-          </View>
-        ) : (
-          <View style={styles.customerList}>
-            {dataKH.map((customer) => (
-              <View key={customer.maKH} style={styles.customerCard}>
-                <View style={styles.customerHeader}>
-                  <View style={styles.customerNameRow}>
-                    <View
-                      style={[
-                        styles.customerAvatar,
-                        {
-                          backgroundColor:
-                            activeTab === "personal" ? "#EFF6FF" : "#FDF2F8",
-                        },
-                      ]}
-                    >
-                      {activeTab === "personal" ? (
-                        <User color={Colors.primary} size={20} />
-                      ) : (
-                        <Building2 color="#EC4899" size={20} />
-                      )}
-                    </View>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        flex: 1,
-                      }}
-                    >
-                      <View style={styles.customerNameContainer}>
-                        <Text style={styles.customerName}>
-                          {customer.tenKH}
-                        </Text>
-                        {customer?.company && (
-                          <Text style={styles.customerCompany}>
-                            {customer.company}
-                          </Text>
-                        )}
-                      </View>
+        <View style={styles.searchBar}>
+          <Search color={Colors.textSecondary} size={18} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm tên, SĐT, email..."
+            placeholderTextColor={Colors.textTertiary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            testID="customer-search-input"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")}>
+              <X color={Colors.textSecondary} size={18} />
+            </TouchableOpacity>
+          )}
+        </View>
 
-                      <TouchableOpacity
-                        onPress={() => handleDeleteKH(customer?.maKH)}
-                        activeOpacity={0.7}
-                        style={{ padding: 6 }}
-                      >
-                        <Trash size={18} color="#EF4444" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                  {/* <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusColor(customer.status) },
-                  ]}
-                >
-                  <Text style={styles.statusBadgeText}>
-                    {getStatusLabel(customer.status)}
-                  </Text>
-                </View> */}
-                </View>
+        <View style={styles.countRow}>
+          <Users color={Colors.textSecondary} size={14} />
+          <Text style={styles.countText}>
+            <Text style={styles.countNumber}>{dataKH?.length ?? 0}</Text> khách
+            hàng
+          </Text>
+        </View>
+      </View>
 
-                <View style={styles.customerInfo}>
-                  <View style={styles.infoRow}>
-                    <Phone color={Colors.textSecondary} size={16} />
-                    <Text style={styles.infoText}>{customer.diDong}</Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <Mail color={Colors.textSecondary} size={16} />
-                    <Text style={styles.infoText}>{customer.email}</Text>
-                  </View>
-                  {customer?.taxCode && (
-                    <View style={styles.infoRow}>
-                      <Building2 color={Colors.textSecondary} size={16} />
-                      <Text style={styles.infoText}>
-                        MST: {customer.taxCode}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* {customer.projects.length > 0 && (
-                <View style={styles.projectsContainer}>
-                  <Text style={styles.projectsLabel}>Dự án quan tâm:</Text>
-                  <View style={styles.projectTags}>
-                    {customer.projects.map((project, index) => (
-                      <View key={index} style={styles.projectTag}>
-                        <Text style={styles.projectTagText}>{project}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )} */}
-
-                <View style={styles.customerFooter}>
-                  <Text style={styles.customerDate}>
-                    Tạo:{" "}
-                    {new Date(customer.ngayDangKy).toLocaleDateString("vi-VN")}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.editButton}
-                    // onPress={() => router.push(`/customer/${customer.maSoKH}`)}
-                    onPress={() => router.push(`/customer/${customer.maKH}`)}
-                    activeOpacity={0.7}
-                  >
-                    <Eye color={Colors.primary} size={18} />
-                    <Text style={styles.editButtonText}>Chi tiết</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-      </ScrollView>
+      {loading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Đang tải...</Text>
+        </View>
+      ) : dataKH.length === 0 ? (
+        <View style={styles.emptyWrap}>
+          <Users color={Colors.textTertiary} size={48} />
+          <Text style={styles.emptyTitle}>Chưa có khách hàng</Text>
+          <Text style={styles.emptySubtitle}>
+            Nhấn + để thêm khách hàng mới
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={dataKH}
+          renderItem={renderCustomerItem}
+          keyExtractor={keyExtractor}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          testID="customer-list"
+        />
+      )}
     </View>
   );
 }
@@ -350,217 +314,232 @@ export default function CustomersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: "#F5F6F8",
   },
-  headerBackButton: {
-    marginLeft: 8,
+  headerBtn: {
+    padding: 4,
   },
-  headerAddButton: {
-    marginRight: 8,
-  },
-  tabContainer: {
-    flexDirection: "row",
-    margin: 24,
-    marginBottom: 0,
-    borderRadius: 12,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.border,
+  topSection: {
     backgroundColor: Colors.white,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.04)",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+      },
+      android: { elevation: 2 },
+      web: { boxShadow: "0 2px 6px rgba(0,0,0,0.04)" },
+    }),
+  },
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: "#F0F1F3",
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 12,
   },
   tab: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-    backgroundColor: Colors.white,
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
-  tabLeft: {
-    borderRightWidth: 1,
-    borderRightColor: Colors.border,
-  },
-  tabRight: {},
   tabActive: {
     backgroundColor: Colors.primary,
+    ...Platform.select({
+      ios: {
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: { elevation: 3 },
+      web: { boxShadow: `0 2px 8px ${Colors.primary}40` },
+    }),
   },
-  tabText: {
-    fontSize: 15,
+  tabLabel: {
+    fontSize: 14,
     fontWeight: "600" as const,
-    color: Colors.text,
+    color: Colors.textSecondary,
   },
-  tabTextActive: {
+  tabLabelActive: {
     color: Colors.white,
   },
-  content: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  searchContainer: {
+  searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 16,
+    backgroundColor: "#F0F1F3",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === "ios" ? 10 : 4,
+    gap: 8,
+    marginBottom: 10,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.text,
+    paddingVertical: Platform.OS === "ios" ? 0 : 6,
   },
-  resultCount: {
-    fontSize: 15,
+  countRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  countText: {
+    fontSize: 13,
     color: Colors.textSecondary,
-    marginBottom: 16,
   },
-  resultCountBold: {
+  countNumber: {
     fontWeight: "700" as const,
     color: Colors.primary,
   },
-  customerList: {
-    gap: 16,
+  listContent: {
+    padding: 16,
+    paddingBottom: 40,
+    gap: 12,
   },
   customerCard: {
     backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderRadius: 14,
+    padding: 14,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
       },
-      android: {
-        elevation: 2,
-      },
-      web: {
-        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)",
-      },
+      android: { elevation: 2 },
+      web: { boxShadow: "0 3px 10px rgba(0,0,0,0.06)" },
     }),
   },
-  customerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 16,
-  },
-  customerNameRow: {
+  cardTopRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    flex: 1,
   },
-  customerAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
   },
-  customerNameContainer: {
-    // flex: 1,
+  avatarText: {
+    fontSize: 16,
+    fontWeight: "700" as const,
+    color: Colors.white,
+  },
+  cardInfo: {
+    flex: 1,
   },
   customerName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700" as const,
     color: Colors.text,
     marginBottom: 2,
   },
   customerCompany: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.textSecondary,
     fontWeight: "500" as const,
   },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
+  deleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FEF2F2",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  statusBadgeText: {
-    fontSize: 12,
-    fontWeight: "600" as const,
-    color: Colors.white,
+  cardDivider: {
+    height: 1,
+    backgroundColor: "rgba(0,0,0,0.05)",
+    marginVertical: 10,
   },
-  customerInfo: {
-    gap: 10,
-    marginBottom: 16,
+  contactRow: {
+    gap: 8,
+    marginBottom: 10,
   },
-  infoRow: {
+  contactItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
   },
-  infoText: {
-    fontSize: 14,
+  contactIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#F5F6F8",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  contactText: {
+    fontSize: 13,
     color: Colors.text,
     flex: 1,
   },
-  projectsContainer: {
-    marginBottom: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  projectsLabel: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.textSecondary,
-    marginBottom: 8,
-  },
-  projectTags: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  projectTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#FFF4ED",
-    borderWidth: 1,
-    borderColor: "#FDBA74",
-  },
-  projectTagText: {
-    fontSize: 12,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  customerFooter: {
+  cardFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.04)",
   },
-  customerDate: {
+  dateText: {
     fontSize: 12,
-    color: Colors.textSecondary,
-    fontStyle: "italic" as const,
+    color: Colors.textTertiary,
   },
-  editButton: {
+  viewDetailBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: "#EFF6FF",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.primary,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "rgba(232,111,37,0.08)",
+    borderRadius: 6,
   },
-  editButtonText: {
-    fontSize: 13,
+  viewDetailText: {
+    fontSize: 12,
     fontWeight: "600" as const,
     color: Colors.primary,
+  },
+  loadingWrap: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  emptyWrap: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    paddingBottom: 60,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "600" as const,
+    color: Colors.text,
+    marginTop: 8,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: Colors.textSecondary,
   },
 });

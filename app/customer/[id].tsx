@@ -6,11 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
-  Image,
   TextInput,
   Modal,
   Alert,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from "react-native";
 import {
   Stack,
@@ -22,15 +22,13 @@ import {
   ChevronLeft,
   Phone,
   Mail,
-  Building2,
   MapPin,
   Calendar,
   Clock,
   Plus,
   Edit2,
+  Trash2,
   FileText,
-  User,
-  X,
 } from "lucide-react-native";
 import { Dropdown } from "react-native-element-dropdown";
 import Colors from "@/constants/colors";
@@ -38,6 +36,7 @@ import { CustomerService } from "../sevices/CustomerService";
 import { CongViecService } from "../sevices/CongViecService";
 import { Format_Date } from "@/components/utils/common";
 import DateTimePicker from "@react-native-community/datetimepicker";
+
 interface Appointment {
   id: string;
   date: string;
@@ -49,13 +48,6 @@ interface Appointment {
   dienGiai?: string;
 }
 
-interface WorkHistory {
-  id: string;
-  date: string;
-  content: string;
-  createdBy: string;
-}
-
 export default function CustomerDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
@@ -65,7 +57,6 @@ export default function CustomerDetailScreen() {
   const [workHistory, setWorkHistory] = useState<any[]>([]);
   const [trangThaiKH, setTrangThaiKH] = useState<any[]>([]);
   const [showAddHistoryModal, setShowAddHistoryModal] = useState(false);
-
   const [showAddAppointmentModal, setShowAddAppointmentModal] = useState(false);
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
@@ -75,13 +66,13 @@ export default function CustomerDetailScreen() {
     dienGiai: "",
     ngayHen: "",
     ngayHenAPI: "",
-    maLH: null,
+    maLH: null as string | null,
   });
 
   const [newHistory, setNewHistory] = useState({
     content: "",
-    status: null,
-    id: null,
+    status: null as string | null,
+    id: null as string | null,
   });
 
   const loadDataExtra = async () => {
@@ -90,34 +81,14 @@ export default function CustomerDetailScreen() {
   };
 
   useEffect(() => {
-    loadDataExtra();
+    void loadDataExtra();
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (id) {
-        getCustomer();
-        getAppointments();
-        getNotes();
-      }
-    }, [id])
-  );
-
-  // useEffect(() => {
-  //   if (id) {
-  //     getCustomer();
-  //     getAppointments();
-  //     getNotes();
-  //   }
-  // }, [id]);
-
-  const getCustomer = async () => {
+  const getCustomer = useCallback(async () => {
     try {
       const res = await CustomerService.getCustomer({ MaKH: id });
-
       if (res?.data?.length) {
         const item = res.data[0];
-
         setCustomer({
           id: item.maKH,
           name: item.tenKH || "",
@@ -135,9 +106,9 @@ export default function CustomerDetailScreen() {
     } catch (err) {
       console.log(err);
     }
-  };
+  }, [id]);
 
-  const getAppointments = async () => {
+  const getAppointments = useCallback(async () => {
     try {
       const res = await CustomerService.getLichHenByMaKH({
         MaKH: id,
@@ -146,7 +117,6 @@ export default function CustomerDetailScreen() {
         InputString: "",
         Home: 0,
       });
-
       if (res?.data?.length) {
         const data = res.data.map((item: any) => ({
           id: item.maLH?.toString(),
@@ -154,11 +124,10 @@ export default function CustomerDetailScreen() {
           time: item.ngayHen?.split("T")[1]?.substring(0, 5) || "",
           title: item.tieuDe || "Lịch hẹn",
           location: item.diaDiem || "",
-          status: "upcoming",
+          status: "upcoming" as const,
           notes: item.ghiChu || "",
           dienGiai: item?.dienGiai,
         }));
-
         setAppointments(data);
       } else {
         setAppointments([]);
@@ -166,14 +135,11 @@ export default function CustomerDetailScreen() {
     } catch (err) {
       console.log(err);
     }
-  };
+  }, [id]);
 
-  const getNotes = async () => {
+  const getNotes = useCallback(async () => {
     try {
-      const res = await CustomerService.getGhiChunByMaKH({
-        MaKH: id,
-      });
-
+      const res = await CustomerService.getGhiChunByMaKH({ MaKH: id });
       if (res?.data?.length) {
         setWorkHistory(res?.data);
       } else {
@@ -182,75 +148,67 @@ export default function CustomerDetailScreen() {
     } catch (err) {
       console.log(err);
     }
-  };
+  }, [id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (id) {
+        void getCustomer();
+        void getAppointments();
+        void getNotes();
+      }
+    }, [id, getCustomer, getAppointments, getNotes])
+  );
 
   const handleAddHistory = async () => {
     if (!newHistory.status || !newHistory.content.trim()) {
       Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin");
       return;
     }
-
     const payload = {
       DienGiai: newHistory?.content,
       MaTT: newHistory?.status,
       MaKH: id,
       ID: newHistory?.id ?? null,
     };
-
     const result = await CongViecService.addGhiChuCV(payload);
-
     if (result?.status === 2000) {
-      getNotes();
+      void getNotes();
       setShowAddHistoryModal(false);
-      setNewHistory({
-        content: "",
-        status: null,
-        id: null,
-      });
-
+      setNewHistory({ content: "", status: null, id: null });
       Alert.alert("Thành công", result?.message);
     } else {
       Alert.alert("Thất bại", result?.message);
     }
-    // const history: WorkHistory = {
-    //   id: Date.now().toString(),
-    //   date: new Date().toISOString().split("T")[0],
-    //   content: newHistory.content,
-    //   createdBy: "Người dùng hiện tại",
-    // };
   };
 
-  const formatDateVN = (date: any) => {
-    const dd = String(date.getDate()).padStart(2, "0");
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const yyyy = date.getFullYear();
-    const hh = String(date.getHours()).padStart(2, "0");
-    const mi = String(date.getMinutes()).padStart(2, "0");
-
+  const formatDateVN = (d: Date) => {
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
     return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
   };
 
-  const formatDateAPI = (date: Date) => {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const dd = String(date.getDate()).padStart(2, "0");
-    const hh = String(date.getHours()).padStart(2, "0");
-    const mi = String(date.getMinutes()).padStart(2, "0");
-    const ss = String(date.getSeconds()).padStart(2, "0");
-
+  const formatDateAPI = (d: Date) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    const ss = String(d.getSeconds()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`;
   };
 
   const onChangeDate = (event: any, selectedDate: any) => {
     setShowPicker(false);
-
     if (selectedDate) {
       setDate(selectedDate);
-
       setNewAppointment((prev) => ({
         ...prev,
-        ngayHen: formatDateVN(selectedDate), // hiển thị
-        ngayHenAPI: formatDateAPI(selectedDate), // gửi api
+        ngayHen: formatDateVN(selectedDate),
+        ngayHenAPI: formatDateAPI(selectedDate),
       }));
     }
   };
@@ -260,7 +218,6 @@ export default function CustomerDetailScreen() {
       Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin");
       return;
     }
-
     const payload = {
       TieuDe: newAppointment.tieuDe,
       DienGiai: newAppointment.dienGiai,
@@ -268,21 +225,12 @@ export default function CustomerDetailScreen() {
       MaLH: newAppointment.maLH ?? null,
       NgayHen: newAppointment.ngayHenAPI,
     };
-
     try {
       const result = await CongViecService.addLichHen(payload);
       if (result?.status === 2000) {
-        getAppointments();
+        void getAppointments();
         setShowAddAppointmentModal(false);
-
-        setNewAppointment({
-          tieuDe: "",
-          dienGiai: "",
-          ngayHen: "",
-          ngayHenAPI: "",
-          maLH: null,
-        });
-
+        setNewAppointment({ tieuDe: "", dienGiai: "", ngayHen: "", ngayHenAPI: "", maLH: null });
         Alert.alert("Thành công", result?.message);
       } else {
         Alert.alert("Thất bại", result?.message);
@@ -292,9 +240,8 @@ export default function CustomerDetailScreen() {
     }
   };
 
-  const handleEditAppointment = (item: any) => {
+  const handleEditAppointment = (item: Appointment) => {
     const dateObj = new Date(item.date + "T" + item.time);
-
     setNewAppointment({
       tieuDe: item.title,
       dienGiai: item.dienGiai || "",
@@ -302,23 +249,19 @@ export default function CustomerDetailScreen() {
       ngayHenAPI: formatDateAPI(dateObj),
       maLH: item.id,
     });
-
     setShowAddAppointmentModal(true);
   };
 
-  const handleDeleteAppointment = (id: any) => {
+  const handleDeleteAppointment = (appointmentId: string) => {
     Alert.alert("Xác nhận", "Bạn có chắc muốn xoá lịch hẹn này?", [
       { text: "Huỷ", style: "cancel" },
       {
         text: "Xoá",
         style: "destructive",
         onPress: async () => {
-          const result = await CongViecService.deleteLichHen({
-            MaLH: id,
-          });
-
+          const result = await CustomerService.addLichHen({ MaLH: appointmentId, MaKH: id, Delete: true });
           if (result?.status === 2000) {
-            getAppointments();
+            void getAppointments();
             Alert.alert("Thành công", "Đã xoá lịch hẹn");
           } else {
             Alert.alert("Lỗi", result?.message);
@@ -328,44 +271,58 @@ export default function CustomerDetailScreen() {
     ]);
   };
 
-  const getStatusColor = () => "#10B981";
-  const getStatusLabel = () => "Khách hàng";
-
-  const getAppointmentStatusColor = (status: string) => {
-    if (status === "completed") return "#10B981";
-    if (status === "cancelled") return "#EF4444";
-    return "#3B82F6";
-  };
-
-  const getAppointmentStatusLabel = (status: string) => {
-    if (status === "completed") return "Hoàn thành";
-    if (status === "cancelled") return "Đã hủy";
-    return "Sắp tới";
-  };
-
-  if (!customer) {
-    return (
-      <View style={styles.container}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <Text style={styles.errorText}>Đang tải dữ liệu...</Text>
-      </View>
-    );
-  }
-
-  const trangThaiOptions = trangThaiKH.map((item) => ({
-    label: item.tenTT,
-    value: item.maTT,
-  }));
-
   const handleEditHistory = (item: any) => {
     setNewHistory({
       content: item.dienGiai,
       status: item.maTT,
       id: item.id,
     });
-
     setShowAddHistoryModal(true);
   };
+
+  const trangThaiOptions = trangThaiKH.map((item) => ({
+    label: item.tenTT,
+    value: item.maTT,
+  }));
+
+  const getInitials = (name: string) => {
+    if (!name) return "?";
+    const parts = name.trim().split(" ");
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name[0].toUpperCase();
+  };
+
+  const getAvatarColor = (name: string) => {
+    const colors = ["#E86F25", "#3B82F6", "#10B981", "#8B5CF6", "#EC4899", "#F59E0B", "#06B6D4"];
+    let hash = 0;
+    for (let i = 0; i < (name || "").length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  if (!customer) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            title: "Chi tiết khách hàng",
+            headerStyle: { backgroundColor: Colors.primary },
+            headerTintColor: Colors.white,
+          }}
+        />
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const avatarBg = getAvatarColor(customer.name);
 
   return (
     <View style={styles.container}>
@@ -376,312 +333,288 @@ export default function CustomerDetailScreen() {
           headerStyle: { backgroundColor: Colors.primary },
           headerTintColor: Colors.white,
           headerTitleStyle: { fontWeight: "700", fontSize: 18 },
-
           headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()}>
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
               <ChevronLeft color={Colors.white} size={24} />
             </TouchableOpacity>
           ),
-
           headerRight: () => (
             <TouchableOpacity
               onPress={() => router.push(`/customer/${customer.id}/edit`)}
+              style={{ padding: 4 }}
             >
-              <Edit2 color={Colors.white} size={22} />
+              <Edit2 color={Colors.white} size={20} />
             </TouchableOpacity>
           ),
         }}
       />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* HEADER */}
-        <View style={styles.customerHeader}>
-          <View style={styles.customerHeaderContent}>
-            <View style={styles.customerAvatar}>
-              <User color={Colors.primary} size={32} />
-            </View>
-
-            <View style={styles.customerHeaderInfo}>
-              <Text style={styles.customerName}>{customer.name}</Text>
-
-              {customer.company ? (
-                <Text style={styles.customerCompany}>{customer.company}</Text>
-              ) : null}
-
-              <View
-                style={[
-                  styles.statusBadge,
-                  { backgroundColor: getStatusColor() },
-                ]}
-              >
-                <Text style={styles.statusBadgeText}>{getStatusLabel()}</Text>
-              </View>
-            </View>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <View style={styles.profileHeader}>
+          <View style={[styles.avatarLarge, { backgroundColor: avatarBg }]}>
+            <Text style={styles.avatarLargeText}>
+              {getInitials(customer.name)}
+            </Text>
+          </View>
+          <Text style={styles.profileName}>{customer.name}</Text>
+          {customer.company ? (
+            <Text style={styles.profileCompany}>{customer.company}</Text>
+          ) : null}
+          <View style={styles.statusChip}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusLabel}>Khách hàng</Text>
           </View>
         </View>
 
-        {/* CONTACT */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Thông tin liên hệ</Text>
-
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <View style={styles.infoIconContainer}>
-                <Phone color={Colors.primary} size={20} />
+        <View style={styles.contactCards}>
+          {customer.phone ? (
+            <View style={styles.contactCardItem}>
+              <View style={[styles.contactIcon, { backgroundColor: "rgba(232,111,37,0.1)" }]}>
+                <Phone color={Colors.primary} size={18} />
               </View>
-
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Số điện thoại</Text>
-                <Text style={styles.infoValue}>{customer.phone}</Text>
+              <View style={styles.contactCardContent}>
+                <Text style={styles.contactCardLabel}>Điện thoại</Text>
+                <Text style={styles.contactCardValue}>{customer.phone}</Text>
               </View>
             </View>
+          ) : null}
 
-            <View style={styles.infoDivider} />
-
-            <View style={styles.infoRow}>
-              <View style={styles.infoIconContainer}>
-                <Mail color={Colors.primary} size={20} />
+          {customer.email ? (
+            <View style={styles.contactCardItem}>
+              <View style={[styles.contactIcon, { backgroundColor: "rgba(59,130,246,0.1)" }]}>
+                <Mail color={Colors.accent.blue} size={18} />
               </View>
-
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>{customer.email}</Text>
+              <View style={styles.contactCardContent}>
+                <Text style={styles.contactCardLabel}>Email</Text>
+                <Text style={styles.contactCardValue}>{customer.email}</Text>
               </View>
             </View>
+          ) : null}
 
-            {customer.diaChi ? (
-              <>
-                <View style={styles.infoDivider} />
-
-                <View style={styles.infoRow}>
-                  <View style={styles.infoIconContainer}>
-                    <MapPin color={Colors.primary} size={20} />
-                  </View>
-
-                  <View style={styles.infoContent}>
-                    <Text style={styles.infoLabel}>Địa chỉ</Text>
-                    <Text style={styles.infoValue}>{customer.diaChi}</Text>
-                  </View>
-                </View>
-              </>
-            ) : null}
-          </View>
+          {customer.diaChi ? (
+            <View style={styles.contactCardItem}>
+              <View style={[styles.contactIcon, { backgroundColor: "rgba(16,185,129,0.1)" }]}>
+                <MapPin color={Colors.accent.green} size={18} />
+              </View>
+              <View style={styles.contactCardContent}>
+                <Text style={styles.contactCardLabel}>Địa chỉ</Text>
+                <Text style={styles.contactCardValue}>{customer.diaChi}</Text>
+              </View>
+            </View>
+          ) : null}
         </View>
 
-        {/* APPOINTMENTS */}
-        <View style={styles.section}>
+        <View style={styles.sectionWrap}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Lịch hẹn</Text>
-
+            <View style={styles.sectionTitleRow}>
+              <Calendar color={Colors.primary} size={18} />
+              <Text style={styles.sectionTitle}>Lịch hẹn</Text>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{appointments.length}</Text>
+              </View>
+            </View>
             <TouchableOpacity
               onPress={() => setShowAddAppointmentModal(true)}
-              style={styles.addButton}
+              style={styles.addBtn}
+              activeOpacity={0.7}
             >
-              <Text style={styles.addButtonText}>+ Thêm</Text>
+              <Plus color={Colors.white} size={16} />
+              <Text style={styles.addBtnText}>Thêm</Text>
             </TouchableOpacity>
           </View>
 
           {appointments.length === 0 ? (
-            <Text style={{ color: Colors.textSecondary }}>
-              Chưa có lịch hẹn
-            </Text>
+            <View style={styles.emptySection}>
+              <Calendar color={Colors.textTertiary} size={32} />
+              <Text style={styles.emptySectionText}>Chưa có lịch hẹn</Text>
+            </View>
           ) : (
-            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator>
+            <View style={styles.appointmentList}>
               {appointments.map((item) => (
-                <View
-                  key={item.id}
-                  style={{
-                    ...styles.appointmentCard,
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                  }}
-                >
+                <View key={item.id} style={styles.appointmentCard}>
                   <TouchableOpacity
-                    style={{ flex: 1 }}
+                    style={styles.appointmentContent}
                     onPress={() => handleEditAppointment(item)}
+                    activeOpacity={0.7}
                   >
-                    <Text style={styles.appointmentTitle}>{item.title}</Text>
-
-                    <Text>
-                      {item.date} - {item.time}
-                    </Text>
-                    <Text style={{ paddingTop: 10 }}>{item.dienGiai}</Text>
+                    <View style={styles.appointmentLeft}>
+                      <View style={styles.appointmentDateBadge}>
+                        <Clock color={Colors.accent.blue} size={12} />
+                        <Text style={styles.appointmentDateText}>
+                          {item.date} · {item.time}
+                        </Text>
+                      </View>
+                      <Text style={styles.appointmentTitle} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      {item.dienGiai ? (
+                        <Text style={styles.appointmentDesc} numberOfLines={2}>
+                          {item.dienGiai}
+                        </Text>
+                      ) : null}
+                    </View>
                   </TouchableOpacity>
-
                   <TouchableOpacity
                     onPress={() => handleDeleteAppointment(item.id)}
-                    style={{ padding: 6 }}
+                    style={styles.appointmentDeleteBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <X size={18} color="#EF4444" />
+                    <Trash2 size={15} color="#EF4444" />
                   </TouchableOpacity>
                 </View>
               ))}
-            </ScrollView>
+            </View>
           )}
         </View>
 
-        {/* HISTORY */}
-        <View style={{ ...styles.section, marginBottom: 50 }}>
+        <View style={[styles.sectionWrap, { marginBottom: 40 }]}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Lịch sử làm việc</Text>
-
+            <View style={styles.sectionTitleRow}>
+              <FileText color={Colors.accent.purple} size={18} />
+              <Text style={styles.sectionTitle}>Lịch sử làm việc</Text>
+              <View style={[styles.badge, { backgroundColor: "rgba(139,92,246,0.1)" }]}>
+                <Text style={[styles.badgeText, { color: Colors.accent.purple }]}>
+                  {workHistory.length}
+                </Text>
+              </View>
+            </View>
             <TouchableOpacity
               onPress={() => setShowAddHistoryModal(true)}
-              style={styles.addButton}
+              style={styles.addBtn}
+              activeOpacity={0.7}
             >
-              <Text style={styles.addButtonText}>+ Thêm</Text>
+              <Plus color={Colors.white} size={16} />
+              <Text style={styles.addBtnText}>Thêm</Text>
             </TouchableOpacity>
           </View>
+
           {workHistory.length === 0 ? (
-            <Text style={{ color: Colors.textSecondary }}>Chưa có lịch sử</Text>
+            <View style={styles.emptySection}>
+              <FileText color={Colors.textTertiary} size={32} />
+              <Text style={styles.emptySectionText}>Chưa có lịch sử</Text>
+            </View>
           ) : (
-            <ScrollView style={{ height: 300 }} showsVerticalScrollIndicator>
+            <View style={styles.historyList}>
               {workHistory.map((item) => (
                 <TouchableOpacity
                   key={item.id}
                   style={styles.historyCard}
                   onPress={() => handleEditHistory(item)}
+                  activeOpacity={0.7}
                 >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <Text style={styles.historyTypeText}>{item.tenTT}</Text>
-                    <Edit2 size={16} color={Colors.primary} />
+                  <View style={styles.historyTop}>
+                    <View style={styles.historyStatusChip}>
+                      <Text style={styles.historyStatusText}>{item.tenTT}</Text>
+                    </View>
+                    <Edit2 size={14} color={Colors.textTertiary} />
                   </View>
-
-                  <Text style={styles.historyContent}>{item.dienGiai}</Text>
-
-                  <Text style={styles.historyCreatedBy}>
+                  <Text style={styles.historyContent} numberOfLines={3}>
+                    {item.dienGiai}
+                  </Text>
+                  <Text style={styles.historyDate}>
                     {Format_Date(item.ngayCN)}
                   </Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </View>
           )}
         </View>
       </ScrollView>
 
-      {/* ADD HISTORY MODAL */}
       <Modal visible={showAddHistoryModal} transparent animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader2}>
-                <Text style={styles.modalTitle}>
-                  {newHistory.id
-                    ? "Sửa lịch sử làm việc"
-                    : "Thêm lịch sử làm việc"}
-                </Text>
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => {
+              setShowAddHistoryModal(false);
+              setNewHistory({ content: "", status: null, id: null });
+            }}
+          >
+            <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
+              <View style={styles.modalHandle} />
+              <Text style={styles.modalTitle}>
+                {newHistory.id ? "Sửa lịch sử làm việc" : "Thêm lịch sử làm việc"}
+              </Text>
 
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowAddHistoryModal(false);
-                    setNewHistory({
-                      content: "",
-                      status: null,
-                      id: null,
-                    });
-                  }}
-                >
-                  <Text style={styles.modalClose}>✕</Text>
-                </TouchableOpacity>
-              </View>
-
+              <Text style={styles.modalLabel}>Trạng thái</Text>
               <Dropdown
-                style={[
-                  styles.input,
-                  { paddingVertical: 10, marginBottom: 20, marginTop: 10 },
-                ]}
+                style={styles.modalDropdown}
                 data={trangThaiOptions}
                 labelField="label"
                 valueField="value"
                 placeholder="Chọn trạng thái công việc"
+                placeholderStyle={{ color: Colors.textTertiary, fontSize: 14 }}
+                selectedTextStyle={{ color: Colors.text, fontSize: 14 }}
                 value={newHistory.status}
                 onChange={(item: any) =>
-                  setNewHistory((prev) => ({
-                    ...prev,
-                    status: item.value,
-                  }))
-                }
-              />
-              <TextInput
-                style={[styles.input, { height: 200 }]}
-                placeholder="Nội dung"
-                multiline
-                value={newHistory.content}
-                onChangeText={(t) =>
-                  setNewHistory({ ...newHistory, content: t })
+                  setNewHistory((prev) => ({ ...prev, status: item.value }))
                 }
               />
 
-              <TouchableOpacity
-                style={styles.modalSaveButton}
-                onPress={handleAddHistory}
-              >
-                <Text style={styles.modalSaveButtonText}>
+              <Text style={styles.modalLabel}>Nội dung</Text>
+              <TextInput
+                style={[styles.modalInput, { height: 140, textAlignVertical: "top" }]}
+                placeholder="Nhập nội dung..."
+                placeholderTextColor={Colors.textTertiary}
+                multiline
+                value={newHistory.content}
+                onChangeText={(t) => setNewHistory({ ...newHistory, content: t })}
+              />
+
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleAddHistory}>
+                <Text style={styles.modalSaveBtnText}>
                   {newHistory.id ? "Cập nhật" : "Lưu lịch sử"}
                 </Text>
               </TouchableOpacity>
-            </View>
-          </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
-      <Modal
-        visible={showAddAppointmentModal}
-        transparent
-        animationType="slide"
-      >
+
+      <Modal visible={showAddAppointmentModal} transparent animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader2}>
-                <Text style={styles.modalTitle}>
-                  {newAppointment.maLH ? "Sửa lịch hẹn" : "Thêm lịch hẹn"}
-                </Text>
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => {
+              setShowAddAppointmentModal(false);
+              setNewAppointment({ tieuDe: "", dienGiai: "", ngayHen: "", ngayHenAPI: "", maLH: null });
+            }}
+          >
+            <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
+              <View style={styles.modalHandle} />
+              <Text style={styles.modalTitle}>
+                {newAppointment.maLH ? "Sửa lịch hẹn" : "Thêm lịch hẹn"}
+              </Text>
 
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowAddAppointmentModal(false);
-                    setNewAppointment({
-                      tieuDe: "",
-                      dienGiai: "",
-                      ngayHen: "",
-                      ngayHenAPI: "",
-                      maLH: null,
-                    });
-                  }}
-                >
-                  <Text style={styles.modalClose}>✕</Text>
-                </TouchableOpacity>
-              </View>
-
+              <Text style={styles.modalLabel}>Tiêu đề</Text>
               <TextInput
-                style={[styles.input, { marginTop: 10 }]}
-                placeholder="Tiêu đề"
+                style={styles.modalInput}
+                placeholder="Nhập tiêu đề..."
+                placeholderTextColor={Colors.textTertiary}
                 value={newAppointment.tieuDe}
                 onChangeText={(t) =>
                   setNewAppointment({ ...newAppointment, tieuDe: t })
                 }
               />
 
+              <Text style={styles.modalLabel}>Ngày giờ hẹn</Text>
               <TouchableOpacity
-                style={[
-                  styles.input,
-                  { marginTop: 10, justifyContent: "center" },
-                ]}
+                style={styles.modalInput}
                 onPress={() => setShowPicker(true)}
               >
                 <Text
-                  style={{ color: newAppointment.ngayHen ? "#000" : "#999" }}
+                  style={{
+                    color: newAppointment.ngayHen ? Colors.text : Colors.textTertiary,
+                    fontSize: 14,
+                  }}
                 >
                   {newAppointment.ngayHen || "Chọn ngày giờ hẹn"}
                 </Text>
@@ -697,9 +630,11 @@ export default function CustomerDetailScreen() {
                 />
               )}
 
+              <Text style={styles.modalLabel}>Diễn giải</Text>
               <TextInput
-                style={[styles.input, { height: 120, marginTop: 10 }]}
-                placeholder="Diễn giải"
+                style={[styles.modalInput, { height: 100, textAlignVertical: "top" }]}
+                placeholder="Nhập diễn giải..."
+                placeholderTextColor={Colors.textTertiary}
                 multiline
                 value={newAppointment.dienGiai}
                 onChangeText={(t) =>
@@ -707,16 +642,13 @@ export default function CustomerDetailScreen() {
                 }
               />
 
-              <TouchableOpacity
-                style={styles.modalSaveButton}
-                onPress={handleAddAppointment}
-              >
-                <Text style={styles.modalSaveButtonText}>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleAddAppointment}>
+                <Text style={styles.modalSaveBtnText}>
                   {newAppointment.maLH ? "Cập nhật" : "Lưu lịch hẹn"}
                 </Text>
               </TouchableOpacity>
-            </View>
-          </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -726,111 +658,92 @@ export default function CustomerDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: "#F5F6F8",
   },
-  headerBackButton: {
-    marginLeft: 8,
-  },
-  headerEditButton: {
-    marginRight: 8,
-  },
-  content: {
+  scrollView: {
     flex: 1,
   },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-  errorText: {
-    fontSize: 16,
-    color: Colors.textSecondary,
-    textAlign: "center",
-    marginTop: 40,
-  },
-  customerHeader: {
-    backgroundColor: Colors.white,
-    paddingVertical: 24,
-    paddingHorizontal: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  customerHeaderContent: {
-    flexDirection: "row",
+  loadingWrap: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
-    gap: 16,
+    gap: 12,
   },
-  customerAvatar: {
+  loadingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+
+  profileHeader: {
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+      },
+      android: { elevation: 3 },
+      web: { boxShadow: "0 4px 12px rgba(0,0,0,0.06)" },
+    }),
+  },
+  avatarLarge: {
     width: 72,
     height: 72,
     borderRadius: 36,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 12,
   },
-  customerHeaderInfo: {
-    flex: 1,
+  avatarLargeText: {
+    fontSize: 26,
+    fontWeight: "700" as const,
+    color: Colors.white,
   },
-  customerName: {
-    fontSize: 22,
+  profileName: {
+    fontSize: 20,
     fontWeight: "700" as const,
     color: Colors.text,
     marginBottom: 4,
+    textAlign: "center",
   },
-  customerCompany: {
-    fontSize: 15,
-    color: Colors.textSecondary,
-    fontWeight: "500" as const,
-    marginBottom: 8,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    alignSelf: "flex-start",
-  },
-  statusBadgeText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.white,
-  },
-  section: {
-    padding: 24,
-    paddingBottom: 0,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    paddingBottom: 10,
-    marginTop: -10,
-  },
-  addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#EFF6FF",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  addButtonText: {
+  profileCompany: {
     fontSize: 14,
-    fontWeight: "600" as const,
-    color: Colors.primary,
+    color: Colors.textSecondary,
+    marginBottom: 10,
   },
-  infoCard: {
+  statusChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(16,185,129,0.1)",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#10B981",
+  },
+  statusLabel: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+    color: "#10B981",
+  },
+
+  contactCards: {
     backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 24,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 14,
+    overflow: "hidden",
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -838,361 +751,296 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 8,
       },
-      android: {
-        elevation: 2,
-      },
-      web: {
-        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)",
-      },
+      android: { elevation: 2 },
+      web: { boxShadow: "0 2px 8px rgba(0,0,0,0.05)" },
     }),
   },
-  infoRow: {
+  contactCardItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.04)",
   },
-  infoIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#EFF6FF",
+  contactIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
   },
-  infoContent: {
+  contactCardContent: {
     flex: 1,
   },
-  infoLabel: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+  contactCardLabel: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    fontWeight: "500" as const,
     marginBottom: 2,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
   },
-  infoValue: {
+  contactCardValue: {
     fontSize: 15,
     fontWeight: "600" as const,
     color: Colors.text,
   },
-  infoDivider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: 12,
+
+  sectionWrap: {
+    marginHorizontal: 16,
+    marginTop: 20,
   },
-  imagesScroll: {
-    gap: 12,
-    paddingBottom: 24,
-  },
-  customerImage: {
-    width: 150,
-    height: 150,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  projectsContainer: {
+  sectionHeader: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 24,
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
   },
-  projectTag: {
+  sectionTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: "#FFF4ED",
-    borderWidth: 1,
-    borderColor: "#FDBA74",
   },
-  projectTagText: {
-    fontSize: 14,
-    fontWeight: "600" as const,
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700" as const,
+    color: Colors.text,
+  },
+  badge: {
+    backgroundColor: "rgba(232,111,37,0.1)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 24,
+    alignItems: "center",
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: "700" as const,
     color: Colors.primary,
   },
-  appointmentsList: {
-    gap: 12,
-    marginBottom: 24,
+  addBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: { elevation: 2 },
+      web: { boxShadow: `0 2px 6px ${Colors.primary}40` },
+    }),
+  },
+  addBtnText: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: Colors.white,
+  },
+
+  emptySection: {
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    paddingVertical: 32,
+    alignItems: "center",
+    gap: 8,
+  },
+  emptySectionText: {
+    fontSize: 13,
+    color: Colors.textTertiary,
+  },
+
+  appointmentList: {
+    gap: 8,
   },
   appointmentCard: {
     backgroundColor: Colors.white,
     borderRadius: 12,
-    padding: 10,
-    paddingHorizontal: 15,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 5,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "flex-start",
     ...Platform.select({
       ios: {
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
+        shadowOpacity: 0.04,
         shadowRadius: 4,
       },
-      android: {
-        elevation: 1,
-      },
-      web: {
-        boxShadow: "0 1px 4px rgba(0, 0, 0, 0.05)",
-      },
+      android: { elevation: 1 },
+      web: { boxShadow: "0 1px 4px rgba(0,0,0,0.04)" },
     }),
   },
-  appointmentHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  appointmentDateContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+  appointmentContent: {
     flex: 1,
   },
-  appointmentDate: {
-    fontSize: 14,
+  appointmentLeft: {
+    gap: 4,
+  },
+  appointmentDateBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(59,130,246,0.08)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+    marginBottom: 4,
+  },
+  appointmentDateText: {
+    fontSize: 11,
     fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  appointmentTimeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.textSecondary,
-    marginHorizontal: 2,
-  },
-  appointmentTime: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  appointmentStatusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  appointmentStatusText: {
-    fontSize: 12,
-    fontWeight: "600" as const,
-    color: Colors.white,
+    color: Colors.accent.blue,
   },
   appointmentTitle: {
-    fontSize: 16,
-    fontWeight: "700" as const,
+    fontSize: 15,
+    fontWeight: "600" as const,
     color: Colors.text,
-    marginBottom: 8,
   },
-  appointmentLocation: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 8,
-  },
-  appointmentLocationText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    flex: 1,
-  },
-  appointmentNotes: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 6,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  appointmentNotesText: {
+  appointmentDesc: {
     fontSize: 13,
     color: Colors.textSecondary,
-    flex: 1,
-    fontStyle: "italic" as const,
+    lineHeight: 18,
+    marginTop: 2,
   },
+  appointmentDeleteBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#FEF2F2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
+  },
+
   historyList: {
-    gap: 12,
-    marginBottom: 24,
+    gap: 8,
   },
   historyCard: {
     backgroundColor: Colors.white,
     borderRadius: 12,
-    paddingHorizontal: 15,
-    marginBottom: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.primary,
+    padding: 14,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.accent.purple,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
+        shadowOpacity: 0.04,
         shadowRadius: 4,
       },
-      android: {
-        elevation: 1,
-      },
-      web: {
-        boxShadow: "0 1px 4px rgba(0, 0, 0, 0.05)",
-      },
+      android: { elevation: 1 },
+      web: { boxShadow: "0 1px 4px rgba(0,0,0,0.04)" },
     }),
   },
-  historyHeader: {
-    marginBottom: 10,
-  },
-  historyTypeContainer: {
+  historyTop: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 10,
+    marginBottom: 6,
   },
-  historyTypeBadge: {
+  historyStatusChip: {
+    backgroundColor: "rgba(139,92,246,0.08)",
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: "#EFF6FF",
   },
-  historyTypeText: {
-    fontSize: 13,
+  historyStatusText: {
+    fontSize: 12,
     fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  historyDate: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+    color: Colors.accent.purple,
   },
   historyContent: {
     fontSize: 14,
     color: Colors.text,
     lineHeight: 20,
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  historyCreatedBy: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    fontStyle: "italic" as const,
+  historyDate: {
+    fontSize: 11,
+    color: Colors.textTertiary,
   },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 40,
-    marginBottom: 24,
-  },
-  emptyStateText: {
-    fontSize: 15,
-    color: Colors.textSecondary,
-    marginTop: 12,
-  },
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
   },
-  modalContent: {
+  modalSheet: {
     backgroundColor: Colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 20,
-    maxHeight: "80%",
-    paddingHorizontal: 10,
-    paddingBottom: 50,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 8,
-      },
-      web: {
-        boxShadow: "0 -4px 20px rgba(0, 0, 0, 0.1)",
-      },
-    }),
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+    maxHeight: "85%",
   },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  modalHeader2: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  modalClose: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#999",
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#DDD",
+    alignSelf: "center",
+    marginTop: 12,
+    marginBottom: 16,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700" as const,
     color: Colors.text,
-    paddingBottom: 15,
-  },
-  modalCloseButton: {
-    width: 32,
-    height: 32,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalBody: {
-    padding: 20,
-  },
-  formGroup: {
     marginBottom: 20,
   },
-  label: {
-    fontSize: 15,
+  modalLabel: {
+    fontSize: 13,
     fontWeight: "600" as const,
-    color: Colors.text,
-    marginBottom: 8,
+    color: Colors.textSecondary,
+    marginBottom: 6,
+    marginTop: 12,
   },
-  required: {
-    color: "#EF4444",
+  modalDropdown: {
+    backgroundColor: "#F5F6F8",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
   },
-  input: {
-    backgroundColor: Colors.background,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
+  modalInput: {
+    backgroundColor: "#F5F6F8",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
     color: Colors.text,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: "rgba(0,0,0,0.06)",
   },
-  textArea: {
-    minHeight: 100,
-    paddingTop: 14,
-  },
-  modalSaveButton: {
+  modalSaveBtn: {
     backgroundColor: Colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: 10,
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 20,
     ...Platform.select({
       ios: {
         shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 4 },
+        shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.3,
-        shadowRadius: 8,
+        shadowRadius: 6,
       },
-      android: {
-        elevation: 4,
-      },
-      web: {
-        boxShadow: `0 4px 12px ${Colors.primary}40`,
-      },
+      android: { elevation: 3 },
+      web: { boxShadow: `0 3px 10px ${Colors.primary}40` },
     }),
   },
-  modalSaveButtonText: {
-    fontSize: 16,
+  modalSaveBtnText: {
+    fontSize: 15,
     fontWeight: "700" as const,
     color: Colors.white,
   },

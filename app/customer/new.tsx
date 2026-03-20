@@ -21,6 +21,8 @@ import {
   ImagePlus,
   X,
   Users,
+  User,
+  Building2,
 } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Contacts from "expo-contacts";
@@ -79,36 +81,29 @@ export default function CustomerNewScreen() {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-
     if (!formData.name.trim()) {
       newErrors.name = "Vui lòng nhập tên khách hàng";
     }
-
     if (!formData.phone.trim()) {
       newErrors.phone = "Vui lòng nhập số điện thoại";
     } else if (!/^0\d{9}$/.test(formData.phone)) {
       newErrors.phone = "Số điện thoại không hợp lệ";
     }
-
     if (
       formData.email.trim() &&
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)
     ) {
       newErrors.email = "Email không hợp lệ";
     }
-
     if (formData.cccd.trim() && !/^\d{12}$/.test(formData.cccd)) {
       newErrors.cccd = "Số CCCD phải có đúng 12 chữ số";
     }
-
     if (formData.type === "business" && !formData.company.trim()) {
       newErrors.company = "Vui lòng nhập tên công ty";
     }
-
     if (formData.type === "business" && !formData.taxCode.trim()) {
       newErrors.taxCode = "Vui lòng nhập mã số thuế";
     }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -121,7 +116,6 @@ export default function CustomerNewScreen() {
         allowsMultipleSelection: true,
         quality: 0.8,
       });
-
       if (!result.canceled && result.assets) {
         const newImages = result.assets.map((asset) => asset.uri);
         setFormData({
@@ -131,11 +125,7 @@ export default function CustomerNewScreen() {
       }
     } catch (error) {
       console.error("Error picking images:", error);
-      if (Platform.OS === "web") {
-        alert("Không thể chọn ảnh");
-      } else {
-        Alert.alert("Lỗi", "Không thể chọn ảnh");
-      }
+      Alert.alert("Lỗi", "Không thể chọn ảnh");
     } finally {
       setIsPickingImage(false);
     }
@@ -151,7 +141,6 @@ export default function CustomerNewScreen() {
       alert("Chức năng này không khả dụng trên web");
       return false;
     }
-
     const { status } = await Contacts.requestPermissionsAsync();
     if (status !== "granted") {
       Alert.alert(
@@ -168,7 +157,6 @@ export default function CustomerNewScreen() {
       setIsLoadingContacts(true);
       const hasPermission = await requestContactsPermission();
       if (!hasPermission) return;
-
       if (phoneContacts.length === 0) {
         const { data } = await Contacts.getContactsAsync({
           fields: [
@@ -177,13 +165,11 @@ export default function CustomerNewScreen() {
             Contacts.Fields.Emails,
           ],
         });
-
         const contactsWithPhone = data.filter(
           (contact) => contact.phoneNumbers && contact.phoneNumbers.length > 0
         );
         setPhoneContacts(contactsWithPhone);
       }
-
       setShowContactsModal(true);
     } catch (error) {
       console.error("Error loading contacts:", error);
@@ -209,61 +195,32 @@ export default function CustomerNewScreen() {
         (contact as any).id ?? `temp-${contact.name}-${Math.random()}`;
       return selectedContacts.has(contactId);
     });
-
     if (contactsToImport.length === 0) {
-      if (Platform.OS === "web") {
-        alert("Vui lòng chọn ít nhất một liên hệ");
-      } else {
-        Alert.alert("Thông báo", "Vui lòng chọn ít nhất một liên hệ");
-      }
+      Alert.alert("Thông báo", "Vui lòng chọn ít nhất một liên hệ");
       return;
     }
-
-    if (contactsToImport.length === 1) {
-      const contact = contactsToImport[0];
-      const phone =
-        contact.phoneNumbers?.[0]?.number?.replace(/[^0-9]/g, "") || "";
-      const email = contact.emails?.[0]?.email || "";
-
-      setFormData({
-        ...formData,
-        name: contact.name || "",
-        phone: phone,
-        email: email,
-      });
-    } else {
-      const firstContact = contactsToImport[0];
-      const phone =
-        firstContact.phoneNumbers?.[0]?.number?.replace(/[^0-9]/g, "") || "";
-      const email = firstContact.emails?.[0]?.email || "";
-
-      setFormData({
-        ...formData,
-        name: firstContact.name || "",
-        phone: phone,
-        email: email,
-      });
-
-      if (Platform.OS === "web") {
-        alert(
-          `Đã nhập ${contactsToImport.length} liên hệ. Thông tin liên hệ đầu tiên đã được điền vào form. Bạn có thể tạo thêm khách hàng cho các liên hệ còn lại sau.`
-        );
-      } else {
-        Alert.alert(
-          "Thông báo",
-          `Đã nhập ${contactsToImport.length} liên hệ. Thông tin liên hệ đầu tiên đã được điền vào form. Bạn có thể tạo thêm khách hàng cho các liên hệ còn lại sau.`,
-          [{ text: "OK" }]
-        );
-      }
+    const firstContact = contactsToImport[0];
+    const phone =
+      firstContact.phoneNumbers?.[0]?.number?.replace(/[^0-9]/g, "") || "";
+    const email = firstContact.emails?.[0]?.email || "";
+    setFormData({
+      ...formData,
+      name: firstContact.name || "",
+      phone: phone,
+      email: email,
+    });
+    if (contactsToImport.length > 1) {
+      Alert.alert(
+        "Thông báo",
+        `Đã nhập thông tin liên hệ đầu tiên. Bạn có thể tạo thêm cho ${contactsToImport.length - 1} liên hệ còn lại sau.`
+      );
     }
-
     setSelectedContacts(new Set());
     setShowContactsModal(false);
   };
 
   const handleSave = async () => {
     if (!validateForm()) return;
-
     try {
       const payload = {
         maKH: 0,
@@ -276,109 +233,111 @@ export default function CustomerNewScreen() {
         maNguon: 0,
         ghiChu: "",
       };
-
       const res = await CustomerService.addCustomer(payload);
-
       if (res?.status === 2000) {
-        if (Platform.OS === "web") {
-          alert(res.message);
-          router.back();
-        } else {
-          Alert.alert("Thành công", res.message, [
-            { text: "OK", onPress: () => router.back() },
-          ]);
-        }
+        Alert.alert("Thành công", res.message, [
+          { text: "OK", onPress: () => router.back() },
+        ]);
       } else {
-        if (Platform.OS === "web") {
-          alert(res?.message || "Tạo khách hàng thất bại");
-        } else {
-          Alert.alert("Lỗi", res?.message || "Tạo khách hàng thất bại");
-        }
+        Alert.alert("Lỗi", res?.message || "Tạo khách hàng thất bại");
       }
     } catch (error) {
       console.log("ADD CUSTOMER ERROR:", error);
-
-      if (Platform.OS === "web") {
-        alert("Không thể kết nối server");
-      } else {
-        Alert.alert("Lỗi", "Không thể kết nối server");
-      }
+      Alert.alert("Lỗi", "Không thể kết nối server");
     }
   };
+
+  const renderFormField = (
+    label: string,
+    value: string,
+    onChangeText: (text: string) => void,
+    options?: {
+      required?: boolean;
+      error?: string;
+      placeholder?: string;
+      keyboardType?: "default" | "phone-pad" | "email-address" | "number-pad";
+      autoCapitalize?: "none" | "sentences" | "words" | "characters";
+      maxLength?: number;
+    }
+  ) => (
+    <View style={styles.formField}>
+      <Text style={styles.fieldLabel}>
+        {label}
+        {options?.required ? <Text style={styles.required}> *</Text> : null}
+      </Text>
+      <TextInput
+        style={[styles.fieldInput, options?.error ? styles.fieldInputError : null]}
+        placeholder={options?.placeholder}
+        placeholderTextColor={Colors.textTertiary}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={options?.keyboardType}
+        autoCapitalize={options?.autoCapitalize}
+        maxLength={options?.maxLength}
+      />
+      {options?.error ? (
+        <Text style={styles.fieldError}>{options.error}</Text>
+      ) : null}
+    </View>
+  );
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
           headerShown: true,
-          title: "Tạo khách hàng mới",
-          headerStyle: {
-            backgroundColor: Colors.primary,
-          },
+          title: "Tạo khách hàng",
+          headerStyle: { backgroundColor: Colors.primary },
           headerTintColor: Colors.white,
-          headerTitleStyle: {
-            fontWeight: "700",
-            fontSize: 18,
-          },
+          headerTitleStyle: { fontWeight: "700", fontSize: 18 },
           headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={styles.headerBackButton}
-            >
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
               <ChevronLeft color={Colors.white} size={24} />
-            </TouchableOpacity>
-          ),
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={handleSave}
-              style={styles.headerSaveButton}
-            >
-              <Save color={Colors.white} size={22} />
             </TouchableOpacity>
           ),
         }}
       />
 
       <ScrollView
-        style={styles.content}
+        style={styles.scroll}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Loại khách hàng</Text>
-          <View style={styles.typeContainer}>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Loại khách hàng</Text>
+          <View style={styles.typeToggle}>
             <TouchableOpacity
-              style={[
-                styles.typeButton,
-                styles.typeButtonLeft,
-                formData.type === "personal" && styles.typeButtonActive,
-              ]}
+              style={[styles.typeOption, formData.type === "personal" && styles.typeOptionActive]}
               onPress={() => setFormData({ ...formData, type: "personal" })}
               activeOpacity={0.8}
             >
+              <User
+                color={formData.type === "personal" ? Colors.white : Colors.textSecondary}
+                size={18}
+              />
               <Text
                 style={[
-                  styles.typeButtonText,
-                  formData.type === "personal" && styles.typeButtonTextActive,
+                  styles.typeOptionText,
+                  formData.type === "personal" && styles.typeOptionTextActive,
                 ]}
               >
                 Cá nhân
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[
-                styles.typeButton,
-                styles.typeButtonRight,
-                formData.type === "business" && styles.typeButtonActive,
-              ]}
+              style={[styles.typeOption, formData.type === "business" && styles.typeOptionActive]}
               onPress={() => setFormData({ ...formData, type: "business" })}
               activeOpacity={0.8}
             >
+              <Building2
+                color={formData.type === "business" ? Colors.white : Colors.textSecondary}
+                size={18}
+              />
               <Text
                 style={[
-                  styles.typeButtonText,
-                  formData.type === "business" && styles.typeButtonTextActive,
+                  styles.typeOptionText,
+                  formData.type === "business" && styles.typeOptionTextActive,
                 ]}
               >
                 Doanh nghiệp
@@ -387,12 +346,12 @@ export default function CustomerNewScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Thông tin cơ bản</Text>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Thông tin cơ bản</Text>
             {Platform.OS !== "web" && (
               <TouchableOpacity
-                style={styles.contactsButton}
+                style={styles.contactsBtn}
                 onPress={loadContacts}
                 activeOpacity={0.8}
                 disabled={isLoadingContacts}
@@ -401,186 +360,140 @@ export default function CustomerNewScreen() {
                   <ActivityIndicator color={Colors.primary} size="small" />
                 ) : (
                   <>
-                    <Users color={Colors.primary} size={18} />
-                    <Text style={styles.contactsButtonText}>
-                      Chọn từ danh bạ
-                    </Text>
+                    <Users color={Colors.primary} size={16} />
+                    <Text style={styles.contactsBtnText}>Danh bạ</Text>
                   </>
                 )}
               </TouchableOpacity>
             )}
           </View>
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>
-              Tên khách hàng <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={[styles.input, errors.name && styles.inputError]}
-              placeholder={
-                formData.type === "personal"
-                  ? "Nguyễn Văn A"
-                  : "Công ty TNHH ABC"
+          {renderFormField(
+            "Tên khách hàng",
+            formData.name,
+            (text) => {
+              setFormData({ ...formData, name: text });
+              if (errors.name) setErrors({ ...errors, name: "" });
+            },
+            {
+              required: true,
+              error: errors.name,
+              placeholder: formData.type === "personal" ? "Nguyễn Văn A" : "Công ty TNHH ABC",
+            }
+          )}
+
+          {renderFormField(
+            "Số điện thoại",
+            formData.phone,
+            (text) => {
+              setFormData({ ...formData, phone: text });
+              if (errors.phone) setErrors({ ...errors, phone: "" });
+            },
+            {
+              required: true,
+              error: errors.phone,
+              placeholder: "0901234567",
+              keyboardType: "phone-pad",
+            }
+          )}
+
+          {renderFormField(
+            "Email",
+            formData.email,
+            (text) => {
+              setFormData({ ...formData, email: text });
+              if (errors.email) setErrors({ ...errors, email: "" });
+            },
+            {
+              error: errors.email,
+              placeholder: "example@gmail.com",
+              keyboardType: "email-address",
+              autoCapitalize: "none",
+            }
+          )}
+
+          {renderFormField(
+            "Số CCCD",
+            formData.cccd,
+            (text) => {
+              const numericText = text.replace(/[^0-9]/g, "");
+              if (numericText.length <= 12) {
+                setFormData({ ...formData, cccd: numericText });
+                if (errors.cccd) setErrors({ ...errors, cccd: "" });
               }
-              placeholderTextColor={Colors.textSecondary}
-              value={formData.name}
-              onChangeText={(text) => {
-                setFormData({ ...formData, name: text });
-                if (errors.name) {
-                  setErrors({ ...errors, name: "" });
-                }
-              }}
-            />
-            {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>
-              Số điện thoại <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={[styles.input, errors.phone && styles.inputError]}
-              placeholder="0901234567"
-              placeholderTextColor={Colors.textSecondary}
-              value={formData.phone}
-              onChangeText={(text) => {
-                setFormData({ ...formData, phone: text });
-                if (errors.phone) {
-                  setErrors({ ...errors, phone: "" });
-                }
-              }}
-              keyboardType="phone-pad"
-            />
-            {errors.phone && (
-              <Text style={styles.errorText}>{errors.phone}</Text>
-            )}
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={[styles.input, errors.email && styles.inputError]}
-              placeholder="example@gmail.com"
-              placeholderTextColor={Colors.textSecondary}
-              value={formData.email}
-              onChangeText={(text) => {
-                setFormData({ ...formData, email: text });
-                if (errors.email) {
-                  setErrors({ ...errors, email: "" });
-                }
-              }}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            {errors.email && (
-              <Text style={styles.errorText}>{errors.email}</Text>
-            )}
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Số CCCD</Text>
-            <TextInput
-              style={[styles.input, errors.cccd && styles.inputError]}
-              placeholder="123456789012"
-              placeholderTextColor={Colors.textSecondary}
-              value={formData.cccd}
-              onChangeText={(text) => {
-                const numericText = text.replace(/[^0-9]/g, "");
-                if (numericText.length <= 12) {
-                  setFormData({ ...formData, cccd: numericText });
-                  if (errors.cccd) {
-                    setErrors({ ...errors, cccd: "" });
-                  }
-                }
-              }}
-              keyboardType="number-pad"
-              maxLength={12}
-            />
-            {errors.cccd && <Text style={styles.errorText}>{errors.cccd}</Text>}
-          </View>
+            },
+            {
+              error: errors.cccd,
+              placeholder: "123456789012",
+              keyboardType: "number-pad",
+              maxLength: 12,
+            }
+          )}
         </View>
 
         {formData.type === "business" && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Thông tin doanh nghiệp</Text>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Thông tin doanh nghiệp</Text>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>
-                Tên công ty <Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={[styles.input, errors.company && styles.inputError]}
-                placeholder="Công ty TNHH ABC"
-                placeholderTextColor={Colors.textSecondary}
-                value={formData.company}
-                onChangeText={(text) => {
-                  setFormData({ ...formData, company: text });
-                  if (errors.company) {
-                    setErrors({ ...errors, company: "" });
-                  }
-                }}
-              />
-              {errors.company && (
-                <Text style={styles.errorText}>{errors.company}</Text>
-              )}
-            </View>
+            {renderFormField(
+              "Tên công ty",
+              formData.company,
+              (text) => {
+                setFormData({ ...formData, company: text });
+                if (errors.company) setErrors({ ...errors, company: "" });
+              },
+              {
+                required: true,
+                error: errors.company,
+                placeholder: "Công ty TNHH ABC",
+              }
+            )}
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>
-                Mã số thuế <Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={[styles.input, errors.taxCode && styles.inputError]}
-                placeholder="0123456789"
-                placeholderTextColor={Colors.textSecondary}
-                value={formData.taxCode}
-                onChangeText={(text) => {
-                  setFormData({ ...formData, taxCode: text });
-                  if (errors.taxCode) {
-                    setErrors({ ...errors, taxCode: "" });
-                  }
-                }}
-                keyboardType="number-pad"
-              />
-              {errors.taxCode && (
-                <Text style={styles.errorText}>{errors.taxCode}</Text>
-              )}
-            </View>
+            {renderFormField(
+              "Mã số thuế",
+              formData.taxCode,
+              (text) => {
+                setFormData({ ...formData, taxCode: text });
+                if (errors.taxCode) setErrors({ ...errors, taxCode: "" });
+              },
+              {
+                required: true,
+                error: errors.taxCode,
+                placeholder: "0123456789",
+                keyboardType: "number-pad",
+              }
+            )}
           </View>
         )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Trạng thái</Text>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Trạng thái</Text>
           <TouchableOpacity
-            style={styles.dropdownButton}
+            style={styles.statusDropdown}
             onPress={() => setShowStatusDropdown(true)}
             activeOpacity={0.8}
           >
-            <View style={styles.dropdownButtonContent}>
+            <View style={styles.statusDropdownLeft}>
               <View
-                style={[
-                  styles.statusIndicator,
-                  { backgroundColor: getSelectedStatusColor() },
-                ]}
+                style={[styles.statusDot, { backgroundColor: getSelectedStatusColor() }]}
               />
-              <Text style={styles.dropdownButtonText}>
+              <Text style={styles.statusDropdownText}>
                 {getSelectedStatusLabel()}
               </Text>
             </View>
-            <ChevronDown color={Colors.textSecondary} size={20} />
+            <ChevronDown color={Colors.textSecondary} size={18} />
           </TouchableOpacity>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Hình ảnh</Text>
-
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Hình ảnh</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.imagesScrollContent}
+            contentContainerStyle={styles.imagesRow}
           >
             <TouchableOpacity
-              style={styles.addImageButton}
+              style={styles.addImageBtn}
               onPress={pickImages}
               activeOpacity={0.8}
               disabled={isPickingImage}
@@ -589,149 +502,30 @@ export default function CustomerNewScreen() {
                 <ActivityIndicator color={Colors.primary} size="small" />
               ) : (
                 <>
-                  <ImagePlus color={Colors.primary} size={32} />
+                  <ImagePlus color={Colors.primary} size={28} />
                   <Text style={styles.addImageText}>Thêm ảnh</Text>
                 </>
               )}
             </TouchableOpacity>
 
             {formData.images.map((imageUri, index) => (
-              <View key={index} style={styles.imageContainer}>
+              <View key={index} style={styles.imageThumb}>
                 <Image
                   source={{ uri: imageUri }}
-                  style={styles.customerImage}
+                  style={styles.imageThumbImg}
                   resizeMode="cover"
                 />
                 <TouchableOpacity
-                  style={styles.removeImageButton}
+                  style={styles.removeImageBtn}
                   onPress={() => removeImage(index)}
                   activeOpacity={0.8}
                 >
-                  <X color={Colors.white} size={16} />
+                  <X color={Colors.white} size={14} />
                 </TouchableOpacity>
               </View>
             ))}
           </ScrollView>
         </View>
-
-        <Modal
-          visible={showStatusDropdown}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowStatusDropdown(false)}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowStatusDropdown(false)}
-          >
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Chọn trạng thái</Text>
-              {statusOptions.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={styles.modalOption}
-                  onPress={() => {
-                    setFormData({ ...formData, status: option.value });
-                    setShowStatusDropdown(false);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.modalOptionContent}>
-                    <View
-                      style={[
-                        styles.statusIndicator,
-                        { backgroundColor: option.color },
-                      ]}
-                    />
-                    <Text style={styles.modalOptionText}>{option.label}</Text>
-                  </View>
-                  {formData.status === option.value && (
-                    <Check color={Colors.primary} size={20} />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </TouchableOpacity>
-        </Modal>
-
-        <Modal
-          visible={showContactsModal}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setShowContactsModal(false)}
-        >
-          <View style={styles.contactsModalContainer}>
-            <View style={styles.contactsModalContent}>
-              <View style={styles.contactsModalHeader}>
-                <Text style={styles.contactsModalTitle}>Chọn từ danh bạ</Text>
-                <TouchableOpacity
-                  onPress={() => setShowContactsModal(false)}
-                  style={styles.closeButton}
-                >
-                  <X color={Colors.text} size={24} />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.contactsModalSubtitle}>
-                Đã chọn: {selectedContacts.size} liên hệ
-              </Text>
-
-              <ScrollView style={styles.contactsList}>
-                {phoneContacts.map((contact) => {
-                  const contactId =
-                    (contact as any).id ??
-                    `temp-${contact.name}-${Math.random()}`;
-
-                  const isSelected = selectedContacts.has(contactId);
-                  const phone =
-                    contact.phoneNumbers?.[0]?.number || "Không có SĐT";
-                  const email = contact.emails?.[0]?.email || "Không có email";
-
-                  return (
-                    <TouchableOpacity
-                      key={contactId}
-                      style={[
-                        styles.contactItem,
-                        isSelected && styles.contactItemSelected,
-                      ]}
-                      onPress={() => toggleContactSelection(contactId)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.contactItemContent}>
-                        <View
-                          style={[
-                            styles.contactCheckbox,
-                            isSelected && styles.contactCheckboxSelected,
-                          ]}
-                        >
-                          {isSelected && (
-                            <Check color={Colors.white} size={16} />
-                          )}
-                        </View>
-                        <View style={styles.contactInfo}>
-                          <Text style={styles.contactName}>{contact.name}</Text>
-                          <Text style={styles.contactDetail}>{phone}</Text>
-                          <Text style={styles.contactDetail}>{email}</Text>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              <View style={styles.contactsModalFooter}>
-                <TouchableOpacity
-                  style={styles.importButton}
-                  onPress={importSelectedContacts}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.importButtonText}>Nhập đã chọn</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
 
         <TouchableOpacity
           style={styles.saveButton}
@@ -742,6 +536,113 @@ export default function CustomerNewScreen() {
           <Text style={styles.saveButtonText}>Tạo khách hàng</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal
+        visible={showStatusDropdown}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStatusDropdown(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowStatusDropdown(false)}
+        >
+          <View style={styles.statusModal}>
+            <Text style={styles.statusModalTitle}>Chọn trạng thái</Text>
+            {statusOptions.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.statusModalOption,
+                  formData.status === option.value && styles.statusModalOptionActive,
+                ]}
+                onPress={() => {
+                  setFormData({ ...formData, status: option.value });
+                  setShowStatusDropdown(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.statusModalOptionLeft}>
+                  <View style={[styles.statusDot, { backgroundColor: option.color }]} />
+                  <Text style={styles.statusModalOptionText}>{option.label}</Text>
+                </View>
+                {formData.status === option.value && (
+                  <Check color={Colors.primary} size={18} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={showContactsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowContactsModal(false)}
+      >
+        <View style={styles.contactsModalWrap}>
+          <View style={styles.contactsModalContent}>
+            <View style={styles.contactsModalHeader}>
+              <Text style={styles.contactsModalTitle}>Chọn từ danh bạ</Text>
+              <TouchableOpacity
+                onPress={() => setShowContactsModal(false)}
+                style={{ padding: 4 }}
+              >
+                <X color={Colors.text} size={22} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.contactsModalSubtitle}>
+              Đã chọn: {selectedContacts.size} liên hệ
+            </Text>
+            <ScrollView style={styles.contactsList}>
+              {phoneContacts.map((contact) => {
+                const contactId =
+                  (contact as any).id ?? `temp-${contact.name}-${Math.random()}`;
+                const isSelected = selectedContacts.has(contactId);
+                const phone =
+                  contact.phoneNumbers?.[0]?.number || "Không có SĐT";
+                const email = contact.emails?.[0]?.email || "Không có email";
+                return (
+                  <TouchableOpacity
+                    key={contactId}
+                    style={[
+                      styles.contactListItem,
+                      isSelected && styles.contactListItemActive,
+                    ]}
+                    onPress={() => toggleContactSelection(contactId)}
+                    activeOpacity={0.7}
+                  >
+                    <View
+                      style={[
+                        styles.contactCheckbox,
+                        isSelected && styles.contactCheckboxActive,
+                      ]}
+                    >
+                      {isSelected && <Check color={Colors.white} size={14} />}
+                    </View>
+                    <View style={styles.contactItemInfo}>
+                      <Text style={styles.contactItemName}>{contact.name}</Text>
+                      <Text style={styles.contactItemDetail}>{phone}</Text>
+                      <Text style={styles.contactItemDetail}>{email}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.contactsModalFooter}>
+              <TouchableOpacity
+                style={styles.importBtn}
+                onPress={importSelectedContacts}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.importBtnText}>Nhập đã chọn</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -749,214 +650,210 @@ export default function CustomerNewScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: "#F5F6F8",
   },
-  headerBackButton: {
-    marginLeft: 8,
-  },
-  headerSaveButton: {
-    marginRight: 8,
-  },
-  content: {
+  scroll: {
     flex: 1,
   },
   scrollContent: {
-    padding: 24,
+    padding: 16,
     paddingBottom: 40,
+    gap: 14,
   },
-  section: {
-    marginBottom: 32,
+  card: {
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    padding: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      android: { elevation: 2 },
+      web: { boxShadow: "0 2px 8px rgba(0,0,0,0.05)" },
+    }),
   },
-  sectionHeader: {
+  cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 4,
   },
-  sectionTitle: {
-    fontSize: 18,
+  cardTitle: {
+    fontSize: 15,
     fontWeight: "700" as const,
     color: Colors.text,
+    marginBottom: 14,
   },
-  contactsButton: {
+  contactsBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "#EFF6FF",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "rgba(232,111,37,0.08)",
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.primary,
+    marginBottom: 14,
   },
-  contactsButtonText: {
-    fontSize: 13,
+  contactsBtnText: {
+    fontSize: 12,
     fontWeight: "600" as const,
     color: Colors.primary,
   },
-  typeContainer: {
+  typeToggle: {
     flexDirection: "row",
-    borderRadius: 12,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.border,
+    backgroundColor: "#F0F1F3",
+    borderRadius: 10,
+    padding: 3,
   },
-  typeButton: {
+  typeOption: {
     flex: 1,
-    paddingVertical: 14,
+    flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.white,
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
-  typeButtonLeft: {
-    borderRightWidth: 1,
-    borderRightColor: Colors.border,
-  },
-  typeButtonRight: {},
-  typeButtonActive: {
+  typeOptionActive: {
     backgroundColor: Colors.primary,
+    ...Platform.select({
+      ios: {
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: { elevation: 3 },
+      web: { boxShadow: `0 2px 8px ${Colors.primary}40` },
+    }),
   },
-  typeButtonText: {
-    fontSize: 15,
+  typeOptionText: {
+    fontSize: 14,
     fontWeight: "600" as const,
-    color: Colors.text,
+    color: Colors.textSecondary,
   },
-  typeButtonTextActive: {
+  typeOptionTextActive: {
     color: Colors.white,
   },
-  formGroup: {
-    marginBottom: 20,
+  formField: {
+    marginBottom: 16,
   },
-  label: {
-    fontSize: 15,
+  fieldLabel: {
+    fontSize: 13,
     fontWeight: "600" as const,
-    color: Colors.text,
-    marginBottom: 8,
+    color: Colors.textSecondary,
+    marginBottom: 6,
   },
   required: {
     color: "#EF4444",
   },
-  input: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+  fieldInput: {
+    backgroundColor: "#F5F6F8",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 15,
     color: Colors.text,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: "rgba(0,0,0,0.06)",
   },
-  inputError: {
+  fieldInputError: {
     borderColor: "#EF4444",
+    backgroundColor: "#FEF2F2",
   },
-  errorText: {
-    fontSize: 13,
+  fieldError: {
+    fontSize: 12,
     color: "#EF4444",
-    marginTop: 6,
-    marginLeft: 4,
+    marginTop: 4,
+    marginLeft: 2,
   },
-  dropdownButton: {
+  statusDropdown: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    backgroundColor: "#F5F6F8",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: "rgba(0,0,0,0.06)",
   },
-  dropdownButtonContent: {
+  statusDropdownLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
-  dropdownButtonText: {
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  statusDropdownText: {
     fontSize: 15,
     fontWeight: "600" as const,
     color: Colors.text,
   },
-  statusIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+  imagesRow: {
+    gap: 10,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  addImageBtn: {
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: Colors.primary,
+    backgroundColor: "rgba(232,111,37,0.06)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    gap: 6,
   },
-  modalContent: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 20,
-    width: "100%",
-    maxWidth: 400,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 8,
-      },
-      web: {
-        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)",
-      },
-    }),
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  modalOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: Colors.background,
-    marginBottom: 8,
-  },
-  modalOptionContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  modalOptionText: {
-    fontSize: 15,
+  addImageText: {
+    fontSize: 11,
     fontWeight: "600" as const,
-    color: Colors.text,
+    color: Colors.primary,
+  },
+  imageThumb: {
+    position: "relative" as const,
+    width: 100,
+    height: 100,
+  },
+  imageThumbImg: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
+  },
+  removeImageBtn: {
+    position: "absolute" as const,
+    top: 4,
+    right: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   saveButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
     backgroundColor: Colors.primary,
-    paddingVertical: 16,
+    paddingVertical: 15,
     borderRadius: 12,
-    marginTop: 8,
     ...Platform.select({
       ios: {
         shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 4 },
+        shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.3,
-        shadowRadius: 8,
+        shadowRadius: 6,
       },
-      android: {
-        elevation: 4,
-      },
-      web: {
-        boxShadow: `0 4px 12px ${Colors.primary}40`,
-      },
+      android: { elevation: 3 },
+      web: { boxShadow: `0 3px 10px ${Colors.primary}40` },
     }),
   },
   saveButtonText: {
@@ -964,179 +861,168 @@ const styles = StyleSheet.create({
     fontWeight: "700" as const,
     color: Colors.white,
   },
-  imagesScrollContent: {
-    gap: 12,
-  },
-  addImageButton: {
-    width: 120,
-    height: 120,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderColor: Colors.primary,
-    backgroundColor: "#EFF6FF",
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
     alignItems: "center",
-    gap: 8,
+    padding: 24,
   },
-  addImageText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  imageContainer: {
-    position: "relative",
-    width: 120,
-    height: 120,
-  },
-  customerImage: {
+  statusModal: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 20,
     width: "100%",
-    height: "100%",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  removeImageButton: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    justifyContent: "center",
-    alignItems: "center",
+    maxWidth: 360,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
       },
-      android: {
-        elevation: 4,
-      },
-      web: {
-        boxShadow: "0 2px 4px rgba(0, 0, 0, 0.3)",
-      },
+      android: { elevation: 8 },
+      web: { boxShadow: "0 4px 20px rgba(0,0,0,0.2)" },
     }),
   },
-  contactsModalContainer: {
+  statusModalTitle: {
+    fontSize: 17,
+    fontWeight: "700" as const,
+    color: Colors.text,
+    marginBottom: 14,
+    textAlign: "center" as const,
+  },
+  statusModalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  statusModalOptionActive: {
+    backgroundColor: "#F5F6F8",
+  },
+  statusModalOptionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  statusModalOptionText: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    color: Colors.text,
+  },
+  contactsModalWrap: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
   },
   contactsModalContent: {
     backgroundColor: Colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     maxHeight: "80%",
     ...Platform.select({
       ios: {
         shadowColor: "#000",
         shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.2,
+        shadowOpacity: 0.15,
         shadowRadius: 12,
       },
-      android: {
-        elevation: 8,
-      },
+      android: { elevation: 8 },
+      web: { boxShadow: "0 -4px 20px rgba(0,0,0,0.15)" },
     }),
   },
   contactsModalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
   },
   contactsModalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700" as const,
     color: Colors.text,
   },
-  closeButton: {
-    padding: 4,
-  },
   contactsModalSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.textSecondary,
-    paddingHorizontal: 24,
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    marginBottom: 12,
   },
   contactsList: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
-  contactItem: {
-    backgroundColor: Colors.background,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  contactItemSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: "#EFF6FF",
-  },
-  contactItemContent: {
+  contactListItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    backgroundColor: "#F5F6F8",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  contactListItemActive: {
+    borderColor: Colors.primary,
+    backgroundColor: "rgba(232,111,37,0.06)",
   },
   contactCheckbox: {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: Colors.border,
+    borderColor: "#D1D5DB",
     justifyContent: "center",
     alignItems: "center",
   },
-  contactCheckboxSelected: {
+  contactCheckboxActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
-  contactInfo: {
+  contactItemInfo: {
     flex: 1,
   },
-  contactName: {
-    fontSize: 16,
+  contactItemName: {
+    fontSize: 15,
     fontWeight: "600" as const,
     color: Colors.text,
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  contactDetail: {
-    fontSize: 13,
+  contactItemDetail: {
+    fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
+    marginTop: 1,
   },
   contactsModalFooter: {
-    padding: 24,
+    padding: 20,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: "rgba(0,0,0,0.06)",
   },
-  importButton: {
+  importBtn: {
     backgroundColor: Colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: 10,
     alignItems: "center",
     ...Platform.select({
       ios: {
         shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 4 },
+        shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.3,
-        shadowRadius: 8,
+        shadowRadius: 6,
       },
-      android: {
-        elevation: 4,
-      },
+      android: { elevation: 3 },
+      web: { boxShadow: `0 3px 10px ${Colors.primary}40` },
     }),
   },
-  importButtonText: {
-    fontSize: 16,
+  importBtnText: {
+    fontSize: 15,
     fontWeight: "700" as const,
     color: Colors.white,
   },
