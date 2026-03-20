@@ -22,6 +22,11 @@ import {
   CreditCard,
   Layers,
   CircleDot,
+  Paperclip,
+  File,
+  Image,
+  FileSpreadsheet,
+  Download,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { CustomerService } from "../sevices/CustomerService";
@@ -40,6 +45,15 @@ interface Installment {
   trangThai: "paid" | "partial" | "unpaid";
 }
 
+interface ContractDocument {
+  id: string;
+  name: string;
+  type: "pdf" | "doc" | "xls" | "jpg" | "png";
+  size: string;
+  date: string;
+  category: string;
+}
+
 interface ContractDetail {
   maHD: string;
   soHopDong: string;
@@ -55,7 +69,75 @@ interface ContractDetail {
   tongPhaiThu: number;
   tongDaThu: number;
   tongConNo: number;
+  taiLieu: ContractDocument[];
 }
+
+const DEMO_DOCUMENTS: ContractDocument[] = [
+  {
+    id: "tl1",
+    name: "Hợp đồng mua bán",
+    type: "pdf",
+    size: "4.2 MB",
+    date: "2025-03-10",
+    category: "Hợp đồng",
+  },
+  {
+    id: "tl2",
+    name: "Phụ lục hợp đồng số 01",
+    type: "pdf",
+    size: "1.8 MB",
+    date: "2025-03-15",
+    category: "Hợp đồng",
+  },
+  {
+    id: "tl3",
+    name: "Biên bản xác nhận đặt cọc",
+    type: "pdf",
+    size: "980 KB",
+    date: "2025-02-28",
+    category: "Thanh toán",
+  },
+  {
+    id: "tl4",
+    name: "Phiếu thu đợt 1",
+    type: "pdf",
+    size: "520 KB",
+    date: "2025-03-15",
+    category: "Thanh toán",
+  },
+  {
+    id: "tl5",
+    name: "Phiếu thu đợt 2",
+    type: "pdf",
+    size: "510 KB",
+    date: "2025-05-20",
+    category: "Thanh toán",
+  },
+  {
+    id: "tl6",
+    name: "Bản vẽ mặt bằng căn hộ",
+    type: "jpg",
+    size: "3.5 MB",
+    date: "2025-03-10",
+    category: "Thiết kế",
+  },
+  {
+    id: "tl7",
+    name: "Bảng tính giá trị hợp đồng",
+    type: "xls",
+    size: "1.1 MB",
+    date: "2025-03-08",
+    category: "Thanh toán",
+  },
+  {
+    id: "tl8",
+    name: "CMND/CCCD khách hàng",
+    type: "jpg",
+    size: "2.1 MB",
+    date: "2025-03-10",
+    category: "Hồ sơ KH",
+  },
+];
 
 const DEMO_CONTRACT: ContractDetail = {
   maHD: "DEMO-001",
@@ -81,6 +163,7 @@ const DEMO_CONTRACT: ContractDetail = {
   tongPhaiThu: 3250000000,
   tongDaThu: 1950000000,
   tongConNo: 1300000000,
+  taiLieu: DEMO_DOCUMENTS,
 };
 
 function formatCurrency(value: number): string {
@@ -114,6 +197,22 @@ function formatDate(dateStr: string): string {
   }
 }
 
+function getDocIcon(type: string) {
+  switch (type) {
+    case "pdf":
+      return { icon: File, color: "#EF4444", bg: "rgba(239,68,68,0.08)" };
+    case "doc":
+      return { icon: FileText, color: "#3B82F6", bg: "rgba(59,130,246,0.08)" };
+    case "xls":
+      return { icon: FileSpreadsheet, color: "#10B981", bg: "rgba(16,185,129,0.08)" };
+    case "jpg":
+    case "png":
+      return { icon: Image, color: "#F59E0B", bg: "rgba(245,158,11,0.08)" };
+    default:
+      return { icon: File, color: "#6B7280", bg: "rgba(107,114,128,0.08)" };
+  }
+}
+
 function getInstallmentIcon(status: "paid" | "partial" | "unpaid") {
   switch (status) {
     case "paid":
@@ -131,7 +230,7 @@ export default function ContractDetailScreen() {
 
   const [contract, setContract] = useState<ContractDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<"history" | "progress">("progress");
+  const [activeTab, setActiveTab] = useState<"history" | "progress" | "documents">("progress");
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -207,10 +306,11 @@ export default function ContractDetailScreen() {
           tongPhaiThu,
           tongDaThu,
           tongConNo: tongPhaiThu - tongDaThu > 0 ? tongPhaiThu - tongDaThu : 0,
+          taiLieu: DEMO_DOCUMENTS,
         };
 
         if (tienDoDot.length > 0 || lichSuThu.length > 0) {
-          setContract(detail);
+          setContract({ ...detail, taiLieu: DEMO_DOCUMENTS });
         } else {
           console.log("[ContractDetail] No installment data, using demo");
           setContract(buildFromParam());
@@ -396,7 +496,20 @@ export default function ContractDetailScreen() {
                 size={16}
               />
               <Text style={[styles.tabText, activeTab === "history" && styles.tabTextActive]}>
-                Lịch sử thu tiền
+                Lịch sử thu
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === "documents" && styles.tabActive]}
+              onPress={() => setActiveTab("documents")}
+              activeOpacity={0.7}
+            >
+              <Paperclip
+                color={activeTab === "documents" ? Colors.primary : Colors.textTertiary}
+                size={16}
+              />
+              <Text style={[styles.tabText, activeTab === "documents" && styles.tabTextActive]}>
+                Tài liệu
               </Text>
             </TouchableOpacity>
           </View>
@@ -506,6 +619,55 @@ export default function ContractDetailScreen() {
                     </View>
                   );
                 })
+              )}
+            </View>
+          )}
+
+          {activeTab === "documents" && (
+            <View style={styles.sectionCard}>
+              {contract.taiLieu.length === 0 ? (
+                <View style={styles.emptyHistory}>
+                  <Paperclip color={Colors.textTertiary} size={32} />
+                  <Text style={styles.emptyHistoryText}>Chưa có tài liệu</Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.docCount}>{contract.taiLieu.length} tài liệu</Text>
+                  {contract.taiLieu.map((doc, idx) => {
+                    const docIconInfo = getDocIcon(doc.type);
+                    const DocIcon = docIconInfo.icon;
+                    const isLast = idx === contract.taiLieu.length - 1;
+                    return (
+                      <TouchableOpacity
+                        key={doc.id}
+                        style={[styles.docRow, !isLast && styles.docRowBorder]}
+                        activeOpacity={0.6}
+                      >
+                        <View style={[styles.docIconWrap, { backgroundColor: docIconInfo.bg }]}>
+                          <DocIcon color={docIconInfo.color} size={18} />
+                        </View>
+                        <View style={styles.docInfo}>
+                          <Text style={styles.docName} numberOfLines={1}>{doc.name}</Text>
+                          <View style={styles.docMeta}>
+                            <Text style={styles.docType}>{doc.type.toUpperCase()}</Text>
+                            <View style={styles.docMetaDot} />
+                            <Text style={styles.docSize}>{doc.size}</Text>
+                            <View style={styles.docMetaDot} />
+                            <Text style={styles.docDate}>{formatDate(doc.date)}</Text>
+                          </View>
+                          {doc.category ? (
+                            <View style={styles.docCategoryWrap}>
+                              <Text style={styles.docCategory}>{doc.category}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <View style={styles.docAction}>
+                          <Download color={Colors.textTertiary} size={16} />
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </>
               )}
             </View>
           )}
@@ -885,5 +1047,86 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textTertiary,
     fontWeight: "500" as const,
+  },
+  docCount: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    fontWeight: "600" as const,
+    marginBottom: 12,
+  },
+  docRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    paddingVertical: 12,
+  },
+  docRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#F2F3F7",
+  },
+  docIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+  },
+  docInfo: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+  },
+  docName: {
+    fontSize: 14,
+    fontWeight: "600" as const,
+    color: Colors.text,
+    marginBottom: 3,
+  },
+  docMeta: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 6,
+    marginBottom: 4,
+  },
+  docType: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: Colors.textTertiary,
+    letterSpacing: 0.5,
+  },
+  docMetaDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: "#D1D5DB",
+  },
+  docSize: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    fontWeight: "500" as const,
+  },
+  docDate: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    fontWeight: "500" as const,
+  },
+  docCategoryWrap: {
+    alignSelf: "flex-start" as const,
+    backgroundColor: "#F2F3F7",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  docCategory: {
+    fontSize: 10,
+    fontWeight: "600" as const,
+    color: Colors.textSecondary,
+  },
+  docAction: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#F7F8FA",
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
   },
 });
