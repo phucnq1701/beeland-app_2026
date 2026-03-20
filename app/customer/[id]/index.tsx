@@ -34,8 +34,8 @@ import {
 } from "lucide-react-native";
 import { Dropdown } from "react-native-element-dropdown";
 import Colors from "@/constants/colors";
-import { CustomerService } from "../sevices/CustomerService";
-import { CongViecService } from "../sevices/CongViecService";
+import { CustomerService } from "../../sevices/CustomerService";
+import { CongViecService } from "../../sevices/CongViecService";
 import { Format_Date } from "@/components/utils/common";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
@@ -693,7 +693,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
   },
-
   profileHeader: {
     backgroundColor: Colors.white,
     alignItems: "center",
@@ -757,7 +756,6 @@ const styles = StyleSheet.create({
     fontWeight: "600" as const,
     color: "#10B981",
   },
-
   contactCards: {
     backgroundColor: Colors.white,
     marginHorizontal: 16,
@@ -807,7 +805,6 @@ const styles = StyleSheet.create({
     fontWeight: "600" as const,
     color: Colors.text,
   },
-
   contractBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -844,7 +841,6 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     marginTop: 2,
   },
-
   sectionWrap: {
     marginHorizontal: 16,
     marginTop: 20,
@@ -902,7 +898,6 @@ const styles = StyleSheet.create({
     fontWeight: "600" as const,
     color: Colors.white,
   },
-
   emptySection: {
     backgroundColor: Colors.white,
     borderRadius: 14,
@@ -914,7 +909,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textTertiary,
   },
-
   appointmentList: {
     gap: 8,
   },
@@ -977,7 +971,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginLeft: 8,
   },
-
   historyList: {
     gap: 8,
   },
@@ -1025,7 +1018,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.textTertiary,
   },
-
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
