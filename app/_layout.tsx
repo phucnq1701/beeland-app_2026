@@ -27,6 +27,7 @@ function RootLayoutNav() {
       <Stack.Screen name="contract/[id]" options={{ headerShown: true, title: 'Chi tiết hợp đồng' }} />
       <Stack.Screen name="deposits" options={{ headerShown: true, title: 'Đặt cọc' }} />
       <Stack.Screen name="deposit/[id]" options={{ headerShown: true, title: 'Chi tiết đặt cọc' }} />
+      <Stack.Screen name="reports" options={{ headerShown: false }} />
     </Stack>
   );
 }
