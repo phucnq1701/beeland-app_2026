@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Linking,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import {
@@ -19,10 +20,9 @@ import {
   Building2,
   User,
   Plus,
-  Eye,
-  Trash2,
   Users,
   X,
+  ChevronRight,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { CustomerService } from "./sevices/CustomerService";
@@ -55,8 +55,6 @@ export default function CustomersScreen() {
     }, 500);
     return () => clearTimeout(timer);
   }, [searchQuery]);
-
-
 
   const handleDeleteKH = useCallback(
     (maKH: any) => {
@@ -111,82 +109,100 @@ export default function CustomersScreen() {
     return colors[Math.abs(hash) % colors.length];
   };
 
+  const handleCall = useCallback((phone: string) => {
+    if (!phone) return;
+    void Linking.openURL(`tel:${phone}`);
+  }, []);
+
+  const handleEmail = useCallback((email: string) => {
+    if (!email) return;
+    void Linking.openURL(`mailto:${email}`);
+  }, []);
+
   const renderCustomerItem = useCallback(
     ({ item: customer }: { item: any }) => {
       const avatarBg = getAvatarColor(customer.tenKH || "");
       return (
         <TouchableOpacity
-          style={styles.customerCard}
+          style={styles.customerRow}
           onPress={() => router.push(`/customer/${customer.maKH}`)}
-          activeOpacity={0.7}
+          onLongPress={() => handleDeleteKH(customer?.maKH)}
+          activeOpacity={0.6}
           testID={`customer-card-${customer.maKH}`}
         >
-          <View style={styles.cardTopRow}>
-            <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
-              <Text style={styles.avatarText}>
-                {getInitials(customer.tenKH)}
-              </Text>
-            </View>
+          <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
+            <Text style={styles.avatarText}>
+              {getInitials(customer.tenKH)}
+            </Text>
+          </View>
 
-            <View style={styles.cardInfo}>
+          <View style={styles.rowContent}>
+            <View style={styles.rowTop}>
               <Text style={styles.customerName} numberOfLines={1}>
                 {customer.tenKH}
               </Text>
+              <Text style={styles.dateLabel}>
+                {new Date(customer.ngayDangKy).toLocaleDateString("vi-VN")}
+              </Text>
+            </View>
+
+            <View style={styles.rowBottom}>
+              <Text style={styles.subInfo} numberOfLines={1}>
+                {customer.diDong || "Chưa có SĐT"}
+                {customer.email ? `  •  ${customer.email}` : ""}
+              </Text>
+            </View>
+
+            <View style={styles.quickActions}>
+              {customer.diDong ? (
+                <TouchableOpacity
+                  style={styles.actionChip}
+                  onPress={() => handleCall(customer.diDong)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Phone size={12} color="#10B981" />
+                  <Text style={styles.actionChipText}>Gọi</Text>
+                </TouchableOpacity>
+              ) : null}
+              {customer.email ? (
+                <TouchableOpacity
+                  style={styles.actionChip}
+                  onPress={() => handleEmail(customer.email)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Mail size={12} color="#3B82F6" />
+                  <Text style={[styles.actionChipText, { color: "#3B82F6" }]}>
+                    Email
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
               {customer?.company ? (
-                <Text style={styles.customerCompany} numberOfLines={1}>
-                  {customer.company}
-                </Text>
+                <View style={styles.companyChip}>
+                  <Building2 size={11} color={Colors.textSecondary} />
+                  <Text style={styles.companyChipText} numberOfLines={1}>
+                    {customer.company}
+                  </Text>
+                </View>
               ) : null}
             </View>
-
-            <TouchableOpacity
-              onPress={() => handleDeleteKH(customer?.maKH)}
-              activeOpacity={0.6}
-              style={styles.deleteBtn}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Trash2 size={16} color="#EF4444" />
-            </TouchableOpacity>
           </View>
 
-          <View style={styles.cardDivider} />
-
-          <View style={styles.contactRow}>
-            <View style={styles.contactItem}>
-              <View style={styles.contactIconWrap}>
-                <Phone color={Colors.primary} size={14} />
-              </View>
-              <Text style={styles.contactText} numberOfLines={1}>
-                {customer.diDong || "—"}
-              </Text>
-            </View>
-            <View style={styles.contactItem}>
-              <View style={styles.contactIconWrap}>
-                <Mail color={Colors.accent.blue} size={14} />
-              </View>
-              <Text style={styles.contactText} numberOfLines={1}>
-                {customer.email || "—"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.cardFooter}>
-            <Text style={styles.dateText}>
-              {new Date(customer.ngayDangKy).toLocaleDateString("vi-VN")}
-            </Text>
-            <View style={styles.viewDetailBtn}>
-              <Eye color={Colors.primary} size={15} />
-              <Text style={styles.viewDetailText}>Chi tiết</Text>
-            </View>
-          </View>
+          <ChevronRight size={16} color={Colors.textTertiary} />
         </TouchableOpacity>
       );
     },
-    [handleDeleteKH, router]
+    [handleDeleteKH, router, handleCall, handleEmail]
   );
 
   const keyExtractor = useCallback(
     (item: any) => item.maKH?.toString(),
+    []
+  );
+
+  const renderSeparator = useCallback(
+    () => <View style={styles.separator} />,
     []
   );
 
@@ -198,7 +214,7 @@ export default function CustomersScreen() {
           title: "Khách hàng",
           headerStyle: { backgroundColor: Colors.primary },
           headerTintColor: Colors.white,
-          headerTitleStyle: { fontWeight: "700", fontSize: 18 },
+          headerTitleStyle: { fontWeight: "700" as const, fontSize: 18 },
           headerLeft: () => (
             <TouchableOpacity
               onPress={() => router.back()}
@@ -219,47 +235,8 @@ export default function CustomersScreen() {
       />
 
       <View style={styles.topSection}>
-        <View style={styles.tabBar}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === "personal" && styles.tabActive]}
-            onPress={() => setActiveTab("personal")}
-            activeOpacity={0.8}
-          >
-            <User
-              color={activeTab === "personal" ? Colors.white : Colors.textSecondary}
-              size={18}
-            />
-            <Text
-              style={[
-                styles.tabLabel,
-                activeTab === "personal" && styles.tabLabelActive,
-              ]}
-            >
-              Cá nhân
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === "business" && styles.tabActive]}
-            onPress={() => setActiveTab("business")}
-            activeOpacity={0.8}
-          >
-            <Building2
-              color={activeTab === "business" ? Colors.white : Colors.textSecondary}
-              size={18}
-            />
-            <Text
-              style={[
-                styles.tabLabel,
-                activeTab === "business" && styles.tabLabelActive,
-              ]}
-            >
-              Doanh nghiệp
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         <View style={styles.searchBar}>
-          <Search color={Colors.textSecondary} size={18} />
+          <Search color={Colors.textTertiary} size={17} />
           <TextInput
             style={styles.searchInput}
             placeholder="Tìm tên, SĐT, email..."
@@ -270,17 +247,61 @@ export default function CustomersScreen() {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery("")}>
-              <X color={Colors.textSecondary} size={18} />
+              <X color={Colors.textSecondary} size={17} />
             </TouchableOpacity>
           )}
         </View>
 
-        <View style={styles.countRow}>
-          <Users color={Colors.textSecondary} size={14} />
-          <Text style={styles.countText}>
-            <Text style={styles.countNumber}>{dataKH?.length ?? 0}</Text> khách
-            hàng
-          </Text>
+        <View style={styles.filterRow}>
+          <View style={styles.tabBar}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === "personal" && styles.tabActive]}
+              onPress={() => setActiveTab("personal")}
+              activeOpacity={0.8}
+            >
+              <User
+                color={
+                  activeTab === "personal" ? Colors.primary : Colors.textTertiary
+                }
+                size={14}
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  activeTab === "personal" && styles.tabLabelActive,
+                ]}
+              >
+                Cá nhân
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                activeTab === "business" && styles.tabActive,
+              ]}
+              onPress={() => setActiveTab("business")}
+              activeOpacity={0.8}
+            >
+              <Building2
+                color={
+                  activeTab === "business" ? Colors.primary : Colors.textTertiary
+                }
+                size={14}
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  activeTab === "business" && styles.tabLabelActive,
+                ]}
+              >
+                Doanh nghiệp
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.countBadge}>
+            <Text style={styles.countText}>{dataKH?.length ?? 0}</Text>
+          </View>
         </View>
       </View>
 
@@ -291,7 +312,9 @@ export default function CustomersScreen() {
         </View>
       ) : dataKH.length === 0 ? (
         <View style={styles.emptyWrap}>
-          <Users color={Colors.textTertiary} size={48} />
+          <View style={styles.emptyIcon}>
+            <Users color={Colors.textTertiary} size={32} />
+          </View>
           <Text style={styles.emptyTitle}>Chưa có khách hàng</Text>
           <Text style={styles.emptySubtitle}>
             Nhấn + để thêm khách hàng mới
@@ -302,6 +325,7 @@ export default function CustomersScreen() {
           data={dataKH}
           renderItem={renderCustomerItem}
           keyExtractor={keyExtractor}
+          ItemSeparatorComponent={renderSeparator}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           testID="customer-list"
@@ -314,7 +338,7 @@ export default function CustomersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F6F8",
+    backgroundColor: "#F8F8FA",
   },
   headerBtn: {
     padding: 4,
@@ -322,65 +346,18 @@ const styles = StyleSheet.create({
   topSection: {
     backgroundColor: Colors.white,
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.04)",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
-      },
-      android: { elevation: 2 },
-      web: { boxShadow: "0 2px 6px rgba(0,0,0,0.04)" },
-    }),
-  },
-  tabBar: {
-    flexDirection: "row",
-    backgroundColor: "#F0F1F3",
-    borderRadius: 10,
-    padding: 3,
-    marginBottom: 12,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  tabActive: {
-    backgroundColor: Colors.primary,
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-      },
-      android: { elevation: 3 },
-      web: { boxShadow: `0 2px 8px ${Colors.primary}40` },
-    }),
-  },
-  tabLabel: {
-    fontSize: 14,
-    fontWeight: "600" as const,
-    color: Colors.textSecondary,
-  },
-  tabLabelActive: {
-    color: Colors.white,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(0,0,0,0.08)",
   },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F0F1F3",
+    backgroundColor: "#F2F3F5",
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 10 : 4,
+    paddingHorizontal: 10,
+    paddingVertical: Platform.OS === "ios" ? 9 : 3,
     gap: 8,
     marginBottom: 10,
   },
@@ -390,130 +367,138 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingVertical: Platform.OS === "ios" ? 0 : 6,
   },
-  countRow: {
+  filterRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+  },
+  tabBar: {
+    flexDirection: "row",
     gap: 6,
   },
-  countText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  countNumber: {
-    fontWeight: "700" as const,
-    color: Colors.primary,
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 40,
-    gap: 12,
-  },
-  customerCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    padding: 14,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
-      },
-      android: { elevation: 2 },
-      web: { boxShadow: "0 3px 10px rgba(0,0,0,0.06)" },
-    }),
-  },
-  cardTopRow: {
+  tab: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: "#F2F3F5",
+  },
+  tabActive: {
+    backgroundColor: "rgba(232,111,37,0.1)",
+  },
+  tabLabel: {
+    fontSize: 13,
+    fontWeight: "500" as const,
+    color: Colors.textTertiary,
+  },
+  tabLabelActive: {
+    color: Colors.primary,
+    fontWeight: "600" as const,
+  },
+  countBadge: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    minWidth: 28,
+    height: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 8,
+  },
+  countText: {
+    fontSize: 12,
+    fontWeight: "700" as const,
+    color: Colors.white,
+  },
+  listContent: {
+    paddingVertical: 4,
+  },
+  customerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: Colors.white,
     gap: 12,
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: "center",
     alignItems: "center",
   },
   avatarText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700" as const,
     color: Colors.white,
   },
-  cardInfo: {
+  rowContent: {
     flex: 1,
+  },
+  rowTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
   },
   customerName: {
     fontSize: 15,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  customerCompany: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    fontWeight: "500" as const,
-  },
-  deleteBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#FEF2F2",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: "rgba(0,0,0,0.05)",
-    marginVertical: 10,
-  },
-  contactRow: {
-    gap: 8,
-    marginBottom: 10,
-  },
-  contactItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  contactIconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "#F5F6F8",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  contactText: {
-    fontSize: 13,
+    fontWeight: "600" as const,
     color: Colors.text,
     flex: 1,
+    marginRight: 8,
   },
-  cardFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.04)",
-  },
-  dateText: {
-    fontSize: 12,
+  dateLabel: {
+    fontSize: 11,
     color: Colors.textTertiary,
   },
-  viewDetailBtn: {
+  rowBottom: {
+    marginBottom: 5,
+  },
+  subInfo: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  quickActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  actionChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: "rgba(232,111,37,0.08)",
-    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    backgroundColor: "rgba(16,185,129,0.08)",
   },
-  viewDetailText: {
-    fontSize: 12,
+  actionChipText: {
+    fontSize: 11,
     fontWeight: "600" as const,
-    color: Colors.primary,
+    color: "#10B981",
+  },
+  companyChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 12,
+    backgroundColor: "#F2F3F5",
+    maxWidth: 160,
+  },
+  companyChipText: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(0,0,0,0.06)",
+    marginLeft: 70,
   },
   loadingWrap: {
     flex: 1,
@@ -529,14 +514,22 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     paddingBottom: 60,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#F2F3F5",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: "600" as const,
     color: Colors.text,
-    marginTop: 8,
   },
   emptySubtitle: {
     fontSize: 13,
