@@ -18,7 +18,7 @@ import Colors from "@/constants/colors";
 import { ProjectService } from "./sevices/ProjectService";
 
 const DEFAULT_PROJECT_IMAGE =
-  "https://r2-pub.rork.com/attachments/bigwmih05tf7or57crm12";
+  "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/css461kotbkumrm0wjakm";
 
 export default function ProjectsScreen() {
   const router = useRouter();
