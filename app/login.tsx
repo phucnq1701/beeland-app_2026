@@ -26,10 +26,6 @@ export default function LoginScreen() {
 
 
   const handleLogin = async () => {
-
-    console.log("Login response:1", companyCode);
-        console.log("Login response2:", username);
-        console.log("Login response3:", password);
     
     if (!companyCode || !username || !password) {
       Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin");
@@ -45,8 +41,6 @@ export default function LoginScreen() {
         Email: username.trim(),
         Password: password,
       });
-  
-      console.log("Login response:", res);
   
       if (res?.status === 200) {
         const token = res?.acessToken;
