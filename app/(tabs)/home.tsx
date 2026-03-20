@@ -339,6 +339,9 @@ export default function HomeScreen() {
         } else if (featureId === "12") {
           console.log("[Home] Navigating to receipts");
           router.push("/receipts");
+        } else if (featureId === "13") {
+          console.log("[Home] Navigating to deposits");
+          router.push("/deposits");
         } else {
           console.log("[Home] No route defined for feature", { featureId });
         }
