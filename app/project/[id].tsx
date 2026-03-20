@@ -19,6 +19,9 @@ import {
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 
+const DEFAULT_PROJECT_IMAGE =
+  "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/css461kotbkumrm0wjakm";
+
 export default function ProjectOptionsScreen() {
   const { project } = useLocalSearchParams<{ project: any }>();
   const router = useRouter();
@@ -68,8 +71,7 @@ export default function ProjectOptionsScreen() {
         <Image
           source={{
             uri:
-              projectData.icon ||
-              "https://images.unsplash.com/photo-1560518883-ce09059eeffa",
+              projectData.icon || DEFAULT_PROJECT_IMAGE,
           }}
           style={styles.projectImage}
           contentFit="cover"
