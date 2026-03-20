@@ -27,6 +27,7 @@ import {
   ChevronRight,
   Hash,
   Banknote,
+  CreditCard,
 } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import Colors from "@/constants/colors";
@@ -328,19 +329,46 @@ export default function BookingDetailScreen() {
             </TouchableOpacity>
 
             {isActiveBooking && (
-              <TouchableOpacity
-                style={styles.uploadButton}
-                activeOpacity={0.8}
-                onPress={handlePickImage}
-                disabled={isUploading}
-              >
-                {loading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Upload size={20} color="#fff" />
-                )}
-                <Text style={styles.uploadButtonText}>Tải chứng từ thanh toán</Text>
-              </TouchableOpacity>
+              <View style={styles.actionRow}>
+                <TouchableOpacity
+                  style={styles.uploadButton}
+                  activeOpacity={0.8}
+                  onPress={handlePickImage}
+                  disabled={isUploading}
+                >
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Upload size={18} color="#fff" />
+                  )}
+                  <Text style={styles.uploadButtonText}>Tải chứng từ</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.paymentButton}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    Alert.alert(
+                      "Thanh toán",
+                      "Bạn muốn thanh toán booking này?",
+                      [
+                        { text: "Không", style: "cancel" },
+                        {
+                          text: "Thanh toán",
+                          onPress: () => {
+                            router.push({
+                              pathname: "/booking/qr-payment",
+                              params: { bookingId: booking.id },
+                            });
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <CreditCard size={18} color="#fff" />
+                  <Text style={styles.paymentButtonText}>Thanh toán</Text>
+                </TouchableOpacity>
+              </View>
             )}
 
             {uploadedImage && (
@@ -637,15 +665,20 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 2,
   },
+  actionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
   uploadButton: {
+    flex: 1,
     backgroundColor: Colors.primary,
     borderRadius: 14,
-    paddingVertical: 16,
+    paddingVertical: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    marginTop: 4,
+    gap: 8,
     ...Platform.select({
       ios: {
         shadowColor: Colors.primary,
@@ -658,7 +691,32 @@ const styles = StyleSheet.create({
     }),
   },
   uploadButtonText: {
-    fontSize: 15,
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: "#fff",
+  },
+  paymentButton: {
+    flex: 1,
+    backgroundColor: "#1D4ED8",
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#1D4ED8",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+      web: { boxShadow: `0 4px 12px rgba(29, 78, 216, 0.25)` },
+    }),
+  },
+  paymentButtonText: {
+    fontSize: 13,
     fontWeight: "700" as const,
     color: "#fff",
   },
