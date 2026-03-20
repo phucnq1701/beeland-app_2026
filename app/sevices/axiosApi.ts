@@ -21,9 +21,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const API_URL = "https://api-beeland.beesky.vn/";
 const axiosApi = axios.create({
   baseURL: API_URL,
-  timeout: 15000,
+  timeout: 30000,
   headers: {
-    "Content-Type": "application/json;charset=utf-8",
+    "Content-Type": "application/json",
+    "Accept": "application/json",
   },
 });
 
@@ -52,8 +53,16 @@ axiosApi.interceptors.response.use(
       console.log("[API Timeout]", error.config?.url);
     } else if (!error.response) {
       console.log("[API Network Error]", error.config?.url, error.message);
+      console.log("[API Network Error Detail]", JSON.stringify({
+        code: error.code,
+        message: error.message,
+        url: error.config?.url,
+        method: error.config?.method,
+        baseURL: error.config?.baseURL,
+      }));
     } else {
       console.log(`[API Error] ${error.config?.url} - Status: ${error.response?.status}`);
+      console.log("[API Error Data]", JSON.stringify(error.response?.data));
     }
     return Promise.reject(error);
   }
