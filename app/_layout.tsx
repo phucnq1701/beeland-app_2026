@@ -23,6 +23,9 @@ function RootLayoutNav() {
       <Stack.Screen name="project/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="product/[id]" options={{ title: 'Chi tiết sản phẩm' }} />
       <Stack.Screen name="price-calculator/[id]" options={{ title: 'Tính giá sản phẩm' }} />
+      <Stack.Screen name="customer/[id]" options={{ headerShown: true }} />
+      <Stack.Screen name="customer/[id]/contracts" options={{ headerShown: true }} />
+      <Stack.Screen name="customer/[id]/edit" options={{ headerShown: true }} />
     </Stack>
   );
 }
