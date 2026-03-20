@@ -1,5 +1,4 @@
 import axiosApi from "./axiosApi";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const CustomerService = {
   getCustomers: async (payload: any = "") => {
@@ -122,6 +121,12 @@ export const CustomerService = {
 
     return await axiosApi
       .post("api/admin/KhachHang/AddLichSuLamViec", init)
+      .then((res) => res.data);
+  },
+
+  getHopDong: async (payload: any = {}) => {
+    return await axiosApi
+      .post("api/admin/hop-dong/danh-sach", payload)
       .then((res) => res.data);
   },
 

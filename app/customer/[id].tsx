@@ -29,6 +29,8 @@ import {
   Edit2,
   Trash2,
   FileText,
+  ChevronRight,
+  ScrollText,
 } from "lucide-react-native";
 import { Dropdown } from "react-native-element-dropdown";
 import Colors from "@/constants/colors";
@@ -403,6 +405,24 @@ export default function CustomerDetailScreen() {
             </View>
           ) : null}
         </View>
+
+        <TouchableOpacity
+          style={styles.contractBtn}
+          activeOpacity={0.7}
+          onPress={() => router.push(`/customer/${customer.id}/contracts`)}
+          testID="contract-history-btn"
+        >
+          <View style={styles.contractBtnLeft}>
+            <View style={[styles.contactIcon, { backgroundColor: "rgba(59,130,246,0.1)" }]}>
+              <ScrollText color={Colors.accent.blue} size={18} />
+            </View>
+            <View>
+              <Text style={styles.contractBtnTitle}>Lịch sử hợp đồng</Text>
+              <Text style={styles.contractBtnDesc}>Xem danh sách hợp đồng</Text>
+            </View>
+          </View>
+          <ChevronRight color={Colors.textTertiary} size={20} />
+        </TouchableOpacity>
 
         <View style={styles.sectionWrap}>
           <View style={styles.sectionHeader}>
@@ -786,6 +806,43 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600" as const,
     color: Colors.text,
+  },
+
+  contractBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.white,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      android: { elevation: 2 },
+      web: { boxShadow: "0 2px 8px rgba(0,0,0,0.05)" },
+    }),
+  },
+  contractBtnLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  contractBtnTitle: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    color: Colors.text,
+  },
+  contractBtnDesc: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    marginTop: 2,
   },
 
   sectionWrap: {
