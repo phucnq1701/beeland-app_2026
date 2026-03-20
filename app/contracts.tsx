@@ -73,6 +73,31 @@ function getStatusColor(status: string, colorWeb?: string): string {
   return statusColorMap[status] || Colors.accent.blue;
 }
 
+const DEMO_CONTRACTS: Contract[] = [
+  {
+    maHD: "DEMO-001",
+    soHopDong: "HD-2025-001234",
+    ngayKy: "2025-03-10",
+    tenKH: "Nguyễn Văn An",
+    maSP: "A-12-08",
+    tongGiaTri: 3250000000,
+    trangThai: "Đã duyệt",
+    tenDA: "Bee Land Tower",
+    colorTT: "#10B981",
+  },
+  {
+    maHD: "DEMO-002",
+    soHopDong: "HD-2025-001567",
+    ngayKy: "2025-03-15",
+    tenKH: "Trần Thị Bích Ngọc",
+    maSP: "B-05-02",
+    tongGiaTri: 4780000000,
+    trangThai: "Chờ duyệt",
+    tenDA: "Bee Land Riverside",
+    colorTT: "#F59E0B",
+  },
+];
+
 export default function ContractsScreen() {
   const router = useRouter();
   const searchTimeout = useRef<any>(null);
@@ -140,11 +165,12 @@ export default function ContractsScreen() {
         }));
         setContracts(mapped);
       } else {
-        setContracts([]);
+        console.log("[Contracts] No data from API, using demo contracts");
+        setContracts(DEMO_CONTRACTS);
       }
     } catch (err) {
-      console.log("[Contracts] loadContracts error", err);
-      setContracts([]);
+      console.log("[Contracts] loadContracts error, using demo contracts", err);
+      setContracts(DEMO_CONTRACTS);
     } finally {
       setLoading(false);
     }
