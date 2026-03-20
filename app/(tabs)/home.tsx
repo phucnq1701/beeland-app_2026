@@ -324,21 +324,12 @@ export default function HomeScreen() {
           router.push("/bookings");
         } else if (featureId === "6") {
           router.push("/customers");
-        } else if (featureId === "10") {
-          console.log("[Home] Navigating to photo gallery");
-          router.push("/photo-gallery");
-        } else if (featureId === "11") {
-          console.log("[Home] Navigating to handovers");
-          router.push("/handovers");
         } else if (featureId === "8") {
           console.log("[Home] Navigating to contracts");
           router.push("/contracts");
         } else if (featureId === "9") {
           console.log("[Home] Navigating to reports");
           router.push("/reports");
-        } else if (featureId === "12") {
-          console.log("[Home] Navigating to receipts");
-          router.push("/receipts");
         } else if (featureId === "13") {
           console.log("[Home] Navigating to deposits");
           router.push("/deposits");

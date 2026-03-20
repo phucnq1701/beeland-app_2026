@@ -152,15 +152,6 @@ export default function AllManagementScreen() {
     } else if (featureId === '9') {
       console.log('[AllManagement] Navigating to reports');
       router.push('/reports');
-    } else if (featureId === '10') {
-      console.log('[AllManagement] Navigating to photo gallery');
-      router.push('/photo-gallery');
-    } else if (featureId === '11') {
-      console.log('[AllManagement] Navigating to handovers');
-      router.push('/handovers');
-    } else if (featureId === '12') {
-      console.log('[AllManagement] Navigating to receipts');
-      router.push('/receipts');
     } else if (featureId === '13') {
       console.log('[AllManagement] Navigating to deposits');
       router.push('/deposits');

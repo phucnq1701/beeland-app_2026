@@ -1,4 +1,4 @@
-import { LucideIcon, Building2, Home, Calendar, Lock, BookOpen, Users, DollarSign, FileText, BarChart3, Image, CheckCircle, Receipt, Landmark } from 'lucide-react-native';
+import { LucideIcon, Building2, Home, Calendar, Lock, BookOpen, Users, DollarSign, FileText, BarChart3, Landmark } from 'lucide-react-native';
 
 export interface Feature {
   id: string;
@@ -72,27 +72,7 @@ export const features: Feature[] = [
     backgroundColor: 'rgba(239, 68, 68, 0.2)',
     iconColor: '#EF4444',
   },
-  {
-    id: '10',
-    title: 'Thư viện ảnh',
-    icon: Image,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    iconColor: '#10B981',
-  },
-  {
-    id: '11',
-    title: 'Bàn giao',
-    icon: CheckCircle,
-    backgroundColor: 'rgba(14, 165, 233, 0.2)',
-    iconColor: '#0EA5E9',
-  },
-  {
-    id: '12',
-    title: 'Phiếu thu',
-    icon: Receipt,
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
-    iconColor: '#EF4444',
-  },
+
   {
     id: '13',
     title: 'Đặt cọc',
