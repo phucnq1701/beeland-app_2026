@@ -378,8 +378,9 @@ export default function ProductsScreen() {
     </View>
   );
 
-  const CELL_SIZE = 56;
-  const FLOOR_COL_WIDTH = 52;
+  const CELL_SIZE = 48;
+  const FLOOR_COL_WIDTH = 48;
+  const TOTAL_COLUMNS = 20;
 
   const renderGridView = () => (
     <View style={styles.gridContainer}>
@@ -413,7 +414,12 @@ export default function ProductsScreen() {
             return numB - numA;
           }
         );
-        const blockColumns = [...new Set(block.units.map((u) => u.column))].sort();
+        const _rawColumns = [...new Set(block.units.map((u) => u.column))].sort();
+        const blockColumns: string[] = [];
+        for (let i = 1; i <= TOTAL_COLUMNS; i++) {
+          const col = i.toString().padStart(2, '0');
+          blockColumns.push(col);
+        }
 
         return (
           <View key={blockIdx} style={styles.blockCard}>
