@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 import {
@@ -18,6 +19,11 @@ import {
   ChevronDown,
   ChevronUp,
   LayoutDashboard,
+  Home,
+  Maximize2,
+  DollarSign,
+  ChevronRight,
+  Package,
 } from "lucide-react-native";
 import {
   overviewBlocks,
@@ -775,54 +781,105 @@ export default function ProductsScreen() {
                 <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
               </View>
             ) : (
-              <View style={styles.productTable}>
-                <View style={styles.tableHeader}>
-                  <Text style={[styles.tableHeaderText, styles.colStatus]}>
-                    Trạng thái
-                  </Text>
-                  <Text style={[styles.tableHeaderText, styles.colCode]}>
-                    Mã sản phẩm
-                  </Text>
-                  <Text style={[styles.tableHeaderText, styles.colPrice]}>
-                    Tổng giá trị gốm PBT
+              <View style={styles.productCardList}>
+                <View style={styles.productCountRow}>
+                  <Package color={Colors.primary} size={14} />
+                  <Text style={styles.productCountText}>
+                    {products2.length} sản phẩm
                   </Text>
                 </View>
-
                 {products2.map((product) => (
-                  // {filteredProducts.map((product) => (
-
                   <TouchableOpacity
                     key={product.maSP}
-                    style={styles.tableRow}
+                    style={styles.productCard}
                     activeOpacity={0.7}
                     onPress={() => handlePressProduct(product.maSP)}
+                    testID={`product-card-${product.maSP}`}
                   >
-                    <View
-                      style={[styles.colStatus, styles.statusBadgeContainer]}
-                    >
+                    <View style={styles.productCardLeft}>
                       <View
                         style={[
-                          styles.statusBadge,
-                          { backgroundColor: getStatusColor(product.maTT) },
+                          styles.productCardIcon,
+                          { backgroundColor: getStatusColor(product.maTT) + '18' },
                         ]}
                       >
-                        <Text style={styles.statusBadgeText}>
-                          {getStatusLabel(product.maTT)}
-                        </Text>
+                        <Home
+                          color={getStatusColor(product.maTT)}
+                          size={20}
+                        />
                       </View>
                     </View>
-                    <Text style={[styles.tableText, styles.colCode]}>
-                      {product.maSanPham}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.tableText,
-                        styles.colPrice,
-                        styles.priceText,
-                      ]}
-                    >
-                      {formatCurrency(product?.tongGiaGomPBT)}
-                    </Text>
+                    <View style={styles.productCardBody}>
+                      <View style={styles.productCardTop}>
+                        <Text style={styles.productCardCode} numberOfLines={1}>
+                          {product.maSanPham || product.kyHieu || '---'}
+                        </Text>
+                        <ChevronRight color={Colors.textTertiary} size={18} />
+                      </View>
+
+                      <View style={styles.productCardInfoRow}>
+                        {product.dtThongThuy ? (
+                          <View style={styles.productCardInfoItem}>
+                            <Maximize2 color={Colors.textSecondary} size={12} />
+                            <Text style={styles.productCardInfoText}>
+                              {product.dtThongThuy} m²
+                            </Text>
+                          </View>
+                        ) : null}
+                        {product.tenLoaiSP ? (
+                          <View style={styles.productCardInfoItem}>
+                            <Home color={Colors.textSecondary} size={12} />
+                            <Text style={styles.productCardInfoText}>
+                              {product.tenLoaiSP}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {product.tenKhu ? (
+                          <View style={styles.productCardInfoItem}>
+                            <Text style={styles.productCardInfoText}>
+                              {product.tenKhu}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <View style={styles.productCardBottom}>
+                        <View style={styles.productCardPriceRow}>
+                          <DollarSign color={Colors.primary} size={13} />
+                          <Text style={styles.productCardPrice}>
+                            {product?.tongGiaGomPBT
+                              ? formatCurrency(product.tongGiaGomPBT)
+                              : 'Liên hệ'}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.productStatusChip,
+                            {
+                              backgroundColor:
+                                getStatusColor(product.maTT) + '14',
+                            },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.productStatusDot,
+                              {
+                                backgroundColor: getStatusColor(product.maTT),
+                              },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.productStatusLabel,
+                              { color: getStatusColor(product.maTT) },
+                            ]}
+                          >
+                            {getStatusLabel(product.maTT)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -960,65 +1017,120 @@ const styles = StyleSheet.create({
     fontWeight: "700" as const,
     color: Colors.primary,
   },
-  productTable: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
+  productCardList: {
+    gap: 0,
+  },
+  productCountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 12,
+  },
+  productCountText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    fontWeight: "500" as const,
+  },
+  productCard: {
+    flexDirection: "row",
+    backgroundColor: "#FFF",
+    borderRadius: 14,
+    marginBottom: 10,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: "rgba(0,0,0,0.04)",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+      },
+    }),
   },
-  tableHeader: {
-    flexDirection: "row",
-    backgroundColor: "#F9FAFB",
+  productCardLeft: {
+    width: 72,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  productCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  productCardBody: {
+    flex: 1,
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingRight: 12,
   },
-  tableHeaderText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
+  productCardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  productCardCode: {
+    fontSize: 15,
+    fontWeight: "700" as const,
+    color: Colors.text,
+    flex: 1,
+    marginRight: 4,
+  },
+  productCardInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginTop: 4,
+    gap: 10,
+  },
+  productCardInfoItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  productCardInfoText: {
+    fontSize: 12,
     color: Colors.textSecondary,
   },
-  tableRow: {
+  productCardBottom: {
     flexDirection: "row",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
     alignItems: "center",
-    position: "relative" as const,
+    justifyContent: "space-between",
+    marginTop: 8,
   },
-  tableText: {
+  productCardPriceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  productCardPrice: {
     fontSize: 14,
-    color: Colors.text,
+    fontWeight: "700" as const,
+    color: Colors.primary,
   },
-  colStatus: {
-    width: 110,
+  productStatusChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
-  colCode: {
-    flex: 1,
+  productStatusDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginRight: 5,
   },
-  colPrice: {
-    width: 100,
-    textAlign: "right" as const,
-    paddingRight: 4,
-  },
-  statusBadgeContainer: {
-    alignItems: "flex-start",
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusBadgeText: {
-    fontSize: 12,
+  productStatusLabel: {
+    fontSize: 11,
     fontWeight: "600" as const,
-    color: Colors.white,
-  },
-  priceText: {
-    fontWeight: "500" as const,
   },
   filterPanel: {
     backgroundColor: Colors.white,
