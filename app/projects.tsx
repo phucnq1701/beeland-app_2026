@@ -90,9 +90,10 @@ export default function ProjectsScreen() {
           testID={`project-card-${index}`}
         >
           <Image
-            source={{ uri: item.icon || DEFAULT_PROJECT_IMAGE }}
+            source={{ uri: (item.icon && item.icon.trim() !== '') ? item.icon : DEFAULT_PROJECT_IMAGE }}
             style={styles.cardImage}
             contentFit="cover"
+            placeholder={DEFAULT_PROJECT_IMAGE}
           />
 
           <View style={styles.cardBody}>
