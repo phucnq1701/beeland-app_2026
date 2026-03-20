@@ -330,6 +330,9 @@ export default function HomeScreen() {
         } else if (featureId === "11") {
           console.log("[Home] Navigating to handovers");
           router.push("/handovers");
+        } else if (featureId === "8") {
+          console.log("[Home] Navigating to contracts");
+          router.push("/contracts");
         } else if (featureId === "9") {
           console.log("[Home] Navigating to reports");
           router.push("/reports");
