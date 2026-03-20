@@ -37,6 +37,7 @@ import { UserService } from "../sevices/UserService";
 import { Format_Date } from "@/components/utils/common";
 import { CustomerService } from "../sevices/CustomerService";
 
+const DEFAULT_PROJECT_IMAGE = "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/bigwmih05tf7or57crm12";
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width - 48;
 const STORAGE_KEY = "@home_features_config";
@@ -493,7 +494,7 @@ export default function HomeScreen() {
                 onPress={() => handlePressProperty(property)}
               >
                 <Image
-                  source={{ uri: property.image }}
+                  source={{ uri: property.image || DEFAULT_PROJECT_IMAGE }}
                   style={styles.propertyImage}
                   contentFit="cover"
                 />

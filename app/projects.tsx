@@ -18,6 +18,8 @@ import { MapPin, ArrowRight } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { ProjectService } from "./sevices/ProjectService";
 
+const DEFAULT_PROJECT_IMAGE = "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/bigwmih05tf7or57crm12";
+
 export default function ProjectsScreen() {
   const router = useRouter();
 
@@ -27,7 +29,7 @@ export default function ProjectsScreen() {
 
 
   useEffect(() => {
-    loadProjects();
+    void loadProjects();
   }, []);
 
   // const handleProjectPress = (id: string) => {
@@ -72,6 +74,7 @@ export default function ProjectsScreen() {
     router.push({
       pathname: "/project/[id]",
       params: {
+        id: project.MaDA,
         project: JSON.stringify(project),
       },
     });
@@ -124,7 +127,7 @@ export default function ProjectsScreen() {
                 source={{
                   uri:
                     project.icon ||
-                    "https://images.unsplash.com/photo-1560518883-ce09059eeffa",
+                    DEFAULT_PROJECT_IMAGE,
                 }}
                 style={styles.projectImage}
                 contentFit="cover"
