@@ -17,7 +17,6 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronUp,
-  ChevronRight,
   LayoutDashboard,
 } from "lucide-react-native";
 import {
@@ -56,14 +55,13 @@ export default function ProductsScreen() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [filterExpanded, setFilterExpanded] = useState<boolean>(false);
-  const [selectedStatus, setSelectedStatus] = useState<
+  const [_selectedStatus, _setSelectedStatus] = useState<
     Product["status"] | "all"
   >("all");
-  const [currentBlockIndex, setCurrentBlockIndex] = useState<number>(0);
   const [selectedOverviewStatus, setSelectedOverviewStatus] = useState<
     UnitStatus | "all"
   >("all");
-  const [onlyShowFavorites, setOnlyShowFavorites] = useState<boolean>(
+  const [onlyShowFavorites, _setOnlyShowFavorites] = useState<boolean>(
     showFavorites === "true"
   );
   const router = useRouter();
@@ -83,8 +81,8 @@ export default function ProductsScreen() {
     KyHieu: "",
   });
 
-  const applyChangeFilter = (p, v) => {
-    let _filter = filterCondition;
+  const applyChangeFilter = (p: string, v: any) => {
+    const _filter = { ...filterCondition } as any;
     switch (p) {
       case "MaDA":
         _filter[p] = v;
@@ -110,7 +108,7 @@ export default function ProductsScreen() {
     setFilterCondition(_filter);
   };
 
-  const loadDataByDA = async (MaDA) => {
+  const loadDataByDA = async (MaDA: number) => {
     const resListKhu = await ProductService.getKhuVuc({ MaDa: MaDA });
     setKhuVuc(resListKhu?.data || []);
   };
@@ -149,7 +147,7 @@ export default function ProductsScreen() {
     }
   };
 
-  const loadProducts2 = async (_filter) => {
+  const loadProducts2 = async (_filter: any) => {
     try {
       setLoading(true);
 
@@ -221,13 +219,13 @@ export default function ProductsScreen() {
     return item?.ColorWeb || "#9CA3AF";
   };
 
-  const filteredProducts = products.filter((product) => {
+  const _filteredProducts = products.filter((product) => {
     const matchesSearch = searchQuery
       ? product.code.toLowerCase().includes(searchQuery.toLowerCase())
       : true;
 
     const matchesStatus =
-      selectedStatus === "all" || product.status === selectedStatus;
+      _selectedStatus === "all" || product.status === _selectedStatus;
 
     const matchesFavorites = onlyShowFavorites ? false : true;
 
@@ -269,9 +267,7 @@ export default function ProductsScreen() {
     }
   };
 
-  const currentBlock = blocks[currentBlockIndex];
-  const floors = ["T19", "T18", "T17", "T16", "T15", "T14", "T13", "T12"];
-  const columns = ["01", "02", "03", "04", "05"];
+
 
   const currentOverviewBlock = overviewBlocks[0];
   const overviewStats = getOverviewStats(currentOverviewBlock);
@@ -406,120 +402,85 @@ export default function ProductsScreen() {
         </View>
       </View>
 
-      <View style={styles.blockCard}>
-        <Text style={styles.blockTitle}>{currentBlock.name}</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        pagingEnabled={false}
+        decelerationRate="fast"
+        contentContainerStyle={styles.blocksScrollContent}
+      >
+        {blocks.map((block, blockIdx) => {
+          const blockFloors = [...new Set(block.units.map((u) => u.floor))].sort(
+            (a, b) => {
+              const numA = parseInt(a.replace("T", ""), 10);
+              const numB = parseInt(b.replace("T", ""), 10);
+              return numB - numA;
+            }
+          );
+          const blockColumns = [...new Set(block.units.map((u) => u.column))].sort();
 
-        <View style={styles.grid}>
-          <View style={styles.gridRow}>
-            <View style={[styles.gridCell, styles.headerCell]}>
-              <Text style={styles.headerCellText}>T\V</Text>
-            </View>
-            {columns.map((col) => (
-              <View key={col} style={[styles.gridCell, styles.headerCell]}>
-                <Text style={styles.headerCellText}>{col}</Text>
-              </View>
-            ))}
-          </View>
+          return (
+            <View key={blockIdx} style={styles.blockCard}>
+              <Text style={styles.blockTitle}>{block.name}</Text>
 
-          {floors.map((floor) => (
-            <View key={floor} style={styles.gridRow}>
-              <View style={[styles.gridCell, styles.floorCell]}>
-                <Text style={styles.floorCellText}>{floor}</Text>
-              </View>
-              {columns.map((col) => {
-                const unit = currentBlock.units.find(
-                  (u) => u.floor === floor && u.column === col
-                );
-                return (
-                  <View key={`${floor}-${col}`} style={styles.gridCell}>
-                    {unit ? (
-                      <TouchableOpacity
-                        style={[
-                          styles.unitCell,
-                          { backgroundColor: getUnitStatusColor(unit.status) },
-                        ]}
-                        onPress={() => handlePressProduct(unit.id)}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.unitCellText}>{unit.id}</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <View style={styles.emptyCell}>
-                        <Text style={styles.emptyCellText}>-</Text>
-                      </View>
-                    )}
+              <View style={styles.grid}>
+                <View style={styles.gridRow}>
+                  <View style={[styles.gridCell, styles.headerCell]}>
+                    <Text style={styles.headerCellText}>T\V</Text>
                   </View>
-                );
-              })}
+                  {blockColumns.map((col) => (
+                    <View key={col} style={[styles.gridCell, styles.headerCell]}>
+                      <Text style={styles.headerCellText}>{col}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {blockFloors.map((floor) => (
+                  <View key={floor} style={styles.gridRow}>
+                    <View style={[styles.gridCell, styles.floorCell]}>
+                      <Text style={styles.floorCellText}>{floor}</Text>
+                    </View>
+                    {blockColumns.map((col) => {
+                      const unit = block.units.find(
+                        (u) => u.floor === floor && u.column === col
+                      );
+                      return (
+                        <View key={`${floor}-${col}`} style={styles.gridCell}>
+                          {unit ? (
+                            <TouchableOpacity
+                              style={[
+                                styles.unitCell,
+                                { backgroundColor: getUnitStatusColor(unit.status) },
+                              ]}
+                              onPress={() => handlePressProduct(unit.id)}
+                              activeOpacity={0.8}
+                            >
+                              <Text style={styles.unitCellText}>{unit.id}</Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <View style={styles.emptyCell}>
+                              <Text style={styles.emptyCellText}>-</Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+
+              <Text style={styles.blockStats}>
+                {block.name}: {block.stats.total} căn •{" "}
+                {block.stats.available} trống • {block.stats.deposit} cọc
+              </Text>
             </View>
-          ))}
-        </View>
-
-        <View style={styles.blockNavigation}>
-          <TouchableOpacity
-            onPress={() =>
-              setCurrentBlockIndex(Math.max(0, currentBlockIndex - 1))
-            }
-            disabled={currentBlockIndex === 0}
-            style={[
-              styles.navButton,
-              currentBlockIndex === 0 && styles.navButtonDisabled,
-            ]}
-            activeOpacity={0.7}
-          >
-            <ChevronLeft
-              color={currentBlockIndex === 0 ? "#D1D5DB" : Colors.text}
-              size={20}
-            />
-          </TouchableOpacity>
-
-          <View style={styles.progressBar}>
-            {blocks.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.progressDot,
-                  index === currentBlockIndex && styles.progressDotActive,
-                ]}
-              />
-            ))}
-          </View>
-
-          <TouchableOpacity
-            onPress={() =>
-              setCurrentBlockIndex(
-                Math.min(blocks.length - 1, currentBlockIndex + 1)
-              )
-            }
-            disabled={currentBlockIndex === blocks.length - 1}
-            style={[
-              styles.navButton,
-              currentBlockIndex === blocks.length - 1 &&
-                styles.navButtonDisabled,
-            ]}
-            activeOpacity={0.7}
-          >
-            <ChevronRight
-              color={
-                currentBlockIndex === blocks.length - 1
-                  ? "#D1D5DB"
-                  : Colors.text
-              }
-              size={20}
-            />
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.blockStats}>
-          {currentBlock.name}: {currentBlock.stats.total} căn •{" "}
-          {currentBlock.stats.available} trống • {currentBlock.stats.deposit}{" "}
-          cọc
-        </Text>
-      </View>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 
-  const formatCurrency = (num) => {
+  const formatCurrency = (num: number | null | undefined) => {
     if (!num) return "0 đ";
     return new Intl.NumberFormat("vi-VN").format(Math.round(num));
   };
@@ -1121,12 +1082,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text,
   },
+  blocksScrollContent: {
+    gap: 12,
+    paddingRight: 4,
+  },
   blockCard: {
     backgroundColor: "#FEF7F3",
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
+    width: 340,
   },
   blockTitle: {
     fontSize: 18,
