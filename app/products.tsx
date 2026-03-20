@@ -378,6 +378,9 @@ export default function ProductsScreen() {
     </View>
   );
 
+  const CELL_SIZE = 56;
+  const FLOOR_COL_WIDTH = 52;
+
   const renderGridView = () => (
     <View style={styles.gridContainer}>
       <View style={styles.statusLegend}>
@@ -402,81 +405,87 @@ export default function ProductsScreen() {
         </View>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        pagingEnabled={false}
-        decelerationRate="fast"
-        contentContainerStyle={styles.blocksScrollContent}
-      >
-        {blocks.map((block, blockIdx) => {
-          const blockFloors = [...new Set(block.units.map((u) => u.floor))].sort(
-            (a, b) => {
-              const numA = parseInt(a.replace("T", ""), 10);
-              const numB = parseInt(b.replace("T", ""), 10);
-              return numB - numA;
-            }
-          );
-          const blockColumns = [...new Set(block.units.map((u) => u.column))].sort();
+      {blocks.map((block, blockIdx) => {
+        const blockFloors = [...new Set(block.units.map((u) => u.floor))].sort(
+          (a, b) => {
+            const numA = parseInt(a.replace("T", ""), 10);
+            const numB = parseInt(b.replace("T", ""), 10);
+            return numB - numA;
+          }
+        );
+        const blockColumns = [...new Set(block.units.map((u) => u.column))].sort();
 
-          return (
-            <View key={blockIdx} style={styles.blockCard}>
+        return (
+          <View key={blockIdx} style={styles.blockCard}>
+            <View style={styles.blockCardHeader}>
               <Text style={styles.blockTitle}>{block.name}</Text>
+              <Text style={styles.blockStatsInline}>
+                {block.stats.total} căn • {block.stats.available} trống • {block.stats.deposit} cọc
+              </Text>
+            </View>
 
-              <View style={styles.grid}>
-                <View style={styles.gridRow}>
-                  <View style={[styles.gridCell, styles.headerCell]}>
-                    <Text style={styles.headerCellText}>T\V</Text>
-                  </View>
-                  {blockColumns.map((col) => (
-                    <View key={col} style={[styles.gridCell, styles.headerCell]}>
-                      <Text style={styles.headerCellText}>{col}</Text>
-                    </View>
-                  ))}
+            <View style={styles.gridTableWrapper}>
+              <View style={styles.fixedFloorCol}>
+                <View style={[styles.fixedHeaderCell, { height: CELL_SIZE, width: FLOOR_COL_WIDTH }]}>
+                  <Text style={styles.headerCellText}>Tầng</Text>
                 </View>
-
                 {blockFloors.map((floor) => (
-                  <View key={floor} style={styles.gridRow}>
-                    <View style={[styles.gridCell, styles.floorCell]}>
-                      <Text style={styles.floorCellText}>{floor}</Text>
-                    </View>
-                    {blockColumns.map((col) => {
-                      const unit = block.units.find(
-                        (u) => u.floor === floor && u.column === col
-                      );
-                      return (
-                        <View key={`${floor}-${col}`} style={styles.gridCell}>
-                          {unit ? (
-                            <TouchableOpacity
-                              style={[
-                                styles.unitCell,
-                                { backgroundColor: getUnitStatusColor(unit.status) },
-                              ]}
-                              onPress={() => handlePressProduct(unit.id)}
-                              activeOpacity={0.8}
-                            >
-                              <Text style={styles.unitCellText}>{unit.id}</Text>
-                            </TouchableOpacity>
-                          ) : (
-                            <View style={styles.emptyCell}>
-                              <Text style={styles.emptyCellText}>-</Text>
-                            </View>
-                          )}
-                        </View>
-                      );
-                    })}
+                  <View key={floor} style={[styles.fixedFloorCell, { height: CELL_SIZE, width: FLOOR_COL_WIDTH }]}>
+                    <Text style={styles.floorCellText}>{floor}</Text>
                   </View>
                 ))}
               </View>
 
-              <Text style={styles.blockStats}>
-                {block.name}: {block.stats.total} căn •{" "}
-                {block.stats.available} trống • {block.stats.deposit} cọc
-              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={true}
+                bounces={false}
+                contentContainerStyle={{ paddingRight: 8 }}
+              >
+                <View>
+                  <View style={styles.scrollHeaderRow}>
+                    {blockColumns.map((col) => (
+                      <View key={col} style={[styles.scrollHeaderCell, { width: CELL_SIZE, height: CELL_SIZE }]}>
+                        <Text style={styles.headerCellText}>{col}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {blockFloors.map((floor) => (
+                    <View key={floor} style={styles.scrollDataRow}>
+                      {blockColumns.map((col) => {
+                        const unit = block.units.find(
+                          (u) => u.floor === floor && u.column === col
+                        );
+                        return (
+                          <View key={`${floor}-${col}`} style={{ width: CELL_SIZE, height: CELL_SIZE, padding: 2 }}>
+                            {unit ? (
+                              <TouchableOpacity
+                                style={[
+                                  styles.unitCell,
+                                  { backgroundColor: getUnitStatusColor(unit.status) },
+                                ]}
+                                onPress={() => handlePressProduct(unit.id)}
+                                activeOpacity={0.8}
+                              >
+                                <Text style={styles.unitCellText}>{unit.id}</Text>
+                              </TouchableOpacity>
+                            ) : (
+                              <View style={styles.emptyCell}>
+                                <Text style={styles.emptyCellText}>-</Text>
+                              </View>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
             </View>
-          );
-        })}
-      </ScrollView>
+          </View>
+        );
+      })}
     </View>
   );
 
@@ -1087,49 +1096,80 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   blockCard: {
-    backgroundColor: "#FEF7F3",
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.border,
-    width: 340,
-  },
-  blockTitle: {
-    fontSize: 18,
-    fontWeight: "700" as const,
-    color: Colors.text,
     marginBottom: 16,
   },
-  grid: {
-    gap: 8,
-  },
-  gridRow: {
+  blockCardHeader: {
     flexDirection: "row",
-    gap: 8,
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#F0F4FF",
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  gridCell: {
-    flex: 1,
-    aspectRatio: 1,
+  blockTitle: {
+    fontSize: 17,
+    fontWeight: "700" as const,
+    color: Colors.text,
+  },
+  blockStatsInline: {
+    fontSize: 12,
+    fontWeight: "500" as const,
+    color: Colors.textSecondary,
+  },
+  gridTableWrapper: {
+    flexDirection: "row",
+  },
+  fixedFloorCol: {
+    borderRightWidth: 1,
+    borderRightColor: Colors.border,
+    backgroundColor: "#F8FAFC",
+    zIndex: 2,
+  },
+  fixedHeaderCell: {
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#E8EDF5",
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  headerCell: {
-    backgroundColor: "#F3E8DC",
-    borderRadius: 6,
+  fixedFloorCell: {
+    justifyContent: "center",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+    backgroundColor: "#F8FAFC",
+  },
+  scrollHeaderRow: {
+    flexDirection: "row",
+  },
+  scrollHeaderCell: {
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#E8EDF5",
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    borderLeftWidth: 1,
+    borderLeftColor: "#E0E4EB",
+  },
+  scrollDataRow: {
+    flexDirection: "row",
   },
   headerCellText: {
-    fontSize: 14,
-    fontWeight: "600" as const,
+    fontSize: 13,
+    fontWeight: "700" as const,
     color: Colors.text,
-  },
-  floorCell: {
-    backgroundColor: "#E8EAF6",
-    borderRadius: 6,
   },
   floorCellText: {
-    fontSize: 14,
-    fontWeight: "600" as const,
-    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: Colors.primary,
   },
   unitCell: {
     width: "100%",
@@ -1194,6 +1234,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: "center" as const,
+    paddingVertical: 10,
   },
   overviewContainer: {
     gap: 16,
