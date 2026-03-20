@@ -21,17 +21,12 @@ import {
   Sparkles,
   Calendar,
   Users,
-  Heart,
   ClipboardList,
   Phone,
   Clock,
 } from "lucide-react-native";
 
 import Colors from "@/constants/colors";
-import { featuredProperties, products } from "@/mocks/properties";
-import { bookings } from "@/mocks/bookings";
-import { customers } from "@/mocks/customers";
-import { appointments } from "@/mocks/appointments";
 import { features, Feature } from "@/mocks/features";
 import { notifications } from "@/mocks/notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -77,51 +72,63 @@ export default function HomeScreen() {
       }
     };
 
-    checkToken();
-  }, []);
+    void checkToken();
+  }, [router]);
 
   const loadData = async () => {
-    const resDA = await ProjectService.getProjects({});
-    const data = resDA?.data || [];
+    try {
+      const resDA = await ProjectService.getProjects({});
+      const data = resDA?.data || [];
+      setDuAn(data.slice(0, 5));
+    } catch (error) {
+      console.log("[Home] Error loading projects:", error instanceof Error ? error.message : String(error));
+    }
 
-    setDuAn(data.slice(0, 5));
+    try {
+      const resBooking = await UserService.getTransactions({
+        TuNgay: "2000-01-01",
+        DenNgay: "2100-01-01",
+        DuAn: "",
+        MaTT: 0,
+        MaKhu: 0,
+        inputSearch: "",
+        Offset: 1,
+        Limit: 50,
+      });
+      const dataBooking = resBooking?.data || [];
+      setBooking(dataBooking.slice(0, 5));
+    } catch (error) {
+      console.log("[Home] Error loading bookings:", error instanceof Error ? error.message : String(error));
+    }
 
-    const resBooking = await UserService.getTransactions({
-      TuNgay: "2000-01-01",
-      DenNgay: "2100-01-01",
-      DuAn: "",
-      MaTT: 0,
-      MaKhu: 0,
-      inputSearch: "",
-      Offset: 1,
-      Limit: 50,
-    });
-    const dataBooking = resBooking?.data || [];
+    try {
+      const resKH = await CustomerService.getCustomers("");
+      const dataKH = resKH?.data || [];
+      setKhachHang(dataKH.slice(0, 5));
+    } catch (error) {
+      console.log("[Home] Error loading customers:", error instanceof Error ? error.message : String(error));
+    }
 
-    setBooking(dataBooking.slice(0, 5));
-
-    let resKH = await CustomerService.getCustomers("");
-
-    const dataKH = resKH?.data || [];
-    setKhachHang(dataKH.slice(0, 5));
-
-    const resLH = await CustomerService.getLichHenByMaKH({
-      MaKH: 0,
-      TuNgay: "2000-01-01",
-      DenNgay: "2100-01-01",
-      InputString: "",
-      Home: 0,
-    });
-    const dataLH = resLH?.data || [];
-    setLichHen(dataLH.slice(0, 5));
+    try {
+      const resLH = await CustomerService.getLichHenByMaKH({
+        MaKH: 0,
+        TuNgay: "2000-01-01",
+        DenNgay: "2100-01-01",
+        InputString: "",
+        Home: 0,
+      });
+      const dataLH = resLH?.data || [];
+      setLichHen(dataLH.slice(0, 5));
+    } catch (error) {
+      console.log("[Home] Error loading appointments:", error instanceof Error ? error.message : String(error));
+    }
   };
 
   useEffect(() => {
     loadFeatureConfiguration().catch(() => {});
     startAnimations();
     startShimmer();
-    loadData();
-
+    void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -271,8 +278,9 @@ export default function HomeScreen() {
           console.log("[Home] Navigate to project options", property);
 
           router.push({
-            pathname: "/project/[id]",
+            pathname: "/project/[id]" as const,
             params: {
+              id: property.MaDA,
               project: JSON.stringify(property),
             },
           });
@@ -281,6 +289,7 @@ export default function HomeScreen() {
         }
       });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [router]
   );
 
@@ -330,8 +339,8 @@ export default function HomeScreen() {
           console.log("[Home] No route defined for feature", { featureId });
         }
       }, 200);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [router]
   );
 
