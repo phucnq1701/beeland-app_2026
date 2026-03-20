@@ -110,7 +110,7 @@ const DEMO_CONTRACTS: Contract[] = [
   },
 ];
 
-const ContractCard = React.memo(({ item, index }: { item: Contract; index: number }) => {
+const ContractCard = React.memo(({ item, index, onPress }: { item: Contract; index: number; onPress: () => void }) => {
   const sColor = getStatusColor(item.trangThai, item.colorTT);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -143,6 +143,7 @@ const ContractCard = React.memo(({ item, index }: { item: Contract; index: numbe
         style={styles.contractCard}
         activeOpacity={0.65}
         testID={`contract-card-${index}`}
+        onPress={onPress}
       >
         <View style={styles.cardHeader}>
           <View style={[styles.statusIndicator, { backgroundColor: sColor }]} />
@@ -385,11 +386,21 @@ export default function ContractsScreen() {
     void loadContracts(newFilter);
   }, [searchQuery, loadContracts, filterHeight]);
 
+  const handleContractPress = useCallback((item: Contract) => {
+    router.push({
+      pathname: "/contract/[id]",
+      params: {
+        id: item.maHD,
+        data: JSON.stringify(item),
+      },
+    });
+  }, [router]);
+
   const renderContract = useCallback(
     ({ item, index }: { item: Contract; index: number }) => (
-      <ContractCard item={item} index={index} />
+      <ContractCard item={item} index={index} onPress={() => handleContractPress(item)} />
     ),
-    []
+    [handleContractPress]
   );
 
   const keyExtractor = useCallback(
