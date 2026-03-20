@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -66,9 +67,11 @@ export default function LoginScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.content}>
         <View style={styles.logoContainer}>
-          <View style={styles.logo}>
-            <Text style={styles.logoText}>BEELAND</Text>
-          </View>
+          <Image
+            source={require('@/assets/images/beeland-logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
 
           <Text style={styles.welcomeText}>Đăng nhập</Text>
           <Text style={styles.subText}>
@@ -165,20 +168,10 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    width: 100,
-    height: 100,
-    borderRadius: 20,
-    backgroundColor: Colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
+    width: 120,
+    height: 120,
+    borderRadius: 24,
     marginBottom: 24,
-  },
-
-  logoText: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: Colors.white,
-    letterSpacing: 1,
   },
 
   welcomeText: {
