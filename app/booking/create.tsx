@@ -8,6 +8,7 @@ import {
   Platform,
   TextInput,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -80,12 +81,26 @@ export default function CreateBookingScreen() {
       const resultBooking = await CartService.addBooking(initDataBooking);
   
       if (resultBooking?.status === 2000) {
-        router.push({
-          pathname: "/booking/payment-method",
-          params: {
-            bookingId: resultBooking.data,
-          },
-        });
+        const bookingId = resultBooking.data;
+        Alert.alert(
+          "Thành công",
+          "Booking đã được lưu. Bạn muốn thanh toán ngay không?",
+          [
+            {
+              text: "Không",
+              style: "cancel",
+              onPress: () => router.replace("/bookings"),
+            },
+            {
+              text: "Thanh toán",
+              onPress: () =>
+                router.push({
+                  pathname: "/booking/payment-method",
+                  params: { bookingId },
+                }),
+            },
+          ]
+        );
       } else {
         alert(resultBooking?.message || "Không thể tạo booking");
       }
@@ -412,7 +427,7 @@ export default function CreateBookingScreen() {
                 activeOpacity={0.8}
                 onPress={handleContinue}
               >
-                <Text style={styles.continueButtonText}>Tiếp tục</Text>
+                <Text style={styles.continueButtonText}>Lưu booking</Text>
               </TouchableOpacity>
             </View>
           )}
