@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Animated,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import {
@@ -16,13 +17,12 @@ import {
   Search,
   FileText,
   Calendar,
-  Package,
-  DollarSign,
   X,
-  AlertCircle,
-  Filter,
   ChevronRight,
   User,
+  Building2,
+  Hash,
+  SlidersHorizontal,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { CustomerService } from "./sevices/CustomerService";
@@ -43,6 +43,18 @@ interface Contract {
 
 function formatCurrency(value: number): string {
   if (!value && value !== 0) return "0";
+  if (value >= 1000000000) {
+    const bil = value / 1000000000;
+    return bil % 1 === 0
+      ? `${bil} tỷ`
+      : `${bil.toFixed(1)} tỷ`;
+  }
+  if (value >= 1000000) {
+    const mil = value / 1000000;
+    return mil % 1 === 0
+      ? `${mil} triệu`
+      : `${mil.toFixed(1)} triệu`;
+  }
   return new Intl.NumberFormat("vi-VN").format(value) + " đ";
 }
 
@@ -98,6 +110,116 @@ const DEMO_CONTRACTS: Contract[] = [
   },
 ];
 
+const ContractCard = React.memo(({ item, index }: { item: Contract; index: number }) => {
+  const sColor = getStatusColor(item.trangThai, item.colorTT);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 350,
+        delay: index * 60,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 350,
+        delay: index * 60,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim, index]);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: fadeAnim,
+        transform: [{ translateY: slideAnim }],
+      }}
+    >
+      <TouchableOpacity
+        style={styles.contractCard}
+        activeOpacity={0.65}
+        testID={`contract-card-${index}`}
+      >
+        <View style={styles.cardHeader}>
+          <View style={[styles.statusIndicator, { backgroundColor: sColor }]} />
+          <View style={styles.headerContent}>
+            <View style={styles.headerTop}>
+              <View style={[styles.contractIconWrap, { backgroundColor: `${sColor}12` }]}>
+                <FileText color={sColor} size={18} />
+              </View>
+              <View style={styles.headerInfo}>
+                <Text style={styles.contractNumber} numberOfLines={1}>
+                  {item.soHopDong || "—"}
+                </Text>
+                <View style={styles.projectRow}>
+                  <Building2 color={Colors.textTertiary} size={11} />
+                  <Text style={styles.projectName} numberOfLines={1}>
+                    {item.tenDA || "—"}
+                  </Text>
+                </View>
+              </View>
+              {item.trangThai ? (
+                <View style={[styles.statusChip, { backgroundColor: `${sColor}14` }]}>
+                  <View style={[styles.statusDot, { backgroundColor: sColor }]} />
+                  <Text style={[styles.statusLabel, { color: sColor }]}>
+                    {item.trangThai}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.cardContent}>
+          <View style={styles.infoGrid}>
+            <View style={styles.infoItem}>
+              <View style={[styles.infoIconWrap, { backgroundColor: "rgba(59,130,246,0.08)" }]}>
+                <User color="#3B82F6" size={13} />
+              </View>
+              <View style={styles.infoText}>
+                <Text style={styles.infoLabel}>Khách hàng</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>
+                  {item.tenKH || "—"}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.infoItem}>
+              <View style={[styles.infoIconWrap, { backgroundColor: "rgba(16,185,129,0.08)" }]}>
+                <Calendar color="#10B981" size={13} />
+              </View>
+              <View style={styles.infoText}>
+                <Text style={styles.infoLabel}>Ngày ký</Text>
+                <Text style={styles.infoValue}>
+                  {formatDate(item.ngayKy) || "—"}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.cardDivider} />
+
+          <View style={styles.bottomRow}>
+            <View style={styles.productTag}>
+              <Hash color={Colors.primary} size={12} />
+              <Text style={styles.productTagText}>{item.maSP || "—"}</Text>
+            </View>
+            <View style={styles.priceSection}>
+              <Text style={styles.priceLabel}>Giá trị HĐ</Text>
+              <Text style={styles.priceValue}>{formatCurrency(item.tongGiaTri)}</Text>
+            </View>
+            <ChevronRight color={Colors.textLight} size={18} />
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
 export default function ContractsScreen() {
   const router = useRouter();
   const searchTimeout = useRef<any>(null);
@@ -108,6 +230,7 @@ export default function ContractsScreen() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchFocused, setSearchFocused] = useState<boolean>(false);
   const [showFilters, setShowFilters] = useState<boolean>(false);
+  const filterHeight = useRef(new Animated.Value(0)).current;
 
   const [statusList, setStatusList] = useState<any[]>([]);
   const [duAn, setDuAn] = useState<any[]>([]);
@@ -123,6 +246,16 @@ export default function ContractsScreen() {
     Offset: 1,
     Limit: 100,
   });
+
+  const toggleFilters = useCallback(() => {
+    const toValue = showFilters ? 0 : 1;
+    setShowFilters(!showFilters);
+    Animated.timing(filterHeight, {
+      toValue,
+      duration: 250,
+      useNativeDriver: false,
+    }).start();
+  }, [showFilters, filterHeight]);
 
   const loadInitData = useCallback(async () => {
     try {
@@ -194,7 +327,6 @@ export default function ContractsScreen() {
       });
     }, 500);
     return () => clearTimeout(searchTimeout.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, loadContracts]);
 
   useEffect(() => {
@@ -235,6 +367,11 @@ export default function ContractsScreen() {
     setSelectedProjects([]);
     setSelectedStatus(0);
     setShowFilters(false);
+    Animated.timing(filterHeight, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: false,
+    }).start();
     const newFilter = {
       TuNgay: "2000-01-01",
       DenNgay: "2100-01-01",
@@ -246,107 +383,12 @@ export default function ContractsScreen() {
     };
     setFilterCondition(newFilter);
     void loadContracts(newFilter);
-  }, [searchQuery, loadContracts]);
+  }, [searchQuery, loadContracts, filterHeight]);
 
   const renderContract = useCallback(
-    ({ item, index }: { item: Contract; index: number }) => {
-      const sColor = getStatusColor(item.trangThai, item.colorTT);
-
-      return (
-        <TouchableOpacity
-          style={styles.contractCard}
-          activeOpacity={0.7}
-          testID={`contract-card-${index}`}
-        >
-          <View style={styles.cardTopBar}>
-            <View style={[styles.cardAccent, { backgroundColor: sColor }]} />
-            <View style={styles.cardTopContent}>
-              <View style={styles.contractIdRow}>
-                <View style={[styles.contractIcon, { backgroundColor: `${sColor}15` }]}>
-                  <FileText color={sColor} size={16} />
-                </View>
-                <View style={styles.contractIdInfo}>
-                  <Text style={styles.contractNumber} numberOfLines={1}>
-                    {item.soHopDong || "—"}
-                  </Text>
-                  {item.tenDA ? (
-                    <Text style={styles.projectLabel} numberOfLines={1}>
-                      {item.tenDA}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-              {item.trangThai ? (
-                <View style={[styles.statusBadge, { backgroundColor: `${sColor}15` }]}>
-                  <View style={[styles.statusDotSmall, { backgroundColor: sColor }]} />
-                  <Text style={[styles.statusText, { color: sColor }]}>
-                    {item.trangThai}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
-
-          <View style={styles.cardBody}>
-            <View style={styles.bodyRow}>
-              <View style={styles.bodyCell}>
-                <View style={styles.bodyCellIcon}>
-                  <User color={Colors.textTertiary} size={13} />
-                </View>
-                <View style={styles.bodyCellContent}>
-                  <Text style={styles.bodyCellLabel}>Khách hàng</Text>
-                  <Text style={styles.bodyCellValue} numberOfLines={1}>
-                    {item.tenKH || "—"}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.bodyCell}>
-                <View style={styles.bodyCellIcon}>
-                  <Calendar color={Colors.textTertiary} size={13} />
-                </View>
-                <View style={styles.bodyCellContent}>
-                  <Text style={styles.bodyCellLabel}>Ngày ký</Text>
-                  <Text style={styles.bodyCellValue}>
-                    {formatDate(item.ngayKy) || "—"}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.bodyDivider} />
-
-            <View style={styles.bodyRow}>
-              <View style={styles.bodyCell}>
-                <View style={styles.bodyCellIcon}>
-                  <Package color={Colors.textTertiary} size={13} />
-                </View>
-                <View style={styles.bodyCellContent}>
-                  <Text style={styles.bodyCellLabel}>Mã SP</Text>
-                  <Text style={[styles.bodyCellValue, { color: Colors.accent.blue, fontWeight: "700" as const }]} numberOfLines={1}>
-                    {item.maSP || "—"}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.bodyCell}>
-                <View style={styles.bodyCellIcon}>
-                  <DollarSign color={Colors.textTertiary} size={13} />
-                </View>
-                <View style={styles.bodyCellContent}>
-                  <Text style={styles.bodyCellLabel}>Tổng giá trị</Text>
-                  <Text style={[styles.bodyCellValue, { color: Colors.primary, fontWeight: "700" as const }]}>
-                    {formatCurrency(item.tongGiaTri)}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.cardFooter}>
-            <ChevronRight color={Colors.textTertiary} size={16} />
-          </View>
-        </TouchableOpacity>
-      );
-    },
+    ({ item, index }: { item: Contract; index: number }) => (
+      <ContractCard item={item} index={index} />
+    ),
     []
   );
 
@@ -355,11 +397,33 @@ export default function ContractsScreen() {
     []
   );
 
+  const totalValue = useMemo(() => {
+    return contracts.reduce((sum, c) => sum + (c.tongGiaTri || 0), 0);
+  }, [contracts]);
+
+  const ListHeaderComponent = useMemo(
+    () =>
+      contracts.length > 0 ? (
+        <View style={styles.summaryBar}>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryCount}>{contracts.length}</Text>
+            <Text style={styles.summaryLabel}>Hợp đồng</Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryAmount}>{formatCurrency(totalValue)}</Text>
+            <Text style={styles.summaryLabel}>Tổng giá trị</Text>
+          </View>
+        </View>
+      ) : null,
+    [contracts.length, totalValue]
+  );
+
   const ListEmptyComponent = useMemo(
     () => (
       <View style={styles.emptyWrap}>
         <View style={styles.emptyIconCircle}>
-          <AlertCircle color={Colors.textTertiary} size={40} />
+          <FileText color={Colors.textTertiary} size={36} />
         </View>
         <Text style={styles.emptyTitle}>
           {searchQuery.trim() ? "Không tìm thấy hợp đồng" : "Chưa có hợp đồng"}
@@ -373,6 +437,8 @@ export default function ContractsScreen() {
     ),
     [searchQuery]
   );
+
+  const activeFilterCount = (selectedProjects.length > 0 ? 1 : 0) + (selectedStatus !== 0 ? 1 : 0);
 
   return (
     <View style={styles.container}>
@@ -415,7 +481,9 @@ export default function ContractsScreen() {
             />
             {searchQuery.length > 0 ? (
               <TouchableOpacity onPress={clearSearch} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <X color={Colors.textTertiary} size={18} />
+                <View style={styles.clearSearchBtn}>
+                  <X color={Colors.white} size={12} />
+                </View>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -425,20 +493,25 @@ export default function ContractsScreen() {
               styles.filterBtn,
               hasActiveFilters && styles.filterBtnActive,
             ]}
-            onPress={() => setShowFilters(!showFilters)}
+            onPress={toggleFilters}
             activeOpacity={0.7}
           >
-            <Filter
+            <SlidersHorizontal
               color={hasActiveFilters ? Colors.white : Colors.textSecondary}
               size={18}
             />
+            {activeFilterCount > 0 && (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
         {showFilters && (
           <View style={styles.filtersPanel}>
             <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>Dự án</Text>
+              <Text style={styles.filterLabel}>DỰ ÁN</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -486,7 +559,7 @@ export default function ContractsScreen() {
             </View>
 
             <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>Trạng thái</Text>
+              <Text style={styles.filterLabel}>TRẠNG THÁI</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -494,12 +567,17 @@ export default function ContractsScreen() {
               >
                 {statusList.map((status: any) => {
                   const active = selectedStatus === status.id;
+                  const chipColor = status.ColorWeb || Colors.primary;
                   return (
                     <TouchableOpacity
                       key={status.id}
-                      style={[styles.filterChip, active && styles.filterChipActive]}
+                      style={[
+                        styles.filterChip,
+                        active && { backgroundColor: chipColor, borderColor: chipColor },
+                      ]}
                       onPress={() => handleStatusFilter(status.id)}
                     >
+                      {active && <View style={[styles.chipDot, { backgroundColor: Colors.white }]} />}
                       <Text
                         style={[styles.filterChipText, active && styles.filterChipTextActive]}
                       >
@@ -519,17 +597,6 @@ export default function ContractsScreen() {
             )}
           </View>
         )}
-
-        <View style={styles.resultRow}>
-          <Text style={styles.resultCountText}>
-            {contracts.length} hợp đồng
-          </Text>
-          {hasActiveFilters && (
-            <View style={styles.activeFilterBadge}>
-              <Text style={styles.activeFilterText}>Đang lọc</Text>
-            </View>
-          )}
-        </View>
       </View>
 
       {loading ? (
@@ -544,8 +611,9 @@ export default function ContractsScreen() {
           keyExtractor={keyExtractor}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={ListHeaderComponent}
           ListEmptyComponent={ListEmptyComponent}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         />
       )}
     </View>
@@ -555,24 +623,22 @@ export default function ContractsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F6F8",
+    backgroundColor: "#F2F3F7",
   },
   searchSection: {
     backgroundColor: Colors.white,
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.04)",
+    paddingBottom: 12,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
       },
-      android: { elevation: 2 },
-      web: { boxShadow: "0 2px 6px rgba(0,0,0,0.04)" },
+      android: { elevation: 3 },
+      web: { boxShadow: "0 3px 8px rgba(0,0,0,0.06)" },
     }),
   },
   searchRow: {
@@ -583,17 +649,17 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F5F6F8",
-    borderRadius: 10,
+    backgroundColor: "#F2F3F7",
+    borderRadius: 12,
     paddingHorizontal: 12,
-    height: 42,
+    height: 44,
     gap: 8,
     borderWidth: 1.5,
     borderColor: "transparent",
   },
   searchBarFocused: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.white,
+    backgroundColor: "#FFF8F4",
   },
   searchInput: {
     flex: 1,
@@ -601,44 +667,67 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingVertical: 0,
   },
-  filterBtn: {
-    width: 42,
-    height: 42,
+  clearSearchBtn: {
+    width: 20,
+    height: 20,
     borderRadius: 10,
-    backgroundColor: "#F5F6F8",
+    backgroundColor: Colors.textTertiary,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: "transparent",
+  },
+  filterBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#F2F3F7",
+    justifyContent: "center",
+    alignItems: "center",
   },
   filterBtnActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+  },
+  filterBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.error,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  filterBadgeText: {
+    fontSize: 9,
+    fontWeight: "800" as const,
+    color: Colors.white,
   },
   filtersPanel: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 14,
+    paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: "rgba(0,0,0,0.05)",
   },
   filterGroup: {
-    marginBottom: 12,
+    marginBottom: 14,
   },
   filterLabel: {
-    fontSize: 12,
-    fontWeight: "600" as const,
-    color: Colors.textSecondary,
+    fontSize: 11,
+    fontWeight: "700" as const,
+    color: Colors.textTertiary,
     marginBottom: 8,
-    textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   filterChips: {
     flexDirection: "row",
     gap: 8,
   },
   filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: "#F0F1F3",
     borderWidth: 1,
@@ -657,50 +746,76 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: "600" as const,
   },
+  chipDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
   clearFilterBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
     paddingVertical: 8,
-    marginTop: 4,
   },
   clearFilterText: {
     fontSize: 13,
     fontWeight: "600" as const,
     color: Colors.error,
   },
-  resultRow: {
+  summaryBar: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 10,
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      android: { elevation: 2 },
+      web: { boxShadow: "0 2px 8px rgba(0,0,0,0.05)" },
+    }),
   },
-  resultCountText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: "500" as const,
+  summaryItem: {
+    flex: 1,
+    alignItems: "center",
   },
-  activeFilterBadge: {
-    backgroundColor: "rgba(232,111,37,0.1)",
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 10,
+  summaryDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: "rgba(0,0,0,0.06)",
   },
-  activeFilterText: {
-    fontSize: 11,
-    fontWeight: "600" as const,
+  summaryCount: {
+    fontSize: 22,
+    fontWeight: "800" as const,
     color: Colors.primary,
+  },
+  summaryAmount: {
+    fontSize: 16,
+    fontWeight: "800" as const,
+    color: Colors.accent.green,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    marginTop: 2,
+    fontWeight: "500" as const,
   },
   loadingWrap: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
   },
   loadingText: {
     fontSize: 14,
     color: Colors.textSecondary,
+    fontWeight: "500" as const,
   },
   listContent: {
     padding: 16,
@@ -708,128 +823,158 @@ const styles = StyleSheet.create({
   },
   contractCard: {
     backgroundColor: Colors.white,
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: "hidden",
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
       },
-      android: { elevation: 2 },
-      web: { boxShadow: "0 2px 10px rgba(0,0,0,0.06)" },
+      android: { elevation: 3 },
+      web: { boxShadow: "0 3px 12px rgba(0,0,0,0.07)" },
     }),
   },
-  cardTopBar: {
+  cardHeader: {
     flexDirection: "row",
   },
-  cardAccent: {
+  statusIndicator: {
     width: 4,
+    borderTopLeftRadius: 16,
   },
-  cardTopContent: {
+  headerContent: {
     flex: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: "rgba(0,0,0,0.015)",
+    paddingVertical: 14,
+    backgroundColor: "rgba(0,0,0,0.012)",
     borderBottomWidth: 1,
     borderBottomColor: "rgba(0,0,0,0.04)",
   },
-  contractIdRow: {
+  headerTop: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    flex: 1,
-    marginRight: 8,
   },
-  contractIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
+  contractIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
   },
-  contractIdInfo: {
+  headerInfo: {
     flex: 1,
+    marginLeft: 10,
+    marginRight: 8,
   },
   contractNumber: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700" as const,
     color: Colors.text,
+    letterSpacing: -0.2,
   },
-  projectLabel: {
-    fontSize: 11,
+  projectRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 3,
+  },
+  projectName: {
+    fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 1,
+    fontWeight: "500" as const,
   },
-  statusBadge: {
+  statusChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 8,
   },
-  statusDotSmall: {
+  statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
   },
-  statusText: {
+  statusLabel: {
     fontSize: 11,
-    fontWeight: "600" as const,
+    fontWeight: "700" as const,
   },
-  cardBody: {
+  cardContent: {
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingTop: 12,
+    paddingBottom: 14,
   },
-  bodyRow: {
+  infoGrid: {
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
   },
-  bodyCell: {
+  infoItem: {
     flex: 1,
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 8,
-    paddingVertical: 6,
   },
-  bodyCellIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    backgroundColor: "rgba(0,0,0,0.03)",
+  infoIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 1,
   },
-  bodyCellContent: {
+  infoText: {
     flex: 1,
   },
-  bodyCellLabel: {
+  infoLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
     fontWeight: "500" as const,
     marginBottom: 2,
   },
-  bodyCellValue: {
+  infoValue: {
     fontSize: 13,
     fontWeight: "600" as const,
     color: Colors.text,
   },
-  bodyDivider: {
+  cardDivider: {
     height: 1,
     backgroundColor: "rgba(0,0,0,0.04)",
-    marginVertical: 4,
+    marginVertical: 12,
   },
-  cardFooter: {
+  bottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  productTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(232,111,37,0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  productTagText: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: Colors.primary,
+  },
+  priceSection: {
+    flex: 1,
     alignItems: "flex-end",
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    paddingTop: 2,
+    marginRight: 8,
+  },
+  priceLabel: {
+    fontSize: 10,
+    color: Colors.textTertiary,
+    fontWeight: "500" as const,
+  },
+  priceValue: {
+    fontSize: 15,
+    fontWeight: "800" as const,
+    color: Colors.accent.green,
+    letterSpacing: -0.3,
   },
   emptyWrap: {
     alignItems: "center",
@@ -841,14 +986,14 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: "rgba(0,0,0,0.04)",
+    backgroundColor: "rgba(232,111,37,0.08)",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 12,
   },
   emptyTitle: {
     fontSize: 17,
-    fontWeight: "600" as const,
+    fontWeight: "700" as const,
     color: Colors.text,
   },
   emptyDesc: {
