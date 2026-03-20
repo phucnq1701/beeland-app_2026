@@ -130,6 +130,12 @@ export const CustomerService = {
       .then((res) => res.data);
   },
 
+  getAllContracts: async (payload: any = {}) => {
+    return await axiosApi
+      .post("api/admin/hop-dong/danh-sach", payload)
+      .then((res) => res.data);
+  },
+
   getQRCode: async (payload: any) => {
     return await axiosApi
       .post("https://api.vietqr.io/v2/generate", payload)
