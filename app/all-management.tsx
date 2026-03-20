@@ -147,7 +147,8 @@ export default function AllManagementScreen() {
     } else if (featureId === '7') {
       console.log('[AllManagement] Hoa hồng - route not implemented');
     } else if (featureId === '8') {
-      console.log('[AllManagement] Hợp đồng - route not implemented');
+      console.log('[AllManagement] Navigating to contracts');
+      router.push('/contracts');
     } else if (featureId === '9') {
       console.log('[AllManagement] Navigating to reports');
       router.push('/reports');
@@ -160,6 +161,9 @@ export default function AllManagementScreen() {
     } else if (featureId === '12') {
       console.log('[AllManagement] Navigating to receipts');
       router.push('/receipts');
+    } else if (featureId === '13') {
+      console.log('[AllManagement] Navigating to deposits');
+      router.push('/deposits');
     } else {
       console.log('[AllManagement] No route defined for feature', { featureId });
     }
