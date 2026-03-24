@@ -21,17 +21,12 @@ import {
   Sparkles,
   Calendar,
   Users,
-  Heart,
   ClipboardList,
   Phone,
   Clock,
 } from "lucide-react-native";
 
 import Colors from "@/constants/colors";
-import { featuredProperties, products } from "@/mocks/properties";
-import { bookings } from "@/mocks/bookings";
-import { customers } from "@/mocks/customers";
-import { appointments } from "@/mocks/appointments";
 import { features, Feature } from "@/mocks/features";
 import { notifications } from "@/mocks/notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -42,6 +37,7 @@ import { UserService } from "../sevices/UserService";
 import { Format_Date } from "@/components/utils/common";
 import { CustomerService } from "../sevices/CustomerService";
 
+const DEFAULT_PROJECT_IMAGE = "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/bigwmih05tf7or57crm12";
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width - 48;
 const STORAGE_KEY = "@home_features_config";
@@ -77,51 +73,63 @@ export default function HomeScreen() {
       }
     };
 
-    checkToken();
-  }, []);
+    void checkToken();
+  }, [router]);
 
   const loadData = async () => {
-    const resDA = await ProjectService.getProjects({});
-    const data = resDA?.data || [];
+    try {
+      const resDA = await ProjectService.getProjects({});
+      const data = resDA?.data || [];
+      setDuAn(data.slice(0, 5));
+    } catch (error) {
+      console.log("[Home] Error loading projects:", error instanceof Error ? error.message : String(error));
+    }
 
-    setDuAn(data.slice(0, 5));
+    try {
+      const resBooking = await UserService.getTransactions({
+        TuNgay: "2000-01-01",
+        DenNgay: "2100-01-01",
+        DuAn: "",
+        MaTT: 0,
+        MaKhu: 0,
+        inputSearch: "",
+        Offset: 1,
+        Limit: 50,
+      });
+      const dataBooking = resBooking?.data || [];
+      setBooking(dataBooking.slice(0, 5));
+    } catch (error) {
+      console.log("[Home] Error loading bookings:", error instanceof Error ? error.message : String(error));
+    }
 
-    const resBooking = await UserService.getTransactions({
-      TuNgay: "2000-01-01",
-      DenNgay: "2100-01-01",
-      DuAn: "",
-      MaTT: 0,
-      MaKhu: 0,
-      inputSearch: "",
-      Offset: 1,
-      Limit: 50,
-    });
-    const dataBooking = resBooking?.data || [];
+    try {
+      const resKH = await CustomerService.getCustomers("");
+      const dataKH = resKH?.data || [];
+      setKhachHang(dataKH.slice(0, 5));
+    } catch (error) {
+      console.log("[Home] Error loading customers:", error instanceof Error ? error.message : String(error));
+    }
 
-    setBooking(dataBooking.slice(0, 5));
-
-    let resKH = await CustomerService.getCustomers("");
-
-    const dataKH = resKH?.data || [];
-    setKhachHang(dataKH.slice(0, 5));
-
-    const resLH = await CustomerService.getLichHenByMaKH({
-      MaKH: 0,
-      TuNgay: "2000-01-01",
-      DenNgay: "2100-01-01",
-      InputString: "",
-      Home: 0,
-    });
-    const dataLH = resLH?.data || [];
-    setLichHen(dataLH.slice(0, 5));
+    try {
+      const resLH = await CustomerService.getLichHenByMaKH({
+        MaKH: 0,
+        TuNgay: "2000-01-01",
+        DenNgay: "2100-01-01",
+        InputString: "",
+        Home: 0,
+      });
+      const dataLH = resLH?.data || [];
+      setLichHen(dataLH.slice(0, 5));
+    } catch (error) {
+      console.log("[Home] Error loading appointments:", error instanceof Error ? error.message : String(error));
+    }
   };
 
   useEffect(() => {
     loadFeatureConfiguration().catch(() => {});
     startAnimations();
     startShimmer();
-    loadData();
-
+    void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -271,8 +279,9 @@ export default function HomeScreen() {
           console.log("[Home] Navigate to project options", property);
 
           router.push({
-            pathname: "/project/[id]",
+            pathname: "/project/[id]" as const,
             params: {
+              id: property.MaDA,
               project: JSON.stringify(property),
             },
           });
@@ -281,6 +290,7 @@ export default function HomeScreen() {
         }
       });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [router]
   );
 
@@ -314,24 +324,21 @@ export default function HomeScreen() {
           router.push("/bookings");
         } else if (featureId === "6") {
           router.push("/customers");
-        } else if (featureId === "10") {
-          console.log("[Home] Navigating to photo gallery");
-          router.push("/photo-gallery");
-        } else if (featureId === "11") {
-          console.log("[Home] Navigating to handovers");
-          router.push("/handovers");
+        } else if (featureId === "8") {
+          console.log("[Home] Navigating to contracts");
+          router.push("/contracts");
         } else if (featureId === "9") {
           console.log("[Home] Navigating to reports");
           router.push("/reports");
-        } else if (featureId === "12") {
-          console.log("[Home] Navigating to receipts");
-          router.push("/receipts");
+        } else if (featureId === "13") {
+          console.log("[Home] Navigating to deposits");
+          router.push("/deposits");
         } else {
           console.log("[Home] No route defined for feature", { featureId });
         }
       }, 200);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [router]
   );
 
@@ -484,7 +491,7 @@ export default function HomeScreen() {
                 onPress={() => handlePressProperty(property)}
               >
                 <Image
-                  source={{ uri: property.image }}
+                  source={{ uri: property.image || DEFAULT_PROJECT_IMAGE }}
                   style={styles.propertyImage}
                   contentFit="cover"
                 />

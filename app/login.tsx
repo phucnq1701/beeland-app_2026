@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,10 +27,12 @@ export default function LoginScreen() {
 
 
   const handleLogin = async () => {
+    
     if (!companyCode || !username || !password) {
       Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin");
       return;
     }
+
   
     try {
       setLoading(true);
@@ -39,8 +42,6 @@ export default function LoginScreen() {
         Email: username.trim(),
         Password: password,
       });
-  
-      console.log("Login response:", res);
   
       if (res?.status === 200) {
         const token = res?.acessToken;
@@ -66,9 +67,11 @@ export default function LoginScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.content}>
         <View style={styles.logoContainer}>
-          <View style={styles.logo}>
-            <Text style={styles.logoText}>BEELAND</Text>
-          </View>
+          <Image
+            source={require('@/assets/images/beeland-logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
 
           <Text style={styles.welcomeText}>Đăng nhập</Text>
           <Text style={styles.subText}>
@@ -134,6 +137,13 @@ export default function LoginScreen() {
               <Text style={styles.loginButtonText}>Đăng nhập</Text>
             )}
           </TouchableOpacity>
+
+          <View style={styles.registerRow}>
+            <Text style={styles.registerText}>Chưa có tài khoản? </Text>
+            <TouchableOpacity onPress={() => router.push('/register')}>
+              <Text style={styles.registerLink}>Đăng ký</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </View>
@@ -158,20 +168,10 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    width: 100,
-    height: 100,
-    borderRadius: 20,
-    backgroundColor: Colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
+    width: 120,
+    height: 120,
+    borderRadius: 24,
     marginBottom: 24,
-  },
-
-  logoText: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: Colors.white,
-    letterSpacing: 1,
   },
 
   welcomeText: {
@@ -238,6 +238,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: Colors.white,
+  },
+  registerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  registerText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  registerLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary,
   },
 });
 
