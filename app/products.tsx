@@ -417,6 +417,8 @@ export default function ProductsScreen() {
     },
   ];
   const buildOverviewData = (dataGrid) => {
+
+    
     const floorsMap = {};
 
     dataGrid.forEach((block) => {
