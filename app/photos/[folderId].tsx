@@ -12,16 +12,13 @@ import {
   Platform,
   FlatList,
   ActivityIndicator,
+  Share,
 } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
-import { Download, X, ChevronLeft, ChevronRight } from "lucide-react-native";
+import { X, ChevronLeft, ChevronRight } from "lucide-react-native";
 import * as Sharing from "expo-sharing";
 import * as MediaLibrary from "expo-media-library";
-import * as FileSystem from "expo-file-system";
 import { DocumentService } from "../sevices/DocumentService";
-
-const CACHE_DIR =
-  FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? "";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -31,7 +28,7 @@ type Photo = {
   url: string;
   thumbnail: string;
   size: string;
-  date: string; // 🔥 giữ raw date
+  date: string;
 };
 
 export default function PhotosScreen() {
@@ -41,23 +38,21 @@ export default function PhotosScreen() {
   }>();
 
   const folderObj = folder ? JSON.parse(folder) : null;
-  
+
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
-  const [downloading, setDownloading] = useState(false);
+
 
   const flatListRef = useRef<FlatList>(null);
 
   const BASE_URL = "https://upload.beesky.vn/";
 
-  // ✅ FIX URL chuẩn
   const getFullUrl = (link: string) => {
     if (!link) return "";
     if (link.startsWith("http")) return link;
-
     return BASE_URL.replace(/\/+$/, "") + "/" + link.replace(/^\/+/, "");
   };
 
@@ -67,7 +62,7 @@ export default function PhotosScreen() {
     url: getFullUrl(item.Link),
     thumbnail: getFullUrl(item.Link),
     size: item.Size ? (item.Size / 1024 / 1024).toFixed(2) + " MB" : "0 MB",
-    date: item.CreatedAt, // 🔥 giữ nguyên để sort chuẩn
+    date: item.CreatedAt,
   });
 
   const loadImg = async () => {
@@ -84,7 +79,8 @@ export default function PhotosScreen() {
       const mapped = data
         .map(mapApiToPhoto)
         .sort(
-          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+          (a: Photo, b: Photo) =>
+            new Date(b.date).getTime() - new Date(a.date).getTime()
         );
 
       setPhotos(mapped);
@@ -97,7 +93,8 @@ export default function PhotosScreen() {
   };
 
   useEffect(() => {
-    loadImg();
+    void loadImg();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handlePhotoPress = (photo: Photo, index: number) => {
@@ -140,65 +137,53 @@ export default function PhotosScreen() {
     flatListRef.current?.scrollToIndex({ index: nextIndex });
   };
 
-  const handleDownload = async (photo: Photo) => {
+  const _handleDownload = async (photo: Photo) => {
     if (!photo?.url) return;
-  
+
     if (Platform.OS === "web") {
-      // Web download
-      const link = document.createElement("a");
-      link.href = photo.url;
-      link.download = photo.name || "image";
-      link.click();
+      try {
+        const link = document.createElement("a");
+        link.href = photo.url;
+        link.download = photo.name || "image";
+        link.click();
+      } catch (e) {
+        console.log("Web download error:", e);
+      }
       return;
     }
-  
+
     try {
-      setDownloading(true);
-  
+      setLoading(true);
+
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== "granted") {
         Alert.alert("Lỗi", "Cần cấp quyền lưu ảnh");
         return;
       }
-  
-      // FIX: loại bỏ dấu // thừa trong URL
+
       const cleanUrl = photo.url.replace(/([^:]\/)\/+/g, "$1");
-  
-      // Lấy extension từ URL
-      const extension =
-        cleanUrl.split(".").pop()?.split("?")[0].toLowerCase() || "jpg";
-  
-      // Tên file trong cache
-      const fileUri = `${CACHE_DIR}${photo.id}.${extension}`;
-  
-      console.log("DOWNLOAD URL:", cleanUrl, "-> URI:", fileUri);
-  
-      const downloadResult = await FileSystem.downloadAsync(cleanUrl, fileUri);
-  
-      if (!downloadResult?.uri) {
-        throw new Error("Download fail");
-      }
-  
-      const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
-  
-      // Nếu album đã tồn tại, không tạo lại
-      await MediaLibrary.createAlbumAsync("BeeSky", asset, false).catch(() => {});
-  
+
+      const asset = await MediaLibrary.createAssetAsync(cleanUrl);
+      await MediaLibrary.createAlbumAsync("BeeSky", asset, false).catch(
+        () => {}
+      );
+
       Alert.alert("OK", "Đã tải ảnh");
     } catch (e) {
       console.log("DOWNLOAD ERROR:", e);
       Alert.alert("Lỗi", "Tải ảnh thất bại");
     } finally {
-      setDownloading(false);
+      setLoading(false);
     }
   };
-  const handleShare = async (photo: Photo) => {
+
+  const _handleShare = async (photo: Photo) => {
     try {
-      const fileUri = CACHE_DIR + photo.id + ".jpg";
-
-      const downloadResult = await FileSystem.downloadAsync(photo.url, fileUri);
-
-      await Sharing.shareAsync(downloadResult.uri);
+      if (Platform.OS === "web") {
+        await Share.share({ url: photo.url });
+      } else {
+        await Sharing.shareAsync(photo.url);
+      }
     } catch {
       Alert.alert("Lỗi", "Không share được");
     }
@@ -208,7 +193,6 @@ export default function PhotosScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ title: folderObj?.Name }} />
 
-      {/* LOADING */}
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" />
@@ -232,7 +216,6 @@ export default function PhotosScreen() {
         </ScrollView>
       )}
 
-      {/* MODAL */}
       <Modal
         visible={selectedPhoto ? true : false}
         transparent
@@ -240,20 +223,12 @@ export default function PhotosScreen() {
         onRequestClose={handleClose}
       >
         <View style={styles.modalContainer}>
-          {/* HEADER */}
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={handleClose}>
               <X color="white" size={28} />
             </TouchableOpacity>
-
-            {/* <TouchableOpacity
-              onPress={() => selectedPhoto && handleDownload(selectedPhoto)}
-            >
-              <Download color="white" size={24} />
-            </TouchableOpacity> */}
           </View>
 
-          {/* IMAGE */}
           <View style={styles.modalImageContainer}>
             <FlatList
               ref={flatListRef}
@@ -288,7 +263,6 @@ export default function PhotosScreen() {
               )}
             />
 
-            {/* NAV */}
             <TouchableOpacity style={styles.leftNav} onPress={handlePrevPhoto}>
               <ChevronLeft color="white" size={30} />
             </TouchableOpacity>
@@ -298,7 +272,6 @@ export default function PhotosScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* FOOTER */}
           {selectedPhoto && (
             <View style={styles.footer}>
               <Text style={{ color: "white" }}>

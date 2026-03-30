@@ -11,6 +11,15 @@ const BlockGrid = ({
   handlePressProduct,
   getHexColor,
   styles,
+}: {
+  block: any;
+  leftRef: any;
+  rightRef: any;
+  scrollYRef: any;
+  localChange: any;
+  handlePressProduct: any;
+  getHexColor: any;
+  styles: any;
 }) => {
   const rawBlock = block?.rawBlock;
   if (!rawBlock) return null;
@@ -61,7 +70,7 @@ const BlockGrid = ({
           <View>
             {/* HEADER */}
             <View style={styles.gridRow}>
-              {locations.map((loc) => (
+              {locations.map((loc: any) => (
                 <View
                   key={loc.maVT}
                   style={[styles.gridCell, styles.headerCell]}
@@ -99,8 +108,8 @@ const BlockGrid = ({
 
                 return (
                   <View key={floor.maTang} style={styles.gridRow}>
-                    {locations.map((loc) => {
-                      const unit = details.find((d) => {
+                    {locations.map((loc: any) => {
+                      const unit = details.find((d: any) => {
                         const vt = d.MaVT ?? d.MaViTri ?? d.ViTri;
                         if (vt == null) return false;
                         return Number(vt) === Number(loc.maVT);

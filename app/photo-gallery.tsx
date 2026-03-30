@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,8 +10,6 @@ import {
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 import {
   ChevronRight,
-  Image as ImageIcon,
-  Share2,
   Filter,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
@@ -26,7 +24,7 @@ export default function PhotoGalleryScreen() {
   const [selectedProject, setSelectedProject] = useState<string>(
     projectId || "all"
   );
-  const [folder, setFolder] = useState([]);
+  const [folder, setFolder] = useState<any[]>([]);
 
   const loadFolder = async () => {
     let res = await DocumentService.get({
@@ -40,7 +38,8 @@ export default function PhotoGalleryScreen() {
 console.log(folder,'folder');
 
   useEffect(() => {
-    loadFolder();
+    void loadFolder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const projects = [
@@ -48,19 +47,19 @@ console.log(folder,'folder');
     ...featuredProperties.map((p) => ({ id: p.id, title: p.title })),
   ];
 
-  const handleFolderPress = (folder: string) => {
+  const handleFolderPress = (folderItem: any) => {
     router.push({
       pathname: "/photos/[folderId]",
       params: {
-        folderId: folder.ID,
-        folder: JSON.stringify(folder), 
+        folderId: folderItem.ID,
+        folder: JSON.stringify(folderItem), 
       },
     });
   };
 
 
 
-  const handleShareFolder = async (
+  const _handleShareFolder = async (
     folder: (typeof photoFolders)[0],
     e: any
   ) => {

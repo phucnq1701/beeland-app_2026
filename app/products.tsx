@@ -17,9 +17,7 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronUp,
-  ChevronRight,
   LayoutDashboard,
-  Lock,
 } from "lucide-react-native";
 import {
   overviewBlocks,
@@ -28,56 +26,42 @@ import {
   UnitStatus,
 } from "@/mocks/overviewUnits";
 import Colors from "@/constants/colors";
-import { products, Product } from "@/mocks/properties";
+import { Product } from "@/mocks/properties";
 import { ProductService } from "./sevices/ProductService";
 import { ProjectService } from "./sevices/ProjectService";
 import { FilterService } from "./sevices/FilterService";
 import { PriceServices } from "./sevices/PriceServices";
 
-import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import * as signalR from "@microsoft/signalr";
 import BlockGrid from "./product/BlockGrid";
 
 type ViewMode = "list" | "grid" | "overview";
 
-type Unit = {
-  id: string;
-  floor: string;
-  column: string;
-  status: "available" | "locked" | "sold" | "deposit";
-};
 
-type Block = {
-  name: string;
-  units: Unit[];
-  stats: {
-    total: number;
-    available: number;
-    deposit: number;
-  };
-};
+
+
 
 export default function ProductsScreen() {
   const { showFavorites } = useLocalSearchParams<{ showFavorites?: string }>();
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [filterExpanded, setFilterExpanded] = useState<boolean>(false);
-  const [selectedStatus, setSelectedStatus] = useState<
+  const [_selectedStatus, _setSelectedStatus] = useState<
     Product["status"] | "all"
   >("all");
-  const [currentBlockIndex, setCurrentBlockIndex] = useState<number>(0);
+  const [_currentBlockIndex, _setCurrentBlockIndex] = useState<number>(0);
   const [selectedOverviewStatus, setSelectedOverviewStatus] = useState<
     UnitStatus | "all"
   >("all");
-  const [onlyShowFavorites, setOnlyShowFavorites] = useState<boolean>(
+  const [_onlyShowFavorites, _setOnlyShowFavorites] = useState<boolean>(
     showFavorites === "true"
   );
   const router = useRouter();
   const { MaDA } = useLocalSearchParams();
 
   const scrollYRef = useRef(0);
-  const leftRef = useRef(null);
-  const rightRef = useRef(null);
+  const leftRef = useRef<ScrollView>(null);
+  const rightRef = useRef<ScrollView>(null);
 
   const [products2, setProducts2] = useState<any[]>([]);
   const [duAn, setDuAn] = useState<any[]>([]);
@@ -86,8 +70,8 @@ export default function ProductsScreen() {
   const [dataGrid, setDataGrid] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [filterCondition, setFilterCondition] = useState({
-    MaDA: Number(MaDA) ?? null,
+  const [filterCondition, setFilterCondition] = useState<Record<string, any>>({
+    MaDA: Number(MaDA) || null,
     MaKhu: null,
     MaPK: null,
     MaTT: null,
@@ -96,8 +80,8 @@ export default function ProductsScreen() {
 
   // real time
 
-  const [hubConnection, setHubConnection] = useState(null);
-  const [localChange, setLocalChange] = useState(null);
+  const [hubConnection, setHubConnection] = useState<any>(null);
+  const [localChange, setLocalChange] = useState<any>(null);
 
   const initSignalR = async () => {
     try {
@@ -111,8 +95,8 @@ export default function ProductsScreen() {
       // console.log("✅ Connected SignalR");
 
       setHubConnection(connection);
-    } catch (err) {
-      // console.log("❌ SignalR error:", err);
+    } catch {
+      // SignalR connection error
     }
   };
 
@@ -120,7 +104,7 @@ export default function ProductsScreen() {
     if (!hubConnection) return;
 
     try {
-      hubConnection.on("ChangeTable", (response) => {
+      hubConnection.on("ChangeTable", (response: any) => {
         console.log(response, "response");
 
         setDataGrid((prev) => {
@@ -131,12 +115,12 @@ export default function ProductsScreen() {
 
             let changed = false;
 
-            const newFloors = block.rawBlock.floor.map((floor) => {
+            const newFloors = block.rawBlock.floor.map((floor: any) => {
               if (Number(floor.maTang) !== Number(response.data?.MaTang)) {
                 return floor;
               }
 
-              const newDetails = floor.detailFloor.map((item) => {
+              const newDetails = floor.detailFloor.map((item: any) => {
                 if (Number(item.MaVT) !== Number(response.data?.MaVT)) {
                   return item;
                 }
@@ -174,13 +158,13 @@ export default function ProductsScreen() {
 
         setTimeout(() => setLocalChange(null), 1000);
       });
-    } catch (err) {
-      // console.log("SignalR listen error:", err);
+    } catch {
+      // SignalR listen error
     }
   }, [hubConnection]);
 
   useEffect(() => {
-    initSignalR();
+    void initSignalR();
   }, []);
 
   useEffect(() => {
@@ -189,24 +173,24 @@ export default function ProductsScreen() {
     };
   }, [hubConnection]);
 
-  const applyChangeFilter = (p, v) => {
+  const applyChangeFilter = (p: string, v: any) => {
     let _filter = filterCondition;
     switch (p) {
       case "MaDA":
         _filter[p] = v;
         _filter.MaKhu = null;
-        loadProducts2(_filter);
+        void loadProducts2(_filter);
         break;
 
       case "MaKhu":
         _filter[p] = v;
-        loadProducts2(_filter);
+        void loadProducts2(_filter);
         break;
 
       case "TrangThai":
         _filter[p] = v;
         _filter.MaTT = v;
-        loadProducts2(_filter);
+        void loadProducts2(_filter);
         break;
 
       default:
@@ -216,13 +200,13 @@ export default function ProductsScreen() {
     setFilterCondition(_filter);
   };
 
-  const loadDataByDA = async (MaDA) => {
+  const loadDataByDA = async (MaDA: any) => {
     const resListKhu = await ProductService.getKhuVuc({ maDA: MaDA });
     setKhuVuc(resListKhu?.data || []);
 
-    handleFormGrid(MaDA);
+    void handleFormGrid(MaDA);
   };
-  const mapStatus = (maTT) => {
+  const mapStatus = (maTT: any) => {
     switch (maTT) {
       case 1:
         return "deposit";
@@ -239,7 +223,7 @@ export default function ProductsScreen() {
     }
   };
 
-  const handleFormGrid = async (MaDA) => {
+  const handleFormGrid = async (MaDA: any) => {
     const result = await PriceServices.getBlock({
       maDA: MaDA ?? filterCondition?.MaDA,
     });
@@ -247,12 +231,12 @@ export default function ProductsScreen() {
     const raw = result?.data || [];
 
     const mappedBlocks = raw
-      .filter((b) => b.maKhu !== -1)
-      .map((block) => {
-        const units = [];
+      .filter((b: any) => b.maKhu !== -1)
+      .map((block: any) => {
+        const units: any[] = [];
 
-        block.floor?.forEach((floor) => {
-          floor.detailFloor?.forEach((item) => {
+        block.floor?.forEach((floor: any) => {
+          floor.detailFloor?.forEach((item: any) => {
             units.push({
               id: item.KyHieu,
               floor: floor.maTang, // ⚠️ dùng số
@@ -287,7 +271,7 @@ export default function ProductsScreen() {
       const ma = Number(MaDA);
       const finalMa = isNaN(ma) ? resDA?.data?.[0]?.MaDA : ma;
 
-      loadDataByDA(finalMa);
+      void loadDataByDA(finalMa);
 
       const resTT = await FilterService.getStatusSP({});
       setTrangThai(resTT?.data || []);
@@ -304,14 +288,14 @@ export default function ProductsScreen() {
       setFilterCondition(filter);
       const res = await ProductService.getProducts(filter);
       setProducts2(res?.data || []);
-    } catch (error) {
-      // console.log("error load products", error);
+    } catch {
+      // load products error
     } finally {
       setLoading(false);
     }
   };
 
-  const loadProducts2 = async (_filter) => {
+  const loadProducts2 = async (_filter: any) => {
     try {
       setLoading(true);
 
@@ -324,7 +308,7 @@ export default function ProductsScreen() {
         Limit: 16,
         offSet: 1,
       };
-      loadDataByDA(_filter.MaDA);
+      void loadDataByDA(_filter.MaDA);
 
       const res = await ProductService.getProducts(filter);
 
@@ -337,7 +321,8 @@ export default function ProductsScreen() {
   };
 
   useEffect(() => {
-    loadProducts();
+    void loadProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -371,14 +356,14 @@ export default function ProductsScreen() {
     router.push({ pathname: "/product/[id]", params: { id } });
   };
 
-  const getHexColor = (number) => {
+  const getHexColor = (number: any) => {
     if (number === null || number === undefined) return "#ccc";
     return "#" + (Number(number) >>> 0).toString(16).slice(-6);
   };
   const currentOverviewBlock = overviewBlocks[0];
   const overviewStats = getOverviewStats(currentOverviewBlock);
 
-  const statusSummaryItems: Array<{
+  const _statusSummaryItems: Array<{
     key: UnitStatus | "all";
     label: string;
     count: number;
@@ -416,11 +401,11 @@ export default function ProductsScreen() {
       color: "#3B82F6",
     },
   ];
-  const buildOverviewData = (dataGrid) => {
-    const floorsMap = {};
+  const buildOverviewData = (dataGrid: any) => {
+    const floorsMap: Record<string, any> = {};
 
-    dataGrid.forEach((block) => {
-      block?.rawBlock?.floor?.forEach((floor) => {
+    dataGrid.forEach((block: any) => {
+      block?.rawBlock?.floor?.forEach((floor: any) => {
         const floorKey = `${block.rawBlock.maKhu}_${floor.maTang}`;
 
         if (!floorsMap[floorKey]) {
@@ -432,7 +417,7 @@ export default function ProductsScreen() {
           };
         }
 
-        const units = (floor.detailFloor || []).map((item) => ({
+        const units = (floor.detailFloor || []).map((item: any) => ({
           id: item.MaSP,
           code: item.KyHieu,
           price: item.GiaBan
@@ -446,18 +431,18 @@ export default function ProductsScreen() {
       });
     });
 
-    Object.values(floorsMap).forEach((floor) => {
-      floor.units.sort((a, b) => a.column - b.column);
+    Object.values(floorsMap).forEach((floor: any) => {
+      floor.units.sort((a: any, b: any) => a.column - b.column);
       floor.totalUnits = floor.units.length;
     });
 
     return Object.values(floorsMap).sort(
-      (a, b) => b.floorNumber - a.floorNumber
+      (a: any, b: any) => b.floorNumber - a.floorNumber
     );
   };
 
-  const buildStatusSummary = (floors) => {
-    const allUnits = floors.flatMap((f) => f.units);
+  const buildStatusSummary = (floors: any[]) => {
+    const allUnits = floors.flatMap((f: any) => f.units);
 
     return [
       {
@@ -469,31 +454,31 @@ export default function ProductsScreen() {
       {
         key: "available",
         label: "TRỐNG",
-        count: allUnits.filter((u) => u.status === "available").length,
+        count: allUnits.filter((u: any) => u.status === "available").length,
         color: "#22C55E",
       },
       {
         key: "deposit",
         label: "ĐÃ CỌC",
-        count: allUnits.filter((u) => u.status === "deposit").length,
+        count: allUnits.filter((u: any) => u.status === "deposit").length,
         color: "#3B82F6",
       },
       {
         key: "locked",
         label: "KHÓA",
-        count: allUnits.filter((u) => u.status === "locked").length,
+        count: allUnits.filter((u: any) => u.status === "locked").length,
         color: "#555A64",
       },
       {
         key: "sold",
         label: "ĐÃ BÁN",
-        count: allUnits.filter((u) => u.status === "sold").length,
+        count: allUnits.filter((u: any) => u.status === "sold").length,
         color: "#EF4444",
       },
       {
         key: "booking",
         label: "BOOKING",
-        count: allUnits.filter((u) => u.status === "booking").length,
+        count: allUnits.filter((u: any) => u.status === "booking").length,
         color: "#CCCCCC",
       },
     ];
@@ -520,7 +505,7 @@ export default function ProductsScreen() {
                 selectedOverviewStatus === item.key &&
                   styles.statusSummaryItemActive,
               ]}
-              onPress={() => setSelectedOverviewStatus(item.key)}
+              onPress={() => setSelectedOverviewStatus(item.key as UnitStatus | "all")}
               activeOpacity={0.8}
             >
               <Text style={styles.statusSummaryLabel}>{item.label}</Text>
@@ -530,16 +515,16 @@ export default function ProductsScreen() {
         </ScrollView>
 
         {/* FLOORS */}
-        {floors.map((floor) => {
+        {floors.map((floor: any) => {
           const filteredUnits =
             selectedOverviewStatus === "all"
               ? floor.units
-              : floor.units.filter((u) => u.status === selectedOverviewStatus);
+              : floor.units.filter((u: any) => u.status === selectedOverviewStatus);
 
           if (filteredUnits.length === 0) return null;
 
           return (
-            <View key={floor.id} style={styles.floorSection}>
+            <View key={String(floor.id)} style={styles.floorSection}>
               {/* HEADER */}
               <View style={styles.floorHeader}>
                 <Text style={styles.floorName}>{floor.name}</Text>
@@ -550,8 +535,8 @@ export default function ProductsScreen() {
 
               {/* GRID */}
               <View style={styles.unitsGrid}>
-                {filteredUnits.map((unit) => {
-                  const config = statusConfig[unit.status] || {};
+                {filteredUnits.map((unit: any) => {
+                  const config = statusConfig[unit.status as UnitStatus] || {};
 
                   return (
                     <TouchableOpacity
@@ -688,7 +673,7 @@ export default function ProductsScreen() {
     );
   };
 
-  const formatCurrency = (num) => {
+  const formatCurrency = (num: any) => {
     if (!num) return "0 đ";
     return new Intl.NumberFormat("vi-VN").format(Math.round(num));
   };
@@ -739,7 +724,7 @@ export default function ProductsScreen() {
                 ]}
                 onPress={() => {
                   setViewMode("grid");
-                  handleFormGrid(filterCondition?.MaDA);
+                  void handleFormGrid(filterCondition?.MaDA);
                 }}
                 activeOpacity={0.8}
               >

@@ -22,32 +22,7 @@ import { CartService } from "../sevices/CartServices";
 import { CustomerService } from "../sevices/CustomerService";
 import { BookingService } from "../sevices/BookingService";
 
-const banks: Bank[] = [
-  {
-    id: "vcb",
-    name: "Vietcombank",
-    logo: "🏦",
-    accountNumber: "1234567890",
-    accountName: "CONG TY BDS ABC",
-    bankCode: "VCB",
-  },
-  {
-    id: "tcb",
-    name: "Techcombank",
-    logo: "💳",
-    accountNumber: "0987654321",
-    accountName: "CONG TY BDS ABC",
-    bankCode: "TCB",
-  },
-  {
-    id: "mb",
-    name: "MB Bank",
-    logo: "🏛️",
-    accountNumber: "5555666677",
-    accountName: "CONG TY BDS ABC",
-    bankCode: "MB",
-  },
-];
+
 
 export default function QRPaymentScreen() {
   const router = useRouter();
@@ -85,7 +60,7 @@ export default function QRPaymentScreen() {
   };
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   const customer = customers.find((c) => c.id === customerId);
@@ -98,11 +73,9 @@ export default function QRPaymentScreen() {
     }).format(value);
   };
 
-  const generateQRCode = (bank: Bank): string => {
-    const amount = bookingAmount.toString();
-    const content = `Thanh toan booking ${bookingId}`;
-    return `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=Bank:${bank.name}%0AAccount:${bank.accountNumber}%0AAmount:${amount}%0AContent:${content}`;
-  };
+  const bookingIdStr = String(bookingId ?? "");
+
+
 
   const handleCopyAccount = async () => {
     await Clipboard.setStringAsync(selectedBank.accountNumber);
@@ -111,20 +84,20 @@ export default function QRPaymentScreen() {
   };
 
   const handleCopyContent = async () => {
-    await Clipboard.setStringAsync(`Thanh toan booking ${bookingId}`);
+    await Clipboard.setStringAsync(`Thanh toan booking ${bookingIdStr}`);
     Alert.alert("Thành công", "Đã sao chép nội dung chuyển khoản");
   };
 
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `Thông tin chuyển khoản:\nNgân hàng: ${
-          selectedBank.name
-        }\nSố TK: ${selectedBank.accountNumber}\nChủ TK: ${
-          selectedBank.accountName
-        }\nSố tiền: ${formatCurrency(
+        message: `Thông tin chuyển khoản:\nNgân hàng: ${String(
+          selectedBank.name ?? ""
+        )}\nSố TK: ${String(selectedBank.accountNumber ?? "")}\nChủ TK: ${String(
+          selectedBank.accountName ?? ""
+        )}\nSố tiền: ${formatCurrency(
           bookingAmount
-        )}\nNội dung: Thanh toan booking ${bookingId}`,
+        )}\nNội dung: Thanh toan booking ${bookingIdStr}`,
       });
     } catch (error) {
       console.error("[QRPayment] Share error:", error);
@@ -194,21 +167,21 @@ export default function QRPaymentScreen() {
         uri: uploadedImage,
         type: "image/jpeg",
         name: "payment.jpg",
-      });
+      } as any);
 
       // upload ảnh
       let res = await CartService.confirmReceiptUpload(formData);
 
       if (res?.length > 0) {
-        let imgs = [];
+        const imgs: { Image: string }[] = [];
 
-        res.map((link) => {
+        res.map((link: string) => {
           imgs.push({ Image: link });
         });
 
         // bookingId chính là maPGC
         let _resBk = await BookingService.addImageBooking({
-          MaPGC: bookingId,
+          MaPGC: bookingIdStr,
           RequestIMG: imgs,
         });
 
@@ -303,7 +276,7 @@ export default function QRPaymentScreen() {
                 </View>
                 <View style={styles.customerInfoRow}>
                   <Text style={styles.customerInfoLabel}>Mã booking:</Text>
-                  <Text style={styles.customerInfoValue}>#{bookingId}</Text>
+                  <Text style={styles.customerInfoValue}>#{bookingIdStr}</Text>
                 </View>
               </View>
             )}
@@ -456,7 +429,7 @@ export default function QRPaymentScreen() {
                   <Text style={styles.infoLabel}>Nội dung:</Text>
                   <View style={styles.infoValueContainer}>
                     <Text style={styles.infoValue}>
-                      Thanh toan booking {bookingId}
+                      Thanh toan booking {bookingIdStr}
                     </Text>
                     <TouchableOpacity
                       style={styles.copyButton}

@@ -16,8 +16,7 @@ import {
   FolderOpen,
   Settings as SettingsIcon,
   MessageCircle,
-  ChevronDown,
-  Check,
+
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import {
@@ -83,9 +82,9 @@ export default function NotificationsScreen() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [showDropdown, setShowDropdown] = useState<boolean>(false);
   const dropdownAnim = useRef(new Animated.Value(0)).current;
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const _unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  const [data, setData] = useState([]);
+  const [data, setData] = useState<any[]>([]);
 
   const loadData = async () => {
     let res = await NotificationService.getNotifications({
@@ -97,7 +96,7 @@ export default function NotificationsScreen() {
   console.log(data);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
   const filteredByType =
     activeFilter === "all"
@@ -109,9 +108,9 @@ export default function NotificationsScreen() {
       ? filteredByType.filter((n) => !n.isRead)
       : filteredByType;
 
-  const activeOption =
+  const _activeOption =
     FILTER_OPTIONS.find((o) => o.key === activeFilter) ?? FILTER_OPTIONS[0];
-  const filteredCount = displayedNotifications.length;
+  const _filteredCount = displayedNotifications.length;
 
   const toggleDropdown = () => {
     if (showDropdown) {
@@ -131,7 +130,7 @@ export default function NotificationsScreen() {
     }
   };
 
-  const selectFilter = (key: FilterType) => {
+  const _selectFilter = (key: FilterType) => {
     setActiveFilter(key);
     Animated.timing(dropdownAnim, {
       toValue: 0,
@@ -155,7 +154,7 @@ export default function NotificationsScreen() {
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
   };
 
-  const getIconByType = (type: Notification["type"]) => {
+  const _getIconByType = (type: Notification["type"]) => {
     switch (type) {
       case "project":
         return <FolderOpen color={Colors.primary} size={20} />;
@@ -170,7 +169,7 @@ export default function NotificationsScreen() {
     }
   };
 
-  const getIconBgByType = (type: Notification["type"]) => {
+  const _getIconBgByType = (type: Notification["type"]) => {
     switch (type) {
       case "project":
         return "#FFF4ED";

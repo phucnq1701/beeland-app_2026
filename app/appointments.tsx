@@ -22,7 +22,6 @@ import {
   MapPin,
   Phone,
   FileText,
-  ChevronRight,
   Eye,
   MessageSquare,
   Users,
@@ -128,7 +127,7 @@ export default function AppointmentsScreen() {
   };
 
   useEffect(() => {
-    loadDSLichHen();
+    void loadDSLichHen();
   }, []);
 
   const loadData = async (search = "") => {
@@ -177,7 +176,7 @@ export default function AppointmentsScreen() {
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchQuery?.trim()?.length > 0 && checkSearch) {
-        loadData(searchQuery);
+        void loadData(searchQuery);
         setShowCustomerList(true);
       } else {
         setShowCustomerList(false);
@@ -226,7 +225,7 @@ export default function AppointmentsScreen() {
 
     const timer = setTimeout(() => {
       if (searchProduct) {
-        loadProducts(searchProduct);
+        void loadProducts(searchProduct);
         setShowProductList(true);
       } else {
         setShowProductList(false);
@@ -236,7 +235,7 @@ export default function AppointmentsScreen() {
     return () => clearTimeout(timer);
   }, [searchProduct]);
 
-  const handleSelectProduct = (item) => {
+  const handleSelectProduct = (item: any) => {
     setIsSelectingProduct(true);
 
     setNewAppointment((prev) => ({
@@ -370,7 +369,7 @@ export default function AppointmentsScreen() {
     });
   }, [filterType, selectedDate, viewMode, dataLichHen]);
 
-  const isThisWeek = (dateStr) => {
+  const isThisWeek = (dateStr: any) => {
     const today = new Date();
     const date = new Date(dateStr);
 
@@ -382,7 +381,7 @@ export default function AppointmentsScreen() {
 
     return date >= firstDay && date <= lastDay;
   };
-  const formatHeaderDate = (dateStr) => {
+  const formatHeaderDate = (dateStr: any) => {
     const date = new Date(dateStr);
 
     if (isThisWeek(dateStr)) {
@@ -428,7 +427,7 @@ export default function AppointmentsScreen() {
     return grouped;
   }, [filteredAppointments]);
 
-  const formatDate = (dateStr: string) => {
+  const _formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     const today = new Date();
     const tomorrow = new Date(today);
@@ -490,7 +489,7 @@ export default function AppointmentsScreen() {
     console.log(newAppointment);
 
     const payload = {
-      MaKH: newAppointment?.maKH,
+      MaKH: (newAppointment as any)?.maKH,
       MaLH: newAppointment.maLH ?? null,
       NgayHen: newAppointment.ngayHenAPI,
       TieuDe: newAppointment.tieuDe,
@@ -500,7 +499,7 @@ export default function AppointmentsScreen() {
     try {
       const result = await CongViecService.addLichHen(payload);
       if (result?.status === 2000) {
-        getAppointments();
+        void getAppointments();
         setShowAddAppointmentModal(false);
 
         setNewAppointment({
@@ -524,7 +523,7 @@ export default function AppointmentsScreen() {
       console.log(err);
     }
   };
-  const handleEditAppointment = (item) => {
+  const handleEditAppointment = (item: any) => {
     const date = new Date(item.date + " " + item.startTime);
 
     setNewAppointment({
@@ -545,10 +544,10 @@ export default function AppointmentsScreen() {
     setShowAddAppointmentModal(true);
   };
 
-  const renderAppointmentCard = (appointment: Appointment, index: number) => {
-    const config = typeConfig[appointment.type];
-    const status = statusConfig[appointment.status];
-    const IconComponent = config.icon;
+  const renderAppointmentCard = (appointment: Appointment, _index: number) => {
+    const config = (typeConfig as any)[appointment.type];
+    const status = (statusConfig as any)[appointment.status];
+    const _IconComponent = config.icon;
     const scale = getCardAnim(appointment.id);
 
     return (

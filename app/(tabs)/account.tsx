@@ -129,9 +129,9 @@ export default function AccountScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [showAllManagement, setShowAllManagement] = React.useState(false);
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<any>(null);
   const [duAn, setDuAn] = useState<any[]>([]);
-  const [khachHang, setKhachHang] = useState<any[]>([]);
+  const [khachHang, setKhachHang] = useState<any>(null);
 
   const handleLogout = () => {
     router.push("/login");
@@ -143,17 +143,17 @@ export default function AccountScreen() {
 
   const loadData = async () => {
     let res = await UserService.userInfo();
-    setData(res?.data ?? []);
+    setData(res?.data ?? null);
 
     const resDA = await ProjectService.getProjects({});
     setDuAn(resDA?.data ?? []);
 
     let resKH = await CustomerService.getCustomers("");
-    setKhachHang(resKH?.data?.[0] ?? []);
+    setKhachHang(resKH?.data?.[0] ?? null);
   };
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   return (
