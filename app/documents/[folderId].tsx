@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,78 +9,179 @@ import {
   Platform,
   Alert,
   Share,
-} from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { Download, Search, FileText, FileSpreadsheet, Image, File, Share2, X } from 'lucide-react-native';
-import Colors from '@/constants/colors';
-import { projectFolders, Document } from '@/mocks/documents';
+  Linking,
+} from "react-native";
+import { router, Stack, useLocalSearchParams } from "expo-router";
+import {
+  Download,
+  Search,
+  FileText,
+  FileSpreadsheet,
+  Image,
+  File,
+  Share2,
+  X,
+} from "lucide-react-native";
+import Colors from "@/constants/colors";
+import { DocumentService } from "../sevices/DocumentService";
 
-const FILE_TYPE_CONFIG: Record<string, { icon: typeof FileText; color: string; label: string }> = {
-  pdf: { icon: FileText, color: '#EF4444', label: 'PDF' },
-  doc: { icon: File, color: '#3B82F6', label: 'DOC' },
-  xls: { icon: FileSpreadsheet, color: '#10B981', label: 'XLS' },
-  jpg: { icon: Image, color: '#F59E0B', label: 'JPG' },
-  png: { icon: Image, color: '#F59E0B', label: 'PNG' },
+// cấu hình icon theo type
+const FILE_TYPE_CONFIG: Record<
+  string,
+  { icon: typeof FileText; color: string; label: string }
+> = {
+  pdf: { icon: FileText, color: "#EF4444", label: "PDF" },
+  doc: { icon: File, color: "#3B82F6", label: "DOC" },
+  docx: { icon: File, color: "#3B82F6", label: "DOCX" },
+  xls: { icon: FileSpreadsheet, color: "#10B981", label: "XLS" },
+  xlsx: { icon: FileSpreadsheet, color: "#10B981", label: "XLSX" },
+  jpg: { icon: Image, color: "#F59E0B", label: "JPG" },
+  png: { icon: Image, color: "#F59E0B", label: "PNG" },
+  pages: { icon: File, color: "#8B5CF6", label: "PAGES" },
+  txt: { icon: FileText, color: "#6B7280", label: "TXT" },
 };
 
-const getTypeConfig = (type: string) => FILE_TYPE_CONFIG[type] ?? { icon: File, color: '#6B7280', label: type.toUpperCase() };
+const getTypeConfig = (type: string) =>
+  FILE_TYPE_CONFIG[type.toLowerCase()] ?? {
+    icon: File,
+    color: "#6B7280",
+    label: type.toUpperCase(),
+  };
+
+interface DocumentItem {
+  id: number;
+  name: string;
+  type: string;
+  size: string;
+  date: string;
+  link: string;
+  ghiChu: string;
+}
 
 export default function DocumentsScreen() {
-  const { folderId } = useLocalSearchParams<{ folderId: string }>();
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const { folderId } = useLocalSearchParams<{
+    folderId: string;
+  }>();
 
-  const folder = projectFolders.find((f) => f.id === folderId);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [selectedType, setSelectedType] = useState<string>("all");
+  const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
 
-  const filteredDocuments = folder?.documents.filter((doc) =>
-    doc.name.toLowerCase().includes(searchQuery.toLowerCase())
-  ) ?? [];
+  const loadData = async (inputSearch: string = "") => {
+    try {
+      const res = await DocumentService.getDetail({
+        DocumentID: Number(folderId),
+        InputSearch: inputSearch,
+      });
 
-  const handleDocumentPress = useCallback((documentId: string) => {
-    console.log('[Documents] Document pressed', { folderId, documentId });
+      const mapped: DocumentItem[] = res?.data?.map((doc: any) => ({
+        id: doc.ID,
+        name: doc.Name,
+        type: doc.Type,
+        size: doc.Size > 0 ? `${doc.Size} MB` : "0 MB",
+        date: new Date(doc.CreatedAt).toLocaleDateString(),
+        link: doc.Link.startsWith("http")
+          ? doc.Link
+          : `https://upload.beesky.vn/${doc.Link.replace(/^\/+/, "")}`,
+        ghiChu: doc.GhiChu,
+      }));
+
+      setDocuments(mapped);
+    } catch (error) {
+      console.error("Load documents error:", error);
+      Alert.alert("Lỗi", "Không tải được dữ liệu tài liệu");
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
   }, [folderId]);
 
-  const handleDownload = useCallback((documentId: string, documentName: string) => {
-    console.log('[Documents] Download pressed', { documentId, documentName });
-    Alert.alert('Tải xuống', `Đang tải "${documentName}"...`);
-  }, []);
+  // debounce input search
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    if (searchTimer) clearTimeout(searchTimer);
+    setSearchTimer(
+      setTimeout(() => {
+        void loadData(text);
+      }, 500)
+    );
+  };
 
-  const handleShare = useCallback(async (doc: Document) => {
-    console.log('[Documents] Share pressed', { docId: doc.id });
-    try {
-      const text = `📄 ${doc.name}\nLoại: ${doc.type.toUpperCase()} • ${doc.size}\nNgày: ${doc.date}`;
-      if (Platform.OS === 'web') {
-        if (navigator.share) {
-          await navigator.share({ title: doc.name, text });
-        } else {
-          Alert.alert('Thông báo', 'Chia sẻ không khả dụng trên trình duyệt này');
-        }
-      } else {
-        await Share.share({ message: text, title: doc.name });
-      }
-    } catch (error) {
-      console.error('[Documents] Share error', error);
+  const filteredDocuments = documents.filter(
+    (doc) =>
+      (selectedType === "all" || doc.type.toLowerCase() === selectedType) &&
+      doc.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleTypePress = (type: string) => {
+    setSelectedType(type);
+  };
+  const canOpenInWebView = (type: string) => {
+    const webTypes = [
+      "pdf",
+      "jpg",
+      "jpeg",
+      "png",
+      "txt",
+      "html",
+      "doc",
+      "docx",
+      "xls",
+      "xlsx",
+    ];
+    return webTypes.includes(type.toLowerCase());
+  };
+
+  const handleDocumentPress = (document: DocumentItem) => {
+    console.log("[Documents] Document pressed", document);
+
+    if (Platform.OS === "web") {
+      window.open(document.link, "_blank");
+      return;
     }
-  }, []);
 
-  if (!folder) {
-    return null;
-  }
+    const fileType = document.type.toLowerCase();
 
-  const typeGroups = filteredDocuments.reduce<Record<string, Document[]>>((acc, doc) => {
-    const key = doc.type;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(doc);
-    return acc;
-  }, {});
+    if (canOpenInWebView(fileType)) {
+      // mở trong app bằng WebView
+      router.push({
+        pathname: "/documents/viewer",
+        params: {
+          link: encodeURIComponent(document.link),
+          type: fileType,
+          name: document.name,
+        },
+      });
+    } else {
+      // mở ngoài nếu WebView không hỗ trợ
+      Linking.openURL(document.link).catch(() =>
+        Alert.alert("Lỗi", "Không thể mở tài liệu")
+      );
+    }
+  };
 
-  const uniqueTypes = Object.keys(typeGroups);
+  const typeGroups = filteredDocuments.reduce<Record<string, DocumentItem[]>>(
+    (acc, doc) => {
+      const key = doc.type;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(doc);
+      return acc;
+    },
+    {}
+  );
+
+  const uniqueTypes = Array.from(
+    new Set(documents.map((doc) => doc.type.toLowerCase()))
+  );
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: folder.name,
-          headerStyle: { backgroundColor: '#FAFAFA' },
+          title: `Folder ${folderId}`,
+          headerStyle: { backgroundColor: "#FAFAFA" },
           headerTintColor: Colors.text,
           headerShadowVisible: false,
         }}
@@ -88,17 +189,59 @@ export default function DocumentsScreen() {
 
       <View style={styles.topSection}>
         <View style={styles.statsRow}>
-          <View style={[styles.statChip, { backgroundColor: folder.color + '12' }]}>
-            <Text style={[styles.statNumber, { color: folder.color }]}>{folder.documentCount}</Text>
-            <Text style={[styles.statLabel, { color: folder.color }]}>tài liệu</Text>
-          </View>
+          <TouchableOpacity
+            style={[
+              styles.statChip,
+              {
+                backgroundColor:
+                  selectedType === "all" ? "#3B82F612" : Colors.white,
+                borderWidth: selectedType === "all" ? 0 : 1,
+                borderColor: Colors.border,
+              },
+            ]}
+            onPress={() => handleTypePress("all")}
+          >
+            <Text
+              style={[
+                styles.statNumber,
+                { color: selectedType === "all" ? "#3B82F6" : Colors.text },
+              ]}
+            >
+              {documents.length}
+            </Text>
+            <Text
+              style={[
+                styles.statLabel,
+                { color: selectedType === "all" ? "#3B82F6" : Colors.text },
+              ]}
+            >
+              Tất cả
+            </Text>
+          </TouchableOpacity>
+
           {uniqueTypes.map((type) => {
             const config = getTypeConfig(type);
             return (
-              <View key={type} style={[styles.statChip, { backgroundColor: config.color + '10' }]}>
-                <Text style={[styles.statNumber, { color: config.color }]}>{typeGroups[type].length}</Text>
-                <Text style={[styles.statLabel, { color: config.color }]}>{config.label}</Text>
-              </View>
+              <TouchableOpacity
+                key={type}
+                style={[
+                  styles.statChip,
+                  {
+                    backgroundColor:
+                      selectedType === type
+                        ? config.color + "20"
+                        : config.color + "10",
+                  },
+                ]}
+                onPress={() => handleTypePress(type)}
+              >
+                <Text style={[styles.statNumber, { color: config.color }]}>
+                  {typeGroups[type]?.length || 0}
+                </Text>
+                <Text style={[styles.statLabel, { color: config.color }]}>
+                  {config.label}
+                </Text>
+              </TouchableOpacity>
             );
           })}
         </View>
@@ -110,10 +253,13 @@ export default function DocumentsScreen() {
             placeholder="Tìm kiếm tài liệu..."
             placeholderTextColor={Colors.textTertiary}
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={handleSearchChange}
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={() => handleSearchChange("")}
+              activeOpacity={0.7}
+            >
               <X color={Colors.textTertiary} size={18} strokeWidth={2} />
             </TouchableOpacity>
           )}
@@ -139,52 +285,53 @@ export default function DocumentsScreen() {
             return (
               <TouchableOpacity
                 key={document.id}
-                style={[styles.documentRow, !isLast && styles.documentRowBorder]}
+                style={[
+                  styles.documentRow,
+                  !isLast && styles.documentRowBorder,
+                ]}
                 activeOpacity={0.6}
-                onPress={() => handleDocumentPress(document.id)}
-                testID={`document-${document.id}`}
+                onPress={() => handleDocumentPress(document)}
               >
-                <View style={[styles.typeIndicator, { backgroundColor: config.color }]} />
-
-                <View style={[styles.iconBox, { backgroundColor: config.color + '10' }]}>
-                  <IconComponent color={config.color} size={20} strokeWidth={1.8} />
+                <View
+                  style={[
+                    styles.typeIndicator,
+                    { backgroundColor: config.color },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.iconBox,
+                    { backgroundColor: config.color + "10" },
+                  ]}
+                >
+                  <IconComponent
+                    color={config.color}
+                    size={20}
+                    strokeWidth={1.8}
+                  />
                 </View>
 
                 <View style={styles.docInfo}>
-                  <Text style={styles.docName} numberOfLines={1}>{document.name}</Text>
+                  <Text style={styles.docName} numberOfLines={1}>
+                    {document.name}
+                  </Text>
                   <View style={styles.docMeta}>
-                    <View style={[styles.typeBadge, { backgroundColor: config.color + '12' }]}>
-                      <Text style={[styles.typeBadgeText, { color: config.color }]}>{config.label}</Text>
+                    <View
+                      style={[
+                        styles.typeBadge,
+                        { backgroundColor: config.color + "12" },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.typeBadgeText, { color: config.color }]}
+                      >
+                        {config.label}
+                      </Text>
                     </View>
                     <Text style={styles.docMetaText}>{document.size}</Text>
                     <View style={styles.dotSep} />
                     <Text style={styles.docMetaText}>{document.date}</Text>
                   </View>
-                </View>
-
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      void handleShare(document);
-                    }}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Share2 color={Colors.textTertiary} size={16} strokeWidth={2} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.downloadBtn, { backgroundColor: config.color + '10' }]}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleDownload(document.id, document.name);
-                    }}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Download color={config.color} size={16} strokeWidth={2.2} />
-                  </TouchableOpacity>
                 </View>
               </TouchableOpacity>
             );
@@ -195,42 +342,34 @@ export default function DocumentsScreen() {
   );
 }
 
+// Styles giữ nguyên
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
-  },
+  container: { flex: 1, backgroundColor: "#FAFAFA" },
   topSection: {
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 16,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: "#FAFAFA",
   },
   statsRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     marginBottom: 14,
-    flexWrap: 'wrap',
+    flexWrap: "wrap",
   },
   statChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
   },
-  statNumber: {
-    fontSize: 14,
-    fontWeight: '700' as const,
-  },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: '500' as const,
-  },
+  statNumber: { fontSize: 14, fontWeight: "700" },
+  statLabel: { fontSize: 12, fontWeight: "500" },
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: Colors.white,
     borderRadius: 14,
     paddingHorizontal: 14,
@@ -239,32 +378,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.text,
-    padding: 0,
-  },
-  content: {
-    flex: 1,
-  },
+  searchInput: { flex: 1, fontSize: 15, color: Colors.text, padding: 0 },
+  content: { flex: 1 },
   scrollContent: {
     paddingBottom: 40,
     marginHorizontal: 20,
     backgroundColor: Colors.white,
     borderRadius: 18,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   documentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 14,
     paddingRight: 16,
     paddingLeft: 0,
   },
   documentRowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.06)',
+    borderBottomColor: "rgba(0,0,0,0.06)",
   },
   typeIndicator: {
     width: 3,
@@ -277,78 +409,32 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 12,
   },
-  docInfo: {
-    flex: 1,
-    gap: 5,
-  },
+  docInfo: { flex: 1, gap: 5 },
   docName: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: "600",
     color: Colors.text,
     lineHeight: 19,
   },
-  docMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  typeBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 5,
-  },
-  typeBadgeText: {
-    fontSize: 10,
-    fontWeight: '700' as const,
-    letterSpacing: 0.3,
-  },
-  docMetaText: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-    fontWeight: '400' as const,
-  },
+  docMeta: { flexDirection: "row", alignItems: "center", gap: 8 },
+  typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
+  typeBadgeText: { fontSize: 10, fontWeight: "700", letterSpacing: 0.3 },
+  docMetaText: { fontSize: 12, color: Colors.textTertiary, fontWeight: "400" },
   dotSep: {
     width: 3,
     height: 3,
     borderRadius: 1.5,
     backgroundColor: Colors.textLight,
   },
-  actionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginLeft: 8,
-  },
-  actionBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  downloadBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 60,
   },
-  emptyIcon: {
-    fontSize: 40,
-    marginBottom: 12,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
+  emptyIcon: { fontSize: 40, marginBottom: 12 },
+  emptyText: { fontSize: 15, color: Colors.textSecondary, fontWeight: "500" },
 });

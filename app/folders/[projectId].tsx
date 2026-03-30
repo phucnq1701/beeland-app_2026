@@ -1,27 +1,67 @@
-import React from 'react';
+
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Alert,
+  Platform,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronRight, Share2, FileText, FolderOpen } from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { projectFolders } from '@/mocks/documents';
-import { Alert, Platform } from 'react-native';
+import { DocumentService } from '../sevices/DocumentService';
 
 export default function FoldersScreen() {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const router = useRouter();
+
+  const [folder, setFolder] = useState<any[]>([]);
+
+  const loadFolder = async () => {
+    try {
+      let res = await DocumentService.get({
+        MaDA: Number(projectId),
+        TypeDocument: 'DOCUMENT',
+        InputSearch: '',
+      });
+
+      const data = res?.data ?? [];
+      
+
+      // Map API data về cấu trúc UI cần
+      const mappedFolders = data.map((item: any) => ({
+        id: item.ID?.toString() ?? Math.random().toString(),
+        name: item.Name ?? 'Không có tên',
+        color: item.Color ?? '#888888',
+        icon: item.Icon ?? 'folder',
+        documentCount: item.SoLuong ?? 0,
+        firstFile: item.FirstFile ?? null,
+        note: item.GhiChu ?? '',
+      }));
+
+      setFolder(mappedFolders);
+    } catch (error) {
+      console.error('Lỗi load folder', error);
+      setFolder([]);
+    }
+  };
+
+  useEffect(() => {
+    loadFolder();
+  }, []);
+
+  
 
   const handleFolderPress = (folderId: string) => {
     console.log('[Folders] Folder pressed', { projectId, folderId });
     router.push(`/documents/${folderId}?projectId=${projectId}` as any);
   };
 
-  const handleShareFolder = async (folder: typeof projectFolders[0], e: any) => {
+  
+  const handleShareFolder = async (folder: any, e: any) => {
     e.stopPropagation();
     console.log('[Folders] Sharing folder', { projectId, folderId: folder.id });
 
@@ -53,7 +93,7 @@ export default function FoldersScreen() {
     }
   };
 
-  const totalDocuments = projectFolders.reduce((sum, f) => sum + f.documentCount, 0);
+  const totalDocuments = folder.reduce((sum, f) => sum + f.documentCount, 0);
 
   return (
     <View style={styles.container}>
@@ -77,7 +117,7 @@ export default function FoldersScreen() {
           <View style={styles.summaryItem}>
             <FolderOpen size={18} color={Colors.primary} strokeWidth={2} />
             <Text style={styles.summaryText}>
-              {projectFolders.length} thư mục
+              {folder.length} thư mục
             </Text>
           </View>
           <View style={styles.summaryDot} />
@@ -89,46 +129,46 @@ export default function FoldersScreen() {
           </View>
         </View>
 
-        {projectFolders.map((folder) => (
+        {folder.map((folderItem) => (
           <TouchableOpacity
-            key={folder.id}
+            key={folderItem.id}
             style={styles.folderCard}
             activeOpacity={0.6}
-            onPress={() => handleFolderPress(folder.id)}
-            testID={`folder-card-${folder.id}`}
+            onPress={() => handleFolderPress(folderItem?.id)}
+            testID={`folder-card-${folderItem.id}`}
           >
             <View style={styles.folderRow}>
-              <View style={[styles.colorStripe, { backgroundColor: folder.color }]} />
+              <View style={[styles.colorStripe, { backgroundColor: folderItem.color }]} />
 
-              <View style={[styles.iconWrap, { backgroundColor: folder.color + '12' }]}>
-                <Text style={styles.iconEmoji}>{folder.icon}</Text>
-              </View>
+              {/* <View style={[styles.iconWrap, { backgroundColor: folderItem.color + '12' }]}>
+                <Text style={styles.iconEmoji}>{folderItem.icon}</Text>
+              </View> */}
 
               <View style={styles.folderInfo}>
                 <Text style={styles.folderName} numberOfLines={1}>
-                  {folder.name}
+                  {folderItem.name}
                 </Text>
                 <View style={styles.metaRow}>
-                  <View style={[styles.countChip, { backgroundColor: folder.color + '14' }]}>
-                    <Text style={[styles.countChipText, { color: folder.color }]}>
-                      {folder.documentCount} tài liệu
+                  <View style={[styles.countChip, { backgroundColor: folderItem.color + '14' }]}>
+                    <Text style={[styles.countChipText, { color: folderItem.color }]}>
+                      {folderItem.documentCount} tài liệu
                     </Text>
                   </View>
                 </View>
               </View>
 
               <View style={styles.actions}>
-                <TouchableOpacity
+                {/* <TouchableOpacity
                   style={styles.shareBtn}
-                  onPress={(e) => handleShareFolder(folder, e)}
+                  onPress={(e) => handleShareFolder(folderItem, e)}
                   activeOpacity={0.6}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  testID={`share-folder-${folder.id}`}
+                  testID={`share-folder-${folderItem.id}`}
                 >
                   <Share2 color={Colors.textTertiary} size={17} strokeWidth={2} />
-                </TouchableOpacity>
-                <View style={[styles.arrowWrap, { backgroundColor: folder.color + '10' }]}>
-                  <ChevronRight color={folder.color} size={18} strokeWidth={2.5} />
+                </TouchableOpacity> */}
+                <View style={[styles.arrowWrap, { backgroundColor: folderItem.color + '10' }]}>
+                  <ChevronRight color={folderItem.color} size={18} strokeWidth={2.5} />
                 </View>
               </View>
             </View>
