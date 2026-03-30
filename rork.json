@@ -1,6 +1,7 @@
 {
   "apps": [
     {
+      "name": "main",
       "path": ".",
       "framework": "react-native"
     }
