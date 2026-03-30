@@ -30,9 +30,9 @@ import {
 import Colors from "@/constants/colors";
 // import { appointments, Appointment } from "@/mocks/appointments";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { CongViecService } from "./sevices/CongViecService";
-import { CustomerService } from "./sevices/CustomerService";
-import { ProductService } from "./sevices/ProductService";
+import { CongViecService } from "@/sevices/CongViecService";
+import { CustomerService } from "@/sevices/CustomerService";
+import { ProductService } from "@/sevices/ProductService";
 
 type ViewMode = "list" | "calendar";
 

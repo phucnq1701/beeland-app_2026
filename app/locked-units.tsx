@@ -26,8 +26,8 @@ import {
 } from "lucide-react-native";
 
 import Colors from "@/constants/colors";
-import { ProjectService } from "./sevices/ProjectService";
-import { BookingService } from "./sevices/BookingService";
+import { ProjectService } from "@/sevices/ProjectService";
+import { BookingService } from "@/sevices/BookingService";
 
 const STATUS_CONFIGS = {
   active: {

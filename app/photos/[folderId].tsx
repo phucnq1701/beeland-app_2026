@@ -18,7 +18,7 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import { X, ChevronLeft, ChevronRight } from "lucide-react-native";
 import * as Sharing from "expo-sharing";
 import * as MediaLibrary from "expo-media-library";
-import { DocumentService } from "../sevices/DocumentService";
+import { DocumentService } from "@/sevices/DocumentService";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 

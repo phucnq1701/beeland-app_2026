@@ -23,7 +23,7 @@ import {
   X,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { DocumentService } from "../sevices/DocumentService";
+import { DocumentService } from "@/sevices/DocumentService";
 
 // cấu hình icon theo type
 const FILE_TYPE_CONFIG: Record<

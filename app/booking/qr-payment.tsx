@@ -18,9 +18,9 @@ import { Copy, Share2, Check, ArrowLeft, Upload, X } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 import Colors from "@/constants/colors";
 import { customers } from "@/mocks/customers";
-import { CartService } from "../sevices/CartServices";
-import { CustomerService } from "../sevices/CustomerService";
-import { BookingService } from "../sevices/BookingService";
+import { CartService } from "@/sevices/CartServices";
+import { CustomerService } from "@/sevices/CustomerService";
+import { BookingService } from "@/sevices/BookingService";
 
 
 

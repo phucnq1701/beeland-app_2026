@@ -29,7 +29,7 @@ import {
   Download,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { CustomerService } from "../sevices/CustomerService";
+import { CustomerService } from "@/sevices/CustomerService";
 
 interface PaymentHistory {
   ngayThu: string;

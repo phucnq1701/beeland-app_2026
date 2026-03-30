@@ -16,8 +16,8 @@ import { Calendar, Lock } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
-import { BookingService } from "@/app/sevices/BookingService";
-import { ProductService } from "../sevices/ProductService";
+import { BookingService } from "@/sevices/BookingService";
+import { ProductService } from "@/sevices/ProductService";
 import { Format_Date } from "@/components/utils/common";
 
 export default function LockDetailScreen() {

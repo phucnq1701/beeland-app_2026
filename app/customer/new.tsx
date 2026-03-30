@@ -28,7 +28,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as Contacts from "expo-contacts";
 import Colors from "@/constants/colors";
 import { CustomerType } from "@/mocks/customers";
-import { CustomerService } from "../sevices/CustomerService";
+import { CustomerService } from "@/sevices/CustomerService";
 
 export default function CustomerNewScreen() {
   const router = useRouter();

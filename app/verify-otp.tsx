@@ -15,7 +15,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, ShieldCheck } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { AuthService } from "./sevices/AuthService";
+import { AuthService } from "@/sevices/AuthService";
 
 const OTP_LENGTH = 6;
 const RESEND_TIMEOUT = 60;

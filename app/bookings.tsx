@@ -23,9 +23,9 @@ import { BlurView } from "expo-blur";
 import Colors from "@/constants/colors";
 import { bookings, BookingStatus, BookingPriority } from "@/mocks/bookings";
 import { featuredProperties } from "@/mocks/properties";
-import { UserService } from "./sevices/UserService";
-import { FilterService } from "./sevices/FilterService";
-import { ProjectService } from "./sevices/ProjectService";
+import { UserService } from "@/sevices/UserService";
+import { FilterService } from "@/sevices/FilterService";
+import { ProjectService } from "@/sevices/ProjectService";
 
 export default function BookingsScreen() {
   const router = useRouter();

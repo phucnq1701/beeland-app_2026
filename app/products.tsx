@@ -27,10 +27,10 @@ import {
 } from "@/mocks/overviewUnits";
 import Colors from "@/constants/colors";
 import { Product } from "@/mocks/properties";
-import { ProductService } from "./sevices/ProductService";
-import { ProjectService } from "./sevices/ProjectService";
-import { FilterService } from "./sevices/FilterService";
-import { PriceServices } from "./sevices/PriceServices";
+import { ProductService } from "@/sevices/ProductService";
+import { ProjectService } from "@/sevices/ProjectService";
+import { FilterService } from "@/sevices/FilterService";
+import { PriceServices } from "@/sevices/PriceServices";
 
 import * as signalR from "@microsoft/signalr";
 import BlockGrid from "./product/BlockGrid";

@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Stack } from "expo-router";
-import { UserService } from "./sevices/UserService";
+import { UserService } from "@/sevices/UserService";
 import Colors from "@/constants/colors";
 
 const { width } = Dimensions.get("window");

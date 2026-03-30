@@ -27,8 +27,8 @@ import {
   Home,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BookingService } from "../sevices/BookingService";
-import { ProductService } from "../sevices/ProductService";
+import { BookingService } from "@/sevices/BookingService";
+import { ProductService } from "@/sevices/ProductService";
 
 export default function ProductDetailScreen() {
   const { id, lockMinutes } = useLocalSearchParams<{

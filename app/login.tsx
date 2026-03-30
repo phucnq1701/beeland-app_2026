@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import Colors from "@/constants/colors";
-import { AuthService } from "./sevices/AuthService";
+import { AuthService } from "@/sevices/AuthService";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
