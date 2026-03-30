@@ -1214,43 +1214,30 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   blockCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    overflow: "hidden",
+    backgroundColor: "#FEF7F3",
+    borderRadius: 12,
+    // padding: 2,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 16,
+  },
+  blockTitle: {
+    fontSize: 18,
+    fontWeight: "700" as const,
+    color: Colors.text,
+    // marginBottom: 16,
+    padding: 10,
   },
   blockCardHeader: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#F0F4FF",
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    gap: 3,
+    marginBottom: 3,
+    height: 45,
   },
-  blockTitle: {
-    fontSize: 17,
-    fontWeight: "700" as const,
-    color: Colors.text,
-  },
-  blockStatsInline: {
-    fontSize: 12,
-    fontWeight: "500" as const,
-    color: Colors.textSecondary,
-  },
-  gridTableWrapper: {
-    flexDirection: "row",
-  },
-  fixedFloorCol: {
-    borderRightWidth: 1,
-    borderRightColor: Colors.border,
-    backgroundColor: "#F8FAFC",
-    zIndex: 2,
-  },
-  fixedHeaderCell: {
+  gridCell: {
+    // flex: 1,
+    // aspectRatio: 1,
+    width: 45,
+    height: 45,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#E8EDF5",
@@ -1457,5 +1444,18 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     color: Colors.textSecondary,
+  },
+  disabledCell: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#E5E7EB",
+    borderRadius: 6,
+  },
+
+  disabledText: {
+    fontSize: 12,
+    color: "#9CA3AF",
   },
 });
