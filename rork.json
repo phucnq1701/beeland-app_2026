@@ -1,8 +1,8 @@
 {
-  "apps": {
-    "expo": {
+  "apps": [
+    {
       "path": ".",
       "framework": "react-native"
     }
-  }
+  ]
 }
