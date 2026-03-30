@@ -11,7 +11,6 @@ const BlockGrid = ({
   handlePressProduct,
   getHexColor,
   styles,
-
 }) => {
   const rawBlock = block?.rawBlock;
   if (!rawBlock) return null;
@@ -25,7 +24,6 @@ const BlockGrid = ({
 
   return (
     <View style={styles.blockCard}>
-    
       <Text style={styles.blockTitle}>{block.name}</Text>
 
       <View style={{ flexDirection: "row" }}>
@@ -49,7 +47,9 @@ const BlockGrid = ({
                 style={{ ...styles.gridRow, marginRight: 3 }}
               >
                 <View style={[styles.gridCell, styles.floorCell]}>
-                  <Text style={styles.floorCellText}>{floor.tenTang}</Text>
+                  <Text style={styles.floorCellText}>
+                    {floor.tenTang?.replace("Tầng", "T")}
+                  </Text>
                 </View>
               </View>
             ))}

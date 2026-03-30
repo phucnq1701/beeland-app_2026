@@ -24,6 +24,7 @@ import {
   Lock,
   Calendar,
   Calculator,
+  Home,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BookingService } from "../sevices/BookingService";
@@ -218,6 +219,8 @@ export default function ProductDetailScreen() {
     setCurrentImageIndex(index);
   };
 
+  console.log(data?.KyHieu);
+
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: property.title }} />
@@ -316,6 +319,11 @@ export default function ProductDetailScreen() {
 
             <View style={styles.heroInfo}>
               <Text style={styles.heroTitle}>{data?.TenDA}</Text>
+
+              <View style={styles.rowCenter}>
+                <Home color={Colors.white} size={16} />
+                <Text style={styles.heroSubtitle}> {data?.KyHieu}</Text>
+              </View>
               <View style={styles.rowCenter}>
                 <MapPin color={Colors.white} size={16} />
                 <Text style={styles.heroSubtitle}>{data?.DiaChi}</Text>

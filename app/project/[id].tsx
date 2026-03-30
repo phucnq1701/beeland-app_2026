@@ -61,7 +61,7 @@ export default function ProjectOptionsScreen() {
       onPress: () =>
         router.push(`/photo-gallery?projectId=${projectData.MaDA}` as any),
     },
-  ];
+  ];  
 
   return (
     <View style={styles.container}>

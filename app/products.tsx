@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 import {
@@ -17,9 +18,12 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronUp,
-  ChevronRight,
   LayoutDashboard,
-  Lock,
+  Home,
+  Maximize2,
+  DollarSign,
+  ChevronRight,
+  Package,
 } from "lucide-react-native";
 import {
   overviewBlocks,
@@ -32,11 +36,6 @@ import { products, Product } from "@/mocks/properties";
 import { ProductService } from "./sevices/ProductService";
 import { ProjectService } from "./sevices/ProjectService";
 import { FilterService } from "./sevices/FilterService";
-import { PriceServices } from "./sevices/PriceServices";
-
-import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
-import * as signalR from "@microsoft/signalr";
-import BlockGrid from "./product/BlockGrid";
 
 type ViewMode = "list" | "grid" | "overview";
 
@@ -62,28 +61,22 @@ export default function ProductsScreen() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [filterExpanded, setFilterExpanded] = useState<boolean>(false);
-  const [selectedStatus, setSelectedStatus] = useState<
+  const [_selectedStatus, _setSelectedStatus] = useState<
     Product["status"] | "all"
   >("all");
-  const [currentBlockIndex, setCurrentBlockIndex] = useState<number>(0);
   const [selectedOverviewStatus, setSelectedOverviewStatus] = useState<
     UnitStatus | "all"
   >("all");
-  const [onlyShowFavorites, setOnlyShowFavorites] = useState<boolean>(
+  const [onlyShowFavorites, _setOnlyShowFavorites] = useState<boolean>(
     showFavorites === "true"
   );
   const router = useRouter();
   const { MaDA } = useLocalSearchParams();
 
-  const scrollYRef = useRef(0);
-  const leftRef = useRef(null);
-  const rightRef = useRef(null);
-
   const [products2, setProducts2] = useState<any[]>([]);
   const [duAn, setDuAn] = useState<any[]>([]);
   const [khuVuc, setKhuVuc] = useState<any[]>([]);
   const [TrangThai, setTrangThai] = useState<any[]>([]);
-  const [dataGrid, setDataGrid] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [filterCondition, setFilterCondition] = useState({
@@ -94,103 +87,8 @@ export default function ProductsScreen() {
     KyHieu: "",
   });
 
-  // real time
-
-  const [hubConnection, setHubConnection] = useState(null);
-  const [localChange, setLocalChange] = useState(null);
-
-  const initSignalR = async () => {
-    try {
-      const connection = new signalR.HubConnectionBuilder()
-        .withUrl("https://api-beeland.beesky.vn/signalr-beeland")
-        .withAutomaticReconnect()
-        .configureLogging(signalR.LogLevel.Trace)
-        .build();
-
-      await connection.start();
-      // console.log("✅ Connected SignalR");
-
-      setHubConnection(connection);
-    } catch (err) {
-      // console.log("❌ SignalR error:", err);
-    }
-  };
-
-  useEffect(() => {
-    if (!hubConnection) return;
-
-    try {
-      hubConnection.on("ChangeTable", (response) => {
-        console.log(response, "response");
-
-        setDataGrid((prev) => {
-          return prev.map((block) => {
-            if (block.rawBlock?.maKhu !== response.data?.MaKhu) {
-              return block; // giữ nguyên reference
-            }
-
-            let changed = false;
-
-            const newFloors = block.rawBlock.floor.map((floor) => {
-              if (Number(floor.maTang) !== Number(response.data?.MaTang)) {
-                return floor;
-              }
-
-              const newDetails = floor.detailFloor.map((item) => {
-                if (Number(item.MaVT) !== Number(response.data?.MaVT)) {
-                  return item;
-                }
-
-                changed = true;
-
-                return {
-                  ...item,
-                  MaTT: response.maTT,
-                  MauNen: response.mauNen,
-                };
-              });
-
-              return {
-                ...floor,
-                detailFloor: newDetails,
-              };
-            });
-
-            if (!changed) return block;
-
-            return {
-              ...block,
-              rawBlock: {
-                ...block.rawBlock,
-                floor: newFloors,
-              },
-            };
-          });
-        });
-        setLocalChange({
-          MaTang: response.data?.MaTang,
-          MaVT: response.data?.MaVT,
-        });
-
-        setTimeout(() => setLocalChange(null), 1000);
-      });
-    } catch (err) {
-      // console.log("SignalR listen error:", err);
-    }
-  }, [hubConnection]);
-
-  useEffect(() => {
-    initSignalR();
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      hubConnection?.stop();
-    };
-  }, [hubConnection]);
-
-  const applyChangeFilter = (p, v) => {
-    let _filter = filterCondition;
+  const applyChangeFilter = (p: string, v: any) => {
+    const _filter = { ...filterCondition } as any;
     switch (p) {
       case "MaDA":
         _filter[p] = v;
@@ -216,67 +114,13 @@ export default function ProductsScreen() {
     setFilterCondition(_filter);
   };
 
-  const loadDataByDA = async (MaDA) => {
-    const resListKhu = await ProductService.getKhuVuc({ maDA: MaDA });
+  const loadDataByDA = async (MaDA: number) => {
+    const resListKhu = await ProductService.getKhuVuc({ MaDa: MaDA });
     setKhuVuc(resListKhu?.data || []);
-
-    handleFormGrid(MaDA);
-  };
-  const mapStatus = (maTT) => {
-    switch (maTT) {
-      case 1:
-        return "deposit";
-      case 2:
-        return "locked";
-      case 3:
-        return "sold";
-      case 11:
-        return "booking";
-      case 18:
-        return "locked";
-      default:
-        return "available";
-    }
   };
 
-  const handleFormGrid = async (MaDA) => {
-    const result = await PriceServices.getBlock({
-      maDA: MaDA ?? filterCondition?.MaDA,
-    });
-
-    const raw = result?.data || [];
-
-    const mappedBlocks = raw
-      .filter((b) => b.maKhu !== -1)
-      .map((block) => {
-        const units = [];
-
-        block.floor?.forEach((floor) => {
-          floor.detailFloor?.forEach((item) => {
-            units.push({
-              id: item.KyHieu,
-              floor: floor.maTang, // ⚠️ dùng số
-              column: item.MaVT, // ⚠️ dùng số
-              status: mapStatus(item.MaTT),
-              raw: item,
-            });
-          });
-        });
-
-        return {
-          name: block.tenKhu,
-          units,
-          rawBlock: block,
-          stats: {
-            total: units.length,
-            available: units.filter((u) => u.status === "available").length,
-            deposit: units.filter((u) => u.status === "deposit").length,
-          },
-        };
-      });
-
-    setDataGrid(mappedBlocks);
-  };
+  console.log(filterCondition);
+  
 
   const loadProducts = async () => {
     try {
@@ -284,16 +128,13 @@ export default function ProductsScreen() {
 
       const resDA = await ProjectService.getProjects({});
       setDuAn(resDA?.data || []);
-      const ma = Number(MaDA);
-      const finalMa = isNaN(ma) ? resDA?.data?.[0]?.MaDA : ma;
-
-      loadDataByDA(finalMa);
+      loadDataByDA(Number(MaDA) ?? resDA?.data?.[0]?.MaDA);
 
       const resTT = await FilterService.getStatusSP({});
       setTrangThai(resTT?.data || []);
 
       let filter = {
-        MaDA: finalMa ?? -1,
+        MaDA: Number(MaDA) ?? resDA?.data?.[0]?.MaDA ?? -1,
         MaKhu: filterCondition.MaKhu,
         MaPK: filterCondition.MaPK,
         MaTT: null,
@@ -304,14 +145,15 @@ export default function ProductsScreen() {
       setFilterCondition(filter);
       const res = await ProductService.getProducts(filter);
       setProducts2(res?.data || []);
+      console.log(res?.data?.[0], "res DA");
     } catch (error) {
-      // console.log("error load products", error);
+      console.log("error load products", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadProducts2 = async (_filter) => {
+  const loadProducts2 = async (_filter: any) => {
     try {
       setLoading(true);
 
@@ -327,6 +169,7 @@ export default function ProductsScreen() {
       loadDataByDA(_filter.MaDA);
 
       const res = await ProductService.getProducts(filter);
+      console.log(res?.data, "res products");
 
       setProducts2(res?.data || []);
     } catch (error) {
@@ -340,21 +183,37 @@ export default function ProductsScreen() {
     loadProducts();
   }, []);
 
-  useEffect(() => {
-    if (rightRef.current) {
-      rightRef.current.scrollTo({
-        y: scrollYRef.current,
-        animated: false,
-      });
-    }
-
-    if (leftRef.current) {
-      leftRef.current.scrollTo({
-        y: scrollYRef.current,
-        animated: false,
-      });
-    }
-  }, [dataGrid]);
+  const blocks: Block[] = [
+    {
+      name: "Block A1",
+      units: [
+        { id: "01-19", floor: "T19", column: "01", status: "deposit" },
+        { id: "04-18", floor: "T18", column: "04", status: "sold" },
+        { id: "05-17", floor: "T17", column: "05", status: "sold" },
+        { id: "03-16", floor: "T16", column: "03", status: "locked" },
+        { id: "01-15", floor: "T15", column: "01", status: "deposit" },
+        { id: "01-14", floor: "T14", column: "01", status: "locked" },
+        { id: "02-14", floor: "T14", column: "02", status: "available" },
+        { id: "04-13", floor: "T13", column: "04", status: "available" },
+        { id: "03-12", floor: "T12", column: "03", status: "available" },
+      ],
+      stats: { total: 10, available: 4, deposit: 3 },
+    },
+    {
+      name: "Block B2",
+      units: [
+        { id: "01-26", floor: "T26", column: "01", status: "available" },
+        { id: "05-24", floor: "T24", column: "05", status: "available" },
+        { id: "03-23", floor: "T23", column: "03", status: "deposit" },
+        { id: "01-22", floor: "T22", column: "01", status: "locked" },
+        { id: "02-21", floor: "T21", column: "02", status: "available" },
+        { id: "04-20", floor: "T20", column: "04", status: "sold" },
+        { id: "01-19", floor: "T19", column: "01", status: "deposit" },
+        { id: "04-18", floor: "T18", column: "04", status: "sold" },
+      ],
+      stats: { total: 10, available: 4, deposit: 2 },
+    },
+  ];
 
   const getStatusLabel = (status: number) => {
     const item = TrangThai.find((i) => i.MaTT === status);
@@ -366,15 +225,56 @@ export default function ProductsScreen() {
     return item?.ColorWeb || "#9CA3AF";
   };
 
+  const _filteredProducts = products.filter((product) => {
+    const matchesSearch = searchQuery
+      ? product.code.toLowerCase().includes(searchQuery.toLowerCase())
+      : true;
+
+    const matchesStatus =
+      _selectedStatus === "all" || product.status === _selectedStatus;
+
+    const matchesFavorites = onlyShowFavorites ? false : true;
+
+    return matchesSearch && matchesStatus && matchesFavorites;
+  });
+
   const handlePressProduct = (id: string) => {
     console.log("[Products] Navigate to product detail", { id });
     router.push({ pathname: "/product/[id]", params: { id } });
   };
 
-  const getHexColor = (number) => {
-    if (number === null || number === undefined) return "#ccc";
-    return "#" + (Number(number) >>> 0).toString(16).slice(-6);
+  const getUnitStatusColor = (status: Unit["status"]) => {
+    switch (status) {
+      case "deposit":
+        return "#10B981";
+      case "locked":
+        return "#F59E0B";
+      case "sold":
+        return "#EF4444";
+      case "available":
+        return "#3B82F6";
+      default:
+        return "#9CA3AF";
+    }
   };
+
+  const _getUnitStatusLabel = (status: Unit["status"]) => {
+    switch (status) {
+      case "deposit":
+        return "Cọc";
+      case "locked":
+        return "Lock";
+      case "sold":
+        return "Đã bán";
+      case "available":
+        return "Còn trống";
+      default:
+        return "";
+    }
+  };
+
+
+
   const currentOverviewBlock = overviewBlocks[0];
   const overviewStats = getOverviewStats(currentOverviewBlock);
 
@@ -416,6 +316,7 @@ export default function ProductsScreen() {
       color: "#3B82F6",
     },
   ];
+<<<<<<< devhuan
   const buildOverviewData = (dataGrid) => {
 
     
@@ -452,245 +353,194 @@ export default function ProductsScreen() {
       floor.units.sort((a, b) => a.column - b.column);
       floor.totalUnits = floor.units.length;
     });
+=======
+>>>>>>> main
 
-    return Object.values(floorsMap).sort(
-      (a, b) => b.floorNumber - a.floorNumber
-    );
-  };
+  const renderOverviewView = () => (
+    <View style={styles.overviewContainer}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.statusSummaryScroll}
+        contentContainerStyle={styles.statusSummaryContent}
+      >
+        {statusSummaryItems.map((item) => (
+          <TouchableOpacity
+            key={item.key}
+            style={[
+              styles.statusSummaryItem,
+              { backgroundColor: item.color },
+              selectedOverviewStatus === item.key &&
+                styles.statusSummaryItemActive,
+            ]}
+            onPress={() => setSelectedOverviewStatus(item.key)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.statusSummaryLabel}>{item.label}</Text>
+            <Text style={styles.statusSummaryCount}>{item.count}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
-  const buildStatusSummary = (floors) => {
-    const allUnits = floors.flatMap((f) => f.units);
+      {currentOverviewBlock.floors.map((floor) => {
+        const filteredUnits =
+          selectedOverviewStatus === "all"
+            ? floor.units
+            : floor.units.filter((u) => u.status === selectedOverviewStatus);
 
-    return [
-      {
-        key: "all",
-        label: "TỔNG",
-        count: allUnits.length,
-        color: "#3B82F6",
-      },
-      {
-        key: "available",
-        label: "TRỐNG",
-        count: allUnits.filter((u) => u.status === "available").length,
-        color: "#22C55E",
-      },
-      {
-        key: "deposit",
-        label: "ĐÃ CỌC",
-        count: allUnits.filter((u) => u.status === "deposit").length,
-        color: "#3B82F6",
-      },
-      {
-        key: "locked",
-        label: "KHÓA",
-        count: allUnits.filter((u) => u.status === "locked").length,
-        color: "#555A64",
-      },
-      {
-        key: "sold",
-        label: "ĐÃ BÁN",
-        count: allUnits.filter((u) => u.status === "sold").length,
-        color: "#EF4444",
-      },
-      {
-        key: "booking",
-        label: "BOOKING",
-        count: allUnits.filter((u) => u.status === "booking").length,
-        color: "#CCCCCC",
-      },
-    ];
-  };
-  const renderOverviewView = () => {
-    const floors = buildOverviewData(dataGrid);
-    const statusSummaryItems = buildStatusSummary(floors);
+        if (filteredUnits.length === 0) return null;
 
-    return (
-      <View style={styles.overviewContainer}>
-        {/* STATUS SUMMARY */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.statusSummaryScroll}
-          contentContainerStyle={styles.statusSummaryContent}
-        >
-          {statusSummaryItems.map((item) => (
-            <TouchableOpacity
-              key={item.key}
-              style={[
-                styles.statusSummaryItem,
-                { backgroundColor: item.color },
-                selectedOverviewStatus === item.key &&
-                  styles.statusSummaryItemActive,
-              ]}
-              onPress={() => setSelectedOverviewStatus(item.key)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.statusSummaryLabel}>{item.label}</Text>
-              <Text style={styles.statusSummaryCount}>{item.count}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* FLOORS */}
-        {floors.map((floor) => {
-          const filteredUnits =
-            selectedOverviewStatus === "all"
-              ? floor.units
-              : floor.units.filter((u) => u.status === selectedOverviewStatus);
-
-          if (filteredUnits.length === 0) return null;
-
-          return (
-            <View key={floor.id} style={styles.floorSection}>
-              {/* HEADER */}
-              <View style={styles.floorHeader}>
-                <Text style={styles.floorName}>{floor.name}</Text>
-                <Text style={styles.floorCount}>
-                  ({filteredUnits.length}/{floor.totalUnits} CĂN)
-                </Text>
-              </View>
-
-              {/* GRID */}
-              <View style={styles.unitsGrid}>
-                {filteredUnits.map((unit) => {
-                  const config = statusConfig[unit.status] || {};
-
-                  return (
-                    <TouchableOpacity
-                      key={unit.id}
-                      style={[
-                        styles.unitCard,
-                        {
-                          backgroundColor: config.bgColor || "#ccc",
-                        },
-                      ]}
-                      onPress={() => handlePressProduct(unit.id)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.unitCode} numberOfLines={1}>
-                        {unit.code}
-                      </Text>
-
-                      {!!unit.price && (
-                        <Text style={styles.unitPrice}>{unit.price}</Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+        return (
+          <View key={floor.name} style={styles.floorSection}>
+            <View style={styles.floorHeader}>
+              <Text style={styles.floorName}>{floor.name}</Text>
+              <Text style={styles.floorCount}>({floor.totalUnits} CĂN)</Text>
             </View>
-          );
-        })}
-      </View>
-    );
-  };
-  // const renderOverviewView = () => (
-  //   <View style={styles.overviewContainer}>
-  //     <ScrollView
-  //       horizontal
-  //       showsHorizontalScrollIndicator={false}
-  //       style={styles.statusSummaryScroll}
-  //       contentContainerStyle={styles.statusSummaryContent}
-  //     >
-  //       {statusSummaryItems.map((item) => (
-  //         <TouchableOpacity
-  //           key={item.key}
-  //           style={[
-  //             styles.statusSummaryItem,
-  //             { backgroundColor: item.color },
-  //             selectedOverviewStatus === item.key &&
-  //               styles.statusSummaryItemActive,
-  //           ]}
-  //           onPress={() => setSelectedOverviewStatus(item.key)}
-  //           activeOpacity={0.8}
-  //         >
-  //           <Text style={styles.statusSummaryLabel}>{item.label}</Text>
-  //           <Text style={styles.statusSummaryCount}>{item.count}</Text>
-  //         </TouchableOpacity>
-  //       ))}
-  //     </ScrollView>
-
-  //     {currentOverviewBlock.floors.map((floor) => {
-  //       const filteredUnits =
-  //         selectedOverviewStatus === "all"
-  //           ? floor.units
-  //           : floor.units.filter((u) => u.status === selectedOverviewStatus);
-
-  //       if (filteredUnits.length === 0) return null;
-
-  //       return (
-  //         <View key={floor.name} style={styles.floorSection}>
-  //           <View style={styles.floorHeader}>
-  //             <Text style={styles.floorName}>{floor.name}</Text>
-  //             <Text style={styles.floorCount}>({floor.totalUnits} CĂN)</Text>
-  //           </View>
-  //           <View style={styles.unitsGrid}>
-  //             {filteredUnits.map((unit) => {
-  //               const config = statusConfig[unit.status];
-  //               return (
-  //                 <TouchableOpacity
-  //                   key={unit.id}
-  //                   style={[
-  //                     styles.unitCard,
-  //                     { backgroundColor: config.bgColor },
-  //                   ]}
-  //                   onPress={() => handlePressProduct(unit.id)}
-  //                   activeOpacity={0.8}
-  //                 >
-  //                   <Text style={styles.unitCode} numberOfLines={1}>
-  //                     {unit.code}
-  //                   </Text>
-  //                   <Text style={styles.unitPrice}>{unit.price}</Text>
-  //                 </TouchableOpacity>
-  //               );
-  //             })}
-  //           </View>
-  //         </View>
-  //       );
-  //     })}
-  //   </View>
-  // );
-
-  const renderGridView = () => {
-    if (!dataGrid || dataGrid.length === 0) return null;
-
-    return (
-      <View style={styles.gridContainer}>
-        {TrangThai?.length > 0 && (
-          <View style={styles.statusLegend}>
-            <View style={styles.legendItems}>
-              {TrangThai.map((item) => (
-                <View key={item.MaTT} style={styles.legendItem}>
-                  <View
+            <View style={styles.unitsGrid}>
+              {filteredUnits.map((unit) => {
+                const config = statusConfig[unit.status];
+                return (
+                  <TouchableOpacity
+                    key={unit.id}
                     style={[
-                      styles.legendDot,
-                      { backgroundColor: item.ColorWeb || "#ccc" },
+                      styles.unitCard,
+                      { backgroundColor: config.bgColor },
                     ]}
-                  />
-                  <Text style={styles.legendText}>{item.TenTT}</Text>
-                </View>
-              ))}
+                    onPress={() => handlePressProduct(unit.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.unitCode} numberOfLines={1}>
+                      {unit.code}
+                    </Text>
+                    <Text style={styles.unitPrice}>{unit.price}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
-        )}
-        {dataGrid.map((block) => (
-          <BlockGrid
-            key={block.rawBlock?.maKhu}
-            block={block}
-            leftRef={leftRef}
-            rightRef={rightRef}
-            scrollYRef={scrollYRef}
-            localChange={localChange}
-            handlePressProduct={handlePressProduct}
-            getHexColor={getHexColor}
-            styles={styles}
-          />
-        ))}
-      </View>
-    );
-  };
+        );
+      })}
+    </View>
+  );
 
-  const formatCurrency = (num) => {
+  const CELL_SIZE = 48;
+  const FLOOR_COL_WIDTH = 48;
+  const TOTAL_COLUMNS = 20;
+
+  const renderGridView = () => (
+    <View style={styles.gridContainer}>
+      <View style={styles.statusLegend}>
+        <Text style={styles.legendTitle}>Trạng thái:</Text>
+        <View style={styles.legendItems}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: "#10B981" }]} />
+            <Text style={styles.legendText}>Cọc</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: "#F59E0B" }]} />
+            <Text style={styles.legendText}>Lock</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: "#EF4444" }]} />
+            <Text style={styles.legendText}>Đã bán</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: "#3B82F6" }]} />
+            <Text style={styles.legendText}>Còn trống</Text>
+          </View>
+        </View>
+      </View>
+
+      {blocks.map((block, blockIdx) => {
+        const blockFloors = [...new Set(block.units.map((u) => u.floor))].sort(
+          (a, b) => {
+            const numA = parseInt(a.replace("T", ""), 10);
+            const numB = parseInt(b.replace("T", ""), 10);
+            return numB - numA;
+          }
+        );
+        const _rawColumns = [...new Set(block.units.map((u) => u.column))].sort();
+        const blockColumns: string[] = [];
+        for (let i = 1; i <= TOTAL_COLUMNS; i++) {
+          const col = i.toString().padStart(2, '0');
+          blockColumns.push(col);
+        }
+
+        return (
+          <View key={blockIdx} style={styles.blockCard}>
+            <View style={styles.blockCardHeader}>
+              <Text style={styles.blockTitle}>{block.name}</Text>
+              <Text style={styles.blockStatsInline}>
+                {block.stats.total} căn • {block.stats.available} trống • {block.stats.deposit} cọc
+              </Text>
+            </View>
+
+            <View style={styles.gridTableWrapper}>
+              <View style={styles.fixedFloorCol}>
+                <View style={[styles.fixedHeaderCell, { height: CELL_SIZE, width: FLOOR_COL_WIDTH }]}>
+                  <Text style={styles.headerCellText}>Tầng</Text>
+                </View>
+                {blockFloors.map((floor) => (
+                  <View key={floor} style={[styles.fixedFloorCell, { height: CELL_SIZE, width: FLOOR_COL_WIDTH }]}>
+                    <Text style={styles.floorCellText}>{floor}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={true}
+                bounces={false}
+                contentContainerStyle={{ paddingRight: 8 }}
+              >
+                <View>
+                  <View style={styles.scrollHeaderRow}>
+                    {blockColumns.map((col) => (
+                      <View key={col} style={[styles.scrollHeaderCell, { width: CELL_SIZE, height: CELL_SIZE }]}>
+                        <Text style={styles.headerCellText}>{col}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {blockFloors.map((floor) => (
+                    <View key={floor} style={styles.scrollDataRow}>
+                      {blockColumns.map((col) => {
+                        const unit = block.units.find(
+                          (u) => u.floor === floor && u.column === col
+                        );
+                        return (
+                          <View key={`${floor}-${col}`} style={{ width: CELL_SIZE, height: CELL_SIZE, padding: 2 }}>
+                            {unit ? (
+                              <TouchableOpacity
+                                style={[
+                                  styles.unitCell,
+                                  { backgroundColor: getUnitStatusColor(unit.status) },
+                                ]}
+                                onPress={() => handlePressProduct(unit.id)}
+                                activeOpacity={0.8}
+                              >
+                                <Text style={styles.unitCellText}>{unit.id}</Text>
+                              </TouchableOpacity>
+                            ) : (
+                              <View style={styles.emptyCell}>
+                                <Text style={styles.emptyCellText}>-</Text>
+                              </View>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+
+  const formatCurrency = (num: number | null | undefined) => {
     if (!num) return "0 đ";
     return new Intl.NumberFormat("vi-VN").format(Math.round(num));
   };
@@ -739,10 +589,7 @@ export default function ProductsScreen() {
                   styles.headerViewBtn,
                   viewMode === "grid" && styles.headerViewBtnActive,
                 ]}
-                onPress={() => {
-                  setViewMode("grid");
-                  handleFormGrid(filterCondition?.MaDA);
-                }}
+                onPress={() => setViewMode("grid")}
                 activeOpacity={0.8}
               >
                 <Grid3x3
@@ -922,6 +769,46 @@ export default function ProductsScreen() {
                 ))}
               </View>
             </View>
+
+            {/* <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>Yêu thích</Text>
+              <View style={styles.filterOptionsGrid}>
+                <TouchableOpacity
+                  style={[
+                    styles.filterOption,
+                    !onlyShowFavorites && styles.filterOptionActive,
+                  ]}
+                  onPress={() => setOnlyShowFavorites(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      !onlyShowFavorites && styles.filterOptionTextActive,
+                    ]}
+                  >
+                    Tất cả
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.filterOption,
+                    onlyShowFavorites && styles.filterOptionActive,
+                  ]}
+                  onPress={() => setOnlyShowFavorites(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      onlyShowFavorites && styles.filterOptionTextActive,
+                    ]}
+                  >
+                    Chỉ yêu thích
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View> */}
           </View>
         )}
 
@@ -933,54 +820,105 @@ export default function ProductsScreen() {
                 <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
               </View>
             ) : (
-              <View style={styles.productTable}>
-                <View style={styles.tableHeader}>
-                  <Text style={[styles.tableHeaderText, styles.colStatus]}>
-                    Trạng thái
-                  </Text>
-                  <Text style={[styles.tableHeaderText, styles.colCode]}>
-                    Mã sản phẩm
-                  </Text>
-                  <Text style={[styles.tableHeaderText, styles.colPrice]}>
-                    Tổng giá trị gốm PBT
+              <View style={styles.productCardList}>
+                <View style={styles.productCountRow}>
+                  <Package color={Colors.primary} size={14} />
+                  <Text style={styles.productCountText}>
+                    {products2.length} sản phẩm
                   </Text>
                 </View>
-
                 {products2.map((product) => (
-                  // {filteredProducts.map((product) => (
-
                   <TouchableOpacity
                     key={product.maSP}
-                    style={styles.tableRow}
+                    style={styles.productCard}
                     activeOpacity={0.7}
                     onPress={() => handlePressProduct(product.maSP)}
+                    testID={`product-card-${product.maSP}`}
                   >
-                    <View
-                      style={[styles.colStatus, styles.statusBadgeContainer]}
-                    >
+                    <View style={styles.productCardLeft}>
                       <View
                         style={[
-                          styles.statusBadge,
-                          { backgroundColor: getStatusColor(product.maTT) },
+                          styles.productCardIcon,
+                          { backgroundColor: getStatusColor(product.maTT) + '18' },
                         ]}
                       >
-                        <Text style={styles.statusBadgeText}>
-                          {getStatusLabel(product.maTT)}
-                        </Text>
+                        <Home
+                          color={getStatusColor(product.maTT)}
+                          size={20}
+                        />
                       </View>
                     </View>
-                    <Text style={[styles.tableText, styles.colCode]}>
-                      {product.maSanPham}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.tableText,
-                        styles.colPrice,
-                        styles.priceText,
-                      ]}
-                    >
-                      {formatCurrency(product?.tongGiaGomPBT)}
-                    </Text>
+                    <View style={styles.productCardBody}>
+                      <View style={styles.productCardTop}>
+                        <Text style={styles.productCardCode} numberOfLines={1}>
+                          {product.maSanPham || product.kyHieu || '---'}
+                        </Text>
+                        <ChevronRight color={Colors.textTertiary} size={18} />
+                      </View>
+
+                      <View style={styles.productCardInfoRow}>
+                        {product.dtThongThuy ? (
+                          <View style={styles.productCardInfoItem}>
+                            <Maximize2 color={Colors.textSecondary} size={12} />
+                            <Text style={styles.productCardInfoText}>
+                              {product.dtThongThuy} m²
+                            </Text>
+                          </View>
+                        ) : null}
+                        {product.tenLoaiSP ? (
+                          <View style={styles.productCardInfoItem}>
+                            <Home color={Colors.textSecondary} size={12} />
+                            <Text style={styles.productCardInfoText}>
+                              {product.tenLoaiSP}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {product.tenKhu ? (
+                          <View style={styles.productCardInfoItem}>
+                            <Text style={styles.productCardInfoText}>
+                              {product.tenKhu}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <View style={styles.productCardBottom}>
+                        <View style={styles.productCardPriceRow}>
+                          <DollarSign color={Colors.primary} size={13} />
+                          <Text style={styles.productCardPrice}>
+                            {product?.tongGiaGomPBT
+                              ? formatCurrency(product.tongGiaGomPBT)
+                              : 'Liên hệ'}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.productStatusChip,
+                            {
+                              backgroundColor:
+                                getStatusColor(product.maTT) + '14',
+                            },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.productStatusDot,
+                              {
+                                backgroundColor: getStatusColor(product.maTT),
+                              },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.productStatusLabel,
+                              { color: getStatusColor(product.maTT) },
+                            ]}
+                          >
+                            {getStatusLabel(product.maTT)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -1118,65 +1056,120 @@ const styles = StyleSheet.create({
     fontWeight: "700" as const,
     color: Colors.primary,
   },
-  productTable: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
+  productCardList: {
+    gap: 0,
+  },
+  productCountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 12,
+  },
+  productCountText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    fontWeight: "500" as const,
+  },
+  productCard: {
+    flexDirection: "row",
+    backgroundColor: "#FFF",
+    borderRadius: 14,
+    marginBottom: 10,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: "rgba(0,0,0,0.04)",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+      },
+    }),
   },
-  tableHeader: {
-    flexDirection: "row",
-    backgroundColor: "#F9FAFB",
+  productCardLeft: {
+    width: 72,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  productCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  productCardBody: {
+    flex: 1,
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingRight: 12,
   },
-  tableHeaderText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
+  productCardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  productCardCode: {
+    fontSize: 15,
+    fontWeight: "700" as const,
+    color: Colors.text,
+    flex: 1,
+    marginRight: 4,
+  },
+  productCardInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginTop: 4,
+    gap: 10,
+  },
+  productCardInfoItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  productCardInfoText: {
+    fontSize: 12,
     color: Colors.textSecondary,
   },
-  tableRow: {
+  productCardBottom: {
     flexDirection: "row",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
     alignItems: "center",
-    position: "relative" as const,
+    justifyContent: "space-between",
+    marginTop: 8,
   },
-  tableText: {
+  productCardPriceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  productCardPrice: {
     fontSize: 14,
-    color: Colors.text,
+    fontWeight: "700" as const,
+    color: Colors.primary,
   },
-  colStatus: {
-    width: 110,
+  productStatusChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
-  colCode: {
-    flex: 1,
+  productStatusDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginRight: 5,
   },
-  colPrice: {
-    width: 100,
-    textAlign: "right" as const,
-    paddingRight: 4,
-  },
-  statusBadgeContainer: {
-    alignItems: "flex-start",
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusBadgeText: {
-    fontSize: 12,
+  productStatusLabel: {
+    fontSize: 11,
     fontWeight: "600" as const,
-    color: Colors.white,
-  },
-  priceText: {
-    fontWeight: "500" as const,
   },
   filterPanel: {
     backgroundColor: Colors.white,
@@ -1255,10 +1248,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text,
   },
+  blocksScrollContent: {
+    gap: 12,
+    paddingRight: 4,
+  },
   blockCard: {
     backgroundColor: "#FEF7F3",
     borderRadius: 12,
-    padding: 16,
+    // padding: 2,
     borderWidth: 1,
     borderColor: Colors.border,
   },
@@ -1266,43 +1263,57 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700" as const,
     color: Colors.text,
-    marginBottom: 16,
+    // marginBottom: 16,
+    padding: 10,
   },
-  grid: {
-    gap: 8,
-  },
-  gridRow: {
+  blockCardHeader: {
     flexDirection: "row",
     gap: 3,
     marginBottom: 3,
-    height: 50,
+    height: 45,
   },
   gridCell: {
     // flex: 1,
     // aspectRatio: 1,
-    width: 50,
-    height: 50,
+    width: 45,
+    height: 45,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#E8EDF5",
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-
-  headerCell: {
-    backgroundColor: "#F3E8DC",
-    borderRadius: 6,
+  fixedFloorCell: {
+    justifyContent: "center",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+    backgroundColor: "#F8FAFC",
+  },
+  scrollHeaderRow: {
+    flexDirection: "row",
+  },
+  scrollHeaderCell: {
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#E8EDF5",
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    borderLeftWidth: 1,
+    borderLeftColor: "#E0E4EB",
+  },
+  scrollDataRow: {
+    flexDirection: "row",
   },
   headerCellText: {
-    fontSize: 10,
-    fontWeight: "600" as const,
+    fontSize: 13,
+    fontWeight: "700" as const,
     color: Colors.text,
-  },
-  floorCell: {
-    backgroundColor: "#E8EAF6",
-    borderRadius: 6,
   },
   floorCellText: {
-    fontSize: 10,
-    fontWeight: "600" as const,
-    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: Colors.primary,
   },
   unitCell: {
     width: "100%",
@@ -1312,9 +1323,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   unitCellText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: "700" as const,
-    color: "#333",
+    color: Colors.white,
   },
   emptyCell: {
     width: "100%",
@@ -1367,7 +1378,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: "center" as const,
-    marginTop: 15,
+    paddingVertical: 10,
   },
   overviewContainer: {
     gap: 16,

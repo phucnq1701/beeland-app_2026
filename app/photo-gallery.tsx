@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,75 +6,113 @@ import {
   ScrollView,
   TouchableOpacity,
   ImageBackground,
-} from 'react-native';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronRight, Image as ImageIcon, Share2, Filter } from 'lucide-react-native';
-import Colors from '@/constants/colors';
-import { photoFolders } from '@/mocks/photos';
-import { Alert, Platform } from 'react-native';
-import { featuredProperties } from '@/mocks/properties';
+} from "react-native";
+import { Stack, useRouter, useLocalSearchParams } from "expo-router";
+import {
+  ChevronRight,
+  Image as ImageIcon,
+  Share2,
+  Filter,
+} from "lucide-react-native";
+import Colors from "@/constants/colors";
+import { photoFolders } from "@/mocks/photos";
+import { Alert, Platform } from "react-native";
+import { featuredProperties } from "@/mocks/properties";
+import { DocumentService } from "./sevices/DocumentService";
 
 export default function PhotoGalleryScreen() {
   const router = useRouter();
   const { projectId } = useLocalSearchParams<{ projectId?: string }>();
-  const [selectedProject, setSelectedProject] = useState<string>(projectId || 'all');
+  const [selectedProject, setSelectedProject] = useState<string>(
+    projectId || "all"
+  );
+  const [folder, setFolder] = useState([]);
+
+  const loadFolder = async () => {
+    let res = await DocumentService.get({
+      MaDA: Number(projectId),
+      TypeDocument: "GALLERY",
+      InputSearch: "",
+    });
+
+    setFolder(res?.data ?? []);
+  };
+console.log(folder,'folder');
+
+  useEffect(() => {
+    loadFolder();
+  }, []);
 
   const projects = [
-    { id: 'all', title: 'Tất cả dự án' },
-    ...featuredProperties.map(p => ({ id: p.id, title: p.title }))
+    { id: "all", title: "Tất cả dự án" },
+    ...featuredProperties.map((p) => ({ id: p.id, title: p.title })),
   ];
 
-  const filteredFolders = useMemo(() => {
-    if (selectedProject === 'all') {
-      return photoFolders;
-    }
-    return photoFolders.filter(folder => folder.projectId === selectedProject);
-  }, [selectedProject]);
-
-  const handleFolderPress = (folderId: string) => {
-    console.log('[PhotoGallery] Folder pressed', { folderId });
-    router.push(`/photos/${folderId}` as any);
+  const handleFolderPress = (folder: string) => {
+    router.push({
+      pathname: "/photos/[folderId]",
+      params: {
+        folderId: folder.ID,
+        folder: JSON.stringify(folder), 
+      },
+    });
   };
 
-  const handleShareFolder = async (folder: typeof photoFolders[0], e: any) => {
+
+
+  const handleShareFolder = async (
+    folder: (typeof photoFolders)[0],
+    e: any
+  ) => {
     e.stopPropagation();
-    console.log('[PhotoGallery] Sharing folder', { folderId: folder.id });
+    console.log("[PhotoGallery] Sharing folder", { folderId: folder.id });
 
     try {
-      const folderText = `📸 Thư viện ảnh: ${folder.name}\n\n` +
+      const folderText =
+        `📸 Thư viện ảnh: ${folder.name}\n\n` +
         `Tổng số: ${folder.photoCount} ảnh\n\n` +
         `Xem tất cả ảnh trong folder "${folder.name}"`;
 
-      if (Platform.OS === 'web') {
+      if (Platform.OS === "web") {
         if (navigator.share) {
           await navigator.share({
             title: folder.name,
             text: folderText,
           });
         } else {
-          Alert.alert('Thông báo', 'Chia sẻ không khả dụng trên trình duyệt này');
+          Alert.alert(
+            "Thông báo",
+            "Chia sẻ không khả dụng trên trình duyệt này"
+          );
         }
       } else {
-        const Share = await import('react-native').then(m => m.Share);
+        const Share = await import("react-native").then((m) => m.Share);
         await Share.share({
           message: folderText,
           title: folder.name,
         });
       }
-      console.log('[PhotoGallery] Folder shared successfully');
+      console.log("[PhotoGallery] Folder shared successfully");
     } catch (error) {
-      console.error('[PhotoGallery] Share error', error);
-      if ((error as any).message !== 'User did not share') {
-        Alert.alert('Lỗi', 'Có lỗi xảy ra khi chia sẻ folder');
+      console.error("[PhotoGallery] Share error", error);
+      if ((error as any).message !== "User did not share") {
+        Alert.alert("Lỗi", "Có lỗi xảy ra khi chia sẻ folder");
       }
     }
   };
+
+
+const formatImageUrl = (url?: string) => {
+  if (!url) return "";
+  return url.startsWith("http") ? url : 'https://upload.beesky.vn/' + url;
+};
+
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Thư viện ảnh',
+          title: "Thư viện ảnh",
           headerStyle: {
             backgroundColor: Colors.white,
           },
@@ -88,59 +126,62 @@ export default function PhotoGalleryScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
+        {/* <View style={styles.header}>
           <ImageIcon color={Colors.primary} size={32} strokeWidth={2} />
           <Text style={styles.headerTitle}>Thư viện ảnh dự án</Text>
           <Text style={styles.headerSubtitle}>
             Khám phá hình ảnh chi tiết về dự án
           </Text>
-        </View>
+        </View> */}
 
         {!projectId && (
           <View style={styles.filterSection}>
-          <View style={styles.filterHeader}>
-            <Filter color={Colors.text} size={20} strokeWidth={2} />
-            <Text style={styles.filterLabel}>Lọc theo dự án</Text>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScrollContent}
-          >
-            {projects.map((project) => (
-              <TouchableOpacity
-                key={project.id}
-                style={[
-                  styles.filterButton,
-                  selectedProject === project.id && styles.filterButtonActive,
-                ]}
-                onPress={() => setSelectedProject(project.id)}
-                activeOpacity={0.7}
-              >
-                <Text
+            <View style={styles.filterHeader}>
+              <Filter color={Colors.text} size={20} strokeWidth={2} />
+              <Text style={styles.filterLabel}>Lọc theo dự án</Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterScrollContent}
+            >
+              {projects.map((project) => (
+                <TouchableOpacity
+                  key={project.id}
                   style={[
-                    styles.filterButtonText,
-                    selectedProject === project.id && styles.filterButtonTextActive,
+                    styles.filterButton,
+                    selectedProject === project.id && styles.filterButtonActive,
                   ]}
+                  onPress={() => setSelectedProject(project.id)}
+                  activeOpacity={0.7}
                 >
-                  {project.title}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+                  <Text
+                    style={[
+                      styles.filterButtonText,
+                      selectedProject === project.id &&
+                        styles.filterButtonTextActive,
+                    ]}
+                  >
+                    {project.title}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
         )}
 
         <View style={styles.foldersContainer}>
-          {filteredFolders.map((folder) => (
+          {folder.map((folder) => (
             <TouchableOpacity
-              key={folder.id}
+              key={folder.ID}
               style={styles.folderCard}
               activeOpacity={0.7}
-              onPress={() => handleFolderPress(folder.id)}
+              onPress={() => handleFolderPress(folder)}
             >
               <ImageBackground
-                source={{ uri: folder.coverPhoto }}
+                source={{
+                  uri: formatImageUrl(folder?.FirstFile),
+                }}
                 style={styles.folderBackground}
                 imageStyle={styles.folderBackgroundImage}
               >
@@ -149,22 +190,26 @@ export default function PhotoGalleryScreen() {
                     <View
                       style={[
                         styles.folderIconContainer,
-                        { backgroundColor: folder.color },
+                        { backgroundColor: folder.Color },
                       ]}
                     >
-                      <Text style={styles.folderEmoji}>{folder.icon}</Text>
+                      {/* <Text style={styles.folderEmoji}>{folder.Icon}</Text> */}
                     </View>
                     <View style={styles.folderHeaderRight}>
-                      <TouchableOpacity
+                      {/* <TouchableOpacity
                         style={styles.shareButton}
                         onPress={(e) => handleShareFolder(folder, e)}
                         activeOpacity={0.7}
                       >
-                        <Share2 color={Colors.white} size={18} strokeWidth={2} />
-                      </TouchableOpacity>
+                        <Share2
+                          color={Colors.white}
+                          size={18}
+                          strokeWidth={2}
+                        />
+                      </TouchableOpacity> */}
                       <View style={styles.folderBadge}>
                         <Text style={styles.folderBadgeText}>
-                          {folder.photoCount} ảnh
+                          {folder.SoLuong} ảnh
                         </Text>
                       </View>
                     </View>
@@ -172,12 +217,12 @@ export default function PhotoGalleryScreen() {
 
                   <View style={styles.folderFooter}>
                     <Text style={styles.folderName} numberOfLines={2}>
-                      {folder.name}
+                      {folder.Name}
                     </Text>
                     <View
                       style={[
                         styles.folderArrow,
-                        { backgroundColor: folder.color },
+                        { backgroundColor: folder.Color },
                       ]}
                     >
                       <ChevronRight
@@ -209,14 +254,14 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 32,
     paddingHorizontal: 24,
     backgroundColor: Colors.white,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
     marginBottom: 20,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
     shadowRadius: 12,
@@ -224,7 +269,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.text,
     marginTop: 12,
     marginBottom: 8,
@@ -232,7 +277,7 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 15,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
+    fontWeight: "500" as const,
   },
   filterSection: {
     backgroundColor: Colors.white,
@@ -240,22 +285,22 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     marginHorizontal: 20,
     borderRadius: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
   },
   filterHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     paddingHorizontal: 16,
     marginBottom: 12,
   },
   filterLabel: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   filterScrollContent: {
@@ -276,7 +321,7 @@ const styles = StyleSheet.create({
   },
   filterButtonText: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   filterButtonTextActive: {
@@ -289,8 +334,8 @@ const styles = StyleSheet.create({
   folderCard: {
     height: 200,
     borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
+    overflow: "hidden",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 16,
@@ -298,48 +343,48 @@ const styles = StyleSheet.create({
   },
   folderBackground: {
     flex: 1,
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   folderBackgroundImage: {
     borderRadius: 20,
   },
   folderOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
     padding: 20,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
   },
   folderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
   },
   folderHeaderRight: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
   },
   shareButton: {
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   folderIconContainer: {
     width: 56,
     height: 56,
     borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   folderEmoji: {
     fontSize: 28,
   },
   folderBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -347,17 +392,17 @@ const styles = StyleSheet.create({
   folderBadgeText: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
   },
   folderFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   folderName: {
     flex: 1,
     fontSize: 20,
-    fontWeight: '700' as const,
+    fontWeight: "700" as const,
     color: Colors.white,
     lineHeight: 26,
     marginRight: 12,
@@ -366,7 +411,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
