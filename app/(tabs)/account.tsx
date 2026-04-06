@@ -23,9 +23,7 @@ import {
   Calendar,
   Users,
   Receipt,
-  Coins,
   FileText,
-  BarChart3,
   Crown,
   Sparkles,
 } from "lucide-react-native";
@@ -102,13 +100,7 @@ const managementItems: ManagementItem[] = [
     route: "/bookings",
     color: Colors.iconBlue,
   },
-  {
-    id: "7",
-    title: "Hoa hồng",
-    icon: Coins,
-    route: "/commissions",
-    color: Colors.iconGreen,
-  },
+
   {
     id: "8",
     title: "Hợp đồng",
@@ -116,13 +108,7 @@ const managementItems: ManagementItem[] = [
     route: "/contracts",
     color: Colors.iconPurple,
   },
-  {
-    id: "9",
-    title: "Báo cáo",
-    icon: BarChart3,
-    route: "/reports",
-    color: Colors.iconPink,
-  },
+
 ];
 
 export default function AccountScreen() {
