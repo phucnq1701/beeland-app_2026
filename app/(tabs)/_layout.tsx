@@ -1,18 +1,11 @@
 import { Tabs } from "expo-router";
-import { Home, MessageCircle, User } from "lucide-react-native";
+import { Home, User } from "lucide-react-native";
 import React from "react";
-import { View, Text, StyleSheet, Platform } from "react-native";
+import { View, StyleSheet, Platform } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
 import Colors from "@/constants/colors";
-import { chatGroups } from "@/mocks/chatGroups";
-
 export default function TabLayout() {
-  const totalUnreadCount = chatGroups.reduce(
-    (sum, group) => sum + group.unreadCount,
-    0
-  );
-
   return (
     <Tabs
       screenOptions={{
@@ -54,29 +47,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="ai-chat"
         options={{
-          title: "Chat",
-          tabBarIcon: ({ focused }) => (
-            <View style={[styles.iconContainer, focused && styles.iconContainerActive]}>
-              <MessageCircle 
-                color={focused ? Colors.primary : Colors.textTertiary} 
-                size={22} 
-                strokeWidth={focused ? 2.5 : 2}
-              />
-              {totalUnreadCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
-                  </Text>
-                </View>
-              )}
-              {focused && (
-                <LinearGradient
-                  colors={[Colors.primary, Colors.primaryLight]}
-                  style={styles.activeIndicator}
-                />
-              )}
-            </View>
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen
