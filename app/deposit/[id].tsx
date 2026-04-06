@@ -27,7 +27,12 @@ import {
   UserCheck,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { DEMO_DEPOSIT_DETAILS, DEMO_DEPOSITS, DepositDetail, DepositPaymentHistory } from "@/mocks/deposits";
+import {
+  DEMO_DEPOSIT_DETAILS,
+  DEMO_DEPOSITS,
+  DepositDetail,
+  DepositPaymentHistory,
+} from "@/mocks/deposits";
 
 function formatCurrency(value: number): string {
   if (!value && value !== 0) return "0 đ";
@@ -76,6 +81,7 @@ function buildFallbackDetail(id: string, dataParam?: string): DepositDetail {
   }
 
   return {
+    ...parsed,
     maDC: parsed.maDC || base.maDC,
     soPhieu: parsed.soPhieu || base.soPhieu,
     ngayDatCoc: parsed.ngayDatCoc || base.ngayDatCoc,
@@ -85,15 +91,15 @@ function buildFallbackDetail(id: string, dataParam?: string): DepositDetail {
     trangThai: parsed.trangThai || base.trangThai,
     tenDA: parsed.tenDA || base.tenDA,
     colorTT: parsed.colorTT || base.colorTT,
-    soCMND: "079XXXXXXXX",
-    diDong: "09XXXXXXXX",
-    email: "email@example.com",
-    diaChi: "TP. Hồ Chí Minh",
+    soCMND: parsed?.SoCMND,
+    diDong: parsed?.DiDong ?? parsed?.DiDong2,
+    email: parsed?.email ?? "email@example.com",
+    diaChi: parsed?.DiaChi ?? "",
     loaiSP: "Căn hộ",
-    dienTich: "—",
-    donGia: 0,
+    dienTich: `${parsed?.DienTichTT} m2`,
+    donGia: parsed?.DonGiaTT,
     ghiChu: "",
-    nguoiTao: "Admin",
+    nguoiTao: parsed?.NguoiNhap,
     ngayTao: parsed.ngayDatCoc || base.ngayDatCoc,
     lichSuDongTien: [
       {
@@ -109,7 +115,10 @@ function buildFallbackDetail(id: string, dataParam?: string): DepositDetail {
 }
 
 export default function DepositDetailScreen() {
-  const { id, data: dataParam } = useLocalSearchParams<{ id: string; data?: string }>();
+  const { id, data: dataParam } = useLocalSearchParams<{
+    id: string;
+    data?: string;
+  }>();
   const router = useRouter();
 
   const [detail, setDetail] = useState<DepositDetail | null>(null);
@@ -119,24 +128,33 @@ export default function DepositDetailScreen() {
 
   useEffect(() => {
     const d = buildFallbackDetail(id || "", dataParam);
+
     setDetail(d);
-    console.log("[DepositDetail] Loaded detail for", id);
   }, [id, dataParam]);
 
   useEffect(() => {
     if (detail) {
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
       ]).start();
     }
   }, [detail, fadeAnim, slideAnim]);
 
   if (!detail) return null;
 
-  const progressPercent = detail.soTienCoc > 0
-    ? Math.round((detail.tongDaDong / detail.soTienCoc) * 100)
-    : 0;
+  const progressPercent =
+    detail.TienCoc > 0
+      ? Math.round((detail.TienCoc / detail.TongGiaTriHDMB) * 100)
+      : 0;
 
   return (
     <View style={styles.container}>
@@ -148,27 +166,52 @@ export default function DepositDetailScreen() {
           headerTintColor: Colors.white,
           headerTitleStyle: { fontWeight: "700" as const, fontSize: 18 },
           headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{ padding: 4 }}
+            >
               <ChevronLeft color={Colors.white} size={24} />
             </TouchableOpacity>
           ),
         }}
       />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <Animated.View
+          style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
+        >
           <View style={styles.infoCard}>
             <View style={styles.infoHeader}>
-              <View style={[styles.iconWrap, { backgroundColor: `${detail.colorTT}15` }]}>
+              <View
+                style={[
+                  styles.iconWrap,
+                  { backgroundColor: `${detail.colorTT}15` },
+                ]}
+              >
                 <Landmark color={detail.colorTT} size={22} />
               </View>
               <View style={styles.infoHeaderText}>
                 <Text style={styles.depositNumber}>{detail.soPhieu}</Text>
                 <Text style={styles.projectName}>{detail.tenDA}</Text>
               </View>
-              <View style={[styles.statusBadge, { backgroundColor: `${detail.colorTT}18` }]}>
-                <View style={[styles.statusDot, { backgroundColor: detail.colorTT }]} />
-                <Text style={[styles.statusText, { color: detail.colorTT }]}>{detail.trangThai}</Text>
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: `${detail.colorTT}18` },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: detail.colorTT },
+                  ]}
+                />
+                <Text style={[styles.statusText, { color: detail.colorTT }]}>
+                  {detail.trangThai}
+                </Text>
               </View>
             </View>
 
@@ -184,14 +227,18 @@ export default function DepositDetailScreen() {
                 <Hash color={Colors.textTertiary} size={13} />
                 <View>
                   <Text style={styles.metaLabel}>Mã SP</Text>
-                  <Text style={[styles.metaValue, { color: Colors.primary }]}>{detail.maSP}</Text>
+                  <Text style={[styles.metaValue, { color: Colors.primary }]}>
+                    {detail.maSP}
+                  </Text>
                 </View>
               </View>
               <View style={styles.metaItem}>
                 <Calendar color={Colors.textTertiary} size={13} />
                 <View>
                   <Text style={styles.metaLabel}>Ngày đặt cọc</Text>
-                  <Text style={styles.metaValue}>{formatDate(detail.ngayDatCoc)}</Text>
+                  <Text style={styles.metaValue}>
+                    {formatDate(detail.ngayDatCoc)}
+                  </Text>
                 </View>
               </View>
               <View style={styles.metaItem}>
@@ -236,7 +283,9 @@ export default function DepositDetailScreen() {
                 <BadgeDollarSign color={Colors.accent.green} size={14} />
                 <Text style={styles.productLabel}>Đơn giá</Text>
                 <Text style={styles.productValue}>
-                  {detail.donGia > 0 ? formatCurrencyShort(detail.donGia) + "/m²" : "—"}
+                  {detail.donGia > 0
+                    ? formatCurrencyShort(detail.donGia) + "/m²"
+                    : "—"}
                 </Text>
               </View>
             </View>
@@ -248,7 +297,9 @@ export default function DepositDetailScreen() {
             ) : null}
             <View style={styles.creatorRow}>
               <UserCheck color={Colors.textTertiary} size={12} />
-              <Text style={styles.creatorText}>Tạo bởi: {detail.nguoiTao} • {formatDate(detail.ngayTao)}</Text>
+              <Text style={styles.creatorText}>
+                Tạo bởi: {detail.nguoiTao} • {formatDate(detail.ngayTao)}
+              </Text>
             </View>
           </View>
 
@@ -256,42 +307,64 @@ export default function DepositDetailScreen() {
             <Text style={styles.sectionTitle}>Tổng quan thanh toán</Text>
             <View style={styles.progressBarWrap}>
               <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+                <View
+                  style={[
+                    styles.progressBarFill,
+                    { width: `${progressPercent}%` },
+                  ]}
+                />
               </View>
               <Text style={styles.progressPercent}>{progressPercent}%</Text>
             </View>
 
             <View style={styles.overviewStats}>
               <View style={styles.statItem}>
-                <View style={[styles.statIcon, { backgroundColor: "rgba(59,130,246,0.1)" }]}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    { backgroundColor: "rgba(59,130,246,0.1)" },
+                  ]}
+                >
                   <CreditCard color="#3B82F6" size={16} />
                 </View>
                 <View>
                   <Text style={styles.statLabel}>Tiền cọc</Text>
                   <Text style={[styles.statValue, { color: "#3B82F6" }]}>
-                    {formatCurrencyShort(detail.soTienCoc)}
+                    {formatCurrencyShort(detail.TienCoc)}
                   </Text>
                 </View>
               </View>
               <View style={styles.statItem}>
-                <View style={[styles.statIcon, { backgroundColor: "rgba(16,185,129,0.1)" }]}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    { backgroundColor: "rgba(16,185,129,0.1)" },
+                  ]}
+                >
                   <BadgeDollarSign color="#10B981" size={16} />
                 </View>
                 <View>
                   <Text style={styles.statLabel}>Đã đóng</Text>
                   <Text style={[styles.statValue, { color: "#10B981" }]}>
-                    {formatCurrencyShort(detail.tongDaDong)}
+                    {formatCurrencyShort(detail.TienCoc)}
                   </Text>
                 </View>
               </View>
               <View style={styles.statItem}>
-                <View style={[styles.statIcon, { backgroundColor: "rgba(239,68,68,0.1)" }]}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    { backgroundColor: "rgba(239,68,68,0.1)" },
+                  ]}
+                >
                   <CreditCard color="#EF4444" size={16} />
                 </View>
                 <View>
                   <Text style={styles.statLabel}>Còn lại</Text>
                   <Text style={[styles.statValue, { color: "#EF4444" }]}>
-                    {formatCurrencyShort(detail.tongConLai)}
+                    {formatCurrencyShort(
+                      detail.TongGiaTriHDMB - detail?.TienCoc
+                    )}
                   </Text>
                 </View>
               </View>
@@ -299,7 +372,9 @@ export default function DepositDetailScreen() {
 
             <View style={styles.valueRow}>
               <Text style={styles.valueLabel}>Tổng tiền đặt cọc</Text>
-              <Text style={styles.valueAmount}>{formatCurrency(detail.soTienCoc)}</Text>
+              <Text style={styles.valueAmount}>
+                {formatCurrency(detail.TienCoc)}
+              </Text>
             </View>
           </View>
 
@@ -309,45 +384,58 @@ export default function DepositDetailScreen() {
             {detail.lichSuDongTien.length === 0 ? (
               <View style={styles.emptyHistory}>
                 <CreditCard color={Colors.textTertiary} size={32} />
-                <Text style={styles.emptyHistoryText}>Chưa có lịch sử đóng tiền</Text>
+                <Text style={styles.emptyHistoryText}>
+                  Chưa có lịch sử đóng tiền
+                </Text>
               </View>
             ) : (
-              detail.lichSuDongTien.map((item: DepositPaymentHistory, idx: number) => {
-                const isLast = idx === detail.lichSuDongTien.length - 1;
-                return (
-                  <View key={idx}>
-                    <View style={styles.historyRow}>
-                      <View style={styles.historyLeft}>
-                        <View style={styles.historyDot}>
-                          <CircleDot color="#10B981" size={18} />
-                        </View>
-                        {!isLast && <View style={styles.historyLine} />}
-                      </View>
-                      <View style={styles.historyContent}>
-                        <View style={styles.historyTopRow}>
-                          <View style={styles.historyDateWrap}>
-                            <Calendar color={Colors.textTertiary} size={13} />
-                            <Text style={styles.historyDate}>{formatDate(item.ngayThu)}</Text>
+              detail.lichSuDongTien.map(
+                (item: DepositPaymentHistory, idx: number) => {
+                  const isLast = idx === detail.lichSuDongTien.length - 1;
+                  return (
+                    <View key={idx}>
+                      <View style={styles.historyRow}>
+                        <View style={styles.historyLeft}>
+                          <View style={styles.historyDot}>
+                            <CircleDot color="#10B981" size={18} />
                           </View>
-                          <Text style={styles.historyAmount}>
-                            +{formatCurrencyShort(item.soTien)}
-                          </Text>
+                          {!isLast && <View style={styles.historyLine} />}
                         </View>
-                        {item.ghiChu ? (
-                          <Text style={styles.historyNote}>{item.ghiChu}</Text>
-                        ) : null}
-                        {item.hinhThuc ? (
-                          <View style={styles.paymentMethodBadge}>
-                            <CreditCard color={Colors.accent.blue} size={10} />
-                            <Text style={styles.paymentMethodText}>{item.hinhThuc}</Text>
+                        <View style={styles.historyContent}>
+                          <View style={styles.historyTopRow}>
+                            <View style={styles.historyDateWrap}>
+                              <Calendar color={Colors.textTertiary} size={13} />
+                              <Text style={styles.historyDate}>
+                                {formatDate(item.ngayThu)}
+                              </Text>
+                            </View>
+                            <Text style={styles.historyAmount}>
+                              +{formatCurrencyShort(item.soTien)}
+                            </Text>
                           </View>
-                        ) : null}
+                          {item.ghiChu ? (
+                            <Text style={styles.historyNote}>
+                              {item.ghiChu}
+                            </Text>
+                          ) : null}
+                          {item.hinhThuc ? (
+                            <View style={styles.paymentMethodBadge}>
+                              <CreditCard
+                                color={Colors.accent.blue}
+                                size={10}
+                              />
+                              <Text style={styles.paymentMethodText}>
+                                {item.hinhThuc}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
                       </View>
+                      {!isLast && <View style={{ height: 4 }} />}
                     </View>
-                    {!isLast && <View style={{ height: 4 }} />}
-                  </View>
-                );
-              })
+                  );
+                }
+              )
             )}
           </View>
 
@@ -372,7 +460,12 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 12 },
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
+      },
       android: { elevation: 3 },
       web: { boxShadow: "0 3px 12px rgba(0,0,0,0.07)" },
     }),
@@ -470,7 +563,12 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 12 },
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
+      },
       android: { elevation: 3 },
       web: { boxShadow: "0 3px 12px rgba(0,0,0,0.07)" },
     }),
@@ -536,7 +634,12 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 12 },
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
+      },
       android: { elevation: 3 },
       web: { boxShadow: "0 3px 12px rgba(0,0,0,0.07)" },
     }),
@@ -621,7 +724,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 12 },
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
+      },
       android: { elevation: 3 },
       web: { boxShadow: "0 3px 12px rgba(0,0,0,0.07)" },
     }),

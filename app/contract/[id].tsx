@@ -30,6 +30,7 @@ import {
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { CustomerService } from "@/sevices/CustomerService";
+import { HopDongService } from "@/sevices/HopDongService";
 
 interface PaymentHistory {
   ngayThu: string;
@@ -155,10 +156,34 @@ const DEMO_CONTRACT: ContractDetail = {
     { ngayThu: "2025-07-10", soTien: 325000000, ghiChu: "Thu đợt 2 - Đợt 2" },
   ],
   tienDoDot: [
-    { dot: "Đợt 1 - Ký HĐMB (30%)", phaiThu: 975000000, daThu: 975000000, conNo: 0, trangThai: "paid" },
-    { dot: "Đợt 2 - Xây thô (30%)", phaiThu: 975000000, daThu: 975000000, conNo: 0, trangThai: "paid" },
-    { dot: "Đợt 3 - Hoàn thiện (30%)", phaiThu: 975000000, daThu: 0, conNo: 975000000, trangThai: "unpaid" },
-    { dot: "Đợt 4 - Bàn giao (10%)", phaiThu: 325000000, daThu: 0, conNo: 325000000, trangThai: "unpaid" },
+    {
+      dot: "Đợt 1 - Ký HĐMB (30%)",
+      phaiThu: 975000000,
+      daThu: 975000000,
+      conNo: 0,
+      trangThai: "paid",
+    },
+    {
+      dot: "Đợt 2 - Xây thô (30%)",
+      phaiThu: 975000000,
+      daThu: 975000000,
+      conNo: 0,
+      trangThai: "paid",
+    },
+    {
+      dot: "Đợt 3 - Hoàn thiện (30%)",
+      phaiThu: 975000000,
+      daThu: 0,
+      conNo: 975000000,
+      trangThai: "unpaid",
+    },
+    {
+      dot: "Đợt 4 - Bàn giao (10%)",
+      phaiThu: 325000000,
+      daThu: 0,
+      conNo: 325000000,
+      trangThai: "unpaid",
+    },
   ],
   tongPhaiThu: 3250000000,
   tongDaThu: 1950000000,
@@ -204,7 +229,11 @@ function getDocIcon(type: string) {
     case "doc":
       return { icon: FileText, color: "#3B82F6", bg: "rgba(59,130,246,0.08)" };
     case "xls":
-      return { icon: FileSpreadsheet, color: "#10B981", bg: "rgba(16,185,129,0.08)" };
+      return {
+        icon: FileSpreadsheet,
+        color: "#10B981",
+        bg: "rgba(16,185,129,0.08)",
+      };
     case "jpg":
     case "png":
       return { icon: Image, color: "#F59E0B", bg: "rgba(245,158,11,0.08)" };
@@ -216,7 +245,11 @@ function getDocIcon(type: string) {
 function getInstallmentIcon(status: "paid" | "partial" | "unpaid") {
   switch (status) {
     case "paid":
-      return { icon: CheckCircle, color: "#10B981", bg: "rgba(16,185,129,0.1)" };
+      return {
+        icon: CheckCircle,
+        color: "#10B981",
+        bg: "rgba(16,185,129,0.1)",
+      };
     case "partial":
       return { icon: Clock, color: "#F59E0B", bg: "rgba(245,158,11,0.1)" };
     case "unpaid":
@@ -225,15 +258,87 @@ function getInstallmentIcon(status: "paid" | "partial" | "unpaid") {
 }
 
 export default function ContractDetailScreen() {
-  const { id, data: dataParam } = useLocalSearchParams<{ id: string; data?: string }>();
+  const { id, data: dataParam } = useLocalSearchParams<{
+    id: string;
+    data?: string;
+  }>();
   const router = useRouter();
 
   const [contract, setContract] = useState<ContractDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<"history" | "progress" | "documents">("progress");
+  const [activeTab, setActiveTab] = useState<
+    "history" | "progress" | "documents"
+  >("progress");
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+
+  const [dataTienDo, setDataTienDo] = useState([]);
+  const [lichSuThu, setLichSuThu] = useState([]);
+  const [overview, setOverview] = useState({
+    tongPhaiThu: 0,
+    tongDaThu: 0,
+    tongConNo: 0,
+    progressPercent: 0,
+  });
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    let res = await HopDongService.getDetailLTT({ MaPGC: id });
+    const tienDoDot = res?.data.map((item) => ({
+      dot: `Đợt ${item.dotTT} (${item.tyLeTT}%)`,
+      phaiThu: item.phaiThu || 0,
+      daThu: item.daThu || 0,
+      conNo: item.conLai || 0,
+      trangThai:
+        item.conLai === 0 ? "paid" : item.daThu > 0 ? "partial" : "unpaid",
+    }));
+    setDataTienDo(tienDoDot);
+
+    const tongPhaiThu = res?.data.reduce(
+      (sum, item) => sum + (item.phaiThu || 0),
+      0
+    );
+
+    const tongDaThu = res?.data.reduce(
+      (sum, item) => sum + (item.daThu || 0),
+      0
+    );
+
+    const tongConNo = res?.data.reduce(
+      (sum, item) => sum + (item.conLai || 0),
+      0
+    );
+
+    const progressPercent =
+      tongPhaiThu > 0 ? Math.round((tongDaThu / tongPhaiThu) * 100) : 0;
+
+    // 👉 set state overview
+    setOverview({
+      tongPhaiThu,
+      tongDaThu,
+      tongConNo,
+      progressPercent,
+    });
+
+    let resLST = await HopDongService.getDetailLST({
+      MaPGC: id,
+      isPhieuThu: true,
+    });
+    const lichSuThu = resLST?.data.map((item) => ({
+      ngayThu: item.ngayThu
+        ? new Date(item.ngayThu).toISOString().slice(0, 10)
+        : "",
+
+      soTien: item.tienThu || 0,
+
+      ghiChu: `Thu đợt ${item.dotTT}${item.name ? " - " + item.name : ""}`,
+    }));
+    setLichSuThu(lichSuThu);
+  };
 
   const buildFromParam = useCallback((): ContractDetail => {
     if (dataParam) {
@@ -261,18 +366,33 @@ export default function ContractDetailScreen() {
   const loadContractDetail = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await CustomerService.getAllContracts({ maHD: id, Limit: 1, Offset: 1 });
-      console.log("[ContractDetail] API response:", JSON.stringify(res?.data?.length));
+      const res = await CustomerService.getAllContracts({
+        maHD: id,
+        Limit: 1,
+        Offset: 1,
+      });
+      console.log(
+        "[ContractDetail] API response:",
+        JSON.stringify(res?.data?.length)
+      );
 
       if (res?.data?.length) {
         const item = res.data[0];
-        const lichSuThu: PaymentHistory[] = (item.lichSuThuTien || item.lichSuThu || []).map((h: any) => ({
+        const lichSuThu: PaymentHistory[] = (
+          item.lichSuThuTien ||
+          item.lichSuThu ||
+          []
+        ).map((h: any) => ({
           ngayThu: h.ngayThu || h.NgayThu || h.ngayPhieu || "",
           soTien: h.soTien || h.SoTien || h.giaTri || 0,
           ghiChu: h.ghiChu || h.GhiChu || h.dienGiai || "",
         }));
 
-        const tienDoDot: Installment[] = (item.tienDoDot || item.dotThanhToan || []).map((d: any) => {
+        const tienDoDot: Installment[] = (
+          item.tienDoDot ||
+          item.dotThanhToan ||
+          []
+        ).map((d: any) => {
           const phaiThu = d.phaiThu || d.PhaiThu || d.soTienDot || 0;
           const daThu = d.daThu || d.DaThu || d.soTienDaThu || 0;
           const conNo = phaiThu - daThu;
@@ -334,8 +454,16 @@ export default function ContractDetailScreen() {
   useEffect(() => {
     if (!loading && contract) {
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
       ]).start();
     }
   }, [loading, contract, fadeAnim, slideAnim]);
@@ -351,7 +479,10 @@ export default function ContractDetailScreen() {
             headerTintColor: Colors.white,
             headerTitleStyle: { fontWeight: "700" as const, fontSize: 18 },
             headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={{ padding: 4 }}
+              >
                 <ChevronLeft color={Colors.white} size={24} />
               </TouchableOpacity>
             ),
@@ -367,9 +498,10 @@ export default function ContractDetailScreen() {
 
   if (!contract) return null;
 
-  const progressPercent = contract.tongPhaiThu > 0
-    ? Math.round((contract.tongDaThu / contract.tongPhaiThu) * 100)
-    : 0;
+  const progressPercent =
+    overview.tongPhaiThu > 0
+      ? Math.round((overview.tongDaThu / overview.tongPhaiThu) * 100)
+      : 0;
 
   return (
     <View style={styles.container}>
@@ -381,27 +513,52 @@ export default function ContractDetailScreen() {
           headerTintColor: Colors.white,
           headerTitleStyle: { fontWeight: "700" as const, fontSize: 18 },
           headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{ padding: 4 }}
+            >
               <ChevronLeft color={Colors.white} size={24} />
             </TouchableOpacity>
           ),
         }}
       />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <Animated.View
+          style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
+        >
           <View style={styles.contractInfoCard}>
             <View style={styles.contractInfoHeader}>
-              <View style={[styles.contractIconWrap, { backgroundColor: `${contract.colorTT}15` }]}>
+              <View
+                style={[
+                  styles.contractIconWrap,
+                  { backgroundColor: `${contract.colorTT}15` },
+                ]}
+              >
                 <FileText color={contract.colorTT} size={22} />
               </View>
               <View style={styles.contractInfoHeaderText}>
                 <Text style={styles.contractNumber}>{contract.soHopDong}</Text>
                 <Text style={styles.projectName}>{contract.tenDA}</Text>
               </View>
-              <View style={[styles.statusBadge, { backgroundColor: `${contract.colorTT}18` }]}>
-                <View style={[styles.statusDot, { backgroundColor: contract.colorTT }]} />
-                <Text style={[styles.statusText, { color: contract.colorTT }]}>{contract.trangThai}</Text>
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: `${contract.colorTT}18` },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: contract.colorTT },
+                  ]}
+                />
+                <Text style={[styles.statusText, { color: contract.colorTT }]}>
+                  {contract.trangThai}
+                </Text>
               </View>
             </View>
 
@@ -416,13 +573,17 @@ export default function ContractDetailScreen() {
               </View>
               <View style={styles.metaItem}>
                 <Text style={styles.metaLabel}>Ngày ký</Text>
-                <Text style={styles.metaValue}>{formatDate(contract.ngayKy)}</Text>
+                <Text style={styles.metaValue}>
+                  {formatDate(contract.ngayKy)}
+                </Text>
               </View>
             </View>
 
             <View style={styles.contractValueRow}>
               <Text style={styles.contractValueLabel}>Giá trị hợp đồng</Text>
-              <Text style={styles.contractValueAmount}>{formatCurrency(contract.tongGiaTri)}</Text>
+              <Text style={styles.contractValueAmount}>
+                {formatCurrency(contract.tongGiaTri)}
+              </Text>
             </View>
           </View>
 
@@ -430,42 +591,62 @@ export default function ContractDetailScreen() {
             <Text style={styles.sectionTitle}>Tổng quan thu tiền</Text>
             <View style={styles.progressBarWrap}>
               <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+                <View
+                  style={[
+                    styles.progressBarFill,
+                    { width: `${overview?.progressPercent}%` },
+                  ]}
+                />
               </View>
               <Text style={styles.progressPercent}>{progressPercent}%</Text>
             </View>
 
             <View style={styles.overviewStats}>
               <View style={styles.statItem}>
-                <View style={[styles.statIcon, { backgroundColor: "rgba(59,130,246,0.1)" }]}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    { backgroundColor: "rgba(59,130,246,0.1)" },
+                  ]}
+                >
                   <DollarSign color="#3B82F6" size={16} />
                 </View>
                 <View>
                   <Text style={styles.statLabel}>Phải thu</Text>
                   <Text style={[styles.statValue, { color: "#3B82F6" }]}>
-                    {formatCurrencyShort(contract.tongPhaiThu)}
+                    {formatCurrencyShort(overview.tongPhaiThu)}
                   </Text>
                 </View>
               </View>
               <View style={styles.statItem}>
-                <View style={[styles.statIcon, { backgroundColor: "rgba(16,185,129,0.1)" }]}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    { backgroundColor: "rgba(16,185,129,0.1)" },
+                  ]}
+                >
                   <TrendingUp color="#10B981" size={16} />
                 </View>
                 <View>
                   <Text style={styles.statLabel}>Đã thu</Text>
                   <Text style={[styles.statValue, { color: "#10B981" }]}>
-                    {formatCurrencyShort(contract.tongDaThu)}
+                    {formatCurrencyShort(overview.tongDaThu)}
                   </Text>
                 </View>
               </View>
               <View style={styles.statItem}>
-                <View style={[styles.statIcon, { backgroundColor: "rgba(239,68,68,0.1)" }]}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    { backgroundColor: "rgba(239,68,68,0.1)" },
+                  ]}
+                >
                   <AlertCircle color="#EF4444" size={16} />
                 </View>
                 <View>
                   <Text style={styles.statLabel}>Còn nợ</Text>
                   <Text style={[styles.statValue, { color: "#EF4444" }]}>
-                    {formatCurrencyShort(contract.tongConNo)}
+                    {formatCurrencyShort(overview.tongConNo)}
                   </Text>
                 </View>
               </View>
@@ -479,10 +660,19 @@ export default function ContractDetailScreen() {
               activeOpacity={0.7}
             >
               <Layers
-                color={activeTab === "progress" ? Colors.primary : Colors.textTertiary}
+                color={
+                  activeTab === "progress"
+                    ? Colors.primary
+                    : Colors.textTertiary
+                }
                 size={16}
               />
-              <Text style={[styles.tabText, activeTab === "progress" && styles.tabTextActive]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === "progress" && styles.tabTextActive,
+                ]}
+              >
                 Tiến độ đợt
               </Text>
             </TouchableOpacity>
@@ -492,23 +682,42 @@ export default function ContractDetailScreen() {
               activeOpacity={0.7}
             >
               <CreditCard
-                color={activeTab === "history" ? Colors.primary : Colors.textTertiary}
+                color={
+                  activeTab === "history" ? Colors.primary : Colors.textTertiary
+                }
                 size={16}
               />
-              <Text style={[styles.tabText, activeTab === "history" && styles.tabTextActive]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === "history" && styles.tabTextActive,
+                ]}
+              >
                 Lịch sử thu
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.tab, activeTab === "documents" && styles.tabActive]}
+              style={[
+                styles.tab,
+                activeTab === "documents" && styles.tabActive,
+              ]}
               onPress={() => setActiveTab("documents")}
               activeOpacity={0.7}
             >
               <Paperclip
-                color={activeTab === "documents" ? Colors.primary : Colors.textTertiary}
+                color={
+                  activeTab === "documents"
+                    ? Colors.primary
+                    : Colors.textTertiary
+                }
                 size={16}
               />
-              <Text style={[styles.tabText, activeTab === "documents" && styles.tabTextActive]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === "documents" && styles.tabTextActive,
+                ]}
+              >
                 Tài liệu
               </Text>
             </TouchableOpacity>
@@ -516,80 +725,114 @@ export default function ContractDetailScreen() {
 
           {activeTab === "progress" && (
             <View style={styles.sectionCard}>
-              {contract.tienDoDot.map((dot, idx) => {
-                const iconInfo = getInstallmentIcon(dot.trangThai);
-                const Icon = iconInfo.icon;
-                const isLast = idx === contract.tienDoDot.length - 1;
-                return (
-                  <View key={idx}>
-                    <View style={styles.installmentRow}>
-                      <View style={styles.installmentLeft}>
-                        <View style={[styles.installmentIconWrap, { backgroundColor: iconInfo.bg }]}>
-                          <Icon color={iconInfo.color} size={16} />
+              {dataTienDo?.length === 0 ? (
+                <View style={styles.emptyHistory}>
+                  <Layers color={Colors.textTertiary} size={32} />
+                  <Text style={styles.emptyHistoryText}>
+                    Chưa có tiến độ đợt
+                  </Text>
+                </View>
+              ) : (
+                dataTienDo?.map((dot, idx) => {
+                  const iconInfo = getInstallmentIcon(dot.trangThai);
+                  const Icon = iconInfo.icon;
+                  const isLast = idx === contract.tienDoDot.length - 1;
+                  return (
+                    <View key={idx}>
+                      <View style={styles.installmentRow}>
+                        <View style={styles.installmentLeft}>
+                          <View
+                            style={[
+                              styles.installmentIconWrap,
+                              { backgroundColor: iconInfo.bg },
+                            ]}
+                          >
+                            <Icon color={iconInfo.color} size={16} />
+                          </View>
+                          {!isLast && <View style={styles.installmentLine} />}
                         </View>
-                        {!isLast && <View style={styles.installmentLine} />}
-                      </View>
-                      <View style={styles.installmentContent}>
-                        <Text style={styles.installmentDot}>{dot.dot}</Text>
-                        <View style={styles.installmentGrid}>
-                          <View style={styles.installmentGridItem}>
-                            <Text style={styles.gridLabel}>Phải thu</Text>
-                            <Text style={styles.gridValue}>{formatCurrencyShort(dot.phaiThu)}</Text>
-                          </View>
-                          <View style={styles.installmentGridItem}>
-                            <Text style={styles.gridLabel}>Đã thu</Text>
-                            <Text style={[styles.gridValue, { color: "#10B981" }]}>
-                              {formatCurrencyShort(dot.daThu)}
-                            </Text>
-                          </View>
-                          <View style={styles.installmentGridItem}>
-                            <Text style={styles.gridLabel}>Còn nợ</Text>
-                            <Text
-                              style={[
-                                styles.gridValue,
-                                { color: dot.conNo > 0 ? "#EF4444" : "#10B981" },
-                              ]}
-                            >
-                              {formatCurrencyShort(dot.conNo)}
-                            </Text>
-                          </View>
-                        </View>
-                        {dot.phaiThu > 0 && (
-                          <View style={styles.miniProgressWrap}>
-                            <View style={styles.miniProgressBg}>
-                              <View
+                        <View style={styles.installmentContent}>
+                          <Text style={styles.installmentDot}>{dot.dot}</Text>
+                          <View style={styles.installmentGrid}>
+                            <View style={styles.installmentGridItem}>
+                              <Text style={styles.gridLabel}>Phải thu</Text>
+                              <Text style={styles.gridValue}>
+                                {formatCurrencyShort(dot.phaiThu)}
+                              </Text>
+                            </View>
+                            <View style={styles.installmentGridItem}>
+                              <Text style={styles.gridLabel}>Đã thu</Text>
+                              <Text
+                                style={[styles.gridValue, { color: "#10B981" }]}
+                              >
+                                {formatCurrencyShort(dot.daThu)}
+                              </Text>
+                            </View>
+                            <View style={styles.installmentGridItem}>
+                              <Text style={styles.gridLabel}>Còn nợ</Text>
+                              <Text
                                 style={[
-                                  styles.miniProgressFill,
+                                  styles.gridValue,
                                   {
-                                    width: `${Math.min(100, Math.round((dot.daThu / dot.phaiThu) * 100))}%`,
-                                    backgroundColor: iconInfo.color,
+                                    color:
+                                      dot.conNo > 0 ? "#EF4444" : "#10B981",
                                   },
                                 ]}
-                              />
+                              >
+                                {formatCurrencyShort(dot.conNo)}
+                              </Text>
                             </View>
-                            <Text style={[styles.miniProgressText, { color: iconInfo.color }]}>
-                              {Math.round((dot.daThu / dot.phaiThu) * 100)}%
-                            </Text>
                           </View>
-                        )}
+                          {dot.phaiThu > 0 && (
+                            <View style={styles.miniProgressWrap}>
+                              <View style={styles.miniProgressBg}>
+                                <View
+                                  style={[
+                                    styles.miniProgressFill,
+                                    {
+                                      width: `${Math.min(
+                                        100,
+                                        Math.round(
+                                          (dot.daThu / dot.phaiThu) * 100
+                                        )
+                                      )}%`,
+                                      backgroundColor: iconInfo.color,
+                                    },
+                                  ]}
+                                />
+                              </View>
+                              <Text
+                                style={[
+                                  styles.miniProgressText,
+                                  { color: iconInfo.color },
+                                ]}
+                              >
+                                {Math.round((dot.daThu / dot.phaiThu) * 100)}%
+                              </Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
+                      {!isLast && <View style={{ height: 4 }} />}
                     </View>
-                    {!isLast && <View style={{ height: 4 }} />}
-                  </View>
-                );
-              })}
+                  );
+                })
+              )}
             </View>
           )}
 
           {activeTab === "history" && (
             <View style={styles.sectionCard}>
-              {contract.lichSuThu.length === 0 ? (
+              {lichSuThu.length === 0 ? (
+                // {true ? (
                 <View style={styles.emptyHistory}>
                   <CreditCard color={Colors.textTertiary} size={32} />
-                  <Text style={styles.emptyHistoryText}>Chưa có lịch sử thu tiền</Text>
+                  <Text style={styles.emptyHistoryText}>
+                    Chưa có lịch sử thu tiền
+                  </Text>
                 </View>
               ) : (
-                contract.lichSuThu.map((item, idx) => {
+                lichSuThu.map((item, idx) => {
                   const isLast = idx === contract.lichSuThu.length - 1;
                   return (
                     <View key={idx}>
@@ -604,14 +847,18 @@ export default function ContractDetailScreen() {
                           <View style={styles.historyTopRow}>
                             <View style={styles.historyDateWrap}>
                               <Calendar color={Colors.textTertiary} size={13} />
-                              <Text style={styles.historyDate}>{formatDate(item.ngayThu)}</Text>
+                              <Text style={styles.historyDate}>
+                                {formatDate(item.ngayThu)}
+                              </Text>
                             </View>
                             <Text style={styles.historyAmount}>
                               +{formatCurrencyShort(item.soTien)}
                             </Text>
                           </View>
                           {item.ghiChu ? (
-                            <Text style={styles.historyNote}>{item.ghiChu}</Text>
+                            <Text style={styles.historyNote}>
+                              {item.ghiChu}
+                            </Text>
                           ) : null}
                         </View>
                       </View>
@@ -625,14 +872,17 @@ export default function ContractDetailScreen() {
 
           {activeTab === "documents" && (
             <View style={styles.sectionCard}>
-              {contract.taiLieu.length === 0 ? (
+              {/* {contract.taiLieu.length === 0 ? ( */}
+              {true ? (
                 <View style={styles.emptyHistory}>
                   <Paperclip color={Colors.textTertiary} size={32} />
                   <Text style={styles.emptyHistoryText}>Chưa có tài liệu</Text>
                 </View>
               ) : (
                 <>
-                  <Text style={styles.docCount}>{contract.taiLieu.length} tài liệu</Text>
+                  <Text style={styles.docCount}>
+                    {contract.taiLieu.length} tài liệu
+                  </Text>
                   {contract.taiLieu.map((doc, idx) => {
                     const docIconInfo = getDocIcon(doc.type);
                     const DocIcon = docIconInfo.icon;
@@ -643,21 +893,34 @@ export default function ContractDetailScreen() {
                         style={[styles.docRow, !isLast && styles.docRowBorder]}
                         activeOpacity={0.6}
                       >
-                        <View style={[styles.docIconWrap, { backgroundColor: docIconInfo.bg }]}>
+                        <View
+                          style={[
+                            styles.docIconWrap,
+                            { backgroundColor: docIconInfo.bg },
+                          ]}
+                        >
                           <DocIcon color={docIconInfo.color} size={18} />
                         </View>
                         <View style={styles.docInfo}>
-                          <Text style={styles.docName} numberOfLines={1}>{doc.name}</Text>
+                          <Text style={styles.docName} numberOfLines={1}>
+                            {doc.name}
+                          </Text>
                           <View style={styles.docMeta}>
-                            <Text style={styles.docType}>{doc.type.toUpperCase()}</Text>
+                            <Text style={styles.docType}>
+                              {doc.type.toUpperCase()}
+                            </Text>
                             <View style={styles.docMetaDot} />
                             <Text style={styles.docSize}>{doc.size}</Text>
                             <View style={styles.docMetaDot} />
-                            <Text style={styles.docDate}>{formatDate(doc.date)}</Text>
+                            <Text style={styles.docDate}>
+                              {formatDate(doc.date)}
+                            </Text>
                           </View>
                           {doc.category ? (
                             <View style={styles.docCategoryWrap}>
-                              <Text style={styles.docCategory}>{doc.category}</Text>
+                              <Text style={styles.docCategory}>
+                                {doc.category}
+                              </Text>
                             </View>
                           ) : null}
                         </View>
@@ -704,7 +967,12 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 12 },
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
+      },
       android: { elevation: 3 },
       web: { boxShadow: "0 3px 12px rgba(0,0,0,0.07)" },
     }),
@@ -802,7 +1070,12 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 12 },
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
+      },
       android: { elevation: 3 },
       web: { boxShadow: "0 3px 12px rgba(0,0,0,0.07)" },
     }),
@@ -875,7 +1148,12 @@ const styles = StyleSheet.create({
     padding: 4,
     marginBottom: 12,
     ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
       android: { elevation: 2 },
       web: { boxShadow: "0 2px 8px rgba(0,0,0,0.05)" },
     }),
@@ -905,7 +1183,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 12 },
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
+      },
       android: { elevation: 3 },
       web: { boxShadow: "0 3px 12px rgba(0,0,0,0.07)" },
     }),

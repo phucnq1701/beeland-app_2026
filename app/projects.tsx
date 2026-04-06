@@ -68,14 +68,21 @@ export default function ProjectsScreen() {
     [router]
   );
 
+  // const filteredProjects = projects.filter((p: any) => {
+  //   if (!search.trim()) return true;
+  //   const q = search?.toLowerCase();
+  //   return (
+  //     (p.TenDA || "")?.toLowerCase().includes(q) ||
+  //     (p.district || "")?.toLowerCase().includes(q) ||
+  //     (p.MaDA || "")?.toLowerCase().includes(q)
+  //   );
+  // });
   const filteredProjects = projects.filter((p: any) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      (p.TenDA || "").toLowerCase().includes(q) ||
-      (p.district || "").toLowerCase().includes(q) ||
-      (p.MaDA || "").toLowerCase().includes(q)
-    );
+    const q = (search || "").trim().toLowerCase();
+    if (!q) return true;
+  
+    return [p?.TenDA, p?.district, p?.MaDA]
+      .some((field) => String(field || "").toLowerCase().includes(q));
   });
 
   const renderProject = useCallback(

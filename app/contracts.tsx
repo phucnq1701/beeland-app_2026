@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -27,6 +33,7 @@ import Colors from "@/constants/colors";
 import { CustomerService } from "@/sevices/CustomerService";
 import { FilterService } from "@/sevices/FilterService";
 import { ProjectService } from "@/sevices/ProjectService";
+import { HopDongService } from "@/sevices/HopDongService";
 
 interface Contract {
   maHD: string;
@@ -44,15 +51,11 @@ function formatCurrency(value: number): string {
   if (!value && value !== 0) return "0";
   if (value >= 1000000000) {
     const bil = value / 1000000000;
-    return bil % 1 === 0
-      ? `${bil} tỷ`
-      : `${bil.toFixed(1)} tỷ`;
+    return bil % 1 === 0 ? `${bil} tỷ` : `${bil.toFixed(1)} tỷ`;
   }
   if (value >= 1000000) {
     const mil = value / 1000000;
-    return mil % 1 === 0
-      ? `${mil} triệu`
-      : `${mil.toFixed(1)} triệu`;
+    return mil % 1 === 0 ? `${mil} triệu` : `${mil.toFixed(1)} triệu`;
   }
   return new Intl.NumberFormat("vi-VN").format(value) + " đ";
 }
@@ -73,7 +76,7 @@ function formatDate(dateStr: string): string {
 const statusColorMap: Record<string, string> = {
   "Đã duyệt": "#10B981",
   "Chờ duyệt": "#F59E0B",
-  "Hủy": "#EF4444",
+  Hủy: "#EF4444",
   "Đang thực hiện": "#3B82F6",
   "Hoàn thành": "#10B981",
   "Thanh lý": "#8B5CF6",
@@ -109,57 +112,74 @@ const DEMO_CONTRACTS: Contract[] = [
   },
 ];
 
-const ContractCard = React.memo(({ item, onPress }: { item: Contract; onPress: () => void }) => {
-  const sColor = getStatusColor(item.trangThai, item.colorTT);
+const ContractCard = React.memo(
+  ({ item, onPress }: { item: Contract; onPress: () => void }) => {
+    const sColor = getStatusColor(item.trangThai, item.colorTT);
 
-  return (
-    <TouchableOpacity
-      style={styles.contractCard}
-      activeOpacity={0.65}
-      testID={`contract-card-${item.maHD}`}
-      onPress={onPress}
-    >
-      <View style={[styles.statusIndicator, { backgroundColor: sColor }]} />
-      <View style={styles.cardBody}>
-        <View style={styles.rowTop}>
-          <View style={styles.rowTopLeft}>
-            <Text style={styles.contractNumber} numberOfLines={1}>
-              {item.soHopDong || "—"}
-            </Text>
-            <Text style={styles.customerName} numberOfLines={1}>
-              {item.tenKH || "—"}
-            </Text>
-          </View>
-          {item.trangThai ? (
-            <View style={[styles.statusChip, { backgroundColor: `${sColor}18` }]}>
-              <View style={[styles.statusDot, { backgroundColor: sColor }]} />
-              <Text style={[styles.statusLabel, { color: sColor }]}>
-                {item.trangThai}
+    return (
+      <TouchableOpacity
+        style={styles.contractCard}
+        activeOpacity={0.65}
+        testID={`contract-card-${item.maHD}`}
+        onPress={onPress}
+      >
+        <View style={[styles.statusIndicator, { backgroundColor: sColor }]} />
+        <View style={styles.cardBody}>
+          <View style={styles.rowTop}>
+            <View style={styles.rowTopLeft}>
+              <Text style={styles.contractNumber} numberOfLines={1}>
+                {item.soHopDong || "—"}
+              </Text>
+              <Text style={styles.customerName} numberOfLines={1}>
+                {item.tenKH || "—"}
               </Text>
             </View>
-          ) : null}
+            {item.trangThai ? (
+              <View
+                style={[styles.statusChip, { backgroundColor: `${sColor}18` }]}
+              >
+                <View style={[styles.statusDot, { backgroundColor: sColor }]} />
+                <Text style={[styles.statusLabel, { color: sColor }]}>
+                  {item.trangThai}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.rowBottom}>
+            <View style={styles.metaRow}>
+              <Building2 color={Colors.textTertiary} size={11} />
+              <Text style={styles.metaText} numberOfLines={1}>
+                {item.tenDA || "—"}
+              </Text>
+            </View>
+            <View style={styles.metaRow}>
+              <Hash color={Colors.primary} size={11} />
+              <Text
+                style={[
+                  styles.metaText,
+                  { color: Colors.primary, fontWeight: "600" as const },
+                ]}
+              >
+                {item.maSP || "—"}
+              </Text>
+            </View>
+            <View style={styles.metaRow}>
+              <Calendar color={Colors.textTertiary} size={11} />
+              <Text style={styles.metaText}>
+                {formatDate(item.ngayKy) || "—"}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }} />
+            <Text style={styles.priceValue}>
+              {formatCurrency(item.tongGiaTri)}
+            </Text>
+            <ChevronRight color={Colors.textLight} size={16} />
+          </View>
         </View>
-        <View style={styles.rowBottom}>
-          <View style={styles.metaRow}>
-            <Building2 color={Colors.textTertiary} size={11} />
-            <Text style={styles.metaText} numberOfLines={1}>{item.tenDA || "—"}</Text>
-          </View>
-          <View style={styles.metaRow}>
-            <Hash color={Colors.primary} size={11} />
-            <Text style={[styles.metaText, { color: Colors.primary, fontWeight: "600" as const }]}>{item.maSP || "—"}</Text>
-          </View>
-          <View style={styles.metaRow}>
-            <Calendar color={Colors.textTertiary} size={11} />
-            <Text style={styles.metaText}>{formatDate(item.ngayKy) || "—"}</Text>
-          </View>
-          <View style={{ flex: 1 }} />
-          <Text style={styles.priceValue}>{formatCurrency(item.tongGiaTri)}</Text>
-          <ChevronRight color={Colors.textLight} size={16} />
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-});
+      </TouchableOpacity>
+    );
+  }
+);
 
 export default function ContractsScreen() {
   const router = useRouter();
@@ -178,6 +198,10 @@ export default function ContractsScreen() {
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<number>(0);
 
+  const [page, setPage] = useState(1);
+  const [totalRows, setTotalRows] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+
   const [filterCondition, setFilterCondition] = useState({
     TuNgay: "2000-01-01",
     DenNgay: "2100-01-01",
@@ -185,8 +209,10 @@ export default function ContractsScreen() {
     MaTT: 0,
     inputSearch: "",
     Offset: 1,
-    Limit: 100,
+    Limit: 20,
   });
+
+  
 
   const toggleFilters = useCallback(() => {
     const toValue = showFilters ? 0 : 1;
@@ -220,36 +246,89 @@ export default function ContractsScreen() {
     }
   }, []);
 
-  const loadContracts = useCallback(async (filter: any) => {
-    setLoading(true);
+  // const loadContracts = useCallback(async (filter: any) => {
+  //   setLoading(true);
+  //   try {
+  //     const res = await HopDongService.get(filter);
+  //     console.log("[Contracts] Response:", JSON.stringify(res?.data?.length));
+  //     if (res?.data?.length) {
+  //       const mapped: Contract[] = res.data.map((item: any) => ({
+  //         maHD: item.maHDMB?.toString() || "",
+  //         soHopDong: item.soHDMB || "",
+  //         ngayKy: item.ngayKy || "",
+  //         tenKH: item.hoTenKH || "",
+  //         maSP: item.maSP?.toString() || "",
+  //         tongGiaTri: item.tongGiaGomVAT || 0,
+  //         trangThai: item.tenTT || "",
+  //         tenDA: item.tenDA || "",
+  //         colorTT: item.mauNen || "",
+  //       }));
+  //       setContracts(mapped);
+  //     } else {
+  //       console.log("[Contracts] No data from API, using demo contracts");
+  //       setContracts(DEMO_CONTRACTS);
+  //     }
+  //   } catch (err) {
+  //     console.log("[Contracts] loadContracts error, using demo contracts", err);
+  //     setContracts(DEMO_CONTRACTS);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // }, []);
+
+  const loadContracts = useCallback(async (filter: any, isLoadMore = false) => {
+    if (isLoadMore) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
+
     try {
-      const res = await CustomerService.getAllContracts(filter);
-      console.log("[Contracts] Response:", JSON.stringify(res?.data?.length));
+      const res = await HopDongService.get(filter);
+
+
+      setTotalRows(res?.totalRows || 0);
+
       if (res?.data?.length) {
         const mapped: Contract[] = res.data.map((item: any) => ({
-          maHD: item.maHD?.toString() || item.id?.toString() || "",
-          soHopDong: item.soHopDong || item.soHD || "",
-          ngayKy: item.ngayKy || item.ngayHD || "",
-          tenKH: item.tenKH || item.tenKhachHang || "",
-          maSP: item.maSP || item.maCanHo || item.maCan || "",
-          tongGiaTri: item.tongGiaTri || item.giaTriHD || item.giaTri || 0,
-          trangThai: item.trangThai || item.tenTT || "",
-          tenDA: item.tenDA || item.tenDuAn || "",
-          colorTT: item.colorTT || item.ColorWeb || "",
+          maHD: item.maHDMB?.toString() || "",
+          soHopDong: item.soHDMB || "",
+          ngayKy: item.ngayKy || "",
+          tenKH: item.hoTenKH || "",
+          maSP: item.maSP?.toString() || "",
+          tongGiaTri: item.tongGiaGomVAT || 0,
+          trangThai: item.tenTT || "",
+          tenDA: item.tenDA || "",
+          colorTT: item.mauNen || "",
         }));
-        setContracts(mapped);
-      } else {
-        console.log("[Contracts] No data from API, using demo contracts");
-        setContracts(DEMO_CONTRACTS);
+
+        setContracts((prev) => (isLoadMore ? [...prev, ...mapped] : mapped));
       }
     } catch (err) {
-      console.log("[Contracts] loadContracts error, using demo contracts", err);
-      setContracts(DEMO_CONTRACTS);
+      console.log("[Contracts] loadContracts error", err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, []);
 
+  const loadMore = () => {
+    if (loadingMore) return;
+
+    // nếu đã load đủ thì dừng
+    if (contracts.length >= totalRows) return;
+
+    const nextPage = page + 1;
+    setPage(nextPage);
+
+    const newFilter = {
+      ...filterCondition,
+      Offset: nextPage,
+    };
+
+    setFilterCondition(newFilter);
+    loadContracts(newFilter, true);
+  };
   useEffect(() => {
     void loadInitData();
     void loadContracts(filterCondition);
@@ -260,13 +339,21 @@ export default function ContractsScreen() {
     if (searchTimeout.current) {
       clearTimeout(searchTimeout.current);
     }
+
     searchTimeout.current = setTimeout(() => {
-      setFilterCondition((prev) => {
-        const newFilter = { ...prev, inputSearch: searchQuery, Offset: 1 };
-        void loadContracts(newFilter);
-        return newFilter;
-      });
+      setPage(1);
+      setContracts([]);
+
+      const newFilter = {
+        ...filterCondition,
+        inputSearch: searchQuery,
+        Offset: 1,
+      };
+
+      setFilterCondition(newFilter);
+      loadContracts(newFilter);
     }, 500);
+
     return () => clearTimeout(searchTimeout.current);
   }, [searchQuery, loadContracts]);
 
@@ -278,7 +365,9 @@ export default function ContractsScreen() {
     setFilterCondition((prev) => {
       const newFilter = {
         ...prev,
-        DuAn: selectedProjects.length ? "," + selectedProjects.join(",") + "," : "",
+        DuAn: selectedProjects.length
+          ? "," + selectedProjects.join(",") + ","
+          : "",
         Offset: 1,
       };
       void loadContracts(newFilter);
@@ -326,15 +415,18 @@ export default function ContractsScreen() {
     void loadContracts(newFilter);
   }, [searchQuery, loadContracts, filterHeight]);
 
-  const handleContractPress = useCallback((item: Contract) => {
-    router.push({
-      pathname: "/contract/[id]",
-      params: {
-        id: item.maHD,
-        data: JSON.stringify(item),
-      },
-    });
-  }, [router]);
+  const handleContractPress = useCallback(
+    (item: Contract) => {
+      router.push({
+        pathname: "/contract/[id]",
+        params: {
+          id: item.maHD,
+          data: JSON.stringify(item),
+        },
+      });
+    },
+    [router]
+  );
 
   const renderContract = useCallback(
     ({ item }: { item: Contract }) => (
@@ -347,8 +439,6 @@ export default function ContractsScreen() {
     (item: Contract, index: number) => item.maHD || index.toString(),
     []
   );
-
-
 
   const ListEmptyComponent = useMemo(
     () => (
@@ -369,7 +459,8 @@ export default function ContractsScreen() {
     [searchQuery]
   );
 
-  const activeFilterCount = (selectedProjects.length > 0 ? 1 : 0) + (selectedStatus !== 0 ? 1 : 0);
+  const activeFilterCount =
+    (selectedProjects.length > 0 ? 1 : 0) + (selectedStatus !== 0 ? 1 : 0);
 
   return (
     <View style={styles.container}>
@@ -381,7 +472,10 @@ export default function ContractsScreen() {
           headerTintColor: Colors.white,
           headerTitleStyle: { fontWeight: "700" as const, fontSize: 18 },
           headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{ padding: 4 }}
+            >
               <ChevronLeft color={Colors.white} size={24} />
             </TouchableOpacity>
           ),
@@ -391,10 +485,7 @@ export default function ContractsScreen() {
       <View style={styles.searchSection}>
         <View style={styles.searchRow}>
           <View
-            style={[
-              styles.searchBar,
-              searchFocused && styles.searchBarFocused,
-            ]}
+            style={[styles.searchBar, searchFocused && styles.searchBarFocused]}
           >
             <Search
               color={searchFocused ? Colors.primary : Colors.textTertiary}
@@ -411,7 +502,10 @@ export default function ContractsScreen() {
               testID="search-contracts-input"
             />
             {searchQuery.length > 0 ? (
-              <TouchableOpacity onPress={clearSearch} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <TouchableOpacity
+                onPress={clearSearch}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
                 <View style={styles.clearSearchBtn}>
                   <X color={Colors.white} size={12} />
                 </View>
@@ -458,7 +552,8 @@ export default function ContractsScreen() {
                   <Text
                     style={[
                       styles.filterChipText,
-                      selectedProjects.length === 0 && styles.filterChipTextActive,
+                      selectedProjects.length === 0 &&
+                        styles.filterChipTextActive,
                     ]}
                   >
                     Tất cả
@@ -469,17 +564,28 @@ export default function ContractsScreen() {
                   return (
                     <TouchableOpacity
                       key={project.MaDA}
-                      style={[styles.filterChip, active && styles.filterChipActive]}
+                      style={[
+                        styles.filterChip,
+                        active && styles.filterChipActive,
+                      ]}
                       onPress={() => {
                         if (active) {
-                          setSelectedProjects((prev) => prev.filter((id) => id !== project.MaDA));
+                          setSelectedProjects((prev) =>
+                            prev.filter((id) => id !== project.MaDA)
+                          );
                         } else {
-                          setSelectedProjects((prev) => [...prev, project.MaDA]);
+                          setSelectedProjects((prev) => [
+                            ...prev,
+                            project.MaDA,
+                          ]);
                         }
                       }}
                     >
                       <Text
-                        style={[styles.filterChipText, active && styles.filterChipTextActive]}
+                        style={[
+                          styles.filterChipText,
+                          active && styles.filterChipTextActive,
+                        ]}
                       >
                         {project.TenDA}
                       </Text>
@@ -489,39 +595,11 @@ export default function ContractsScreen() {
               </ScrollView>
             </View>
 
-            <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>TRẠNG THÁI</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterChips}
-              >
-                {statusList.map((status: any) => {
-                  const active = selectedStatus === status.id;
-                  const chipColor = status.ColorWeb || Colors.primary;
-                  return (
-                    <TouchableOpacity
-                      key={status.id}
-                      style={[
-                        styles.filterChip,
-                        active && { backgroundColor: chipColor, borderColor: chipColor },
-                      ]}
-                      onPress={() => handleStatusFilter(status.id)}
-                    >
-                      {active && <View style={[styles.chipDot, { backgroundColor: Colors.white }]} />}
-                      <Text
-                        style={[styles.filterChipText, active && styles.filterChipTextActive]}
-                      >
-                        {status.title}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
             {hasActiveFilters && (
-              <TouchableOpacity style={styles.clearFilterBtn} onPress={clearFilters}>
+              <TouchableOpacity
+                style={styles.clearFilterBtn}
+                onPress={clearFilters}
+              >
                 <X color={Colors.error} size={14} />
                 <Text style={styles.clearFilterText}>Xóa bộ lọc</Text>
               </TouchableOpacity>
@@ -536,6 +614,16 @@ export default function ContractsScreen() {
           <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
         </View>
       ) : (
+        // <FlatList
+        //   data={contracts}
+        //   renderItem={renderContract}
+        //   keyExtractor={keyExtractor}
+        //   contentContainerStyle={styles.listContent}
+        //   showsVerticalScrollIndicator={false}
+        //   ListEmptyComponent={ListEmptyComponent}
+        //   ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        // />
+
         <FlatList
           data={contracts}
           renderItem={renderContract}
@@ -544,6 +632,13 @@ export default function ContractsScreen() {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={ListEmptyComponent}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator style={{ marginVertical: 10 }} />
+            ) : null
+          }
         />
       )}
     </View>
