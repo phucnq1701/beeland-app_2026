@@ -15,7 +15,7 @@ import { Image } from "expo-image";
 import { MapPin, Search, Building2, ChevronRight } from "lucide-react-native";
 
 import Colors from "@/constants/colors";
-import { ProjectService } from "./sevices/ProjectService";
+import { ProjectService } from "@/sevices/ProjectService";
 
 const DEFAULT_PROJECT_IMAGE =
   "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/css461kotbkumrm0wjakm";

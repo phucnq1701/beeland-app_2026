@@ -34,8 +34,8 @@ import {
 } from "lucide-react-native";
 import { Dropdown } from "react-native-element-dropdown";
 import Colors from "@/constants/colors";
-import { CustomerService } from "../../sevices/CustomerService";
-import { CongViecService } from "../../sevices/CongViecService";
+import { CustomerService } from "@/sevices/CustomerService";
+import { CongViecService } from "@/sevices/CongViecService";
 import { Format_Date } from "@/components/utils/common";
 import DateTimePicker from "@react-native-community/datetimepicker";
 

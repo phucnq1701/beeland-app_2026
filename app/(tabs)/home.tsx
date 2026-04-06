@@ -32,10 +32,10 @@ import { notifications } from "@/mocks/notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useFocusEffect } from "expo-router";
-import { ProjectService } from "../sevices/ProjectService";
-import { UserService } from "../sevices/UserService";
+import { ProjectService } from "@/sevices/ProjectService";
+import { UserService } from "@/sevices/UserService";
 import { Format_Date } from "@/components/utils/common";
-import { CustomerService } from "../sevices/CustomerService";
+import { CustomerService } from "@/sevices/CustomerService";
 
 const DEFAULT_PROJECT_IMAGE = "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/bigwmih05tf7or57crm12";
 const { width } = Dimensions.get("window");

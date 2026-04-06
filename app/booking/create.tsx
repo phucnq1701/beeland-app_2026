@@ -21,8 +21,8 @@ import {
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { customers, Customer } from "@/mocks/customers";
-import { CustomerService } from "../sevices/CustomerService";
-import { CartService } from "../sevices/CartServices";
+import { CustomerService } from "@/sevices/CustomerService";
+import { CartService } from "@/sevices/CartServices";
 
 export default function CreateBookingScreen() {
   const router = useRouter();

@@ -25,7 +25,7 @@ import {
   ChevronRight,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { CustomerService } from "./sevices/CustomerService";
+import { CustomerService } from "@/sevices/CustomerService";
 
 type TabType = "personal" | "business";
 

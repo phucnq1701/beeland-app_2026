@@ -15,7 +15,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, Building2, Mail } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { AuthService } from "./sevices/AuthService";
+import { AuthService } from "@/sevices/AuthService";
 
 export default function ForgotPasswordScreen() {
   const insets = useSafeAreaInsets();

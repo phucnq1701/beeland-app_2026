@@ -23,7 +23,7 @@ import {
   notifications as initialNotifications,
   Notification,
 } from "@/mocks/notifications";
-import { NotificationService } from "./sevices/NotificationService";
+import { NotificationService } from "@/sevices/NotificationService";
 
 type FilterType = "all" | Notification["type"];
 

@@ -16,7 +16,7 @@ import Colors from "@/constants/colors";
 import { photoFolders } from "@/mocks/photos";
 import { Alert, Platform } from "react-native";
 import { featuredProperties } from "@/mocks/properties";
-import { DocumentService } from "./sevices/DocumentService";
+import { DocumentService } from "@/sevices/DocumentService";
 
 export default function PhotoGalleryScreen() {
   const router = useRouter();

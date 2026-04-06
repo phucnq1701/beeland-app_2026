@@ -24,9 +24,9 @@ import {
   SlidersHorizontal,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { CustomerService } from "./sevices/CustomerService";
-import { FilterService } from "./sevices/FilterService";
-import { ProjectService } from "./sevices/ProjectService";
+import { CustomerService } from "@/sevices/CustomerService";
+import { FilterService } from "@/sevices/FilterService";
+import { ProjectService } from "@/sevices/ProjectService";
 
 interface Contract {
   maHD: string;
