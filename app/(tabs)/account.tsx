@@ -7,6 +7,7 @@ import {
   ScrollView,
   Platform,
   Dimensions,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -128,11 +129,9 @@ export default function AccountScreen() {
   const handleDeleteAccount = () => {
     if (Platform.OS === "web") {
       if (window.confirm("Bạn có chắc chắn muốn xóa tài khoản? Hành động này không thể hoàn tác.")) {
-        // TODO: Call delete account API
         router.push("/login");
       }
     } else {
-      const { Alert } = require("react-native");
       Alert.alert(
         "Xóa tài khoản",
         "Bạn có chắc chắn muốn xóa tài khoản? Hành động này không thể hoàn tác.",
@@ -142,7 +141,6 @@ export default function AccountScreen() {
             text: "Xóa",
             style: "destructive",
             onPress: () => {
-              // TODO: Call delete account API
               router.push("/login");
             },
           },
