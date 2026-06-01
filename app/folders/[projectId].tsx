@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  Share,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronRight, Share2, FileText, FolderOpen } from 'lucide-react-native';
@@ -78,7 +79,6 @@ export default function FoldersScreen() {
           Alert.alert('Thông báo', 'Chia sẻ không khả dụng trên trình duyệt này');
         }
       } else {
-        const Share = await import('react-native').then(m => m.Share);
         await Share.share({
           message: folderText,
           title: folder.name,
