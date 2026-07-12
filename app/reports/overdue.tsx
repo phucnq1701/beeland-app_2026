@@ -14,9 +14,9 @@ import {
   TouchableWithoutFeedback,
   Platform,
   ActivityIndicator,
+  Alert,
   Modal,
   ScrollView,
-  Alert,
 } from "react-native";
 import { router, Stack } from "expo-router";
 import Colors from "@/constants/colors";
@@ -25,8 +25,7 @@ import {
   X,
   Calendar,
   Check,
-  DollarSign,
-  Banknote,
+  AlertCircle,
 } from "lucide-react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ProjectService } from "@/sevices/ProjectService";
@@ -48,6 +47,21 @@ interface ProjectOption {
   TenDA: string;
 }
 
+interface OverdueItem {
+  ConThieu: number;
+  DotTT: number;
+  DotTTText: string | null;
+  ID: number;
+  MaKH: number;
+  NgayTT: string;
+  SoHD: string;
+  SoNgayQuaHan: number;
+  SoTien: number;
+  TenKH: string;
+  TongDaThu: number;
+  TrangThaiThu: string;
+}
+
 interface Filters {
   MaDA: number | null;
   period: PeriodType;
@@ -62,93 +76,123 @@ const DEFAULT_FILTERS: Filters = {
   toDate: null,
 };
 
-const PAGE_SIZE = 20;
-
 type ActiveChip = "project" | "period" | null;
 type DatePickerTarget = "from" | "to" | null;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const pad = (n: number) => String(n).padStart(2, "0");
-
-const fmtDisplay = (d: Date | null) => {
-  if (!d) return "";
+const fmtISO = (d: Date) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const fmtDisplay = (d: Date | null) =>
+  d ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` : "";
+const fmtISOToDisplay = (iso: string): string => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 };
 
-const formatShort = (num: number) => {
-  if (num >= 1_000_000_000)
-    return `${(num / 1_000_000_000).toFixed(1).replace(/\.0$/, "")} tỷ`;
-  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(0)} tr`;
-  return new Intl.NumberFormat("vi-VN").format(num);
-};
-
-function buildDateRange(filters: Filters): { TuNgay: string; DenNgay: string } {
-  const fmt = (d: Date) =>
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+function buildDateRange(f: Filters): { TuNgay: string; DenNgay: string } {
   const today = new Date();
-
-  switch (filters.period) {
+  switch (f.period) {
     case "today":
-      return { TuNgay: fmt(today), DenNgay: fmt(today) };
+      return { TuNgay: fmtISO(today), DenNgay: fmtISO(today) };
     case "week": {
-      const day = today.getDay();
-      const diffToMon = day === 0 ? -6 : 1 - day;
+      const d = today.getDay();
       const mon = new Date(today);
-      mon.setDate(today.getDate() + diffToMon);
+      mon.setDate(today.getDate() + (d === 0 ? -6 : 1 - d));
       const sun = new Date(mon);
       sun.setDate(mon.getDate() + 6);
-      return { TuNgay: fmt(mon), DenNgay: fmt(sun) };
+      return { TuNgay: fmtISO(mon), DenNgay: fmtISO(sun) };
     }
     case "month":
       return {
-        TuNgay: fmt(new Date(today.getFullYear(), today.getMonth(), 1)),
-        DenNgay: fmt(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+        TuNgay: fmtISO(new Date(today.getFullYear(), today.getMonth(), 1)),
+        DenNgay: fmtISO(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
       };
     case "year":
       return {
-        TuNgay: fmt(new Date(today.getFullYear(), 0, 1)),
-        DenNgay: fmt(new Date(today.getFullYear(), 11, 31)),
+        TuNgay: fmtISO(new Date(today.getFullYear(), 0, 1)),
+        DenNgay: fmtISO(new Date(today.getFullYear(), 11, 31)),
       };
     case "custom":
       return {
-        TuNgay: fmt(filters.fromDate ?? today),
-        DenNgay: fmt(filters.toDate ?? today),
+        TuNgay: f.fromDate ? fmtISO(f.fromDate) : fmtISO(today),
+        DenNgay: f.toDate ? fmtISO(f.toDate) : fmtISO(today),
       };
   }
 }
 
-// ─── PaymentItem ──────────────────────────────────────────────────────────────
-interface PaymentItemData {
-  id: any;
-  receiptCode: string;
-  amount: string;
-  customerName: string;
-  projectName: string;
-  paymentDate: string;
-  paymentMethod: string;
-  rawAmount: number;
-}
+const formatShort = (num: number) => {
+  if (num >= 1_000_000_000)
+    return `${(num / 1_000_000_000).toFixed(1).replace(/\.0$/, "")} tỷ`;
+  if (num >= 1_000_000)
+    return `${(num / 1_000_000).toFixed(1).replace(/\.0$/, "")} tr`;
+  return new Intl.NumberFormat("vi-VN").format(num);
+};
 
-const PaymentItem = React.memo(({ item }: { item: PaymentItemData }) => (
-  <View style={styles.itemCard}>
-    <View style={styles.itemHeader}>
-      <Text style={styles.receiptCode}>{item.receiptCode}</Text>
-      <Text style={styles.amount}>{item.amount}</Text>
-    </View>
-    <Text style={styles.customer}>{item.customerName}</Text>
-    <Text style={styles.project}>{item.projectName}</Text>
-    <View style={styles.footer}>
-      <View style={styles.footerItem}>
-        <Calendar size={13} color={Colors.textSecondary} />
-        <Text style={styles.footerText}>{item.paymentDate}</Text>
+const overdueColor = (days: number) => {
+  if (days >= 15) return { bg: "#FEE2E2", text: "#B91C1C", bar: "#EF4444" };
+  if (days >= 8) return { bg: "#FEE2E2", text: "#DC2626", bar: "#F87171" };
+  if (days >= 4) return { bg: "#FFF7ED", text: "#C2410C", bar: "#FB923C" };
+  return { bg: "#FFFBEB", text: "#B45309", bar: "#FCD34D" };
+};
+
+// ─── OverdueCard ──────────────────────────────────────────────────────────────
+const OverdueCard = React.memo(({ item }: { item: OverdueItem }) => {
+  const clr = overdueColor(item.SoNgayQuaHan);
+  const batchLabel = item.DotTTText ?? `Đợt ${item.DotTT}`;
+  const dueDateDisplay = fmtISOToDisplay(item.NgayTT);
+
+  const handleProcess = useCallback(() => {
+    Alert.alert("Xử lý", `${item.SoHD} · ${batchLabel}`);
+  }, [item.SoHD, batchLabel]);
+
+  return (
+    <View style={styles.itemCard}>
+      <View style={[styles.itemBar, { backgroundColor: clr.bar }]} />
+      <View style={styles.itemInner}>
+        <View style={styles.itemRow}>
+          <Text style={styles.itemContract} numberOfLines={1}>
+            {item.SoHD}
+            <Text style={styles.itemBatch}> · {batchLabel}</Text>
+          </Text>
+          <View style={[styles.overdueBadge, { backgroundColor: clr.bg }]}>
+            <Text style={[styles.overdueBadgeText, { color: clr.text }]}>
+              quá {item.SoNgayQuaHan} ngày
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.itemSub} numberOfLines={1}>
+          {item.TenKH}
+          <Text style={styles.itemDue}> · hạn {dueDateDisplay}</Text>
+        </Text>
+
+        <View
+          style={[
+            styles.statusBadge,
+            item.TrangThaiThu === "Thu thiếu"
+              ? { backgroundColor: "#FFF7ED" }
+              : { backgroundColor: "#FEF2F2" },
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusText,
+              item.TrangThaiThu === "Thu thiếu"
+                ? { color: "#C2410C" }
+                : { color: "#DC2626" },
+            ]}
+          >
+            {item.TrangThaiThu}
+            {item.TrangThaiThu === "Thu thiếu" &&
+              ` · đã thu ${formatShort(item.TongDaThu)}`}
+          </Text>
+        </View>
       </View>
-      <View style={styles.footerItem}>
-        <Banknote size={13} color={Colors.textSecondary} />
-        <Text style={styles.footerText}>{item.paymentMethod}</Text>
-      </View>
     </View>
-  </View>
-));
+  );
+});
 
 // ─── DropdownModal ────────────────────────────────────────────────────────────
 interface DropdownModalProps {
@@ -179,6 +223,7 @@ const DropdownModal = React.memo(
         <TouchableWithoutFeedback onPress={onClose}>
           <View style={dropdownStyles.backdrop} />
         </TouchableWithoutFeedback>
+
         <View style={dropdownStyles.sheet}>
           <View style={dropdownStyles.handle} />
           <ScrollView showsVerticalScrollIndicator={false}>
@@ -211,6 +256,7 @@ const DropdownModal = React.memo(
                   )}
                 </TouchableOpacity>
               ))}
+
             {activeChip === "period" &&
               periodOptions.map((opt, idx, arr) => (
                 <TouchableOpacity
@@ -248,13 +294,11 @@ const DropdownModal = React.memo(
 );
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
-export default function PaymentReportScreen() {
+export default function OverdueReportScreen() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [debouncedFilters, setDebouncedFilters] =
     useState<Filters>(DEFAULT_FILTERS);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isFirstFilterRun = useRef(true);
-  const requestIdRef = useRef(0);
 
   const [activeChip, setActiveChip] = useState<ActiveChip>(null);
   const [dateTarget, setDateTarget] = useState<DatePickerTarget>(null);
@@ -262,12 +306,8 @@ export default function PaymentReportScreen() {
 
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
-
-  const [data, setData] = useState<any[]>([]);
-  const [pageIndex, setPageIndex] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [data, setData] = useState<OverdueItem[]>([]);
 
   // ── Fetch projects ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -291,44 +331,25 @@ export default function PaymentReportScreen() {
 
   // ── Debounce filters ───────────────────────────────────────────────────────
   useEffect(() => {
-    // Lần chạy đầu tiên (mount): áp dụng filters ngay, không đặt timer.
-    // Tránh việc 300ms sau lại set lại debouncedFilters (object mới) với
-    // cùng giá trị, khiến effect fetch chạy thêm lần 2 cho cùng dữ liệu.
-    if (isFirstFilterRun.current) {
-      isFirstFilterRun.current = false;
-      setDebouncedFilters(filters);
-      return;
-    }
-
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      setData([]);
-      setPageIndex(1);
-      setHasMore(true);
-      setDebouncedFilters(filters);
-    }, 300);
+    debounceRef.current = setTimeout(() => setDebouncedFilters(filters), 300);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [filters]);
 
-  // ── Fetch page ─────────────────────────────────────────────────────────────
-  const fetchPage = useCallback(
-    async (page: number, currentFilters: Filters) => {
-      const myRequestId = ++requestIdRef.current;
-      const isFirstPage = page === 1;
-      if (isFirstPage) setLoading(true);
-      else setLoadingMore(true);
+  // ── Fetch data ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
       try {
-        const { TuNgay, DenNgay } = buildDateRange(currentFilters);
-        const res = await BaoCaoService.getThuTien({
-          MaDA: currentFilters.MaDA,
+        const { TuNgay, DenNgay } = buildDateRange(debouncedFilters);
+        const res = await BaoCaoService.getDotQuaHan({
+          MaDA: debouncedFilters.MaDA,
           TuNgay,
           DenNgay,
-          PageSize: PAGE_SIZE,
-          PageIndex: page,
         });
-
         if (res?.status === 4001) {
           Alert.alert(
             "Không có quyền",
@@ -338,41 +359,24 @@ export default function PaymentReportScreen() {
           );
           return;
         }
-        // Có request mới hơn đã được gọi sau request này -> bỏ qua kết quả cũ
-        if (myRequestId !== requestIdRef.current) return;
 
-        const newItems: any[] = res?.data ?? [];
-        setData((prev) => (isFirstPage ? newItems : [...prev, ...newItems]));
-        setHasMore(newItems.length >= PAGE_SIZE);
+        if (!cancelled) setData(res?.data ?? []);
       } catch (e) {
-        console.error("Lỗi tải thu tiền:", e);
-        if (isFirstPage && myRequestId === requestIdRef.current) setData([]);
+        console.error("Lỗi tải đợt quá hạn:", e);
+        if (!cancelled) setData([]);
       } finally {
-        if (myRequestId === requestIdRef.current) {
-          if (isFirstPage) setLoading(false);
-          else setLoadingMore(false);
-        }
+        if (!cancelled) setLoading(false);
       }
-    },
-    []
-  );
-
-  useEffect(() => {
-    fetchPage(1, debouncedFilters);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [debouncedFilters]);
-
-  const handleEndReached = useCallback(() => {
-    if (loadingMore || loading || !hasMore) return;
-    if (listData.length === 0) return;
-    const nextPage = pageIndex + 1;
-    setPageIndex(nextPage);
-    fetchPage(nextPage, debouncedFilters);
-  }, [loadingMore, loading, hasMore, pageIndex, debouncedFilters, fetchPage]);
 
   // ── Setters ────────────────────────────────────────────────────────────────
   const setFilter = useCallback(
-    <K extends keyof Filters>(key: K, value: Filters[K]) =>
-      setFilters((prev) => ({ ...prev, [key]: value })),
+    <K extends keyof Filters>(key: K, val: Filters[K]) =>
+      setFilters((prev) => ({ ...prev, [key]: val })),
     []
   );
   const toggleChip = useCallback(
@@ -417,7 +421,9 @@ export default function PaymentReportScreen() {
       if (Platform.OS === "android") {
         applyDate(selected);
         setDateTarget(null);
-      } else setPendingDate(selected);
+      } else {
+        setPendingDate(selected);
+      }
     },
     [applyDate]
   );
@@ -429,55 +435,27 @@ export default function PaymentReportScreen() {
 
   const handleCancelDate = useCallback(() => setDateTarget(null), []);
 
-  // ── Derived data ───────────────────────────────────────────────────────────
-  const listData = useMemo(
-    () =>
-      data.map((item: any) => ({
-        id: item.ID,
-        receiptCode: item.SoPT,
-        amount: `${item.TienThu.toLocaleString("vi-VN")}₫`,
-        customerName: item.TenKH,
-        projectName: item.DienGiai,
-        paymentDate: new Date(item.NgayThu).toLocaleDateString("vi-VN"),
-        paymentMethod: "Phiếu thu",
-        rawAmount: item.TienThu,
-      })),
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const totalConThieu = useMemo(
+    () => data.reduce((s, i) => s + (i.ConThieu ?? 0), 0),
     [data]
   );
 
-  const totalRaw = useMemo(
-    () => listData.reduce((s, i) => s + (i.rawAmount ?? 0), 0),
-    [listData]
-  );
-
+  const isProjectActive = filters.MaDA !== null;
+  const isPeriodActive = filters.period !== "week";
   const projectLabel =
     projects.find((p) => p.MaDA === filters.MaDA)?.TenDA ?? "Tất cả dự án";
   const periodLabel =
-    periodOptions.find((p) => p.id === filters.period)?.label ?? "Hôm nay";
-  const isProjectActive = filters.MaDA !== null;
-  const isPeriodActive = filters.period !== "today";
+    periodOptions.find((p) => p.id === filters.period)?.label ?? "Tuần này";
 
   // ── FlatList helpers ───────────────────────────────────────────────────────
   const renderItem = useCallback(
-    ({ item }: { item: PaymentItemData }) => <PaymentItem item={item} />,
+    ({ item }: { item: OverdueItem }) => <OverdueCard item={item} />,
     []
   );
-  const keyExtractor = useCallback(
-    (item: PaymentItemData) => String(item.id),
-    []
-  );
+  const keyExtractor = useCallback((item: OverdueItem) => String(item.ID), []);
 
-  const ListFooter = useMemo(() => {
-    if (!loadingMore) return null;
-    return (
-      <View style={styles.loadMoreContainer}>
-        <ActivityIndicator size="small" color={Colors.primary} />
-        <Text style={styles.loadMoreText}>Đang tải thêm...</Text>
-      </View>
-    );
-  }, [loadingMore]);
-
-  // ListHeaderComponent — chỉ chứa date range khi period === "custom"
+  // ListHeader chỉ chứa date range (custom), hiển thị dưới sticky header
   const ListHeader = useMemo(() => {
     if (filters.period !== "custom") return null;
     return (
@@ -498,7 +476,7 @@ export default function PaymentReportScreen() {
           <Text
             style={[
               styles.dateInputText,
-              filters.fromDate && styles.dateInputTextFilled,
+              filters.fromDate && styles.dateInputFilled,
             ]}
           >
             {fmtDisplay(filters.fromDate) || "Từ ngày"}
@@ -521,7 +499,7 @@ export default function PaymentReportScreen() {
           <Text
             style={[
               styles.dateInputText,
-              filters.toDate && styles.dateInputTextFilled,
+              filters.toDate && styles.dateInputFilled,
             ]}
           >
             {fmtDisplay(filters.toDate) || "Đến ngày"}
@@ -530,10 +508,10 @@ export default function PaymentReportScreen() {
 
         {(filters.fromDate || filters.toDate) && (
           <TouchableOpacity
-            onPress={() =>
-              setFilters((prev) => ({ ...prev, fromDate: null, toDate: null }))
-            }
             style={styles.dateClear}
+            onPress={() =>
+              setFilters((p) => ({ ...p, fromDate: null, toDate: null }))
+            }
           >
             <X size={14} color={Colors.textSecondary} />
           </TouchableOpacity>
@@ -546,13 +524,13 @@ export default function PaymentReportScreen() {
   const ListEmpty = useMemo(
     () =>
       loading ? (
-        <View style={styles.loadingContainer}>
+        <View style={styles.loadingState}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
         </View>
       ) : (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Không có dữ liệu phù hợp</Text>
+          <Text style={styles.emptyText}>Không có đợt quá hạn</Text>
         </View>
       ),
     [loading]
@@ -563,13 +541,14 @@ export default function PaymentReportScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: "Báo cáo thu tiền",
+          title: "Đợt quá hạn",
           headerStyle: { backgroundColor: Colors.white },
           headerTintColor: Colors.text,
           headerShadowVisible: false,
         }}
       />
 
+      {/* Dropdown Modal — ngoài FlatList, không bị zIndex chặn */}
       <DropdownModal
         activeChip={activeChip}
         onClose={closeDropdown}
@@ -578,12 +557,12 @@ export default function PaymentReportScreen() {
         setFilter={setFilter}
       />
 
-      {/* iOS Date Picker */}
+      {/* iOS Date Picker Modal */}
       {Platform.OS === "ios" && dateTarget !== null && (
         <Modal
           transparent
           animationType="slide"
-          visible
+          visible={dateTarget !== null}
           onRequestClose={handleCancelDate}
         >
           <TouchableWithoutFeedback onPress={handleCancelDate}>
@@ -663,7 +642,7 @@ export default function PaymentReportScreen() {
         />
       )}
 
-      {/* ── STICKY HEADER — luôn bám trên cùng, không cuộn theo list ── */}
+      {/* ══ STICKY HEADER — chips + summary card + section header ══ */}
       <View style={styles.stickyHeader}>
         {/* Chip row */}
         <ScrollView
@@ -728,17 +707,17 @@ export default function PaymentReportScreen() {
           )}
         </ScrollView>
 
-        {/* Total card */}
+        {/* Summary card */}
         <View style={styles.totalCard}>
           <View style={styles.totalAccent} />
           <View style={styles.totalIconWrap}>
-            <DollarSign size={22} color="#10B981" />
+            <AlertCircle size={22} color="#EF4444" />
           </View>
           <View style={styles.totalBody}>
-            <Text style={styles.totalLabel}>Tổng tiền thu về</Text>
-            <Text style={styles.totalValue}>{formatShort(totalRaw)}</Text>
+            <Text style={styles.totalLabel}>Tổng tiền còn thiếu</Text>
+            <Text style={styles.totalValue}>{formatShort(totalConThieu)}</Text>
             <Text style={styles.totalSub}>
-              {listData.length} giao dịch{hasMore ? "+" : ""} • {periodLabel}
+              {data.length} đợt chưa thanh toán · {periodLabel}
             </Text>
           </View>
         </View>
@@ -747,25 +726,21 @@ export default function PaymentReportScreen() {
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleWrap}>
             <View style={styles.sectionAccent} />
-            <Text style={styles.sectionTitle}>Chi tiết thu tiền</Text>
+            <Text style={styles.sectionTitle}>Danh sách đợt quá hạn</Text>
           </View>
           <View style={styles.sectionBadge}>
-            <Text style={styles.sectionBadgeText}>
-              {listData.length}
-              {hasMore ? "+" : ""}
-            </Text>
+            <Text style={styles.sectionBadgeText}>{data.length}</Text>
           </View>
         </View>
       </View>
 
-      {/* FlatList — chỉ cuộn phần danh sách */}
+      {/* FlatList — chỉ cuộn danh sách */}
       <FlatList
-        data={loading ? [] : listData}
+        data={loading ? [] : data}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         ListHeaderComponent={ListHeader}
         ListEmptyComponent={ListEmpty}
-        ListFooterComponent={ListFooter}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -775,8 +750,6 @@ export default function PaymentReportScreen() {
         windowSize={7}
         removeClippedSubviews={Platform.OS === "android"}
         overScrollMode="never"
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.2}
       />
     </View>
   );
@@ -830,7 +803,6 @@ const dropdownStyles = StyleSheet.create({
   itemTextActive: { color: Colors.primary, fontWeight: "500" },
 });
 
-// ─── Main styles ──────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8F8F8" },
 
@@ -901,7 +873,7 @@ const styles = StyleSheet.create({
   },
   dateInputFocused: { borderColor: Colors.primary, backgroundColor: "#F5F8FF" },
   dateInputText: { fontSize: 13, color: Colors.textSecondary },
-  dateInputTextFilled: { color: Colors.text, fontWeight: "500" },
+  dateInputFilled: { color: Colors.text, fontWeight: "500" },
   dateSep: { fontSize: 14, color: Colors.textSecondary },
   dateClear: { padding: 6 },
 
@@ -966,12 +938,12 @@ const styles = StyleSheet.create({
       android: { elevation: 3 },
     }),
   },
-  totalAccent: { width: 5, alignSelf: "stretch", backgroundColor: "#10B981" },
+  totalAccent: { width: 5, alignSelf: "stretch", backgroundColor: "#EF4444" },
   totalIconWrap: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: "#FEF2F2",
     justifyContent: "center",
     alignItems: "center",
     marginHorizontal: 14,
@@ -981,7 +953,7 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#10B981",
+    color: "#EF4444",
     marginTop: 2,
   },
   totalSub: { marginTop: 3, fontSize: 11, color: Colors.textSecondary },
@@ -1011,46 +983,48 @@ const styles = StyleSheet.create({
   itemCard: {
     backgroundColor: Colors.white,
     borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
+    flexDirection: "row",
+    overflow: "hidden",
+    marginBottom: 10,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
+        shadowOpacity: 0.05,
         shadowRadius: 4,
       },
-      android: { elevation: 1 },
+      android: { elevation: 2 },
     }),
   },
-  itemHeader: {
+  itemBar: { width: 4, alignSelf: "stretch" },
+  itemInner: { flex: 1, padding: 14, gap: 5 },
+  itemRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 6,
+    alignItems: "center",
   },
-  receiptCode: { fontSize: 13, fontWeight: "700", color: Colors.primary },
-  amount: { fontSize: 14, fontWeight: "700", color: "#10B981" },
-  customer: { fontSize: 14, fontWeight: "600", color: Colors.text },
-  project: { marginTop: 3, fontSize: 12, color: Colors.textSecondary },
-  footer: { flexDirection: "row", gap: 16, marginTop: 10 },
-  footerItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  footerText: { fontSize: 12, color: Colors.textSecondary },
+  itemContract: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.text,
+    flex: 1,
+    marginRight: 8,
+  },
+  itemBatch: { fontSize: 14, fontWeight: "400", color: Colors.text },
+  overdueBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  overdueBadgeText: { fontSize: 11, fontWeight: "700" },
+  itemSub: { fontSize: 12, color: Colors.textSecondary },
+  itemDue: { fontWeight: "500", color: Colors.textSecondary },
+  statusBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  statusText: { fontSize: 11, fontWeight: "600" },
 
+  loadingState: { alignItems: "center", paddingVertical: 40, gap: 12 },
+  loadingText: { fontSize: 14, color: Colors.textSecondary },
   emptyState: { alignItems: "center", paddingVertical: 40 },
   emptyText: { fontSize: 14, color: Colors.textSecondary, fontWeight: "500" },
-  loadingContainer: {
-    paddingVertical: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingText: { marginTop: 12, fontSize: 14, color: Colors.textSecondary },
-
-  loadMoreContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 16,
-  },
-  loadMoreText: { fontSize: 13, color: Colors.textSecondary },
 });

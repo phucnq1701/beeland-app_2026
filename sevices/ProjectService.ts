@@ -3,9 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const ProjectService = {
   getProjects: async (payload: any = {}) => {
-    const tenCTDKVT =
-      (await AsyncStorage.getItem("tenCTDKVT")) || "beesky";
-
+    const tenCTDKVT = (await AsyncStorage.getItem("tenCTDKVT")) || "beesky";
     const dataInit = {
       TenCTDKVT: tenCTDKVT,
       ...payload,
@@ -15,6 +13,4 @@ export const ProjectService = {
       .post("api/beeland/get-project", dataInit)
       .then((res) => res.data);
   },
-
-
 };

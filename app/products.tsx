@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
 } from "react-native";
-import { Stack, useRouter, useLocalSearchParams } from "expo-router";
+import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import {
   Search,
   List,
@@ -320,10 +320,16 @@ export default function ProductsScreen() {
     }
   };
 
-  useEffect(() => {
-    void loadProducts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // useEffect(() => {
+  //   void loadProducts();
+  
+  // }, []);
+  useFocusEffect(
+    useCallback(() => {
+      console.log("🔁 Screen focus → gọi lại API");
+      void loadProducts();
+    }, [])
+  );
 
   useEffect(() => {
     if (rightRef.current) {
@@ -925,7 +931,7 @@ export default function ProductsScreen() {
                     Mã sản phẩm
                   </Text>
                   <Text style={[styles.tableHeaderText, styles.colPrice]}>
-                    Tổng giá trị gốm PBT
+                    Tổng giá trị gồm PBT
                   </Text>
                 </View>
 

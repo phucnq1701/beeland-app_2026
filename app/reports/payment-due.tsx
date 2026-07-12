@@ -25,8 +25,8 @@ import {
   X,
   Calendar,
   Check,
-  DollarSign,
   Banknote,
+  CalendarClock,
 } from "lucide-react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ProjectService } from "@/sevices/ProjectService";
@@ -48,6 +48,21 @@ interface ProjectOption {
   TenDA: string;
 }
 
+interface SapHHItem {
+  ConThieu: number;
+  DotTT: number;
+  DotTTText: string | null;
+  ID: number;
+  MaKH: number;
+  NgayTT: string;
+  SoHD: string;
+  SoNgayConLai: number;
+  SoTien: number;
+  TenKH: string;
+  TongDaThu: number;
+  TrangThaiThu: string;
+}
+
 interface Filters {
   MaDA: number | null;
   period: PeriodType;
@@ -62,8 +77,6 @@ const DEFAULT_FILTERS: Filters = {
   toDate: null,
 };
 
-const PAGE_SIZE = 20;
-
 type ActiveChip = "project" | "period" | null;
 type DatePickerTarget = "from" | "to" | null;
 
@@ -75,18 +88,27 @@ const fmtDisplay = (d: Date | null) => {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 };
 
+const fmtISOToDisplay = (iso: string): string => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+};
+
 const formatShort = (num: number) => {
   if (num >= 1_000_000_000)
     return `${(num / 1_000_000_000).toFixed(1).replace(/\.0$/, "")} tỷ`;
-  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(0)} tr`;
+  if (num >= 1_000_000)
+    return `${(num / 1_000_000).toFixed(1).replace(/\.0$/, "")} tr`;
   return new Intl.NumberFormat("vi-VN").format(num);
 };
+
+const formatCurrency = (num: number) =>
+  new Intl.NumberFormat("vi-VN").format(num) + " ₫";
 
 function buildDateRange(filters: Filters): { TuNgay: string; DenNgay: string } {
   const fmt = (d: Date) =>
     `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const today = new Date();
-
   switch (filters.period) {
     case "today":
       return { TuNgay: fmt(today), DenNgay: fmt(today) };
@@ -117,40 +139,94 @@ function buildDateRange(filters: Filters): { TuNgay: string; DenNgay: string } {
   }
 }
 
-// ─── PaymentItem ──────────────────────────────────────────────────────────────
-interface PaymentItemData {
-  id: any;
-  receiptCode: string;
-  amount: string;
-  customerName: string;
-  projectName: string;
-  paymentDate: string;
-  paymentMethod: string;
-  rawAmount: number;
-}
-
-const PaymentItem = React.memo(({ item }: { item: PaymentItemData }) => (
-  <View style={styles.itemCard}>
-    <View style={styles.itemHeader}>
-      <Text style={styles.receiptCode}>{item.receiptCode}</Text>
-      <Text style={styles.amount}>{item.amount}</Text>
-    </View>
-    <Text style={styles.customer}>{item.customerName}</Text>
-    <Text style={styles.project}>{item.projectName}</Text>
-    <View style={styles.footer}>
-      <View style={styles.footerItem}>
-        <Calendar size={13} color={Colors.textSecondary} />
-        <Text style={styles.footerText}>{item.paymentDate}</Text>
+const DaysBadge = React.memo(({ days }: { days: number }) => {
+  if (days < 0)
+    return (
+      <View style={[styles.daysBadge, { backgroundColor: "#FEF2F2" }]}>
+        <Text style={[styles.daysBadgeText, { color: "#EF4444" }]}>
+          quá {Math.abs(days)} ngày
+        </Text>
       </View>
-      <View style={styles.footerItem}>
-        <Banknote size={13} color={Colors.textSecondary} />
-        <Text style={styles.footerText}>{item.paymentMethod}</Text>
+    );
+  if (days === 0)
+    return (
+      <View style={[styles.daysBadge, { backgroundColor: "#FEF2F2" }]}>
+        <Text style={[styles.daysBadgeText, { color: "#EF4444" }]}>
+          hôm nay
+        </Text>
+      </View>
+    );
+  if (days <= 7)
+    return (
+      <View style={[styles.daysBadge, { backgroundColor: "#FFF7ED" }]}>
+        <Text style={[styles.daysBadgeText, { color: "#EA580C" }]}>
+          còn {days} ngày
+        </Text>
+      </View>
+    );
+  return (
+    <View style={[styles.daysBadge, { backgroundColor: "#FFFBEB" }]}>
+      <Text style={[styles.daysBadgeText, { color: "#D97706" }]}>
+        còn {days} ngày
+      </Text>
+    </View>
+  );
+});
+
+const DebtItem = React.memo(({ item }: { item: SapHHItem }) => {
+  const batchLabel = item.DotTTText ?? `Đợt ${item.DotTT}`;
+  const dueDateDisplay = fmtISOToDisplay(item.NgayTT);
+  const isPaid = item.TongDaThu >= item.SoTien;
+  const amountDisplay = formatCurrency(item.ConThieu);
+
+  return (
+    <View style={styles.listItem}>
+      <View style={styles.itemIconWrap}>
+        <CalendarClock size={20} color="#D97706" />
+      </View>
+      <View style={styles.itemBody}>
+        <View style={styles.itemRow}>
+          <Text style={styles.itemTitle} numberOfLines={1}>
+            {item.SoHD}
+          </Text>
+          <DaysBadge days={item.SoNgayConLai} />
+        </View>
+        <Text style={styles.itemSub} numberOfLines={1}>
+          {item.TenKH} · {batchLabel}
+        </Text>
+        <View style={styles.itemDateRow}>
+          <Calendar size={11} color={Colors.textSecondary} />
+          <Text style={styles.itemDateText}>
+            Hạn thanh toán: {dueDateDisplay}
+          </Text>
+        </View>
+        <View style={styles.itemFooter}>
+          <View>
+            <Text style={styles.itemAmount}>{amountDisplay}</Text>
+            <View
+              style={[
+                styles.statusBadge,
+                isPaid
+                  ? { backgroundColor: "#F0FDF4" }
+                  : { backgroundColor: "#FEF2F2" },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusText,
+                  isPaid ? { color: "#16A34A" } : { color: "#EF4444" },
+                ]}
+              >
+                {item.TrangThaiThu}
+              </Text>
+            </View>
+          </View>
+        </View>
       </View>
     </View>
-  </View>
-));
+  );
+});
 
-// ─── DropdownModal ────────────────────────────────────────────────────────────
 interface DropdownModalProps {
   activeChip: ActiveChip;
   onClose: () => void;
@@ -248,13 +324,11 @@ const DropdownModal = React.memo(
 );
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
-export default function PaymentReportScreen() {
+export default function DebtReportScreen() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [debouncedFilters, setDebouncedFilters] =
     useState<Filters>(DEFAULT_FILTERS);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isFirstFilterRun = useRef(true);
-  const requestIdRef = useRef(0);
 
   const [activeChip, setActiveChip] = useState<ActiveChip>(null);
   const [dateTarget, setDateTarget] = useState<DatePickerTarget>(null);
@@ -263,11 +337,8 @@ export default function PaymentReportScreen() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
 
-  const [data, setData] = useState<any[]>([]);
-  const [pageIndex, setPageIndex] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
+  const [data, setData] = useState<SapHHItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
 
   // ── Fetch projects ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -291,20 +362,8 @@ export default function PaymentReportScreen() {
 
   // ── Debounce filters ───────────────────────────────────────────────────────
   useEffect(() => {
-    // Lần chạy đầu tiên (mount): áp dụng filters ngay, không đặt timer.
-    // Tránh việc 300ms sau lại set lại debouncedFilters (object mới) với
-    // cùng giá trị, khiến effect fetch chạy thêm lần 2 cho cùng dữ liệu.
-    if (isFirstFilterRun.current) {
-      isFirstFilterRun.current = false;
-      setDebouncedFilters(filters);
-      return;
-    }
-
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      setData([]);
-      setPageIndex(1);
-      setHasMore(true);
       setDebouncedFilters(filters);
     }, 300);
     return () => {
@@ -312,23 +371,18 @@ export default function PaymentReportScreen() {
     };
   }, [filters]);
 
-  // ── Fetch page ─────────────────────────────────────────────────────────────
-  const fetchPage = useCallback(
-    async (page: number, currentFilters: Filters) => {
-      const myRequestId = ++requestIdRef.current;
-      const isFirstPage = page === 1;
-      if (isFirstPage) setLoading(true);
-      else setLoadingMore(true);
+  // ── Fetch data ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        const { TuNgay, DenNgay } = buildDateRange(currentFilters);
-        const res = await BaoCaoService.getThuTien({
-          MaDA: currentFilters.MaDA,
+        const { TuNgay, DenNgay } = buildDateRange(debouncedFilters);
+        const res = await BaoCaoService.getSapHH({
+          MaDA: debouncedFilters.MaDA,
           TuNgay,
           DenNgay,
-          PageSize: PAGE_SIZE,
-          PageIndex: page,
         });
-
         if (res?.status === 4001) {
           Alert.alert(
             "Không có quyền",
@@ -338,36 +392,19 @@ export default function PaymentReportScreen() {
           );
           return;
         }
-        // Có request mới hơn đã được gọi sau request này -> bỏ qua kết quả cũ
-        if (myRequestId !== requestIdRef.current) return;
-
-        const newItems: any[] = res?.data ?? [];
-        setData((prev) => (isFirstPage ? newItems : [...prev, ...newItems]));
-        setHasMore(newItems.length >= PAGE_SIZE);
+        if (!cancelled) setData(res?.data ?? []);
       } catch (e) {
-        console.error("Lỗi tải thu tiền:", e);
-        if (isFirstPage && myRequestId === requestIdRef.current) setData([]);
+        console.error("Lỗi tải hợp đồng:", e);
+        if (!cancelled) setData([]);
       } finally {
-        if (myRequestId === requestIdRef.current) {
-          if (isFirstPage) setLoading(false);
-          else setLoadingMore(false);
-        }
+        if (!cancelled) setLoading(false);
       }
-    },
-    []
-  );
-
-  useEffect(() => {
-    fetchPage(1, debouncedFilters);
+    };
+    fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, [debouncedFilters]);
-
-  const handleEndReached = useCallback(() => {
-    if (loadingMore || loading || !hasMore) return;
-    if (listData.length === 0) return;
-    const nextPage = pageIndex + 1;
-    setPageIndex(nextPage);
-    fetchPage(nextPage, debouncedFilters);
-  }, [loadingMore, loading, hasMore, pageIndex, debouncedFilters, fetchPage]);
 
   // ── Setters ────────────────────────────────────────────────────────────────
   const setFilter = useCallback(
@@ -429,25 +466,14 @@ export default function PaymentReportScreen() {
 
   const handleCancelDate = useCallback(() => setDateTarget(null), []);
 
-  // ── Derived data ───────────────────────────────────────────────────────────
-  const listData = useMemo(
-    () =>
-      data.map((item: any) => ({
-        id: item.ID,
-        receiptCode: item.SoPT,
-        amount: `${item.TienThu.toLocaleString("vi-VN")}₫`,
-        customerName: item.TenKH,
-        projectName: item.DienGiai,
-        paymentDate: new Date(item.NgayThu).toLocaleDateString("vi-VN"),
-        paymentMethod: "Phiếu thu",
-        rawAmount: item.TienThu,
-      })),
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const totalConThieu = useMemo(
+    () => data.reduce((s, i) => s + (i.ConThieu ?? 0), 0),
     [data]
   );
-
-  const totalRaw = useMemo(
-    () => listData.reduce((s, i) => s + (i.rawAmount ?? 0), 0),
-    [listData]
+  const totalSoTien = useMemo(
+    () => data.reduce((s, i) => s + (i.SoTien ?? 0), 0),
+    [data]
   );
 
   const projectLabel =
@@ -459,25 +485,11 @@ export default function PaymentReportScreen() {
 
   // ── FlatList helpers ───────────────────────────────────────────────────────
   const renderItem = useCallback(
-    ({ item }: { item: PaymentItemData }) => <PaymentItem item={item} />,
+    ({ item }: { item: SapHHItem }) => <DebtItem item={item} />,
     []
   );
-  const keyExtractor = useCallback(
-    (item: PaymentItemData) => String(item.id),
-    []
-  );
+  const keyExtractor = useCallback((item: SapHHItem) => String(item.ID), []);
 
-  const ListFooter = useMemo(() => {
-    if (!loadingMore) return null;
-    return (
-      <View style={styles.loadMoreContainer}>
-        <ActivityIndicator size="small" color={Colors.primary} />
-        <Text style={styles.loadMoreText}>Đang tải thêm...</Text>
-      </View>
-    );
-  }, [loadingMore]);
-
-  // ListHeaderComponent — chỉ chứa date range khi period === "custom"
   const ListHeader = useMemo(() => {
     if (filters.period !== "custom") return null;
     return (
@@ -504,9 +516,7 @@ export default function PaymentReportScreen() {
             {fmtDisplay(filters.fromDate) || "Từ ngày"}
           </Text>
         </TouchableOpacity>
-
         <Text style={styles.dateSep}>—</Text>
-
         <TouchableOpacity
           style={[
             styles.dateInput,
@@ -527,7 +537,6 @@ export default function PaymentReportScreen() {
             {fmtDisplay(filters.toDate) || "Đến ngày"}
           </Text>
         </TouchableOpacity>
-
         {(filters.fromDate || filters.toDate) && (
           <TouchableOpacity
             onPress={() =>
@@ -563,7 +572,7 @@ export default function PaymentReportScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: "Báo cáo thu tiền",
+          title: "Báo cáo sắp đến hạn",
           headerStyle: { backgroundColor: Colors.white },
           headerTintColor: Colors.text,
           headerShadowVisible: false,
@@ -643,7 +652,6 @@ export default function PaymentReportScreen() {
         </Modal>
       )}
 
-      {/* Android Date Picker */}
       {Platform.OS === "android" && dateTarget !== null && (
         <DateTimePicker
           mode="date"
@@ -663,7 +671,7 @@ export default function PaymentReportScreen() {
         />
       )}
 
-      {/* ── STICKY HEADER — luôn bám trên cùng, không cuộn theo list ── */}
+      {/* ══ STICKY HEADER — chip + 2 cards + section header ══ */}
       <View style={styles.stickyHeader}>
         {/* Chip row */}
         <ScrollView
@@ -728,18 +736,50 @@ export default function PaymentReportScreen() {
           )}
         </ScrollView>
 
-        {/* Total card */}
-        <View style={styles.totalCard}>
-          <View style={styles.totalAccent} />
-          <View style={styles.totalIconWrap}>
-            <DollarSign size={22} color="#10B981" />
+        {/* 2 summary cards */}
+        <View style={styles.summaryRow}>
+          <View style={[styles.totalCard, { flex: 1 }]}>
+            <View
+              style={[styles.totalAccent, { backgroundColor: "#EF4444" }]}
+            />
+            <View
+              style={[
+                styles.totalIconWrap,
+                { backgroundColor: "#FEF2F2", marginHorizontal: 12 },
+              ]}
+            >
+              <Banknote size={20} color="#EF4444" />
+            </View>
+            <View style={styles.totalBody}>
+              <Text style={styles.totalLabel}>Tổng cần thu</Text>
+              <Text style={[styles.totalValue, { color: "#EF4444" }]}>
+                {formatShort(totalSoTien)}
+              </Text>
+              <Text style={styles.totalSub}>
+                {data.length} đợt • {periodLabel}
+              </Text>
+            </View>
           </View>
-          <View style={styles.totalBody}>
-            <Text style={styles.totalLabel}>Tổng tiền thu về</Text>
-            <Text style={styles.totalValue}>{formatShort(totalRaw)}</Text>
-            <Text style={styles.totalSub}>
-              {listData.length} giao dịch{hasMore ? "+" : ""} • {periodLabel}
-            </Text>
+
+          <View style={[styles.totalCard, { flex: 1, marginLeft: 10 }]}>
+            <View
+              style={[styles.totalAccent, { backgroundColor: "#D97706" }]}
+            />
+            <View
+              style={[
+                styles.totalIconWrap,
+                { backgroundColor: "#FFFBEB", marginHorizontal: 12 },
+              ]}
+            >
+              <CalendarClock size={20} color="#D97706" />
+            </View>
+            <View style={styles.totalBody}>
+              <Text style={styles.totalLabel}>Còn thiếu</Text>
+              <Text style={[styles.totalValue, { color: "#D97706" }]}>
+                {formatShort(totalConThieu)}
+              </Text>
+              <Text style={styles.totalSub}>chưa thanh toán</Text>
+            </View>
           </View>
         </View>
 
@@ -747,25 +787,21 @@ export default function PaymentReportScreen() {
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleWrap}>
             <View style={styles.sectionAccent} />
-            <Text style={styles.sectionTitle}>Chi tiết thu tiền</Text>
+            <Text style={styles.sectionTitle}>Danh sách đợt</Text>
           </View>
           <View style={styles.sectionBadge}>
-            <Text style={styles.sectionBadgeText}>
-              {listData.length}
-              {hasMore ? "+" : ""}
-            </Text>
+            <Text style={styles.sectionBadgeText}>{data.length}</Text>
           </View>
         </View>
       </View>
 
-      {/* FlatList — chỉ cuộn phần danh sách */}
+      {/* FlatList — chỉ cuộn phần danh sách, không có phân trang */}
       <FlatList
-        data={loading ? [] : listData}
+        data={loading ? [] : data}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         ListHeaderComponent={ListHeader}
         ListEmptyComponent={ListEmpty}
-        ListFooterComponent={ListFooter}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -775,8 +811,6 @@ export default function PaymentReportScreen() {
         windowSize={7}
         removeClippedSubviews={Platform.OS === "android"}
         overScrollMode="never"
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.2}
       />
     </View>
   );
@@ -949,12 +983,15 @@ const styles = StyleSheet.create({
   pickerPreviewText: { fontSize: 14, fontWeight: "600", color: Colors.primary },
   iosPicker: { width: "100%" },
 
+  summaryRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
   totalCard: {
     backgroundColor: Colors.white,
     borderRadius: 14,
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
     overflow: "hidden",
     ...Platform.select({
       ios: {
@@ -966,25 +1003,18 @@ const styles = StyleSheet.create({
       android: { elevation: 3 },
     }),
   },
-  totalAccent: { width: 5, alignSelf: "stretch", backgroundColor: "#10B981" },
+  totalAccent: { width: 4, alignSelf: "stretch" },
   totalIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#ECFDF5",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    marginHorizontal: 14,
   },
-  totalBody: { flex: 1, paddingVertical: 16 },
-  totalLabel: { fontSize: 12, color: Colors.textSecondary },
-  totalValue: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#10B981",
-    marginTop: 2,
-  },
-  totalSub: { marginTop: 3, fontSize: 11, color: Colors.textSecondary },
+  totalBody: { flex: 1, paddingVertical: 14, paddingRight: 8 },
+  totalLabel: { fontSize: 11, color: Colors.textSecondary },
+  totalValue: { fontSize: 18, fontWeight: "800", marginTop: 2 },
+  totalSub: { marginTop: 2, fontSize: 10, color: Colors.textSecondary },
 
   sectionHeader: {
     flexDirection: "row",
@@ -1008,49 +1038,74 @@ const styles = StyleSheet.create({
   },
   sectionBadgeText: { fontSize: 12, fontWeight: "700", color: Colors.primary },
 
-  itemCard: {
+  listItem: {
     backgroundColor: Colors.white,
     borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 10,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
+        shadowOpacity: 0.05,
         shadowRadius: 4,
       },
-      android: { elevation: 1 },
+      android: { elevation: 2 },
     }),
   },
-  itemHeader: {
+  itemIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#FFFBEB",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  itemBody: { flex: 1, gap: 4 },
+  itemRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 6,
+    alignItems: "center",
   },
-  receiptCode: { fontSize: 13, fontWeight: "700", color: Colors.primary },
-  amount: { fontSize: 14, fontWeight: "700", color: "#10B981" },
-  customer: { fontSize: 14, fontWeight: "600", color: Colors.text },
-  project: { marginTop: 3, fontSize: 12, color: Colors.textSecondary },
-  footer: { flexDirection: "row", gap: 16, marginTop: 10 },
-  footerItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  footerText: { fontSize: 12, color: Colors.textSecondary },
+  itemTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.text,
+    flex: 1,
+    marginRight: 8,
+  },
+  itemSub: { fontSize: 12, color: Colors.textSecondary },
+  itemDateRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  itemDateText: { fontSize: 11, color: Colors.textSecondary },
+  itemFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginTop: 4,
+  },
+  itemAmount: { fontSize: 14, fontWeight: "800", color: Colors.text },
+  statusBadge: {
+    marginTop: 3,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    alignSelf: "flex-start",
+  },
+  statusText: { fontSize: 10, fontWeight: "600" },
 
-  emptyState: { alignItems: "center", paddingVertical: 40 },
-  emptyText: { fontSize: 14, color: Colors.textSecondary, fontWeight: "500" },
+  daysBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  daysBadgeText: { fontSize: 11, fontWeight: "700" },
+
   loadingContainer: {
     paddingVertical: 40,
     alignItems: "center",
     justifyContent: "center",
   },
   loadingText: { marginTop: 12, fontSize: 14, color: Colors.textSecondary },
-
-  loadMoreContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 16,
-  },
-  loadMoreText: { fontSize: 13, color: Colors.textSecondary },
+  emptyState: { alignItems: "center", paddingVertical: 40 },
+  emptyText: { fontSize: 14, color: Colors.textSecondary, fontWeight: "500" },
 });
