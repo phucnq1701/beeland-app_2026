@@ -7,14 +7,13 @@ import {
   ScrollView,
   Platform,
   Dimensions,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import {
   User,
   Settings,
-  Bell,
-  HelpCircle,
   LogOut,
   ChevronRight,
   Building2,
@@ -24,14 +23,12 @@ import {
   Users,
   Receipt,
   FileText,
-  Crown,
+  Trash2,
   Sparkles,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 import { UserService } from "@/sevices/UserService";
-import { ProjectService } from "@/sevices/ProjectService";
-import { CustomerService } from "@/sevices/CustomerService";
 
 const { width } = Dimensions.get("window");
 
@@ -53,8 +50,7 @@ interface ManagementItem {
 const menuItems: MenuItem[] = [
   { id: "1", title: "Thông tin cá nhân", icon: User, color: Colors.iconOrange },
   { id: "2", title: "Cài đặt", icon: Settings, color: Colors.iconBlue },
-  { id: "3", title: "Thông báo", icon: Bell, color: Colors.iconGreen },
-  { id: "4", title: "Trợ giúp", icon: HelpCircle, color: Colors.iconPurple },
+  { id: "3", title: "Xóa tài khoản", icon: Trash2, color: Colors.error },
 ];
 
 const managementItems: ManagementItem[] = [
@@ -116,8 +112,6 @@ export default function AccountScreen() {
   const router = useRouter();
   const [showAllManagement, setShowAllManagement] = React.useState(false);
   const [data, setData] = useState<any>(null);
-  const [duAn, setDuAn] = useState<any[]>([]);
-  const [khachHang, setKhachHang] = useState<any>(null);
 
   const handleLogout = () => {
     router.push("/login");
@@ -128,14 +122,31 @@ export default function AccountScreen() {
   };
 
   const loadData = async () => {
-    let res = await UserService.userInfo();
+    const res = await UserService.userInfo();
     setData(res?.data ?? null);
+  };
 
-    const resDA = await ProjectService.getProjects({});
-    setDuAn(resDA?.data ?? []);
-
-    let resKH = await CustomerService.getCustomers("");
-    setKhachHang(resKH?.data?.[0] ?? null);
+  const handleDeleteAccount = () => {
+    if (Platform.OS === "web") {
+      if (window.confirm("Bạn có chắc chắn muốn xóa tài khoản? Hành động này không thể hoàn tác.")) {
+        router.push("/login");
+      }
+    } else {
+      Alert.alert(
+        "Xóa tài khoản",
+        "Bạn có chắc chắn muốn xóa tài khoản? Hành động này không thể hoàn tác.",
+        [
+          { text: "Hủy", style: "cancel" },
+          {
+            text: "Xóa",
+            style: "destructive",
+            onPress: () => {
+              router.push("/login");
+            },
+          },
+        ]
+      );
+    }
   };
 
   useEffect(() => {
@@ -168,10 +179,6 @@ export default function AccountScreen() {
               </View>
               <Text style={styles.headerTitle}>Cài đặt</Text>
             </View>
-            <View style={styles.premiumBadge}>
-              <Crown size={14} color={Colors.primary} />
-              <Text style={styles.premiumText}>Premium</Text>
-            </View>
           </View>
         </View>
 
@@ -198,23 +205,6 @@ export default function AccountScreen() {
             </View>
             <Text style={styles.profileName}>{data?.HoTen}</Text>
             <Text style={styles.profileEmail}>{data?.Email}</Text>
-
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{duAn?.length}</Text>
-                <Text style={styles.statLabel}>Dự án</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{khachHang?.totalRows}</Text>
-                <Text style={styles.statLabel}>Khách hàng</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>89%</Text>
-                <Text style={styles.statLabel}>Tỷ lệ</Text>
-              </View>
-            </View>
           </View>
         </View>
 
@@ -287,6 +277,8 @@ export default function AccountScreen() {
                 onPress={() => {
                   if (item.id === "1") {
                     router.push("/profile");
+                  } else if (item.id === "3") {
+                    handleDeleteAccount();
                   }
                 }}
               >
@@ -387,23 +379,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     letterSpacing: -0.5,
   },
-  premiumBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-    backgroundColor: "rgba(255, 255, 255, 0.7)",
-  },
-  premiumText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.primary,
-  },
   profileCardContainer: {
     marginHorizontal: 20,
     marginBottom: 24,
@@ -472,35 +447,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     marginBottom: 20,
-  },
-  statsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "100%",
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: Colors.glass.border,
-  },
-  statItem: {
-    alignItems: "center",
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-    fontWeight: "500",
-  },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: Colors.glass.border,
   },
   section: {
     marginBottom: 20,

@@ -1,8 +1,9 @@
 {
+  "$schema": "https://rork.com/schema/rork.json",
   "apps": [
     {
       "name": "main",
-      "path": ".",
+      "path": "main",
       "framework": "react-native"
     }
   ]
