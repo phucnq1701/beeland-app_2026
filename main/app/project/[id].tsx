@@ -16,6 +16,8 @@ import {
   ArrowLeft,
   MapPin,
   ChevronRight,
+  Clapperboard,
+  Map,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 
@@ -60,6 +62,24 @@ export default function ProjectOptionsScreen() {
       bg: "rgba(16, 185, 129, 0.1)",
       onPress: () =>
         router.push(`/photo-gallery?projectId=${projectData.MaDA}` as any),
+    },
+    // {
+    //   id: "video",
+    //   title: "Thư viện video",
+    //   subtitle: "Quản lý video dự án",
+    //   icon: Clapperboard,
+    //   color: "#8B5CF6",
+    //   bg: "rgba(139, 92, 246, 0.12)",
+    //   onPress: () => router.push(`/video/${projectData.MaDA}` as any),
+    // },
+    {
+      id: "diagram",
+      title: "Sơ đồ phân lô",
+      subtitle: "Xem sơ đồ quy hoạch dự án",
+      icon: Map,
+      color: "#F59E0B", // Amber
+      bg: "rgba(245, 158, 11, 0.12)",
+      onPress: () => router.push(`/diagram/${projectData.MaDA}` as any),
     },
   ];
 
@@ -207,7 +227,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.15)",
   },
-
   body: {
     flex: 1,
     paddingHorizontal: 20,

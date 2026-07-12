@@ -33,6 +33,7 @@ import {
   DepositDetail,
   DepositPaymentHistory,
 } from "@/mocks/deposits";
+import { HopDongService } from "@/sevices/HopDongService";
 
 function formatCurrency(value: number): string {
   if (!value && value !== 0) return "0 đ";
@@ -126,11 +127,34 @@ export default function DepositDetailScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
+  const [lichSuThu, setLichSuThu] = useState([]);
+
   useEffect(() => {
     const d = buildFallbackDetail(id || "", dataParam);
 
     setDetail(d);
   }, [id, dataParam]);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+  const loadData = async () => {
+    let resLST = await HopDongService.getDetailLST({
+      MaPGC: Number(id),
+      isPhieuThu: true,
+    });
+
+    const lichSuThu = resLST?.data.map((item) => ({
+      ngayThu: item.ngayThu
+        ? new Date(item.ngayThu).toISOString().slice(0, 10)
+        : "",
+
+      soTien: item.tienThu || 0,
+
+      ghiChu: `Thu đợt ${item.dotTT}${item.name ? " - " + item.name : ""}`,
+    }));
+    setLichSuThu(lichSuThu);
+  };
 
   useEffect(() => {
     if (detail) {
@@ -381,7 +405,7 @@ export default function DepositDetailScreen() {
           <View style={styles.historyCard}>
             <Text style={styles.sectionTitle}>Lịch sử đóng tiền</Text>
 
-            {detail.lichSuDongTien.length === 0 ? (
+            {/* {detail.lichSuDongTien.length === 0 ? (
               <View style={styles.emptyHistory}>
                 <CreditCard color={Colors.textTertiary} size={32} />
                 <Text style={styles.emptyHistoryText}>
@@ -436,6 +460,47 @@ export default function DepositDetailScreen() {
                   );
                 }
               )
+            )} */}
+            {lichSuThu.length === 0 ? (
+              <View style={styles.emptyHistory}>
+                <CreditCard color={Colors.textTertiary} size={32} />
+                <Text style={styles.emptyHistoryText}>
+                  Chưa có lịch sử đóng tiền
+                </Text>
+              </View>
+            ) : (
+              lichSuThu.map((item, idx) => {
+                const isLast = idx === lichSuThu.length - 1;
+                return (
+                  <View key={idx}>
+                    <View style={styles.historyRow}>
+                      <View style={styles.historyLeft}>
+                        <View style={styles.historyDot}>
+                          <CircleDot color="#10B981" size={18} />
+                        </View>
+                        {!isLast && <View style={styles.historyLine} />}
+                      </View>
+                      <View style={styles.historyContent}>
+                        <View style={styles.historyTopRow}>
+                          <View style={styles.historyDateWrap}>
+                            <Calendar color={Colors.textTertiary} size={13} />
+                            <Text style={styles.historyDate}>
+                              {formatDate(item.ngayThu)}
+                            </Text>
+                          </View>
+                          <Text style={styles.historyAmount}>
+                            +{formatCurrencyShort(item.soTien)}
+                          </Text>
+                        </View>
+                        {item.ghiChu ? (
+                          <Text style={styles.historyNote}>{item.ghiChu}</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    {!isLast && <View style={{ height: 4 }} />}
+                  </View>
+                );
+              })
             )}
           </View>
 

@@ -119,11 +119,11 @@ export default function ProjectsScreen() {
             </View>
 
             <View style={styles.cardBottom}>
-              {item.price ? (
+              {/* {item.price ? (
                 <Text style={styles.cardPrice}>{item.price}</Text>
               ) : (
                 <Text style={styles.cardPriceContact}>Liên hệ</Text>
-              )}
+              )} */}
 
               <View
                 style={[

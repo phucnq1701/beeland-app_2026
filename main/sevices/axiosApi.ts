@@ -19,6 +19,8 @@ import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_URL = "https://api-beeland.beesky.vn/";
+// const API_URL = "https://api-beeland-dev.beesky.vn/";
+
 const axiosApi = axios.create({
   baseURL: API_URL,
   timeout: 30000,

@@ -270,6 +270,7 @@ export default function ContractDetailScreen() {
     "history" | "progress" | "documents"
   >("progress");
 
+  
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
@@ -285,6 +286,9 @@ export default function ContractDetailScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+
+  
 
   const loadData = async () => {
     let res = await HopDongService.getDetailLTT({ MaPGC: id });
@@ -344,6 +348,8 @@ export default function ContractDetailScreen() {
     if (dataParam) {
       try {
         const parsed = JSON.parse(dataParam);
+        console.log(parsed,'parsed');
+        
         return {
           ...DEMO_CONTRACT,
           maHD: parsed.maHD || id || DEMO_CONTRACT.maHD,
@@ -581,6 +587,7 @@ export default function ContractDetailScreen() {
 
             <View style={styles.contractValueRow}>
               <Text style={styles.contractValueLabel}>Giá trị hợp đồng</Text>
+
               <Text style={styles.contractValueAmount}>
                 {formatCurrency(contract.tongGiaTri)}
               </Text>
@@ -824,7 +831,6 @@ export default function ContractDetailScreen() {
           {activeTab === "history" && (
             <View style={styles.sectionCard}>
               {lichSuThu.length === 0 ? (
-                // {true ? (
                 <View style={styles.emptyHistory}>
                   <CreditCard color={Colors.textTertiary} size={32} />
                   <Text style={styles.emptyHistoryText}>

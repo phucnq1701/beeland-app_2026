@@ -25,36 +25,33 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-
   const handleLogin = async () => {
-    
     if (!companyCode || !username || !password) {
       Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin");
       return;
     }
 
-  
     try {
       setLoading(true);
-  
+
       const res = await AuthService.login({
         TenCTDKVT: companyCode.trim(),
         Email: username.trim(),
         Password: password,
       });
-  
+
       if (res?.status === 200) {
         const token = res?.acessToken;
-        
+
         if (token) {
           await AsyncStorage.setItem("@token", token);
+          await AsyncStorage.setItem("tenCTDKVT", companyCode.trim());
         }
-  
+
         router.replace("/(tabs)/home");
       } else {
         Alert.alert("Thông báo", res?.message || "Đăng nhập thất bại");
       }
-  
     } catch (error) {
       console.log("Login error:", error);
       Alert.alert("Lỗi", "Không kết nối được server");
@@ -68,7 +65,7 @@ export default function LoginScreen() {
       <View style={styles.content}>
         <View style={styles.logoContainer}>
           <Image
-            source={require('@/assets/images/beeland-logo.png')}
+            source={require("@/assets/images/beeland-logo.png")}
             style={styles.logo}
             resizeMode="contain"
           />
@@ -140,7 +137,7 @@ export default function LoginScreen() {
 
           <View style={styles.registerRow}>
             <Text style={styles.registerText}>Chưa có tài khoản? </Text>
-            <TouchableOpacity onPress={() => router.push('/register')}>
+            <TouchableOpacity onPress={() => router.push("/register")}>
               <Text style={styles.registerLink}>Đăng ký</Text>
             </TouchableOpacity>
           </View>
@@ -240,9 +237,9 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   registerRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     marginTop: 20,
   },
   registerText: {
@@ -251,9 +248,7 @@ const styles = StyleSheet.create({
   },
   registerLink: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.primary,
   },
 });
-
-

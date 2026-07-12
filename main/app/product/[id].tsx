@@ -201,7 +201,7 @@ export default function ProductDetailScreen() {
         const seconds = res?.data || 0;
 
         setIsLocked(true);
-        setRemainingSeconds(seconds); // API trả về seconds giống code cũ
+        setRemainingSeconds(seconds); 
       }
     } catch (err) {
       console.log("Lock error", err);

@@ -332,6 +332,8 @@ export default function DepositsScreen() {
 
   const handleDepositPress = useCallback(
     (item: Deposit) => {
+      console.log(item?.maDC,'item');
+      
       router.push({
         pathname: "/deposit/[id]",
         params: {
