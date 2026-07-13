@@ -24,8 +24,7 @@
         "NSPhotoLibraryAddUsageDescription": "Allow $(PRODUCT_NAME) to save photos."
       },
       "accessesContactNotes": true,
-      "usesIcloudStorage": true,
-      "runtimeVersion": "appVersion"
+      "usesIcloudStorage": true
     },
     "android": {
       "adaptiveIcon": {
@@ -60,10 +59,8 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
-      ],
-      "runtimeVersion": {
-        "policy": "appVersion"
-      }
+      ]
+     
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -119,6 +116,9 @@
       "eas": {
         "projectId": "d1c32165-b49c-4573-b60e-c683ae7d1b0d"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     },
     "updates": {
       "url": "https://u.expo.dev/d1c32165-b49c-4573-b60e-c683ae7d1b0d"
