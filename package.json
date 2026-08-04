@@ -8,7 +8,6 @@
     "start-web": "bunx rork start -p 1u56dq6uahj9lsqc91elj --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p 1u56dq6uahj9lsqc91elj --web --tunnel",
     "lint": "expo lint",
-    "postinstall": "npx install-skia",
     "buildios": "eas build -p ios --profile production --clear-cache",
     "buildandroid": "eas build -p android --profile production --clear-cache",
     "submit": "eas submit -p ios",
