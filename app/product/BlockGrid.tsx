@@ -112,7 +112,8 @@ const BlockGrid = ({
                       const unit = details.find((d: any) => {
                         const vt = d.MaVT ?? d.MaViTri ?? d.ViTri;
                         if (vt == null) return false;
-                        return Number(vt) === Number(loc.maVT);
+                        // ma_tang/vi_tri là uuid → so khớp bằng chuỗi
+                        return String(vt) === String(loc.maVT);
                       });
 
                       if (!unit) {
@@ -138,16 +139,19 @@ const BlockGrid = ({
                               styles.unitCell,
                               {
                                 backgroundColor:
-                                  localChange?.MaTang === floor.maTang &&
-                                  localChange?.MaVT === loc.maVT
+                                  String(localChange?.MaTang) ===
+                                    String(floor.maTang) &&
+                                  String(localChange?.MaVT) === String(loc.maVT)
                                     ? "yellow"
-                                    : getHexColor(unit.MauNen),
+                                    : unit.ColorTT ||
+                                      (typeof unit.MauNen === "string" &&
+                                      unit.MauNen.startsWith("#")
+                                        ? unit.MauNen
+                                        : getHexColor(unit.MauNen)) ||
+                                      "#ccc",
                               },
                             ]}
-                            onPress={() => {
-                              if (unit.MaTT !== 2 && unit.MaTT !== 18) return;
-                              handlePressProduct(unit.MaSP);
-                            }}
+                            onPress={() => handlePressProduct(unit.MaSP)}
                           >
                             <Text style={styles.unitCellText}>
                               {unit.KyHieu}

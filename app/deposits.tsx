@@ -31,8 +31,8 @@ import {
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { DEMO_DEPOSITS, Deposit } from "@/mocks/deposits";
-import { ProjectService } from "@/sevices/ProjectService";
-import { DatCocService } from "@/sevices/DatCocService";
+import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { DatCocService } from "@/sevicesSupabase/DatCocService";
 
 function formatCurrency(value: number): string {
   if (!value && value !== 0) return "0";
@@ -142,6 +142,7 @@ const DepositCard = React.memo(
     );
   }
 );
+DepositCard.displayName = "DepositCard";
 
 export default function DepositsScreen() {
   const router = useRouter();
@@ -206,7 +207,7 @@ export default function DepositsScreen() {
 
     return color;
   };
-  const loadData = async (filter, isLoadMore = false) => {
+  const loadData = async (filter: any, isLoadMore = false) => {
     if (isLoadMore) {
       setLoadingMore(true);
     } else {

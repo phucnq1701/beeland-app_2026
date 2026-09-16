@@ -32,7 +32,9 @@ import Colors from "@/constants/colors";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { CongViecService } from "@/sevices/CongViecService";
 import { CustomerService } from "@/sevices/CustomerService";
-import { ProductService } from "@/sevices/ProductService";
+import { CustomerService as CustomerSupabaseService } from "@/sevicesSupabase/CustomerService";
+
+import { ProductService } from "@/sevicesSupabase/ProductService";
 
 type ViewMode = "list" | "calendar";
 
@@ -130,22 +132,36 @@ export default function AppointmentsScreen() {
     void loadDSLichHen();
   }, []);
 
+  function normalizeCustomer(item: any) {
+    const raw = item?.raw || {};
+    return {
+      maKH: item?.ma_kh ?? raw?.MaKH ?? "",
+      tenKH: (item?.ho_ten ?? raw?.TenKH ?? "").toString().trim(),
+      diDong: item?.dien_thoai || raw?.DiDong || "",
+      email: item?.email || raw?.Email || "",
+      cccd: item?.cccd || raw?.SoCMND || "",
+      diaChi: item?.dia_chi || raw?.DiaChi || "",
+      company: raw?.TenCongTy || null,
+      ngayDangKy: item?.ngay_tao || item?.created_at || raw?.NgayTao || null,
+      _raw: item,
+    };
+  }
+  
   const loadData = async (search = "") => {
     setLoadingKH(true);
-
+  
     try {
-      let res = await CustomerService.getCustomers(search);
+      let res = await CustomerSupabaseService.getCustomers({ search });
       const list = Array.isArray(res?.data) ? res.data : [];
-
-      setDataKH(list);
+  
+      setDataKH(list.map(normalizeCustomer));
     } catch (error) {
       console.log("ERROR:", error);
       setDataKH([]);
     }
-
+  
     setLoadingKH(false);
   };
-
   useEffect(() => {
     if (openedFromHome.current) return;
 

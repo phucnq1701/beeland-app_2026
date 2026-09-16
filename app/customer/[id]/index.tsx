@@ -23,130 +23,68 @@ import {
   Phone,
   Mail,
   MapPin,
-  Calendar,
-  Clock,
   Plus,
   Edit2,
-  Trash2,
   FileText,
   ChevronRight,
   ScrollText,
+  Trash2,
 } from "lucide-react-native";
-import { Dropdown } from "react-native-element-dropdown";
 import Colors from "@/constants/colors";
-import { CustomerService } from "@/sevices/CustomerService";
-import { CongViecService } from "@/sevices/CongViecService";
+import { CustomerService } from "@/sevicesSupabase/CustomerService";
 import { Format_Date } from "@/components/utils/common";
-import DateTimePicker from "@react-native-community/datetimepicker";
-
-interface Appointment {
-  id: string;
-  date: string;
-  time: string;
-  title: string;
-  location: string;
-  status: "upcoming" | "completed" | "cancelled";
-  notes?: string;
-  dienGiai?: string;
-}
 
 export default function CustomerDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
 
   const [customer, setCustomer] = useState<any>(null);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [workHistory, setWorkHistory] = useState<any[]>([]);
-  const [trangThaiKH, setTrangThaiKH] = useState<any[]>([]);
   const [showAddHistoryModal, setShowAddHistoryModal] = useState(false);
-  const [showAddAppointmentModal, setShowAddAppointmentModal] = useState(false);
-  const [date, setDate] = useState(new Date());
-  const [showPicker, setShowPicker] = useState(false);
-
-  const [newAppointment, setNewAppointment] = useState({
-    tieuDe: "",
-    dienGiai: "",
-    ngayHen: "",
-    ngayHenAPI: "",
-    maLH: null as string | null,
-  });
 
   const [newHistory, setNewHistory] = useState({
+    title: "",
     content: "",
-    status: null as string | null,
-    id: null as string | null,
   });
-
-  const loadDataExtra = async () => {
-    const result = await CustomerService.getTrangThaiKH();
-    setTrangThaiKH(result?.data ?? []);
-  };
-
-  useEffect(() => {
-    void loadDataExtra();
-  }, []);
 
   const getCustomer = useCallback(async () => {
     try {
-      const res = await CustomerService.getCustomer({ MaKH: id });
-      if (res?.data?.length) {
-        const item = res.data[0];
+      if (!id) return;
+      const detail = await CustomerService.getCustomerDetailCloud(String(id));
+      if (detail) {
+        const isPersonal = detail.is_personal !== false;
         setCustomer({
-          id: item.maKH,
-          name: item.tenKH || "",
-          phone: item.diDong || "",
-          email: item.email || "",
-          company: item.tenQD || "",
-          taxCode: "",
-          type: "personal",
-          status: "active",
-          images: [],
-          projects: [],
-          diaChi: item.diaChi || "",
+          id: detail.id,
+          maSoKh: detail.ma_so_kh,
+          name: (isPersonal ? detail.ten_kh : detail.ten_cong_ty) || detail.tenKH || "",
+          phone: detail.diDong || detail.dien_thoai || "",
+          phone2: detail.di_dong2 || "",
+          email: detail.email || detail.email_ct || "",
+          company: !isPersonal
+            ? detail.ten_cong_ty || detail.cty?.ten_ct_vt || detail.cty?.ten_ct || ""
+            : detail.tenSan || detail.cty?.ten_ct_vt || detail.cty?.ten_ct || "",
+          cccd: detail.cccd || detail.so_cmnd || "",
+          taxCode: detail.ma_so_thue_ct || detail.ma_so_ttncn || "",
+          isPersonal,
+          type: isPersonal ? "personal" : "business",
+          status: detail.tenTT || "Đang giao dịch",
+          statusColor: detail.statusColor || Colors.primary,
+          source: detail.tenNguon || "",
+          diaChi: detail.diaChi || detail.dia_chi || detail.thuong_tru || detail.dia_chi_ct || "",
+          nguoiDaiDienPl: detail.nguoi_dai_dien_pl,
+          chucVu: detail.chuc_vu,
         });
       }
     } catch (err) {
-      console.log(err);
-    }
-  }, [id]);
-
-  const getAppointments = useCallback(async () => {
-    try {
-      const res = await CustomerService.getLichHenByMaKH({
-        MaKH: id,
-        TuNgay: "2000-01-01",
-        DenNgay: "2100-01-01",
-        InputString: "",
-        Home: 0,
-      });
-      if (res?.data?.length) {
-        const data = res.data.map((item: any) => ({
-          id: item.maLH?.toString(),
-          date: item.ngayHen?.split("T")[0],
-          time: item.ngayHen?.split("T")[1]?.substring(0, 5) || "",
-          title: item.tieuDe || "Lịch hẹn",
-          location: item.diaDiem || "",
-          status: "upcoming" as const,
-          notes: item.ghiChu || "",
-          dienGiai: item?.dienGiai,
-        }));
-        setAppointments(data);
-      } else {
-        setAppointments([]);
-      }
-    } catch (err) {
-      console.log(err);
+      console.log("Error get customer detail:", err);
     }
   }, [id]);
 
   const getNotes = useCallback(async () => {
     try {
-      const res = await CustomerService.getGhiChunByMaKH({ MaKH: id });
-      if (res?.data?.length) {
-        setWorkHistory(res?.data);
-      } else {
-        setWorkHistory([]);
-      }
+      if (!id) return;
+      const activities = await CustomerService.getCustomerActivities(String(id));
+      setWorkHistory(activities || []);
     } catch (err) {
       console.log(err);
     }
@@ -156,136 +94,55 @@ export default function CustomerDetailScreen() {
     useCallback(() => {
       if (id) {
         void getCustomer();
-        void getAppointments();
         void getNotes();
       }
-    }, [id, getCustomer, getAppointments, getNotes])
+    }, [id, getCustomer, getNotes])
   );
 
   const handleAddHistory = async () => {
-    if (!newHistory.status || !newHistory.content.trim()) {
-      Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin");
+    if (!newHistory.content.trim()) {
+      Alert.alert("Thông báo", "Vui lòng nhập nội dung chăm sóc");
       return;
     }
-    const payload = {
-      DienGiai: newHistory?.content,
-      MaTT: newHistory?.status,
-      MaKH: id,
-      ID: newHistory?.id ?? null,
-    };
-    const result = await CongViecService.addGhiChuCV(payload);
+    const result = await CustomerService.addCustomerActivity({
+      customerId: String(id),
+      content: newHistory.content,
+      title: newHistory.title || "Chăm sóc khách hàng",
+    });
     if (result?.status === 2000) {
       void getNotes();
       setShowAddHistoryModal(false);
-      setNewHistory({ content: "", status: null, id: null });
-      Alert.alert("Thành công", result?.message);
+      setNewHistory({ title: "", content: "" });
+      Alert.alert("Thành công", "Đã thêm nhật ký chăm sóc");
     } else {
-      Alert.alert("Thất bại", result?.message);
+      Alert.alert("Thất bại", result?.message || "Không thể lưu nhật ký");
     }
   };
 
-  const formatDateVN = (d: Date) => {
-    const dd = String(d.getDate()).padStart(2, "0");
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const yyyy = d.getFullYear();
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mi = String(d.getMinutes()).padStart(2, "0");
-    return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
-  };
 
-  const formatDateAPI = (d: Date) => {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mi = String(d.getMinutes()).padStart(2, "0");
-    const ss = String(d.getSeconds()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`;
-  };
-
-  const onChangeDate = (event: any, selectedDate: any) => {
-    setShowPicker(false);
-    if (selectedDate) {
-      setDate(selectedDate);
-      setNewAppointment((prev) => ({
-        ...prev,
-        ngayHen: formatDateVN(selectedDate),
-        ngayHenAPI: formatDateAPI(selectedDate),
-      }));
-    }
-  };
-
-  const handleAddAppointment = async () => {
-    if (!newAppointment.tieuDe || !newAppointment.ngayHen) {
-      Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin");
-      return;
-    }
-    const payload = {
-      TieuDe: newAppointment.tieuDe,
-      DienGiai: newAppointment.dienGiai,
-      MaKH: id,
-      MaLH: newAppointment.maLH ?? null,
-      NgayHen: newAppointment.ngayHenAPI,
-    };
-    try {
-      const result = await CongViecService.addLichHen(payload);
-      if (result?.status === 2000) {
-        void getAppointments();
-        setShowAddAppointmentModal(false);
-        setNewAppointment({ tieuDe: "", dienGiai: "", ngayHen: "", ngayHenAPI: "", maLH: null });
-        Alert.alert("Thành công", result?.message);
-      } else {
-        Alert.alert("Thất bại", result?.message);
-      }
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
-  const handleEditAppointment = (item: Appointment) => {
-    const dateObj = new Date(item.date + "T" + item.time);
-    setNewAppointment({
-      tieuDe: item.title,
-      dienGiai: item.dienGiai || "",
-      ngayHen: formatDateVN(dateObj),
-      ngayHenAPI: formatDateAPI(dateObj),
-      maLH: item.id,
-    });
-    setShowAddAppointmentModal(true);
-  };
-
-  const handleDeleteAppointment = (appointmentId: string) => {
-    Alert.alert("Xác nhận", "Bạn có chắc muốn xoá lịch hẹn này?", [
-      { text: "Huỷ", style: "cancel" },
-      {
-        text: "Xoá",
-        style: "destructive",
-        onPress: async () => {
-          const result = await CustomerService.addLichHen({ MaLH: appointmentId, MaKH: id, Delete: true });
-          if (result?.status === 2000) {
-            void getAppointments();
-            Alert.alert("Thành công", "Đã xoá lịch hẹn");
-          } else {
-            Alert.alert("Lỗi", result?.message);
-          }
+  const handleDeleteCustomer = () => {
+    Alert.alert(
+      "Xác nhận xoá",
+      `Bạn có chắc muốn xoá khách hàng "${customer?.name || ""}"?`,
+      [
+        { text: "Hu", style: "cancel" },
+        {
+          text: "Xoá",
+          style: "destructive",
+          onPress: async () => {
+            const res = await CustomerService.deleteCustomer(String(id));
+            if (res.status === 2000) {
+              Alert.alert("Thành công", "Đã xoá khách hàng", [
+                { text: "OK", onPress: () => router.back() },
+              ]);
+            } else {
+              Alert.alert("Không thể xoá", res.message);
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
-
-  const handleEditHistory = (item: any) => {
-    setNewHistory({
-      content: item.dienGiai,
-      status: item.maTT,
-      id: item.id,
-    });
-    setShowAddHistoryModal(true);
-  };
-
-  const trangThaiOptions = trangThaiKH.map((item) => ({
-    label: item.tenTT,
-    value: item.maTT,
-  }));
 
   const getInitials = (name: string) => {
     if (!name) return "?";
@@ -341,12 +198,17 @@ export default function CustomerDetailScreen() {
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <TouchableOpacity
-              onPress={() => router.push(`/customer/${customer.id}/edit`)}
-              style={{ padding: 4 }}
-            >
-              <Edit2 color={Colors.white} size={20} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+              <TouchableOpacity
+                onPress={() => router.push(`/customer/${customer.id}/edit`)}
+                style={{ padding: 4 }}
+              >
+                <Edit2 color={Colors.white} size={20} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDeleteCustomer} style={{ padding: 4 }}>
+                <Trash2 color={Colors.white} size={20} />
+              </TouchableOpacity>
+            </View>
           ),
         }}
       />
@@ -362,9 +224,18 @@ export default function CustomerDetailScreen() {
           {customer.company ? (
             <Text style={styles.profileCompany}>{customer.company}</Text>
           ) : null}
-          <View style={styles.statusChip}>
-            <View style={styles.statusDot} />
-            <Text style={styles.statusLabel}>Khách hàng</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+            {customer.maSoKh ? (
+              <View style={[styles.statusChip, { backgroundColor: "#F1F5F9" }]}>
+                <Text style={[styles.statusLabel, { color: "#475569" }]}>Mã: {customer.maSoKh}</Text>
+              </View>
+            ) : null}
+            <View style={[styles.statusChip, { backgroundColor: (customer.statusColor || Colors.primary) + "18" }]}>
+              <View style={[styles.statusDot, { backgroundColor: customer.statusColor || Colors.primary }]} />
+              <Text style={[styles.statusLabel, { color: customer.statusColor || Colors.primary }]}>
+                {customer.status}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -375,8 +246,20 @@ export default function CustomerDetailScreen() {
                 <Phone color={Colors.primary} size={18} />
               </View>
               <View style={styles.contactCardContent}>
-                <Text style={styles.contactCardLabel}>Điện thoại</Text>
+                <Text style={styles.contactCardLabel}>Điện thoại chính</Text>
                 <Text style={styles.contactCardValue}>{customer.phone}</Text>
+              </View>
+            </View>
+          ) : null}
+
+          {customer.phone2 ? (
+            <View style={styles.contactCardItem}>
+              <View style={[styles.contactIcon, { backgroundColor: "rgba(232,111,37,0.06)" }]}>
+                <Phone color={Colors.textSecondary} size={18} />
+              </View>
+              <View style={styles.contactCardContent}>
+                <Text style={styles.contactCardLabel}>Điện thoại phụ</Text>
+                <Text style={styles.contactCardValue}>{customer.phone2}</Text>
               </View>
             </View>
           ) : null}
@@ -393,6 +276,42 @@ export default function CustomerDetailScreen() {
             </View>
           ) : null}
 
+          {customer.cccd ? (
+            <View style={styles.contactCardItem}>
+              <View style={[styles.contactIcon, { backgroundColor: "rgba(139,92,246,0.1)" }]}>
+                <FileText color={Colors.accent.purple} size={18} />
+              </View>
+              <View style={styles.contactCardContent}>
+                <Text style={styles.contactCardLabel}>Số CCCD / CMND</Text>
+                <Text style={styles.contactCardValue}>{customer.cccd}</Text>
+              </View>
+            </View>
+          ) : null}
+
+          {customer.taxCode ? (
+            <View style={styles.contactCardItem}>
+              <View style={[styles.contactIcon, { backgroundColor: "rgba(245,158,11,0.1)" }]}>
+                <FileText color="#F59E0B" size={18} />
+              </View>
+              <View style={styles.contactCardContent}>
+                <Text style={styles.contactCardLabel}>{customer.isPersonal ? "Mã số thuế TNCN" : "Mã số thuế doanh nghiệp"}</Text>
+                <Text style={styles.contactCardValue}>{customer.taxCode}</Text>
+              </View>
+            </View>
+          ) : null}
+
+          {customer.source ? (
+            <View style={styles.contactCardItem}>
+              <View style={[styles.contactIcon, { backgroundColor: "rgba(16,185,129,0.1)" }]}>
+                <FileText color={Colors.accent.green} size={18} />
+              </View>
+              <View style={styles.contactCardContent}>
+                <Text style={styles.contactCardLabel}>Nguồn khách</Text>
+                <Text style={styles.contactCardValue}>{customer.source}</Text>
+              </View>
+            </View>
+          ) : null}
+
           {customer.diaChi ? (
             <View style={styles.contactCardItem}>
               <View style={[styles.contactIcon, { backgroundColor: "rgba(16,185,129,0.1)" }]}>
@@ -401,6 +320,18 @@ export default function CustomerDetailScreen() {
               <View style={styles.contactCardContent}>
                 <Text style={styles.contactCardLabel}>Địa chỉ</Text>
                 <Text style={styles.contactCardValue}>{customer.diaChi}</Text>
+              </View>
+            </View>
+          ) : null}
+
+          {!customer.isPersonal && customer.nguoiDaiDienPl ? (
+            <View style={styles.contactCardItem}>
+              <View style={[styles.contactIcon, { backgroundColor: "rgba(59,130,246,0.1)" }]}>
+                <FileText color={Colors.accent.blue} size={18} />
+              </View>
+              <View style={styles.contactCardContent}>
+                <Text style={styles.contactCardLabel}>Người đại diện PL</Text>
+                <Text style={styles.contactCardValue}>{customer.nguoiDaiDienPl} {customer.chucVu ? `(${customer.chucVu})` : ""}</Text>
               </View>
             </View>
           ) : null}
@@ -424,74 +355,11 @@ export default function CustomerDetailScreen() {
           <ChevronRight color={Colors.textTertiary} size={20} />
         </TouchableOpacity>
 
-        <View style={styles.sectionWrap}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleRow}>
-              <Calendar color={Colors.primary} size={18} />
-              <Text style={styles.sectionTitle}>Lịch hẹn</Text>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{appointments.length}</Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              onPress={() => setShowAddAppointmentModal(true)}
-              style={styles.addBtn}
-              activeOpacity={0.7}
-            >
-              <Plus color={Colors.white} size={16} />
-              <Text style={styles.addBtnText}>Thêm</Text>
-            </TouchableOpacity>
-          </View>
-
-          {appointments.length === 0 ? (
-            <View style={styles.emptySection}>
-              <Calendar color={Colors.textTertiary} size={32} />
-              <Text style={styles.emptySectionText}>Chưa có lịch hẹn</Text>
-            </View>
-          ) : (
-            <View style={styles.appointmentList}>
-              {appointments.map((item) => (
-                <View key={item.id} style={styles.appointmentCard}>
-                  <TouchableOpacity
-                    style={styles.appointmentContent}
-                    onPress={() => handleEditAppointment(item)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.appointmentLeft}>
-                      <View style={styles.appointmentDateBadge}>
-                        <Clock color={Colors.accent.blue} size={12} />
-                        <Text style={styles.appointmentDateText}>
-                          {item.date} · {item.time}
-                        </Text>
-                      </View>
-                      <Text style={styles.appointmentTitle} numberOfLines={1}>
-                        {item.title}
-                      </Text>
-                      {item.dienGiai ? (
-                        <Text style={styles.appointmentDesc} numberOfLines={2}>
-                          {item.dienGiai}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => handleDeleteAppointment(item.id)}
-                    style={styles.appointmentDeleteBtn}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Trash2 size={15} color="#EF4444" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-
         <View style={[styles.sectionWrap, { marginBottom: 40 }]}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
               <FileText color={Colors.accent.purple} size={18} />
-              <Text style={styles.sectionTitle}>Lịch sử làm việc</Text>
+              <Text style={styles.sectionTitle}>Nhật ký chăm sóc</Text>
               <View style={[styles.badge, { backgroundColor: "rgba(139,92,246,0.1)" }]}>
                 <Text style={[styles.badgeText, { color: Colors.accent.purple }]}>
                   {workHistory.length}
@@ -511,30 +379,32 @@ export default function CustomerDetailScreen() {
           {workHistory.length === 0 ? (
             <View style={styles.emptySection}>
               <FileText color={Colors.textTertiary} size={32} />
-              <Text style={styles.emptySectionText}>Chưa có lịch sử</Text>
+              <Text style={styles.emptySectionText}>Chưa có nhật ký chăm sóc</Text>
             </View>
           ) : (
             <View style={styles.historyList}>
               {workHistory.map((item) => (
-                <TouchableOpacity
+                <View
                   key={item.id}
                   style={styles.historyCard}
-                  onPress={() => handleEditHistory(item)}
-                  activeOpacity={0.7}
                 >
                   <View style={styles.historyTop}>
                     <View style={styles.historyStatusChip}>
-                      <Text style={styles.historyStatusText}>{item.tenTT}</Text>
+                      <Text style={styles.historyStatusText}>{item.tieuDe || "Chăm sóc KH"}</Text>
                     </View>
-                    <Edit2 size={14} color={Colors.textTertiary} />
+                    <Text style={styles.historyDate}>
+                      {item.thoiGian ? Format_Date(item.thoiGian) : ""}
+                    </Text>
                   </View>
-                  <Text style={styles.historyContent} numberOfLines={3}>
-                    {item.dienGiai}
+                  <Text style={styles.historyContent}>
+                    {item.noiDung}
                   </Text>
-                  <Text style={styles.historyDate}>
-                    {Format_Date(item.ngayCN)}
-                  </Text>
-                </TouchableOpacity>
+                  {item.nguoiThucHien ? (
+                    <Text style={[styles.historyDate, { marginTop: 4, color: Colors.textSecondary }]}>
+                      Người xử lý: {item.nguoiThucHien}
+                    </Text>
+                  ) : null}
+                </View>
               ))}
             </View>
           )}
@@ -551,34 +421,26 @@ export default function CustomerDetailScreen() {
             activeOpacity={1}
             onPress={() => {
               setShowAddHistoryModal(false);
-              setNewHistory({ content: "", status: null, id: null });
+              setNewHistory({ title: "", content: "" });
             }}
           >
             <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
               <View style={styles.modalHandle} />
-              <Text style={styles.modalTitle}>
-                {newHistory.id ? "Sửa lịch sử làm việc" : "Thêm lịch sử làm việc"}
-              </Text>
+              <Text style={styles.modalTitle}>Thêm nhật ký chăm sóc</Text>
 
-              <Text style={styles.modalLabel}>Trạng thái</Text>
-              <Dropdown
-                style={styles.modalDropdown}
-                data={trangThaiOptions}
-                labelField="label"
-                valueField="value"
-                placeholder="Chọn trạng thái công việc"
-                placeholderStyle={{ color: Colors.textTertiary, fontSize: 14 }}
-                selectedTextStyle={{ color: Colors.text, fontSize: 14 }}
-                value={newHistory.status}
-                onChange={(item: any) =>
-                  setNewHistory((prev) => ({ ...prev, status: item.value }))
-                }
+              <Text style={styles.modalLabel}>Tiêu đề</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Ví dụ: Gọi điện tư vấn, Gặp trao đổi..."
+                placeholderTextColor={Colors.textTertiary}
+                value={newHistory.title}
+                onChangeText={(t) => setNewHistory({ ...newHistory, title: t })}
               />
 
-              <Text style={styles.modalLabel}>Nội dung</Text>
+              <Text style={styles.modalLabel}>Nội dung chăm sóc *</Text>
               <TextInput
-                style={[styles.modalInput, { height: 140, textAlignVertical: "top" }]}
-                placeholder="Nhập nội dung..."
+                style={[styles.modalInput, { height: 120, textAlignVertical: "top" }]}
+                placeholder="Nhập nội dung trao đổi với khách hàng..."
                 placeholderTextColor={Colors.textTertiary}
                 multiline
                 value={newHistory.content}
@@ -586,86 +448,7 @@ export default function CustomerDetailScreen() {
               />
 
               <TouchableOpacity style={styles.modalSaveBtn} onPress={handleAddHistory}>
-                <Text style={styles.modalSaveBtnText}>
-                  {newHistory.id ? "Cập nhật" : "Lưu lịch sử"}
-                </Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      <Modal visible={showAddAppointmentModal} transparent animationType="slide">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{ flex: 1 }}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => {
-              setShowAddAppointmentModal(false);
-              setNewAppointment({ tieuDe: "", dienGiai: "", ngayHen: "", ngayHenAPI: "", maLH: null });
-            }}
-          >
-            <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
-              <View style={styles.modalHandle} />
-              <Text style={styles.modalTitle}>
-                {newAppointment.maLH ? "Sửa lịch hẹn" : "Thêm lịch hẹn"}
-              </Text>
-
-              <Text style={styles.modalLabel}>Tiêu đề</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Nhập tiêu đề..."
-                placeholderTextColor={Colors.textTertiary}
-                value={newAppointment.tieuDe}
-                onChangeText={(t) =>
-                  setNewAppointment({ ...newAppointment, tieuDe: t })
-                }
-              />
-
-              <Text style={styles.modalLabel}>Ngày giờ hẹn</Text>
-              <TouchableOpacity
-                style={styles.modalInput}
-                onPress={() => setShowPicker(true)}
-              >
-                <Text
-                  style={{
-                    color: newAppointment.ngayHen ? Colors.text : Colors.textTertiary,
-                    fontSize: 14,
-                  }}
-                >
-                  {newAppointment.ngayHen || "Chọn ngày giờ hẹn"}
-                </Text>
-              </TouchableOpacity>
-
-              {showPicker && (
-                <DateTimePicker
-                  value={date}
-                  mode="datetime"
-                  display="default"
-                  locale="vi-VN"
-                  onChange={onChangeDate}
-                />
-              )}
-
-              <Text style={styles.modalLabel}>Diễn giải</Text>
-              <TextInput
-                style={[styles.modalInput, { height: 100, textAlignVertical: "top" }]}
-                placeholder="Nhập diễn giải..."
-                placeholderTextColor={Colors.textTertiary}
-                multiline
-                value={newAppointment.dienGiai}
-                onChangeText={(t) =>
-                  setNewAppointment({ ...newAppointment, dienGiai: t })
-                }
-              />
-
-              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleAddAppointment}>
-                <Text style={styles.modalSaveBtnText}>
-                  {newAppointment.maLH ? "Cập nhật" : "Lưu lịch hẹn"}
-                </Text>
+                <Text style={styles.modalSaveBtnText}>Lưu nhật ký</Text>
               </TouchableOpacity>
             </TouchableOpacity>
           </TouchableOpacity>

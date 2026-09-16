@@ -13,7 +13,7 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronRight, Share2, FileText, FolderOpen } from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { DocumentService } from '@/sevices/DocumentService';
+import { DocumentService } from '@/sevicesSupabase/DocumentService';
 
 export default function FoldersScreen() {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();

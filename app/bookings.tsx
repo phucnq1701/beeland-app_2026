@@ -23,9 +23,26 @@ import { BlurView } from "expo-blur";
 import Colors from "@/constants/colors";
 import { bookings, BookingStatus, BookingPriority } from "@/mocks/bookings";
 import { featuredProperties } from "@/mocks/properties";
-import { UserService } from "@/sevices/UserService";
-import { FilterService } from "@/sevices/FilterService";
-import { ProjectService } from "@/sevices/ProjectService";
+import { BookingService } from "@/sevicesSupabase/BookingService";
+import { FilterService } from "@/sevicesSupabase/FilterService";
+import { ProjectService } from "@/sevicesSupabase/ProjectService";
+
+/** Loại bỏ bản ghi trùng theo id ổn định (maPGC -> id -> soPhieu), giữ bản đầu tiên */
+const dedupeBookings = (list: any[]): any[] => {
+  const seen = new Set<string>();
+  const out: any[] = [];
+  for (const item of Array.isArray(list) ? list : []) {
+    const k = String(item?.maPGC ?? item?.id ?? item?.soPhieu ?? "");
+    if (!k) {
+      out.push(item);
+      continue;
+    }
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(item);
+  }
+  return out;
+};
 
 export default function BookingsScreen() {
   const router = useRouter();
@@ -69,21 +86,17 @@ export default function BookingsScreen() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // const res = await UserService.getTransactions(filterCondition);
-
-      // setData(res?.data ?? []);
-      // setDataAll(res?.data ?? []);
-
-      const resTT = await FilterService.getStatusTransaction({});
+      // Trạng thái booking — cloud pgc_trang_thai
+      const resTT = await BookingService.getBookingStatus();
 
       let arr: any[] = [];
       arr.push({ id: 0, title: "Tất cả", ColorWeb: "#8B5CF6" });
 
-      resTT?.data?.forEach((item) => {
+      (resTT?.data ?? []).forEach((item: any) => {
         arr.push({
-          id: item.MaTT,
-          title: item.TenTT,
-          ColorWeb: item.ColorWeb,
+          id: item.id,
+          title: item.item_name,
+          ColorWeb: item.color_code || "#8B5CF6",
         });
       });
 
@@ -91,6 +104,17 @@ export default function BookingsScreen() {
 
       const resDA = await ProjectService.getProjects({});
       setDuAn(resDA?.data ?? []);
+
+      // Danh sách booking — cloud
+      const res = await BookingService.listBookings({
+        maDA: [],
+        keyword: "",
+        pageSize: 50,
+        pageIndex: 1,
+      });
+      const clean = dedupeBookings(res?.data ?? []);
+      setData(clean);
+      setDataAll(clean);
     } catch (err) {
       console.log("loadData error", err);
     }
@@ -101,10 +125,24 @@ export default function BookingsScreen() {
   const loadData2 = async (_filter: any) => {
     setLoading(true);
     try {
-      const res = await UserService.getTransactions(_filter);
+      const res = await BookingService.listBookings({
+        maDA: _filter?.DuAn
+          ? String(_filter.DuAn)
+              .split(",")
+              .map((s: string) => s.trim())
+              .filter(Boolean)
+          : [],
+        maTT: _filter?.MaTT,
+        keyword: _filter?.inputSearch ?? "",
+        tuNgay: _filter?.TuNgay,
+        denNgay: _filter?.DenNgay,
+        pageSize: _filter?.Limit ?? 50,
+        pageIndex: _filter?.Offset ?? 1,
+      });
 
-      setData(res?.data ?? []);
-      setDataAll(res?.data ?? []);
+      const clean = dedupeBookings(res?.data ?? []);
+      setData(clean);
+      setDataAll(clean);
     } catch (err) {
       console.log("loadData2 error", err);
     }
@@ -187,40 +225,17 @@ export default function BookingsScreen() {
     }
   };
 
-  /* ---------------- MEMO ---------------- */
-
-  const filteredBookings = useMemo(() => {
-    return bookings.filter((booking) => {
-      const matchesSearch =
-        searchQuery === "" ||
-        booking.customerName
-          .toLowerCase()
-          .includes(searchQuery.toLowerCase()) ||
-        booking.customerPhone.includes(searchQuery) ||
-        booking.productCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        booking.id.toLowerCase().includes(searchQuery.toLowerCase());
-
-      const matchesProject =
-        selectedProject === "all" || booking.projectId === selectedProject;
-
-      const matchesStatus =
-        selectedStatus === "all" || booking.status === selectedStatus;
-
-      return matchesSearch && matchesProject && matchesStatus;
-    });
-  }, [searchQuery, selectedProject, selectedStatus]);
-
   /* ---------------- CLEAR FILTER ---------------- */
 
   const clearFilters = () => {
     setSearchQuery("");
-    setSelectedProject("all");
+    setSelectedProjects([]);
     setSelectedStatus("all");
     setShowFilters(false);
   };
 
   const hasActiveFilters =
-    selectedProject !== "all" || selectedStatus !== "all";
+    selectedProjects.length > 0 || selectedStatus !== "all";
 
   const statusLabels: Record<BookingStatus | "all", string> = {
     all: "Tất cả",
@@ -555,80 +570,57 @@ export default function BookingsScreen() {
           </TouchableOpacity>
         </View> */}
 
-        <View style={styles.statsContainer}>
-          {/* TẤT CẢ */}
-          {/* <TouchableOpacity
-            activeOpacity={0.7}
-            style={[
-              styles.statCardWrapper,
-              filterCondition?.MaTT === 0 && styles.statCardSelected,
-            ]}
-            onPress={() => applyChangeFilter("TrangThai", 0)}
-          >
-            <BlurView intensity={30} tint="dark" style={styles.statCard}>
-              <LinearGradient
-                colors={
-                  filterCondition?.MaTT === 0
-                    ? ["rgba(139, 92, 246, 0.45)", "rgba(139, 92, 246, 0.2)"]
-                    : ["rgba(139, 92, 246, 0.3)", "rgba(139, 92, 246, 0.1)"]
-                }
-                style={StyleSheet.absoluteFill}
-              />
-              <Text style={styles.statValue}>{data?.length}</Text>
-              <Text style={styles.statLabel}>Tất cả</Text>
-            </BlurView>
-          </TouchableOpacity> */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statsScrollContent}
+          style={styles.statsScroll}
+        >
+          {statusList.map((status) => {
+            const active = selectTT === status.title;
 
-          {/* STATUS LIST */}
-          {statusList
-            // .filter((s) => s.id !== 0)
-            .map((status) => {
-              const active = selectTT === status.title;
+            return (
+              <TouchableOpacity
+                key={status.id}
+                activeOpacity={0.7}
+                style={[
+                  styles.statCardWrapper,
+                  active && styles.statCardSelected,
+                ]}
+                onPress={() => handleTT(status?.title)}
+              >
+                <BlurView intensity={30} tint="dark" style={styles.statCard}>
+                  <LinearGradient
+                    colors={
+                      active
+                        ? [`${status.ColorWeb}80`, `${status.ColorWeb}40`]
+                        : [`${status.ColorWeb}60`, `${status.ColorWeb}20`]
+                    }
+                    style={StyleSheet.absoluteFill}
+                  />
 
-              return (
-                <TouchableOpacity
-                  key={status.id}
-                  activeOpacity={0.7}
-                  style={[
-                    styles.statCardWrapper,
-                    active && styles.statCardSelected,
-                  ]}
-                  onPress={() => handleTT(status?.title)}
-                >
-                  <BlurView intensity={30} tint="dark" style={styles.statCard}>
-                    <LinearGradient
-                      colors={
-                        active
-                          ? [`${status.ColorWeb}80`, `${status.ColorWeb}40`]
-                          : [`${status.ColorWeb}60`, `${status.ColorWeb}20`]
-                      }
-                      style={StyleSheet.absoluteFill}
-                    />
+                  <Text style={[styles.statValue, { color: status.ColorWeb }]}>
+                    {status.id === 0
+                      ? dataAll?.length
+                      : dataAll?.filter(
+                          (item) => item?.tenTT === status.title
+                        )?.length}
+                  </Text>
 
-                    <Text
-                      style={[styles.statValue, { color: status.ColorWeb }]}
-                    >
-                      {/* {statusCount[status.title] || 0} */}
-                      {status.id === 0
-                        ? dataAll?.length
-                        : dataAll?.filter(
-                            (item) => item?.tenTT === status.title
-                          )?.length}
-                    </Text>
-
-                    <Text style={styles.statLabel}>{status.title}</Text>
-                  </BlurView>
-                </TouchableOpacity>
-              );
-            })}
-        </View>
+                  <Text style={styles.statLabel} numberOfLines={1}>
+                    {status.title}
+                  </Text>
+                </BlurView>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
         {/* Active filter indicator */}
         {selectedStatus !== "all" && (
           <View style={styles.activeFilterRow}>
             <Text style={styles.activeFilterText}>
-              Đang lọc: {statusLabels[selectedStatus]} (
-              {filteredBookings.length})
+              Đang lọc: {statusLabels[selectedStatus]} ({data.length})
             </Text>
             <TouchableOpacity onPress={() => setSelectedStatus("all")}>
               <X color={Colors.textSecondary} size={16} />
@@ -659,9 +651,9 @@ export default function BookingsScreen() {
                 </Text>
               </View>
             ) : (
-              data.map((booking) => (
+              data.map((booking, index) => (
                 <TouchableOpacity
-                  key={booking.maPGC}
+                  key={`${booking?.maPGC ?? booking?.id ?? booking?.soPhieu ?? "row"}-${index}`}
                   style={styles.bookingCard}
                   activeOpacity={0.8}
                   // onPress={() => router.push(`/booking/${booking.maPGC}`)}
@@ -917,13 +909,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.text,
   },
+  statsScroll: {
+    marginBottom: 20,
+  },
+  statsScrollContent: {
+    flexDirection: "row",
+    gap: 10,
+    paddingRight: 4,
+  },
   statsContainer: {
     flexDirection: "row",
     gap: 10,
     marginBottom: 20,
   },
   statCardWrapper: {
-    flex: 1,
+    width: 110,
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1.5,

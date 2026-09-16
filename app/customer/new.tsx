@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,641 +8,597 @@ import {
   TextInput,
   Platform,
   Alert,
-  Modal,
-  Image,
   ActivityIndicator,
+  KeyboardAvoidingView,
 } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ChevronLeft,
   Save,
-  ChevronDown,
-  Check,
-  ImagePlus,
-  X,
-  Users,
   User,
   Building2,
+  Phone,
+  Mail,
+  CreditCard,
+  MapPin,
+  FileText,
+  AlertCircle,
+  CheckCircle2,
 } from "lucide-react-native";
-import * as ImagePicker from "expo-image-picker";
-import * as Contacts from "expo-contacts";
 import Colors from "@/constants/colors";
-import { CustomerType } from "@/mocks/customers";
-import { CustomerService } from "@/sevices/CustomerService";
+import { CustomerService } from "@/sevicesSupabase/CustomerService";
 
 export default function CustomerNewScreen() {
   const router = useRouter();
+  const { dataBooking, returnToBooking } = useLocalSearchParams();
+  const isReturningToBooking = String(returnToBooking) === "1";
+  const bookingParam = typeof dataBooking === "string" ? dataBooking : "";
 
+  // 7 trường cốt lõi tối ưu cho Mobile App:
+  // 1. Loại khách (Cá nhân / Doanh nghiệp)
+  // 2. Họ tên / Tên công ty
+  // 3. Số điện thoại (chính + phụ)
+  // 4. Email
+  // 5. CCCD / MST
+  // 6. Nguồn khách & Trạng thái
+  // 7. Địa chỉ & Ghi chú nhanh
   const [formData, setFormData] = useState({
+    isPersonal: true,
     name: "",
     phone: "",
+    phone2: "",
     email: "",
     cccd: "",
-    type: "personal" as CustomerType,
-    company: "",
     taxCode: "",
-    status: "potential" as "active" | "potential" | "inactive",
-    images: [] as string[],
+    diaChi: "",
+    statusId: "" as string,
+    sourceId: "" as string,
+    notes: "",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [isPickingImage, setIsPickingImage] = useState(false);
-  const [showContactsModal, setShowContactsModal] = useState(false);
-  const [phoneContacts, setPhoneContacts] = useState<Contacts.Contact[]>([]);
-  const [selectedContacts, setSelectedContacts] = useState<Set<string>>(
-    new Set()
-  );
-  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+  const [statusOptions, setStatusOptions] = useState<any[]>([]);
+  const [sourceOptions, setSourceOptions] = useState<any[]>([]);
+  const [loadingCatalogs, setLoadingCatalogs] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const statusOptions: {
-    value: "active" | "potential" | "inactive";
-    label: string;
-    color: string;
-  }[] = [
-    { value: "potential", label: "Tiềm năng", color: "#F59E0B" },
-    { value: "active", label: "Đang giao dịch", color: "#10B981" },
-    { value: "inactive", label: "Không hoạt động", color: "#9CA3AF" },
-  ];
+  // Duplicate Check State
+  const [duplicateCustomer, setDuplicateCustomer] = useState<any>(null);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
 
-  const getSelectedStatusLabel = () => {
-    return (
-      statusOptions.find((option) => option.value === formData.status)?.label ||
-      ""
-    );
-  };
+  // Load catalogs (Trạng thái, Nguồn khách) từ Supabase cloud_catalogs
+  useEffect(() => {
+    let isMounted = true;
+    const loadCatalogs = async () => {
+      setLoadingCatalogs(true);
+      try {
+        const [statuses, sources] = await Promise.all([
+          CustomerService.getTrangThaiCatalogs(),
+          CustomerService.getNguonCatalogs(),
+        ]);
+        if (isMounted) {
+          setStatusOptions(statuses);
+          setSourceOptions(sources);
+          if (statuses.length > 0) {
+            setFormData((prev) => ({ ...prev, statusId: statuses[0].value || statuses[0].id }));
+          }
+          if (sources.length > 0) {
+            setFormData((prev) => ({ ...prev, sourceId: sources[0].value || sources[0].id }));
+          }
+        }
+      } catch (e) {
+        console.log("Error loading catalogs in customer new:", e);
+      } finally {
+        if (isMounted) setLoadingCatalogs(false);
+      }
+    };
+    loadCatalogs();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-  const getSelectedStatusColor = () => {
-    return (
-      statusOptions.find((option) => option.value === formData.status)?.color ||
-      Colors.textSecondary
-    );
-  };
+  // Tự động kiểm tra trùng khi nhập xong SĐT hoặc CCCD (debounce 500ms)
+  useEffect(() => {
+    const cleanPhone = formData.phone.trim();
+    const cleanCccd = formData.cccd.trim();
+
+    if (cleanPhone.length < 9 && cleanCccd.length < 9) {
+      setDuplicateCustomer(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setCheckingDuplicate(true);
+      try {
+        const dup = await CustomerService.checkDuplicateCustomer({
+          phone: cleanPhone.length >= 9 ? cleanPhone : undefined,
+          cccd: cleanCccd.length >= 9 ? cleanCccd : undefined,
+        });
+        setDuplicateCustomer(dup);
+      } catch (e) {
+        console.log("Duplicate check error:", e);
+      } finally {
+        setCheckingDuplicate(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [formData.phone, formData.cccd]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.name.trim()) {
-      newErrors.name = "Vui lòng nhập tên khách hàng";
+      newErrors.name = formData.isPersonal ? "Vui lòng nhập họ và tên" : "Vui lòng nhập tên công ty";
     }
     if (!formData.phone.trim()) {
       newErrors.phone = "Vui lòng nhập số điện thoại";
-    } else if (!/^0\d{9}$/.test(formData.phone)) {
+    } else if (!/^[0-9+.\-\s]{8,15}$/.test(formData.phone.trim())) {
       newErrors.phone = "Số điện thoại không hợp lệ";
     }
-    if (
-      formData.email.trim() &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)
-    ) {
-      newErrors.email = "Email không hợp lệ";
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      newErrors.email = "Email không đúng định dạng";
     }
-    if (formData.cccd.trim() && !/^\d{12}$/.test(formData.cccd)) {
-      newErrors.cccd = "Số CCCD phải có đúng 12 chữ số";
+    if (!formData.isPersonal && !formData.taxCode.trim()) {
+      newErrors.taxCode = "Vui lòng nhập mã số thuế công ty";
     }
-    if (formData.type === "business" && !formData.company.trim()) {
-      newErrors.company = "Vui lòng nhập tên công ty";
-    }
-    if (formData.type === "business" && !formData.taxCode.trim()) {
-      newErrors.taxCode = "Vui lòng nhập mã số thuế";
-    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const pickImages = async () => {
-    try {
-      setIsPickingImage(true);
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsMultipleSelection: true,
-        quality: 0.8,
+  const handleUseExistingCustomer = (cust: any) => {
+    if (isReturningToBooking) {
+      router.replace({
+        pathname: "/booking/create",
+        params: {
+          dataBooking: bookingParam,
+          createdCustomer: JSON.stringify(cust),
+        },
       });
-      if (!result.canceled && result.assets) {
-        const newImages = result.assets.map((asset) => asset.uri);
-        setFormData({
-          ...formData,
-          images: [...formData.images, ...newImages],
-        });
-      }
-    } catch (error) {
-      console.error("Error picking images:", error);
-      Alert.alert("Lỗi", "Không thể chọn ảnh");
-    } finally {
-      setIsPickingImage(false);
-    }
-  };
-
-  const removeImage = (index: number) => {
-    const updatedImages = formData.images.filter((_, i) => i !== index);
-    setFormData({ ...formData, images: updatedImages });
-  };
-
-  const requestContactsPermission = async () => {
-    if (Platform.OS === "web") {
-      alert("Chức năng này không khả dụng trên web");
-      return false;
-    }
-    const { status } = await Contacts.requestPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert(
-        "Thông báo",
-        "Cần cấp quyền truy cập danh bạ để sử dụng chức năng này"
-      );
-      return false;
-    }
-    return true;
-  };
-
-  const loadContacts = async () => {
-    try {
-      setIsLoadingContacts(true);
-      const hasPermission = await requestContactsPermission();
-      if (!hasPermission) return;
-      if (phoneContacts.length === 0) {
-        const { data } = await Contacts.getContactsAsync({
-          fields: [
-            Contacts.Fields.Name,
-            Contacts.Fields.PhoneNumbers,
-            Contacts.Fields.Emails,
-          ],
-        });
-        const contactsWithPhone = data.filter(
-          (contact) => contact.phoneNumbers && contact.phoneNumbers.length > 0
-        );
-        setPhoneContacts(contactsWithPhone);
-      }
-      setShowContactsModal(true);
-    } catch (error) {
-      console.error("Error loading contacts:", error);
-      Alert.alert("Lỗi", "Không thể tải danh bạ");
-    } finally {
-      setIsLoadingContacts(false);
-    }
-  };
-
-  const toggleContactSelection = (contactId: string) => {
-    const newSelected = new Set(selectedContacts);
-    if (newSelected.has(contactId)) {
-      newSelected.delete(contactId);
     } else {
-      newSelected.add(contactId);
+      router.replace(`/customer/${cust.id}`);
     }
-    setSelectedContacts(newSelected);
-  };
-
-  const importSelectedContacts = () => {
-    const contactsToImport = phoneContacts.filter((contact) => {
-      const contactId =
-        (contact as any).id ?? `temp-${contact.name}-${Math.random()}`;
-      return selectedContacts.has(contactId);
-    });
-    if (contactsToImport.length === 0) {
-      Alert.alert("Thông báo", "Vui lòng chọn ít nhất một liên hệ");
-      return;
-    }
-    const firstContact = contactsToImport[0];
-    const phone =
-      firstContact.phoneNumbers?.[0]?.number?.replace(/[^0-9]/g, "") || "";
-    const email = firstContact.emails?.[0]?.email || "";
-    setFormData({
-      ...formData,
-      name: firstContact.name || "",
-      phone: phone,
-      email: email,
-    });
-    if (contactsToImport.length > 1) {
-      Alert.alert(
-        "Thông báo",
-        `Đã nhập thông tin liên hệ đầu tiên. Bạn có thể tạo thêm cho ${contactsToImport.length - 1} liên hệ còn lại sau.`
-      );
-    }
-    setSelectedContacts(new Set());
-    setShowContactsModal(false);
   };
 
   const handleSave = async () => {
     if (!validateForm()) return;
+    setSaving(true);
+
     try {
-      const payload = {
-        maKH: 0,
-        hoTen: formData.name,
-        diDong: formData.phone,
-        email: formData.email,
-        soCMND: formData.cccd,
-        diaChi: "",
-        maNKH: 0,
-        maNguon: 0,
-        ghiChu: "",
+      const payload: any = {
+        isPersonal: formData.isPersonal,
+        tenKh: formData.name.trim(),
+        tenCongTy: formData.isPersonal ? null : formData.name.trim(),
+        diDong: formData.phone.trim(),
+        diDong2: formData.phone2.trim() || null,
+        email: formData.email.trim() || null,
+        cccd: formData.cccd.trim() || null,
+        diaChi: formData.diaChi.trim() || null,
+        taxCode: formData.isPersonal ? null : formData.taxCode.trim() || null,
+        maTtId: formData.statusId || null,
+        maNguonId: formData.sourceId || null,
       };
-      const res = await CustomerService.addCustomer(payload);
-      if (res?.status === 2000) {
-        Alert.alert("Thành công", res.message, [
-          { text: "OK", onPress: () => router.back() },
-        ]);
+
+      const res = await CustomerService.saveCustomerCloud(payload);
+
+      if (res?.status === 2000 && res.data) {
+        // Nếu có ghi chú ban đầu, thêm vào activities
+        if (formData.notes.trim() && res.data.id) {
+          try {
+            await CustomerService.addCustomerActivity({
+              customerId: res.data.id,
+              content: formData.notes.trim(),
+              title: "Ghi chú ban đầu khi tạo khách",
+            });
+          } catch {}
+        }
+
+        if (isReturningToBooking) {
+          router.replace({
+            pathname: "/booking/create",
+            params: {
+              dataBooking: bookingParam,
+              createdCustomer: JSON.stringify(res.data),
+            },
+          });
+          return;
+        }
+
+        const msg = "Tạo mới khách hàng thành công!";
+        if (Platform.OS === "web") {
+          alert(msg);
+          router.back();
+        } else {
+          Alert.alert("Thành công", msg, [{ text: "OK", onPress: () => router.back() }]);
+        }
+      } else if ((res as any)?.needLogin) {
+        // Hết phiên đăng nhập (dù đã đăng nhập web, app mobile cần phiên riêng)
+        const errorMsg = res?.message || "Chưa đăng nhập hoặc phiên đã hết hạn";
+        if (Platform.OS === "web") {
+          alert(errorMsg);
+          router.replace("/login" as any);
+        } else {
+          Alert.alert("Thông báo", errorMsg, [
+            { text: "Để sau", style: "cancel" },
+            { text: "Đăng nhập lại", onPress: () => router.replace("/login" as any) },
+          ]);
+        }
       } else {
-        Alert.alert("Lỗi", res?.message || "Tạo khách hàng thất bại");
+        const errorMsg = res?.message || "Không thể tạo khách hàng, vui lòng thử lại";
+        if (Platform.OS === "web") {
+          alert(errorMsg);
+        } else {
+          Alert.alert("Thông báo", errorMsg);
+        }
       }
-    } catch (error) {
-      console.log("ADD CUSTOMER ERROR:", error);
-      Alert.alert("Lỗi", "Không thể kết nối server");
+    } catch (err: any) {
+      console.log("Error create customer:", err);
+      Alert.alert("Lỗi", "Đã xảy ra sự cố khi lưu dữ liệu");
+    } finally {
+      setSaving(false);
     }
   };
-
-  const renderFormField = (
-    label: string,
-    value: string,
-    onChangeText: (text: string) => void,
-    options?: {
-      required?: boolean;
-      error?: string;
-      placeholder?: string;
-      keyboardType?: "default" | "phone-pad" | "email-address" | "number-pad";
-      autoCapitalize?: "none" | "sentences" | "words" | "characters";
-      maxLength?: number;
-    }
-  ) => (
-    <View style={styles.formField}>
-      <Text style={styles.fieldLabel}>
-        {label}
-        {options?.required ? <Text style={styles.required}> *</Text> : null}
-      </Text>
-      <TextInput
-        style={[styles.fieldInput, options?.error ? styles.fieldInputError : null]}
-        placeholder={options?.placeholder}
-        placeholderTextColor={Colors.textTertiary}
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={options?.keyboardType}
-        autoCapitalize={options?.autoCapitalize}
-        maxLength={options?.maxLength}
-      />
-      {options?.error ? (
-        <Text style={styles.fieldError}>{options.error}</Text>
-      ) : null}
-    </View>
-  );
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          headerShown: true,
-          title: "Tạo khách hàng",
-          headerStyle: { backgroundColor: Colors.primary },
-          headerTintColor: Colors.white,
-          headerTitleStyle: { fontWeight: "700", fontSize: 18 },
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
-              <ChevronLeft color={Colors.white} size={24} />
-            </TouchableOpacity>
-          ),
+          headerShown: false,
         }}
       />
 
-      <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
+          <ChevronLeft size={24} color={Colors.text} />
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Thêm khách hàng</Text>
+          <Text style={styles.headerSubtitle}>Thông tin nhanh cho môi giới</Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.saveHeaderBtn, saving && styles.saveButtonDisabled]}
+          onPress={handleSave}
+          disabled={saving}
+          activeOpacity={0.8}
+        >
+          {saving ? (
+            <ActivityIndicator size="small" color="#FFF" />
+          ) : (
+            <>
+              <Save size={18} color="#FFF" />
+              <Text style={styles.saveHeaderText}>Lưu</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
       >
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Loại khách hàng</Text>
-          <View style={styles.typeToggle}>
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Loại khách hàng */}
+          <View style={styles.typeSelectorContainer}>
             <TouchableOpacity
-              style={[styles.typeOption, formData.type === "personal" && styles.typeOptionActive]}
-              onPress={() => setFormData({ ...formData, type: "personal" })}
+              style={[
+                styles.typeOption,
+                formData.isPersonal && styles.typeOptionActive,
+              ]}
+              onPress={() => setFormData({ ...formData, isPersonal: true })}
               activeOpacity={0.8}
             >
               <User
-                color={formData.type === "personal" ? Colors.white : Colors.textSecondary}
                 size={18}
+                color={formData.isPersonal ? "#FFF" : Colors.textSecondary}
               />
               <Text
                 style={[
                   styles.typeOptionText,
-                  formData.type === "personal" && styles.typeOptionTextActive,
+                  formData.isPersonal && styles.typeOptionTextActive,
                 ]}
               >
                 Cá nhân
               </Text>
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.typeOption, formData.type === "business" && styles.typeOptionActive]}
-              onPress={() => setFormData({ ...formData, type: "business" })}
+              style={[
+                styles.typeOption,
+                !formData.isPersonal && styles.typeOptionActive,
+              ]}
+              onPress={() => setFormData({ ...formData, isPersonal: false })}
               activeOpacity={0.8}
             >
               <Building2
-                color={formData.type === "business" ? Colors.white : Colors.textSecondary}
                 size={18}
+                color={!formData.isPersonal ? "#FFF" : Colors.textSecondary}
               />
               <Text
                 style={[
                   styles.typeOptionText,
-                  formData.type === "business" && styles.typeOptionTextActive,
+                  !formData.isPersonal && styles.typeOptionTextActive,
                 ]}
               >
                 Doanh nghiệp
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
 
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Thông tin cơ bản</Text>
-            {Platform.OS !== "web" && (
-              <TouchableOpacity
-                style={styles.contactsBtn}
-                onPress={loadContacts}
-                activeOpacity={0.8}
-                disabled={isLoadingContacts}
-              >
-                {isLoadingContacts ? (
-                  <ActivityIndicator color={Colors.primary} size="small" />
-                ) : (
-                  <>
-                    <Users color={Colors.primary} size={16} />
-                    <Text style={styles.contactsBtnText}>Danh bạ</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {renderFormField(
-            "Tên khách hàng",
-            formData.name,
-            (text) => {
-              setFormData({ ...formData, name: text });
-              if (errors.name) setErrors({ ...errors, name: "" });
-            },
-            {
-              required: true,
-              error: errors.name,
-              placeholder: formData.type === "personal" ? "Nguyễn Văn A" : "Công ty TNHH ABC",
-            }
-          )}
-
-          {renderFormField(
-            "Số điện thoại",
-            formData.phone,
-            (text) => {
-              setFormData({ ...formData, phone: text });
-              if (errors.phone) setErrors({ ...errors, phone: "" });
-            },
-            {
-              required: true,
-              error: errors.phone,
-              placeholder: "0901234567",
-              keyboardType: "phone-pad",
-            }
-          )}
-
-          {renderFormField(
-            "Email",
-            formData.email,
-            (text) => {
-              setFormData({ ...formData, email: text });
-              if (errors.email) setErrors({ ...errors, email: "" });
-            },
-            {
-              error: errors.email,
-              placeholder: "example@gmail.com",
-              keyboardType: "email-address",
-              autoCapitalize: "none",
-            }
-          )}
-
-          {renderFormField(
-            "Số CCCD",
-            formData.cccd,
-            (text) => {
-              const numericText = text.replace(/[^0-9]/g, "");
-              if (numericText.length <= 12) {
-                setFormData({ ...formData, cccd: numericText });
-                if (errors.cccd) setErrors({ ...errors, cccd: "" });
-              }
-            },
-            {
-              error: errors.cccd,
-              placeholder: "123456789012",
-              keyboardType: "number-pad",
-              maxLength: 12,
-            }
-          )}
-        </View>
-
-        {formData.type === "business" && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Thông tin doanh nghiệp</Text>
-
-            {renderFormField(
-              "Tên công ty",
-              formData.company,
-              (text) => {
-                setFormData({ ...formData, company: text });
-                if (errors.company) setErrors({ ...errors, company: "" });
-              },
-              {
-                required: true,
-                error: errors.company,
-                placeholder: "Công ty TNHH ABC",
-              }
-            )}
-
-            {renderFormField(
-              "Mã số thuế",
-              formData.taxCode,
-              (text) => {
-                setFormData({ ...formData, taxCode: text });
-                if (errors.taxCode) setErrors({ ...errors, taxCode: "" });
-              },
-              {
-                required: true,
-                error: errors.taxCode,
-                placeholder: "0123456789",
-                keyboardType: "number-pad",
-              }
-            )}
-          </View>
-        )}
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Trạng thái</Text>
-          <TouchableOpacity
-            style={styles.statusDropdown}
-            onPress={() => setShowStatusDropdown(true)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.statusDropdownLeft}>
-              <View
-                style={[styles.statusDot, { backgroundColor: getSelectedStatusColor() }]}
-              />
-              <Text style={styles.statusDropdownText}>
-                {getSelectedStatusLabel()}
-              </Text>
-            </View>
-            <ChevronDown color={Colors.textSecondary} size={18} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Hình ảnh</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.imagesRow}
-          >
-            <TouchableOpacity
-              style={styles.addImageBtn}
-              onPress={pickImages}
-              activeOpacity={0.8}
-              disabled={isPickingImage}
-            >
-              {isPickingImage ? (
-                <ActivityIndicator color={Colors.primary} size="small" />
-              ) : (
-                <>
-                  <ImagePlus color={Colors.primary} size={28} />
-                  <Text style={styles.addImageText}>Thêm ảnh</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {formData.images.map((imageUri, index) => (
-              <View key={index} style={styles.imageThumb}>
-                <Image
-                  source={{ uri: imageUri }}
-                  style={styles.imageThumbImg}
-                  resizeMode="cover"
-                />
-                <TouchableOpacity
-                  style={styles.removeImageBtn}
-                  onPress={() => removeImage(index)}
-                  activeOpacity={0.8}
-                >
-                  <X color={Colors.white} size={14} />
-                </TouchableOpacity>
+          {/* Cảnh báo trùng khách hàng */}
+          {duplicateCustomer && (
+            <View style={styles.duplicateCard}>
+              <View style={styles.duplicateHeader}>
+                <AlertCircle size={20} color="#D97706" />
+                <Text style={styles.duplicateTitle}>Khách hàng đã tồn tại</Text>
               </View>
-            ))}
-          </ScrollView>
-        </View>
-
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={handleSave}
-          activeOpacity={0.8}
-        >
-          <Save color={Colors.white} size={20} />
-          <Text style={styles.saveButtonText}>Tạo khách hàng</Text>
-        </TouchableOpacity>
-      </ScrollView>
-
-      <Modal
-        visible={showStatusDropdown}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowStatusDropdown(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowStatusDropdown(false)}
-        >
-          <View style={styles.statusModal}>
-            <Text style={styles.statusModalTitle}>Chọn trạng thái</Text>
-            {statusOptions.map((option) => (
+              <Text style={styles.duplicateInfo}>
+                Hệ thống tìm thấy hồ sơ: <Text style={styles.duplicateBold}>{duplicateCustomer.tenKH}</Text> (
+                {duplicateCustomer.diDong || duplicateCustomer.cccd})
+              </Text>
               <TouchableOpacity
-                key={option.value}
-                style={[
-                  styles.statusModalOption,
-                  formData.status === option.value && styles.statusModalOptionActive,
-                ]}
-                onPress={() => {
-                  setFormData({ ...formData, status: option.value });
-                  setShowStatusDropdown(false);
-                }}
-                activeOpacity={0.7}
+                style={styles.duplicateActionBtn}
+                onPress={() => handleUseExistingCustomer(duplicateCustomer)}
+                activeOpacity={0.8}
               >
-                <View style={styles.statusModalOptionLeft}>
-                  <View style={[styles.statusDot, { backgroundColor: option.color }]} />
-                  <Text style={styles.statusModalOptionText}>{option.label}</Text>
-                </View>
-                {formData.status === option.value && (
-                  <Check color={Colors.primary} size={18} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      <Modal
-        visible={showContactsModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowContactsModal(false)}
-      >
-        <View style={styles.contactsModalWrap}>
-          <View style={styles.contactsModalContent}>
-            <View style={styles.contactsModalHeader}>
-              <Text style={styles.contactsModalTitle}>Chọn từ danh bạ</Text>
-              <TouchableOpacity
-                onPress={() => setShowContactsModal(false)}
-                style={{ padding: 4 }}
-              >
-                <X color={Colors.text} size={22} />
+                <CheckCircle2 size={16} color="#FFF" />
+                <Text style={styles.duplicateActionText}>
+                  {isReturningToBooking ? "Chọn khách hàng này cho Booking" : "Xem hồ sơ khách hàng cũ"}
+                </Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.contactsModalSubtitle}>
-              Đã chọn: {selectedContacts.size} liên hệ
+          )}
+
+          {/* 1. Họ tên / Tên công ty */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>
+              {formData.isPersonal ? "Họ và tên khách hàng" : "Tên doanh nghiệp / Công ty"} <Text style={styles.requiredMark}>*</Text>
             </Text>
-            <ScrollView style={styles.contactsList}>
-              {phoneContacts.map((contact) => {
-                const contactId =
-                  (contact as any).id ?? `temp-${contact.name}-${Math.random()}`;
-                const isSelected = selectedContacts.has(contactId);
-                const phone =
-                  contact.phoneNumbers?.[0]?.number || "Không có SĐT";
-                const email = contact.emails?.[0]?.email || "Không có email";
+            <View style={[styles.inputWrapper, errors.name && styles.inputError]}>
+              {formData.isPersonal ? (
+                <User size={20} color={Colors.textSecondary} />
+              ) : (
+                <Building2 size={20} color={Colors.textSecondary} />
+              )}
+              <TextInput
+                style={styles.textInput}
+                placeholder={formData.isPersonal ? "Nguyễn Văn A" : "Công ty TNHH Đầu tư..."}
+                placeholderTextColor="#9CA3AF"
+                value={formData.name}
+                onChangeText={(text) => {
+                  setFormData({ ...formData, name: text });
+                  if (errors.name) setErrors({ ...errors, name: "" });
+                }}
+              />
+            </View>
+            {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
+          </View>
+
+          {/* 2. Số điện thoại */}
+          <View style={styles.rowInputs}>
+            <View style={[styles.inputGroup, { flex: 1 }]}>
+              <Text style={styles.inputLabel}>
+                Số điện thoại chính <Text style={styles.requiredMark}>*</Text>
+              </Text>
+              <View style={[styles.inputWrapper, errors.phone && styles.inputError]}>
+                <Phone size={18} color={Colors.textSecondary} />
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="0912345678"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="phone-pad"
+                  value={formData.phone}
+                  onChangeText={(text) => {
+                    setFormData({ ...formData, phone: text });
+                    if (errors.phone) setErrors({ ...errors, phone: "" });
+                  }}
+                />
+                {checkingDuplicate && <ActivityIndicator size="small" color={Colors.primary} />}
+              </View>
+              {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
+            </View>
+
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 12 }]}>
+              <Text style={styles.inputLabel}>SĐT phụ (nếu có)</Text>
+              <View style={styles.inputWrapper}>
+                <Phone size={18} color="#9CA3AF" />
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="0987654321"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="phone-pad"
+                  value={formData.phone2}
+                  onChangeText={(text) => setFormData({ ...formData, phone2: text })}
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* 3. Email & CCCD/MST */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Email</Text>
+            <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
+              <Mail size={18} color={Colors.textSecondary} />
+              <TextInput
+                style={styles.textInput}
+                placeholder="example@gmail.com"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={formData.email}
+                onChangeText={(text) => {
+                  setFormData({ ...formData, email: text });
+                  if (errors.email) setErrors({ ...errors, email: "" });
+                }}
+              />
+            </View>
+            {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>
+              {formData.isPersonal ? "Số CCCD / CMND" : "Mã số thuế (MST)"} {!formData.isPersonal && <Text style={styles.requiredMark}>*</Text>}
+            </Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                !formData.isPersonal && errors.taxCode && styles.inputError,
+              ]}
+            >
+              <CreditCard size={18} color={Colors.textSecondary} />
+              <TextInput
+                style={styles.textInput}
+                placeholder={formData.isPersonal ? "12 số CCCD" : "Mã số thuế doanh nghiệp"}
+                placeholderTextColor="#9CA3AF"
+                keyboardType="numeric"
+                value={formData.isPersonal ? formData.cccd : formData.taxCode}
+                onChangeText={(text) => {
+                  if (formData.isPersonal) {
+                    setFormData({ ...formData, cccd: text });
+                  } else {
+                    setFormData({ ...formData, taxCode: text });
+                    if (errors.taxCode) setErrors({ ...errors, taxCode: "" });
+                  }
+                }}
+              />
+            </View>
+            {!formData.isPersonal && errors.taxCode ? (
+              <Text style={styles.errorText}>{errors.taxCode}</Text>
+            ) : null}
+          </View>
+
+          {/* 4. Trạng thái & Nguồn khách */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Phân loại khách hàng</Text>
+          </View>
+
+          {/* Trạng thái */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Trạng thái</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tagScroll}>
+              {statusOptions.map((st) => {
+                const isSelected = (formData.statusId || "") === String(st.value || st.id);
                 return (
                   <TouchableOpacity
-                    key={contactId}
+                    key={String(st.id || st.value)}
                     style={[
-                      styles.contactListItem,
-                      isSelected && styles.contactListItemActive,
+                      styles.tagChip,
+                      isSelected && {
+                        backgroundColor: (st.color || Colors.primary) + "18",
+                        borderColor: st.color || Colors.primary,
+                      },
                     ]}
-                    onPress={() => toggleContactSelection(contactId)}
+                    onPress={() => setFormData({ ...formData, statusId: String(st.value || st.id) })}
                     activeOpacity={0.7}
                   >
                     <View
                       style={[
-                        styles.contactCheckbox,
-                        isSelected && styles.contactCheckboxActive,
+                        styles.tagDot,
+                        { backgroundColor: st.color || Colors.primary },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.tagChipText,
+                        isSelected && { color: st.color || Colors.primary, fontWeight: "600" },
                       ]}
                     >
-                      {isSelected && <Check color={Colors.white} size={14} />}
-                    </View>
-                    <View style={styles.contactItemInfo}>
-                      <Text style={styles.contactItemName}>{contact.name}</Text>
-                      <Text style={styles.contactItemDetail}>{phone}</Text>
-                      <Text style={styles.contactItemDetail}>{email}</Text>
-                    </View>
+                      {st.label}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
-            <View style={styles.contactsModalFooter}>
-              <TouchableOpacity
-                style={styles.importBtn}
-                onPress={importSelectedContacts}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.importBtnText}>Nhập đã chọn</Text>
-              </TouchableOpacity>
+          </View>
+
+          {/* Nguồn khách */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Nguồn khách</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tagScroll}>
+              {sourceOptions.map((src) => {
+                const isSelected = (formData.sourceId || "") === String(src.value || src.id);
+                return (
+                  <TouchableOpacity
+                    key={String(src.id || src.value)}
+                    style={[
+                      styles.tagChip,
+                      isSelected && styles.tagChipActive,
+                    ]}
+                    onPress={() => setFormData({ ...formData, sourceId: String(src.value || src.id) })}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.tagChipText,
+                        isSelected && styles.tagChipTextActive,
+                      ]}
+                    >
+                      {src.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* 5. Địa chỉ */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Địa chỉ liên hệ</Text>
+            <View style={styles.inputWrapper}>
+              <MapPin size={18} color={Colors.textSecondary} />
+              <TextInput
+                style={styles.textInput}
+                placeholder="Số nhà, đường, phường, quận..."
+                placeholderTextColor="#9CA3AF"
+                value={formData.diaChi}
+                onChangeText={(text) => setFormData({ ...formData, diaChi: text })}
+              />
             </View>
           </View>
-        </View>
-      </Modal>
+
+          {/* 6. Ghi chú & Nhu cầu nhanh */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Nhu cầu / Ghi chú ban đầu</Text>
+            <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
+              <FileText size={18} color={Colors.textSecondary} style={{ marginTop: 2 }} />
+              <TextInput
+                style={[styles.textInput, styles.textAreaInput]}
+                placeholder="Khách quan tâm căn 2PN, ngân sách 3 tỷ, cần vay ngân hàng..."
+                placeholderTextColor="#9CA3AF"
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                value={formData.notes}
+                onChangeText={(text) => setFormData({ ...formData, notes: text })}
+              />
+            </View>
+          </View>
+
+          {/* Action Button dưới cùng */}
+          <TouchableOpacity
+            style={[styles.bottomSubmitBtn, saving && styles.saveButtonDisabled]}
+            onPress={handleSave}
+            disabled={saving}
+            activeOpacity={0.8}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <Text style={styles.bottomSubmitText}>Tạo khách hàng</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -650,380 +606,252 @@ export default function CustomerNewScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F6F8",
+    backgroundColor: "#F8FAFC",
   },
-  scroll: {
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: Platform.OS === "ios" ? 54 : 44,
+    paddingBottom: 14,
+    paddingHorizontal: 16,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: "center",
+    marginHorizontal: 12,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  saveHeaderBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  saveHeaderText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  content: {
     flex: 1,
   },
-  scrollContent: {
+  contentContainer: {
     padding: 16,
     paddingBottom: 40,
-    gap: 14,
   },
-  card: {
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    padding: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-      },
-      android: { elevation: 2 },
-      web: { boxShadow: "0 2px 8px rgba(0,0,0,0.05)" },
-    }),
-  },
-  cardHeader: {
+  typeSelectorContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    marginBottom: 14,
-  },
-  contactsBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: "rgba(232,111,37,0.08)",
-    borderRadius: 8,
-    marginBottom: 14,
-  },
-  contactsBtnText: {
-    fontSize: 12,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  typeToggle: {
-    flexDirection: "row",
-    backgroundColor: "#F0F1F3",
-    borderRadius: 10,
-    padding: 3,
+    backgroundColor: "#E2E8F0",
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 20,
   },
   typeOption: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
     paddingVertical: 10,
     borderRadius: 8,
+    gap: 8,
   },
   typeOptionActive: {
     backgroundColor: Colors.primary,
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-      },
-      android: { elevation: 3 },
-      web: { boxShadow: `0 2px 8px ${Colors.primary}40` },
-    }),
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   typeOptionText: {
     fontSize: 14,
-    fontWeight: "600" as const,
+    fontWeight: "600",
     color: Colors.textSecondary,
   },
   typeOptionTextActive: {
-    color: Colors.white,
+    color: "#FFFFFF",
   },
-  formField: {
+  duplicateCard: {
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    borderRadius: 12,
+    padding: 14,
     marginBottom: 16,
   },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.textSecondary,
+  duplicateHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     marginBottom: 6,
   },
-  required: {
+  duplicateTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#92400E",
+  },
+  duplicateInfo: {
+    fontSize: 13,
+    color: "#78350F",
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  duplicateBold: {
+    fontWeight: "700",
+  },
+  duplicateActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#D97706",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  duplicateActionText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  sectionHeader: {
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  rowInputs: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.text,
+    marginBottom: 6,
+  },
+  requiredMark: {
     color: "#EF4444",
   },
-  fieldInput: {
-    backgroundColor: "#F5F6F8",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: Colors.text,
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
+    borderColor: "#E2E8F0",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    minHeight: 46,
+    gap: 10,
   },
-  fieldInputError: {
+  textAreaWrapper: {
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    minHeight: 88,
+  },
+  inputError: {
     borderColor: "#EF4444",
     backgroundColor: "#FEF2F2",
   },
-  fieldError: {
+  textInput: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.text,
+    paddingVertical: 8,
+  },
+  textAreaInput: {
+    minHeight: 68,
+    paddingVertical: 0,
+  },
+  errorText: {
     fontSize: 12,
     color: "#EF4444",
     marginTop: 4,
     marginLeft: 2,
   },
-  statusDropdown: {
+  tagScroll: {
+    flexDirection: "row",
+    marginHorizontal: -4,
+  },
+  tagChip: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#F5F6F8",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-  },
-  statusDropdownLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  statusDropdownText: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  imagesRow: {
-    gap: 10,
-  },
-  addImageBtn: {
-    width: 100,
-    height: 100,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderColor: Colors.primary,
-    backgroundColor: "rgba(232,111,37,0.06)",
-    justifyContent: "center",
-    alignItems: "center",
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginHorizontal: 4,
     gap: 6,
   },
-  addImageText: {
-    fontSize: 11,
-    fontWeight: "600" as const,
-    color: Colors.primary,
+  tagChipActive: {
+    backgroundColor: Colors.primary + "15",
+    borderColor: Colors.primary,
   },
-  imageThumb: {
-    position: "relative" as const,
-    width: 100,
-    height: 100,
+  tagDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  imageThumbImg: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 12,
-  },
-  removeImageBtn: {
-    position: "absolute" as const,
-    top: 4,
-    right: 4,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  saveButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: Colors.primary,
-    paddingVertical: 15,
-    borderRadius: 12,
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.3,
-        shadowRadius: 6,
-      },
-      android: { elevation: 3 },
-      web: { boxShadow: `0 3px 10px ${Colors.primary}40` },
-    }),
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: "700" as const,
-    color: Colors.white,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  statusModal: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 20,
-    width: "100%",
-    maxWidth: 360,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 12,
-      },
-      android: { elevation: 8 },
-      web: { boxShadow: "0 4px 20px rgba(0,0,0,0.2)" },
-    }),
-  },
-  statusModalTitle: {
-    fontSize: 17,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    marginBottom: 14,
-    textAlign: "center" as const,
-  },
-  statusModalOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    marginBottom: 6,
-  },
-  statusModalOptionActive: {
-    backgroundColor: "#F5F6F8",
-  },
-  statusModalOptionLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  statusModalOptionText: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  contactsModalWrap: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "flex-end",
-  },
-  contactsModalContent: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "80%",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 12,
-      },
-      android: { elevation: 8 },
-      web: { boxShadow: "0 -4px 20px rgba(0,0,0,0.15)" },
-    }),
-  },
-  contactsModalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 8,
-  },
-  contactsModalTitle: {
-    fontSize: 18,
-    fontWeight: "700" as const,
-    color: Colors.text,
-  },
-  contactsModalSubtitle: {
+  tagChipText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    paddingHorizontal: 20,
-    marginBottom: 12,
+    fontWeight: "500",
   },
-  contactsList: {
-    flex: 1,
-    paddingHorizontal: 20,
+  tagChipTextActive: {
+    color: Colors.primary,
+    fontWeight: "700",
   },
-  contactListItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: "#F5F6F8",
+  bottomSubmitBtn: {
+    backgroundColor: Colors.primary,
     borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  contactListItemActive: {
-    borderColor: Colors.primary,
-    backgroundColor: "rgba(232,111,37,0.06)",
-  },
-  contactCheckbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "#D1D5DB",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  contactCheckboxActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  contactItemInfo: {
-    flex: 1,
-  },
-  contactItemName: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  contactItemDetail: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 1,
-  },
-  contactsModalFooter: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.06)",
-  },
-  importBtn: {
-    backgroundColor: Colors.primary,
     paddingVertical: 14,
-    borderRadius: 10,
     alignItems: "center",
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.3,
-        shadowRadius: 6,
-      },
-      android: { elevation: 3 },
-      web: { boxShadow: `0 3px 10px ${Colors.primary}40` },
-    }),
+    justifyContent: "center",
+    marginTop: 16,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  importBtnText: {
-    fontSize: 15,
-    fontWeight: "700" as const,
-    color: Colors.white,
+  bottomSubmitText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

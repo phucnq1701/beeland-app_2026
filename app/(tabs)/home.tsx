@@ -32,12 +32,14 @@ import { notifications } from "@/mocks/notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useFocusEffect } from "expo-router";
-import { ProjectService } from "@/sevices/ProjectService";
-import { UserService } from "@/sevices/UserService";
+import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { BookingService } from "@/sevicesSupabase/BookingService";
 import { Format_Date } from "@/components/utils/common";
-import { CustomerService } from "@/sevices/CustomerService";
+import { CustomerService as CustomerSupabaseService } from "@/sevicesSupabase/CustomerService";
+import { LichHenService } from "@/sevicesSupabase/LichHenService";
 
-const DEFAULT_PROJECT_IMAGE = "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/bigwmih05tf7or57crm12";
+const DEFAULT_PROJECT_IMAGE =
+  "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/bigwmih05tf7or57crm12";
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width - 48;
 const STORAGE_KEY = "@home_features_config";
@@ -65,63 +67,105 @@ export default function HomeScreen() {
   useEffect(() => {
     const checkToken = async () => {
       const token = await AsyncStorage.getItem("@token");
-
-      if (token) {
-        router.replace("/(tabs)/home");
-      } else {
+      if (!token) {
         router.replace("/login");
+        return;
       }
+      // Anon đã bị khóa SELECT (42501) nên JWT hết hạn bắt buộc về login lấy JWT 7-day mới
+      try {
+        const supabaseJwt = await AsyncStorage.getItem("@supabase_jwt");
+        if (!supabaseJwt) {
+          console.log("[Home] chưa có cloud_jwt -> về login");
+          router.replace("/login");
+          return;
+        }
+        const { isJwtExpired, decodeJwtPayload } = await import(
+          "@/sevicesSupabase/cloudTenant"
+        );
+        if (isJwtExpired(supabaseJwt)) {
+          const p = decodeJwtPayload(supabaseJwt);
+          console.log(
+            `[Home] cloud_jwt expired (exp=${p?.exp}, now=${Math.floor(Date.now() / 1000)}) -> về login lấy JWT mới`
+          );
+          router.replace("/login");
+          return;
+        }
+      } catch {}
     };
 
     void checkToken();
   }, [router]);
 
+  function normalizeCustomer(item: any) {
+    // CustomerService Supabase đã normalize sẵn, giữ tương thích API cũ
+    const raw = item?.raw || {};
+    return {
+      maKH: item?.maKH ?? item?.ma_kh ?? item?.id ?? raw?.MaKH ?? "",
+      tenKH: (item?.tenKH ?? item?.ho_ten ?? item?.ten_kh ?? raw?.TenKH ?? "")
+        .toString()
+        .trim(),
+      diDong: item?.diDong ?? item?.dien_thoai ?? item?.di_dong ?? raw?.DiDong ?? "",
+      email: item?.email || raw?.Email || "",
+      cccd: item?.cccd || raw?.SoCMND || "",
+      diaChi: item?.diaChi ?? item?.dia_chi ?? raw?.DiaChi ?? "",
+      company: item?.ten_cong_ty || raw?.TenCongTy || null,
+      ngayDangKy:
+        item?.ngayDangKy ?? item?.ngay_tao ?? item?.created_at ?? raw?.NgayTao ?? null,
+      tenTT: item?.tenTT ?? "",
+      status: item?.status ?? item?.tenTT ?? "",
+      _raw: item,
+    };
+  }
+
   const loadData = async () => {
     try {
-      const resDA = await ProjectService.getProjects({});
+      const resDA = await ProjectService.getProjects({ limit: 5 });
       const data = resDA?.data || [];
       setDuAn(data.slice(0, 5));
     } catch (error) {
-      console.log("[Home] Error loading projects:", error instanceof Error ? error.message : String(error));
+      console.log(
+        "[Home] Error loading projects:",
+        error instanceof Error ? error.message : String(error)
+      );
     }
 
     try {
-      const resBooking = await UserService.getTransactions({
-        TuNgay: "2000-01-01",
-        DenNgay: "2100-01-01",
-        DuAn: "",
-        MaTT: 0,
-        MaKhu: 0,
-        inputSearch: "",
-        Offset: 1,
-        Limit: 50,
+      const resBooking = await BookingService.listBookingsFromCloud({
+        limit: 5,
+        offset: 0,
       });
       const dataBooking = resBooking?.data || [];
       setBooking(dataBooking.slice(0, 5));
     } catch (error) {
-      console.log("[Home] Error loading bookings:", error instanceof Error ? error.message : String(error));
+      console.log(
+        "[Home] Error loading bookings:",
+        error instanceof Error ? error.message : String(error)
+      );
     }
 
     try {
-      const resKH = await CustomerService.getCustomers("");
-      const dataKH = resKH?.data || [];
+      const resKH = await CustomerSupabaseService.getCustomers({
+        limit: 5,
+        offset: 0,
+      });
+      const dataKH = (resKH?.data || []).map(normalizeCustomer);
       setKhachHang(dataKH.slice(0, 5));
     } catch (error) {
-      console.log("[Home] Error loading customers:", error instanceof Error ? error.message : String(error));
+      console.log(
+        "[Home] Error loading customers:",
+        error instanceof Error ? error.message : String(error)
+      );
     }
 
     try {
-      const resLH = await CustomerService.getLichHenByMaKH({
-        MaKH: 0,
-        TuNgay: "2000-01-01",
-        DenNgay: "2100-01-01",
-        InputString: "",
-        Home: 0,
-      });
+      const resLH = await LichHenService.listRecent({ limit: 5 });
       const dataLH = resLH?.data || [];
       setLichHen(dataLH.slice(0, 5));
     } catch (error) {
-      console.log("[Home] Error loading appointments:", error instanceof Error ? error.message : String(error));
+      console.log(
+        "[Home] Error loading appointments:",
+        error instanceof Error ? error.message : String(error)
+      );
     }
   };
 
@@ -261,16 +305,42 @@ export default function HomeScreen() {
     setActiveIndex(index);
   };
 
-  const statusColors: Record<string, string> = {
-    "Chờ duyệt": "#F59E0B", // amber
-    "Đã duyệt": "#10B981", // green
-    "Huỷ booking": "#EF4444", // red
+  // Chuẩn hoá key trạng thái: DB có thể trả "Hủy booking" (y) hoặc "Huỷ booking" (u),
+  // kèm khoảng trắng/hoa-thường khác nhau. Tra màu theo key chuẩn + màu mặc định.
+  const normalizeStatusKey = (s: any) =>
+    String(s ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/huỷ/g, "hủy")
+      .replace(/\s+/g, " ");
+
+  const STATUS_BG: Record<string, string> = {
+    "chờ duyệt": "#F59E0B", // amber
+    "đã duyệt": "#10B981", // green
+    "hủy booking": "#EF4444", // red
+    "đặt cọc chờ duyệt": "#F59E0B",
+    "đặt cọc đã duyệt": "#10B981",
+    "đã thanh lý": "#6B7280",
   };
 
-  const priorityColors: Record<string, string> = {
-    "Chờ duyệt": "#FEF3C7", // vàng nhạt
-    "Đã duyệt": "#D1FAE5", // xanh nhạt
-    "Huỷ booking": "#FEE2E2", // đỏ nhạt
+  const STATUS_FG: Record<string, string> = {
+    "chờ duyệt": "#FEF3C7", // vàng nhạt
+    "đã duyệt": "#D1FAE5", // xanh nhạt
+    "hủy booking": "#FEE2E2", // đỏ nhạt
+    "đặt cọc chờ duyệt": "#FEF3C7",
+    "đặt cọc đã duyệt": "#D1FAE5",
+    "đã thanh lý": "#F3F4F6",
+  };
+
+  const statusBgOf = (t: any) => STATUS_BG[normalizeStatusKey(t)] ?? "#64748B";
+  const statusFgOf = (t: any) => STATUS_FG[normalizeStatusKey(t)] ?? "#F1F5F9";
+
+  /** Hiển thị tiền: nhận number/string/null — null thì hiện "—" thay vì "đ" trơ trọi */
+  const formatMoney = (v: any) => {
+    const n =
+      typeof v === "string" ? Number(String(v).replace(/[^\d.-]/g, "")) : Number(v);
+    if (!Number.isFinite(n)) return "—";
+    return `${n.toLocaleString("vi-VN")}đ`;
   };
   const handlePressProperty = useCallback(
     (property: any) => {
@@ -491,7 +561,7 @@ export default function HomeScreen() {
                 onPress={() => handlePressProperty(property)}
               >
                 <Image
-                  source={{ uri: property.image || DEFAULT_PROJECT_IMAGE }}
+                  source={{ uri: property.icon || DEFAULT_PROJECT_IMAGE }}
                   style={styles.propertyImage}
                   contentFit="cover"
                 />
@@ -500,14 +570,14 @@ export default function HomeScreen() {
                   style={[
                     styles.propertyBadge,
                     {
-                      backgroundColor:
-                        property?.MaTT === 1
-                          ? "rgba(16, 185, 129, 0.9)"
-                          : property?.MaTT === 2
-                          ? "rgba(239, 68, 68, 0.9)"
-                          : property?.MaTT === 3
-                          ? "rgba(249, 115, 22, 0.9)"
-                          : "rgba(107, 114, 128, 0.9)",
+                      backgroundColor: (() => {
+                        const tt = (property?.TenTT || property?.ten_tt || "").trim();
+                        const ma = String(property?.MaTT ?? property?.ma_tt ?? "");
+                        if (tt === "Đang bán" || ma === "1") return "rgba(16, 185, 129, 0.9)";
+                        if (tt === "Đã bán" || ma === "2") return "rgba(239, 68, 68, 0.9)";
+                        if (tt === "Đầu tư" || ma === "3") return "rgba(249, 115, 22, 0.9)";
+                        return "rgba(16, 185, 129, 0.9)";
+                      })(),
                     },
                   ]}
                 >
@@ -515,26 +585,13 @@ export default function HomeScreen() {
                     style={[
                       styles.badgeDot,
                       {
-                        backgroundColor:
-                          property?.MaTT === 1
-                            ? "#6EE7B7"
-                            : property?.MaTT === 2
-                            ? "#FCA5A5"
-                            : property?.MaTT === 3
-                            ? "#FDBA74"
-                            : "#D1D5DB",
+                        backgroundColor: "#6EE7B7",
                       },
                     ]}
                   />
 
                   <Text style={styles.propertyBadgeText}>
-                    {property?.MaTT === 1
-                      ? "Đang bán"
-                      : property?.MaTT === 2
-                      ? "Đã bán"
-                      : property?.MaTT === 3
-                      ? "Đầu tư"
-                      : "Không xác định"}
+                    {property?.TenTT || property?.ten_tt || "Đang bán"}
                   </Text>
                 </View>
 
@@ -677,12 +734,12 @@ export default function HomeScreen() {
               <View
                 style={[
                   styles.recentIconBox,
-                  { backgroundColor: statusColors[booking.tenTT] },
+                  { backgroundColor: statusBgOf(booking.tenTT) },
                 ]}
               >
                 <ClipboardList
                   size={20}
-                  color={priorityColors[booking.tenTT]}
+                  color={statusFgOf(booking.tenTT)}
                 />
               </View>
               <View style={styles.recentCardContent}>
@@ -701,18 +758,18 @@ export default function HomeScreen() {
               </View>
               <View style={styles.recentCardRight}>
                 <Text style={styles.recentCardAmount}>
-                  {booking.tongGiaGomVAT?.toLocaleString("vi-VN")}đ
+                  {formatMoney(booking.tongGiaGomVAT ?? booking.tong_gia)}
                 </Text>
                 <View
                   style={[
                     styles.statusBadge,
-                    { backgroundColor: statusColors[booking.tenTT] },
+                    { backgroundColor: statusBgOf(booking.tenTT) },
                   ]}
                 >
                   <Text
                     style={[
                       styles.statusBadgeText,
-                      { color: priorityColors[booking.tenTT] },
+                      { color: statusFgOf(booking.tenTT) },
                     ]}
                   >
                     {booking.tenTT}
@@ -744,13 +801,14 @@ export default function HomeScreen() {
           </View>
           {khachHang.map((customer) => (
             <TouchableOpacity
-              key={customer.maKH}
+              key={customer._raw?.id || customer.maKH}
               style={styles.recentCard}
               activeOpacity={0.7}
               onPress={() =>
                 router.push({
                   pathname: "/customer/[id]",
-                  params: { id: customer.maKH },
+                  // Ưu tiên UUID; mã KH vẫn được màn chi tiết chấp nhận
+                  params: { id: customer._raw?.id || customer.maKH },
                 })
               }
             >

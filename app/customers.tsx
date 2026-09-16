@@ -1,4 +1,9 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -10,325 +15,529 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  RefreshControl,
 } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter, useFocusEffect } from "expo-router";
 import {
   Search,
   ChevronLeft,
   Phone,
-  Mail,
   Building2,
   User,
   Plus,
   Users,
   X,
   ChevronRight,
+  MessageCircle,
+  MapPin,
+  FileText,
+  Filter,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { CustomerService } from "@/sevices/CustomerService";
+import { CustomerService } from "@/sevicesSupabase/CustomerService";
 
-type TabType = "personal" | "business";
+type CustomerTab = "all" | "personal" | "business";
+
+const PAGE_SIZE = 20;
 
 export default function CustomersScreen() {
-  const [activeTab, setActiveTab] = useState<TabType>("personal");
-  const [searchQuery, setSearchQuery] = useState<string>("");
   const router = useRouter();
-  const [dataKH, setDataKH] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<CustomerTab>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [selectedStatusId, setSelectedStatusId] = useState<string>("all");
 
-  const loadData = async (search = "") => {
-    setLoading(true);
-    try {
-      let res = await CustomerService.getCustomers(search);
-      const list = Array.isArray(res?.data) ? res.data : [];
-      setDataKH(list);
-    } catch (error) {
-      console.log("ERROR:", error);
-      setDataKH([]);
+  const [dataKH, setDataKH] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const [statusCatalogs, setStatusCatalogs] = useState<any[]>([]);
+
+  // Giữ params mới nhất để refetch khi focus lại (tránh stale closure)
+  const latestParams = useRef({ searchQuery, activeTab, selectedStatusId });
+  latestParams.current = { searchQuery, activeTab, selectedStatusId };
+  const isFirstFocus = useRef(true);
+
+  // Load Status Filter Options
+  useEffect(() => {
+    const loadCatalogs = async () => {
+      try {
+        const statuses = await CustomerService.getTrangThaiCatalogs();
+        setStatusCatalogs([{ id: "all", label: "Tất cả", value: "all", color: Colors.primary }, ...statuses]);
+      } catch (e) {
+        console.log("Error loading catalogs:", e);
+      }
+    };
+    loadCatalogs();
+  }, []);
+
+  const fetchCustomers = async ({
+    search = searchQuery,
+    tab = activeTab,
+    statusId = selectedStatusId,
+    offset = 0,
+    isRefresh = false,
+    isLoadMore = false,
+  }: {
+    search?: string;
+    tab?: CustomerTab;
+    statusId?: string;
+    offset?: number;
+    isRefresh?: boolean;
+    isLoadMore?: boolean;
+  }) => {
+    if (isLoadMore) {
+      setLoadingMore(true);
+    } else if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
     }
-    setLoading(false);
+
+    try {
+      const isPersonal = tab === "personal" ? true : tab === "business" ? false : undefined;
+      const res = await CustomerService.getCustomers({
+        search,
+        isPersonal,
+        maTtId: statusId !== "all" ? statusId : undefined,
+        limit: PAGE_SIZE,
+        offset,
+      });
+
+      const list = Array.isArray(res?.data) ? res.data : [];
+      setDataKH((prev) => (isLoadMore ? [...prev, ...list] : list));
+      setTotal(res?.total ?? 0);
+      setHasMore(!!res?.hasMore);
+      // Hết phiên đăng nhập -> hiện banner đăng nhập lại thay vì "Chưa có khách hàng"
+      setAuthError(
+        (res as any)?.authError
+          ? ((res as any)?.message || "Chưa đăng nhập hoặc phiên đã hết hạn. Vui lòng đăng nhập lại.")
+          : null
+      );
+    } catch (error) {
+      console.log("Fetch customers error:", error);
+      if (!isLoadMore) {
+        setDataKH([]);
+        setTotal(0);
+      }
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+      setLoadingMore(false);
+    }
   };
 
+  // Debounce search 400ms
   useEffect(() => {
     const timer = setTimeout(() => {
-      void loadData(searchQuery);
-    }, 500);
+      fetchCustomers({ offset: 0 });
+    }, 400);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, activeTab, selectedStatusId]);
 
-  const handleDeleteKH = useCallback(
-    (maKH: any) => {
-      Alert.alert("Xác nhận xoá", "Bạn có chắc muốn xoá khách hàng này?", [
+  // Tự tải lại danh sách mỗi khi quay về màn này (sau Thêm/Sửa/Xoá)
+  // để thấy ngay dữ liệu mới. Bỏ qua lần focus đầu (mount đã fetch ở trên).
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
+      }
+      const p = latestParams.current;
+      fetchCustomers({
+        search: p.searchQuery,
+        tab: p.activeTab,
+        statusId: p.selectedStatusId,
+        offset: 0,
+      });
+    }, [])
+  );
+
+  const handleRefresh = () => {
+    fetchCustomers({ offset: 0, isRefresh: true });
+  };
+
+  const handleLoadMore = () => {
+    if (loading || loadingMore || !hasMore || dataKH.length === 0) return;
+    fetchCustomers({ offset: dataKH.length, isLoadMore: true });
+  };
+
+  const handleCall = (phone?: string) => {
+    if (!phone) {
+      Alert.alert("Thông báo", "Khách hàng không có số điện thoại");
+      return;
+    }
+    const clean = phone.replace(/[^0-9+]/g, "");
+    Linking.openURL(`tel:${clean}`);
+  };
+
+  const handleZalo = (phone?: string) => {
+    if (!phone) {
+      Alert.alert("Thông báo", "Khách hàng không có số điện thoại");
+      return;
+    }
+    const clean = phone.replace(/[^0-9]/g, "");
+    Linking.openURL(`https://zalo.me/${clean}`);
+  };
+
+  const handleDeleteKH = (customer: any) => {
+    Alert.alert(
+      "Xác nhận xoá",
+      `Bạn có chắc muốn xoá khách hàng "${customer.tenKH}"?`,
+      [
+        { text: "Huỷ", style: "cancel" },
         {
           text: "Xoá",
           style: "destructive",
           onPress: async () => {
             try {
-              const res = await CustomerService.delete({ MaKH: [maKH] });
-              if (res?.status === 2000) {
-                void loadData(searchQuery);
-                Alert.alert("Thành công", res?.message);
+              const res = await CustomerService.deleteCustomer(customer.id);
+              if (res.status === 2000) {
+                Alert.alert("Thành công", "Đã xoá khách hàng");
+                fetchCustomers({ offset: 0 });
               } else {
-                Alert.alert("Lỗi", res?.message);
+                Alert.alert("Không thể xoá", res.message);
               }
-            } catch (error) {
-              console.log("delete error:", error);
-              Alert.alert("Lỗi", "Không thể xoá khách hàng");
+            } catch (e) {
+              Alert.alert("Lỗi", "Có lỗi xảy ra khi xoá khách hàng");
             }
           },
         },
-        { text: "Huỷ", style: "cancel" },
-      ]);
-    },
-    [searchQuery]
-  );
-
-  const getInitials = (name: string) => {
-    if (!name) return "?";
-    const parts = name.trim().split(" ");
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    return name[0].toUpperCase();
+      ]
+    );
   };
 
-  const getAvatarColor = (name: string) => {
-    const colors = [
-      "#E86F25",
-      "#3B82F6",
-      "#10B981",
-      "#8B5CF6",
-      "#EC4899",
-      "#F59E0B",
-      "#06B6D4",
-    ];
-    let hash = 0;
-    for (let i = 0; i < (name || "").length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-  };
+  const renderItem = ({ item }: { item: any }) => {
+    const isPersonal = item.isPersonal;
+    const phone = item.diDong || item.dien_thoai;
+    const badgeColor = item.statusColor || Colors.primary;
 
-  const handleCall = useCallback((phone: string) => {
-    if (!phone) return;
-    void Linking.openURL(`tel:${phone}`);
-  }, []);
-
-  const handleEmail = useCallback((email: string) => {
-    if (!email) return;
-    void Linking.openURL(`mailto:${email}`);
-  }, []);
-
-  const renderCustomerItem = useCallback(
-    ({ item: customer }: { item: any }) => {
-      const avatarBg = getAvatarColor(customer.tenKH || "");
-      return (
-        <TouchableOpacity
-          style={styles.customerRow}
-          onPress={() => router.push(`/customer/${customer.maKH}`)}
-          onLongPress={() => handleDeleteKH(customer?.maKH)}
-          activeOpacity={0.6}
-          testID={`customer-card-${customer.maKH}`}
-        >
-          <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
-            <Text style={styles.avatarText}>
-              {getInitials(customer.tenKH)}
-            </Text>
-          </View>
-
-          <View style={styles.rowContent}>
-            <View style={styles.rowTop}>
-              <Text style={styles.customerName} numberOfLines={1}>
-                {customer.tenKH}
-              </Text>
-              <Text style={styles.dateLabel}>
-                {new Date(customer.ngayDangKy).toLocaleDateString("vi-VN")}
-              </Text>
+    return (
+      <TouchableOpacity
+        activeOpacity={0.8}
+        style={styles.card}
+        onPress={() => router.push(`/customer/${item.id}` as any)}
+        onLongPress={() => handleDeleteKH(item)}
+      >
+        {/* Header Card */}
+        <View style={styles.cardHeader}>
+          <View style={styles.headerLeft}>
+            <View style={[styles.avatar, { backgroundColor: isPersonal ? "#EFF6FF" : "#FEF3C7" }]}>
+              {isPersonal ? (
+                <User size={20} color="#2563EB" />
+              ) : (
+                <Building2 size={20} color="#D97706" />
+              )}
             </View>
-
-            <View style={styles.rowBottom}>
-              <Text style={styles.subInfo} numberOfLines={1}>
-                {customer.diDong || "Chưa có SĐT"}
-                {customer.email ? `  •  ${customer.email}` : ""}
-              </Text>
-            </View>
-
-            <View style={styles.quickActions}>
-              {customer.diDong ? (
-                <TouchableOpacity
-                  style={styles.actionChip}
-                  onPress={() => handleCall(customer.diDong)}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            <View style={styles.nameBlock}>
+              <View style={styles.nameRow}>
+                <Text style={styles.customerName} numberOfLines={1}>
+                  {item.tenKH || (isPersonal ? "Chưa có tên" : "Doanh nghiệp")}
+                </Text>
+                <View
+                  style={[
+                    styles.typeBadge,
+                    { backgroundColor: isPersonal ? "#EFF6FF" : "#FEF3C7" },
+                  ]}
                 >
-                  <Phone size={12} color="#10B981" />
-                  <Text style={styles.actionChipText}>Gọi</Text>
-                </TouchableOpacity>
-              ) : null}
-              {customer.email ? (
-                <TouchableOpacity
-                  style={styles.actionChip}
-                  onPress={() => handleEmail(customer.email)}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                >
-                  <Mail size={12} color="#3B82F6" />
-                  <Text style={[styles.actionChipText, { color: "#3B82F6" }]}>
-                    Email
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-              {customer?.company ? (
-                <View style={styles.companyChip}>
-                  <Building2 size={11} color={Colors.textSecondary} />
-                  <Text style={styles.companyChipText} numberOfLines={1}>
-                    {customer.company}
+                  <Text
+                    style={[
+                      styles.typeBadgeText,
+                      { color: isPersonal ? "#2563EB" : "#D97706" },
+                    ]}
+                  >
+                    {isPersonal ? "Cá nhân" : "Doanh nghiệp"}
                   </Text>
                 </View>
+              </View>
+
+              {item.ma_so_kh ? (
+                <Text style={styles.customerCode}>Mã: {item.ma_so_kh}</Text>
               ) : null}
             </View>
           </View>
 
-          <ChevronRight size={16} color={Colors.textTertiary} />
-        </TouchableOpacity>
-      );
-    },
-    [handleDeleteKH, router, handleCall, handleEmail]
-  );
+          {/* Badge Trạng thái */}
+          <View style={[styles.statusBadge, { backgroundColor: `${badgeColor}18` }]}>
+            <View style={[styles.statusDot, { backgroundColor: badgeColor }]} />
+            <Text style={[styles.statusText, { color: badgeColor }]} numberOfLines={1}>
+              {item.status || "Tiềm năng"}
+            </Text>
+          </View>
+        </View>
 
-  const keyExtractor = useCallback(
-    (item: any) => item.maKH?.toString(),
-    []
-  );
+        {/* Thông tin chính cốt lõi */}
+        <View style={styles.cardBody}>
+          {phone ? (
+            <View style={styles.infoRow}>
+              <Phone size={14} color="#64748B" />
+              <Text style={styles.infoText}>{phone}</Text>
+            </View>
+          ) : null}
 
-  const renderSeparator = useCallback(
-    () => <View style={styles.separator} />,
-    []
-  );
+          {item.cccd ? (
+            <View style={styles.infoRow}>
+              <FileText size={14} color="#64748B" />
+              <Text style={styles.infoText}>CCCD/CMND: {item.cccd}</Text>
+            </View>
+          ) : null}
+
+          {item.taxCode ? (
+            <View style={styles.infoRow}>
+              <FileText size={14} color="#64748B" />
+              <Text style={styles.infoText}>MST: {item.taxCode}</Text>
+            </View>
+          ) : null}
+
+          {item.diaChi ? (
+            <View style={styles.infoRow}>
+              <MapPin size={14} color="#64748B" />
+              <Text style={styles.infoText} numberOfLines={1}>
+                {item.diaChi}
+              </Text>
+            </View>
+          ) : null}
+
+          {item.source ? (
+            <View style={styles.sourceRow}>
+              <Text style={styles.sourceLabel}>Nguồn: </Text>
+              <Text style={styles.sourceValue}>{item.source}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Action Buttons Nhanh: Call, Zalo, Chi tiết */}
+        <View style={styles.cardFooter}>
+          <View style={styles.actionButtonsLeft}>
+            {phone ? (
+              <>
+                <TouchableOpacity
+                  style={[styles.quickBtn, styles.callBtn]}
+                  onPress={() => handleCall(phone)}
+                >
+                  <Phone size={14} color="#16A34A" />
+                  <Text style={styles.callBtnText}>Gọi điện</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.quickBtn, styles.zaloBtn]}
+                  onPress={() => handleZalo(phone)}
+                >
+                  <MessageCircle size={14} color="#0284C7" />
+                  <Text style={styles.zaloBtnText}>Zalo</Text>
+                </TouchableOpacity>
+              </>
+            ) : null}
+          </View>
+
+          <View style={styles.viewDetailBtn}>
+            <Text style={styles.viewDetailText}>Chi tiết</Text>
+            <ChevronRight size={14} color="#94A3B8" />
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          headerShown: true,
-          title: "Khách hàng",
-          headerStyle: { backgroundColor: Colors.primary },
-          headerTintColor: Colors.white,
-          headerTitleStyle: { fontWeight: "700" as const, fontSize: 18 },
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={styles.headerBtn}
-            >
-              <ChevronLeft color={Colors.white} size={24} />
-            </TouchableOpacity>
-          ),
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={() => router.push("/customer/new")}
-              style={styles.headerBtn}
-            >
-              <Plus color={Colors.white} size={24} />
-            </TouchableOpacity>
-          ),
+          headerShown: false,
         }}
       />
 
-      <View style={styles.topSection}>
-        <View style={styles.searchBar}>
-          <Search color={Colors.textTertiary} size={17} />
+      {/* Header Bar */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <ChevronLeft size={24} color="#1E293B" />
+        </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>Khách hàng</Text>
+          <Text style={styles.headerSubtitle}>{total} khách hàng</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => router.push("/customer/new" as any)}
+        >
+          <Plus size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchSection}>
+        <View style={styles.searchBox}>
+          <Search size={18} color="#94A3B8" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Tìm tên, SĐT, email..."
-            placeholderTextColor={Colors.textTertiary}
+            placeholder="Tìm tên, SĐT, CCCD, Email, Mã KH..."
+            placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
-            testID="customer-search-input"
+            returnKeyType="search"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery("")}>
-              <X color={Colors.textSecondary} size={17} />
+              <X size={16} color="#94A3B8" />
             </TouchableOpacity>
           )}
         </View>
-
-        <View style={styles.filterRow}>
-          <View style={styles.tabBar}>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === "personal" && styles.tabActive]}
-              onPress={() => setActiveTab("personal")}
-              activeOpacity={0.8}
-            >
-              <User
-                color={
-                  activeTab === "personal" ? Colors.primary : Colors.textTertiary
-                }
-                size={14}
-              />
-              <Text
-                style={[
-                  styles.tabLabel,
-                  activeTab === "personal" && styles.tabLabelActive,
-                ]}
-              >
-                Cá nhân
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                activeTab === "business" && styles.tabActive,
-              ]}
-              onPress={() => setActiveTab("business")}
-              activeOpacity={0.8}
-            >
-              <Building2
-                color={
-                  activeTab === "business" ? Colors.primary : Colors.textTertiary
-                }
-                size={14}
-              />
-              <Text
-                style={[
-                  styles.tabLabel,
-                  activeTab === "business" && styles.tabLabelActive,
-                ]}
-              >
-                Doanh nghiệp
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>{dataKH?.length ?? 0}</Text>
-          </View>
-        </View>
       </View>
 
-      {loading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Đang tải...</Text>
-        </View>
-      ) : dataKH.length === 0 ? (
-        <View style={styles.emptyWrap}>
-          <View style={styles.emptyIcon}>
-            <Users color={Colors.textTertiary} size={32} />
-          </View>
-          <Text style={styles.emptyTitle}>Chưa có khách hàng</Text>
-          <Text style={styles.emptySubtitle}>
-            Nhấn + để thêm khách hàng mới
+      {/* Tabs: Tất cả / Cá nhân / Doanh nghiệp */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === "all" && styles.tabItemActive]}
+          onPress={() => setActiveTab("all")}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "all" && styles.tabTextActive,
+            ]}
+          >
+            Tất cả
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === "personal" && styles.tabItemActive]}
+          onPress={() => setActiveTab("personal")}
+        >
+          <User size={15} color={activeTab === "personal" ? Colors.primary : "#64748B"} />
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "personal" && styles.tabTextActive,
+            ]}
+          >
+            Cá nhân
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === "business" && styles.tabItemActive]}
+          onPress={() => setActiveTab("business")}
+        >
+          <Building2 size={15} color={activeTab === "business" ? Colors.primary : "#64748B"} />
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "business" && styles.tabTextActive,
+            ]}
+          >
+            Doanh nghiệp
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Bộ lọc trạng thái ngang */}
+      {statusCatalogs.length > 1 && (
+        <View style={styles.statusFilterWrap}>
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={statusCatalogs}
+            keyExtractor={(item) => String(item.id)}
+            contentContainerStyle={styles.statusFilterContent}
+            renderItem={({ item }) => {
+              const isSelected = selectedStatusId === item.value || (item.value === "all" && selectedStatusId === "all");
+              return (
+                <TouchableOpacity
+                  style={[
+                    styles.statusPill,
+                    isSelected && { backgroundColor: item.color || Colors.primary, borderColor: item.color || Colors.primary },
+                  ]}
+                  onPress={() => setSelectedStatusId(item.value)}
+                >
+                  <Text
+                    style={[
+                      styles.statusPillText,
+                      isSelected && { color: "#FFFFFF", fontWeight: "700" },
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </View>
+      )}
+
+      {/* Main List */}
+      {loading && !refreshing ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Đang tải danh sách khách hàng...</Text>
         </View>
       ) : (
         <FlatList
           data={dataKH}
-          renderItem={renderCustomerItem}
-          keyExtractor={keyExtractor}
-          ItemSeparatorComponent={renderSeparator}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          testID="customer-list"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.loadMoreContainer}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={styles.loadMoreText}>Đang tải thêm...</Text>
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={
+            authError ? (
+              <View style={styles.emptyContainer}>
+                <Users size={56} color="#FCA5A5" />
+                <Text style={styles.emptyTitle}>Phiên đăng nhập đã hết hạn</Text>
+                <Text style={styles.emptyDesc}>
+                  {authError}{"\n"}Hãy đăng nhập lại bằng đúng tài khoản web để xem danh sách khách hàng.
+                </Text>
+                <TouchableOpacity
+                  style={styles.emptyBtn}
+                  onPress={() => router.replace("/login" as any)}
+                >
+                  <Text style={styles.emptyBtnText}>Đăng nhập lại</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Users size={56} color="#CBD5E1" />
+                <Text style={styles.emptyTitle}>Chưa có khách hàng</Text>
+                <Text style={styles.emptyDesc}>
+                  {searchQuery
+                    ? "Không tìm thấy khách hàng nào khớp với từ khoá"
+                    : "Chạm vào nút + phía trên để thêm khách hàng mới"}
+                </Text>
+                <TouchableOpacity
+                  style={styles.emptyBtn}
+                  onPress={() => router.push("/customer/new" as any)}
+                >
+                  <Plus size={18} color="#FFFFFF" />
+                  <Text style={styles.emptyBtnText}>Thêm khách hàng</Text>
+                </TouchableOpacity>
+              </View>
+            )
+          }
         />
       )}
     </View>
@@ -338,201 +547,344 @@ export default function CustomersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F8FA",
+    backgroundColor: "#F8FAFC",
   },
-  headerBtn: {
-    padding: 4,
-  },
-  topSection: {
-    backgroundColor: Colors.white,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(0,0,0,0.08)",
-  },
-  searchBar: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F2F3F5",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: Platform.OS === "ios" ? 9 : 3,
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === "ios" ? 54 : 16,
+    paddingBottom: 14,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: "center",
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  addButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  searchSection: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    backgroundColor: "#FFFFFF",
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 42,
     gap: 8,
-    marginBottom: 10,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: Colors.text,
-    paddingVertical: Platform.OS === "ios" ? 0 : 6,
+    color: "#1E293B",
+    padding: 0,
   },
-  filterRow: {
+  tabsContainer: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  tabItem: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-  },
-  tabBar: {
-    flexDirection: "row",
+    justifyContent: "center",
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#F1F5F9",
     gap: 6,
   },
-  tab: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
+  tabItemActive: {
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  tabTextActive: {
+    color: Colors.primary,
+    fontWeight: "700",
+  },
+  statusFilterWrap: {
+    backgroundColor: "#FFFFFF",
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  statusFilterContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  statusPill: {
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: "#F2F3F5",
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
-  tabActive: {
-    backgroundColor: "rgba(232,111,37,0.1)",
-  },
-  tabLabel: {
-    fontSize: 13,
-    fontWeight: "500" as const,
-    color: Colors.textTertiary,
-  },
-  tabLabelActive: {
-    color: Colors.primary,
-    fontWeight: "600" as const,
-  },
-  countBadge: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    minWidth: 28,
-    height: 24,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 8,
-  },
-  countText: {
+  statusPillText: {
     fontSize: 12,
-    fontWeight: "700" as const,
-    color: Colors.white,
+    color: "#475569",
+    fontWeight: "500",
   },
   listContent: {
-    paddingVertical: 4,
-  },
-  customerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.white,
+    padding: 16,
+    paddingBottom: 40,
     gap: 12,
   },
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    justifyContent: "center",
-    alignItems: "center",
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
   },
-  avatarText: {
-    fontSize: 15,
-    fontWeight: "700" as const,
-    color: Colors.white,
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 10,
   },
-  rowContent: {
-    flex: 1,
-  },
-  rowTop: {
+  headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 2,
-  },
-  customerName: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
     flex: 1,
     marginRight: 8,
+    gap: 10,
   },
-  dateLabel: {
-    fontSize: 11,
-    color: Colors.textTertiary,
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  rowBottom: {
-    marginBottom: 5,
+  nameBlock: {
+    flex: 1,
   },
-  subInfo: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  quickActions: {
+  nameRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     flexWrap: "wrap",
   },
-  actionChip: {
+  customerName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  typeBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  typeBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  customerCode: {
+    fontSize: 11,
+    color: "#94A3B8",
+    marginTop: 2,
+  },
+  statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: "rgba(16,185,129,0.08)",
+    gap: 5,
   },
-  actionChipText: {
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
     fontSize: 11,
-    fontWeight: "600" as const,
-    color: "#10B981",
+    fontWeight: "600",
   },
-  companyChip: {
+  cardBody: {
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F8FAFC",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F8FAFC",
+    gap: 6,
+  },
+  infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 12,
-    backgroundColor: "#F2F3F5",
-    maxWidth: 160,
+    gap: 8,
   },
-  companyChipText: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: "rgba(0,0,0,0.06)",
-    marginLeft: 70,
-  },
-  loadingWrap: {
+  infoText: {
+    fontSize: 13,
+    color: "#334155",
     flex: 1,
-    justifyContent: "center",
+  },
+  sourceRow: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    marginTop: 2,
+  },
+  sourceLabel: {
+    fontSize: 12,
+    color: "#94A3B8",
+  },
+  sourceValue: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  cardFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  actionButtonsLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  quickBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    gap: 4,
+  },
+  callBtn: {
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#DCFCE7",
+  },
+  callBtnText: {
+    fontSize: 12,
+    color: "#16A34A",
+    fontWeight: "600",
+  },
+  zaloBtn: {
+    backgroundColor: "#F0F9FF",
+    borderWidth: 1,
+    borderColor: "#E0F2FE",
+  },
+  zaloBtnText: {
+    fontSize: 12,
+    color: "#0284C7",
+    fontWeight: "600",
+  },
+  viewDetailBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  viewDetailText: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
   },
   loadingText: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: "#64748B",
   },
-  emptyWrap: {
-    flex: 1,
-    justifyContent: "center",
+  loadMoreContainer: {
+    paddingVertical: 14,
     alignItems: "center",
-    gap: 6,
-    paddingBottom: 60,
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
   },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#F2F3F5",
-    justifyContent: "center",
+  loadMoreText: {
+    fontSize: 13,
+    color: "#64748B",
+  },
+  emptyContainer: {
     alignItems: "center",
-    marginBottom: 8,
+    justifyContent: "center",
+    paddingVertical: 60,
+    paddingHorizontal: 24,
   },
   emptyTitle: {
     fontSize: 16,
-    fontWeight: "600" as const,
-    color: Colors.text,
+    fontWeight: "700",
+    color: "#334155",
+    marginTop: 14,
   },
-  emptySubtitle: {
+  emptyDesc: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: "#64748B",
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  emptyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: 20,
+    gap: 6,
+  },
+  emptyBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });

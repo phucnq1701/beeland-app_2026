@@ -29,8 +29,7 @@ import {
   Download,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { CustomerService } from "@/sevices/CustomerService";
-import { HopDongService } from "@/sevices/HopDongService";
+import { HopDongService } from "@/sevicesSupabase/HopDongService";
 
 interface PaymentHistory {
   ngayThu: string;
@@ -274,8 +273,8 @@ export default function ContractDetailScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
-  const [dataTienDo, setDataTienDo] = useState([]);
-  const [lichSuThu, setLichSuThu] = useState([]);
+  const [dataTienDo, setDataTienDo] = useState<Installment[]>([]);
+  const [lichSuThu, setLichSuThu] = useState<PaymentHistory[]>([]);
   const [overview, setOverview] = useState({
     tongPhaiThu: 0,
     tongDaThu: 0,
@@ -292,13 +291,16 @@ export default function ContractDetailScreen() {
 
   const loadData = async () => {
     let res = await HopDongService.getDetailLTT({ MaPGC: id });
-    const tienDoDot = res?.data.map((item) => ({
+    const tienDoDot: Installment[] = (res?.data || []).map((item: any) => ({
       dot: `Đợt ${item.dotTT} (${item.tyLeTT}%)`,
       phaiThu: item.phaiThu || 0,
       daThu: item.daThu || 0,
       conNo: item.conLai || 0,
-      trangThai:
-        item.conLai === 0 ? "paid" : item.daThu > 0 ? "partial" : "unpaid",
+      trangThai: (item.conLai === 0
+        ? "paid"
+        : item.daThu > 0
+          ? "partial"
+          : "unpaid") as Installment["trangThai"],
     }));
     setDataTienDo(tienDoDot);
 
@@ -332,15 +334,17 @@ export default function ContractDetailScreen() {
       MaPGC: id,
       isPhieuThu: true,
     });
-    const lichSuThu = resLST?.data.map((item) => ({
-      ngayThu: item.ngayThu
-        ? new Date(item.ngayThu).toISOString().slice(0, 10)
-        : "",
-
-      soTien: item.tienThu || 0,
-
-      ghiChu: `Thu đợt ${item.dotTT}${item.name ? " - " + item.name : ""}`,
-    }));
+    const lichSuThu: PaymentHistory[] = (resLST?.data || []).map(
+      (item: any) => ({
+        ngayThu: item.ngayThu
+          ? new Date(item.ngayThu).toISOString().slice(0, 10)
+          : "",
+        soTien: item.tienThu || 0,
+        ghiChu:
+          item.dienGiai ||
+          `Thu đợt ${item.dotTT ?? ""}${item.name ? " - " + item.name : ""}`,
+      })
+    );
     setLichSuThu(lichSuThu);
   };
 
@@ -369,93 +373,15 @@ export default function ContractDetailScreen() {
     return DEMO_CONTRACT;
   }, [dataParam, id]);
 
-  const loadContractDetail = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await CustomerService.getAllContracts({
-        maHD: id,
-        Limit: 1,
-        Offset: 1,
-      });
-      console.log(
-        "[ContractDetail] API response:",
-        JSON.stringify(res?.data?.length)
-      );
-
-      if (res?.data?.length) {
-        const item = res.data[0];
-        const lichSuThu: PaymentHistory[] = (
-          item.lichSuThuTien ||
-          item.lichSuThu ||
-          []
-        ).map((h: any) => ({
-          ngayThu: h.ngayThu || h.NgayThu || h.ngayPhieu || "",
-          soTien: h.soTien || h.SoTien || h.giaTri || 0,
-          ghiChu: h.ghiChu || h.GhiChu || h.dienGiai || "",
-        }));
-
-        const tienDoDot: Installment[] = (
-          item.tienDoDot ||
-          item.dotThanhToan ||
-          []
-        ).map((d: any) => {
-          const phaiThu = d.phaiThu || d.PhaiThu || d.soTienDot || 0;
-          const daThu = d.daThu || d.DaThu || d.soTienDaThu || 0;
-          const conNo = phaiThu - daThu;
-          let trangThai: "paid" | "partial" | "unpaid" = "unpaid";
-          if (daThu >= phaiThu && phaiThu > 0) trangThai = "paid";
-          else if (daThu > 0) trangThai = "partial";
-          return {
-            dot: d.tenDot || d.TenDot || d.dot || "",
-            phaiThu,
-            daThu,
-            conNo: conNo > 0 ? conNo : 0,
-            trangThai,
-          };
-        });
-
-        const tongPhaiThu = tienDoDot.reduce((s, d) => s + d.phaiThu, 0);
-        const tongDaThu = tienDoDot.reduce((s, d) => s + d.daThu, 0);
-
-        const detail: ContractDetail = {
-          maHD: item.maHD?.toString() || id || "",
-          soHopDong: item.soHopDong || item.soHD || "",
-          ngayKy: item.ngayKy || item.ngayHD || "",
-          tenKH: item.tenKH || item.tenKhachHang || "",
-          maSP: item.maSP || item.maCanHo || "",
-          tongGiaTri: item.tongGiaTri || item.giaTriHD || 0,
-          trangThai: item.trangThai || item.tenTT || "",
-          tenDA: item.tenDA || item.tenDuAn || "",
-          colorTT: item.colorTT || item.ColorWeb || "#3B82F6",
-          lichSuThu,
-          tienDoDot,
-          tongPhaiThu,
-          tongDaThu,
-          tongConNo: tongPhaiThu - tongDaThu > 0 ? tongPhaiThu - tongDaThu : 0,
-          taiLieu: DEMO_DOCUMENTS,
-        };
-
-        if (tienDoDot.length > 0 || lichSuThu.length > 0) {
-          setContract({ ...detail, taiLieu: DEMO_DOCUMENTS });
-        } else {
-          console.log("[ContractDetail] No installment data, using demo");
-          setContract(buildFromParam());
-        }
-      } else {
-        console.log("[ContractDetail] No API data, using demo");
-        setContract(buildFromParam());
-      }
-    } catch (err) {
-      console.log("[ContractDetail] Error:", err);
-      setContract(buildFromParam());
-    } finally {
-      setLoading(false);
-    }
-  }, [id, buildFromParam]);
-
+  // Header từ dòng lưới truyền sang (giống đặt cọc dùng row fn_deposit_list)
   useEffect(() => {
-    void loadContractDetail();
-  }, [loadContractDetail]);
+    setContract(buildFromParam());
+    setLoading(true);
+    void loadData()
+      .catch((err) => console.log("[ContractDetail] loadData error", err))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, dataParam]);
 
   useEffect(() => {
     if (!loading && contract) {
@@ -743,7 +669,7 @@ export default function ContractDetailScreen() {
                 dataTienDo?.map((dot, idx) => {
                   const iconInfo = getInstallmentIcon(dot.trangThai);
                   const Icon = iconInfo.icon;
-                  const isLast = idx === contract.tienDoDot.length - 1;
+                  const isLast = idx === dataTienDo.length - 1;
                   return (
                     <View key={idx}>
                       <View style={styles.installmentRow}>
@@ -839,7 +765,7 @@ export default function ContractDetailScreen() {
                 </View>
               ) : (
                 lichSuThu.map((item, idx) => {
-                  const isLast = idx === contract.lichSuThu.length - 1;
+                  const isLast = idx === lichSuThu.length - 1;
                   return (
                     <View key={idx}>
                       <View style={styles.historyRow}>
@@ -887,12 +813,12 @@ export default function ContractDetailScreen() {
               ) : (
                 <>
                   <Text style={styles.docCount}>
-                    {contract.taiLieu.length} tài liệu
+                    {contract?.taiLieu?.length ?? 0} tài liệu
                   </Text>
-                  {contract.taiLieu.map((doc, idx) => {
+                  {(contract?.taiLieu ?? []).map((doc, idx) => {
                     const docIconInfo = getDocIcon(doc.type);
                     const DocIcon = docIconInfo.icon;
-                    const isLast = idx === contract.taiLieu.length - 1;
+                    const isLast = idx === (contract?.taiLieu?.length ?? 1) - 1;
                     return (
                       <TouchableOpacity
                         key={doc.id}
