@@ -32,7 +32,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import Colors from "@/constants/colors";
 import { bookings } from "@/mocks/bookings";
-import { ProductService } from "@/sevices/ProductService";
+import { ProductService } from "@/sevicesSupabase/ProductService";
 import { BookingService } from "@/sevices/BookingService";
 import { CartService } from "@/sevices/CartServices";
 

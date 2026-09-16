@@ -27,15 +27,18 @@ import {
 } from "@/mocks/overviewUnits";
 import Colors from "@/constants/colors";
 import { Product } from "@/mocks/properties";
-import { ProductService } from "@/sevices/ProductService";
-import { ProjectService } from "@/sevices/ProjectService";
-import { FilterService } from "@/sevices/FilterService";
-import { PriceServices } from "@/sevices/PriceServices";
+import { ProductService } from "@/sevicesSupabase/ProductService";
+import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { FilterService } from "@/sevicesSupabase/FilterService";
+import { PriceServices } from "@/sevicesSupabase/PriceServices";
 
 import * as signalR from "@microsoft/signalr";
 import BlockGrid from "./product/BlockGrid";
 
 type ViewMode = "list" | "grid" | "overview";
+
+// Số sản phẩm mỗi lần gọi API (phân trang cuộn vô hạn)
+const PAGE_SIZE = 16;
 
 
 
@@ -69,12 +72,18 @@ export default function ProductsScreen() {
   const [TrangThai, setTrangThai] = useState<any[]>([]);
   const [dataGrid, setDataGrid] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const offSetRef = useRef(1);
+  const loadingMoreRef = useRef(false);
+  const hasMoreRef = useRef(true);
 
   const [filterCondition, setFilterCondition] = useState<Record<string, any>>({
     MaDA: Number(MaDA) || null,
     MaKhu: null,
     MaPK: null,
     MaTT: null,
+    FormCode: null,
     KyHieu: "",
   });
 
@@ -85,11 +94,24 @@ export default function ProductsScreen() {
 
   const initSignalR = async () => {
     try {
+      // Logger no-op: chặn hoàn toàn log nội bộ của SignalR (tránh stack trace rác
+      // khi server đóng kết nối realtime — không phải lỗi API)
+      const silentLogger: signalR.ILogger = {
+        log: () => {},
+      };
+
       const connection = new signalR.HubConnectionBuilder()
         .withUrl("https://api-beeland.beesky.vn/signalr-beeland")
         .withAutomaticReconnect()
-        .configureLogging(signalR.LogLevel.Trace)
+        .configureLogging(silentLogger)
         .build();
+
+      // Xử lý khi server đóng kết nối (không phải lỗi API, chỉ realtime)
+      connection.onclose((err) => {
+        if (err) {
+          console.log("[SignalR] Connection closed:", err?.message || err);
+        }
+      });
 
       await connection.start();
       // console.log("✅ Connected SignalR");
@@ -206,21 +228,22 @@ export default function ProductsScreen() {
 
     void handleFormGrid(MaDA);
   };
-  const mapStatus = (maTT: any) => {
-    switch (maTT) {
-      case 1:
-        return "deposit";
-      case 2:
-        return "locked";
-      case 3:
-        return "sold";
-      case 11:
-        return "booking";
-      case 18:
-        return "locked";
-      default:
-        return "available";
-    }
+  // MaTT giờ là uuid → map trạng thái theo TÊN (TenTT) từ FK cloud_catalogs
+  const mapStatusByTT = (item: any) => {
+    const t = String(item?.TenTT || "").toLowerCase();
+    if (
+      t.includes("đã bán") ||
+      t.includes("hdmb") ||
+      t.includes("bàn giao") ||
+      t.includes("sổ đỏ") ||
+      t.includes("góp vốn") ||
+      t.includes("thanh lý")
+    )
+      return "sold";
+    if (t.includes("đặt cọc")) return "deposit";
+    if (t.includes("booking")) return "booking";
+    if (t.includes("giữ chỗ") || t.includes("lock")) return "locked";
+    return "available";
   };
 
   const handleFormGrid = async (MaDA: any) => {
@@ -239,9 +262,9 @@ export default function ProductsScreen() {
           floor.detailFloor?.forEach((item: any) => {
             units.push({
               id: item.KyHieu,
-              floor: floor.maTang, // ⚠️ dùng số
-              column: item.MaVT, // ⚠️ dùng số
-              status: mapStatus(item.MaTT),
+              floor: floor.maTang,
+              column: item.MaVT,
+              status: mapStatusByTT(item),
               raw: item,
             });
           });
@@ -265,6 +288,10 @@ export default function ProductsScreen() {
   const loadProducts = async () => {
     try {
       setLoading(true);
+      // Reset phân trang về trang đầu
+      offSetRef.current = 1;
+      hasMoreRef.current = true;
+      setHasMore(true);
 
       const resDA = await ProjectService.getProjects({});
       setDuAn(resDA?.data || []);
@@ -281,13 +308,23 @@ export default function ProductsScreen() {
         MaKhu: filterCondition.MaKhu,
         MaPK: filterCondition.MaPK,
         MaTT: null,
+        FormCode: filterCondition.FormCode,
         KyHieu: filterCondition?.KyHieu,
-        Limit: 16,
+        Limit: PAGE_SIZE,
         offSet: 1,
       };
       setFilterCondition(filter);
       const res = await ProductService.getProducts(filter);
-      setProducts2(res?.data || []);
+      const data = res?.data || [];
+      setProducts2(data);
+
+      // Cập nhật con trỏ phân trang + còn dữ liệu để tải thêm hay không
+      offSetRef.current = data.length + 1;
+      const total = (res as any)?.total ?? data.length;
+      const more =
+        data.length >= PAGE_SIZE && (total === 0 || data.length < total);
+      hasMoreRef.current = more;
+      setHasMore(more);
     } catch {
       // load products error
     } finally {
@@ -298,25 +335,104 @@ export default function ProductsScreen() {
   const loadProducts2 = async (_filter: any) => {
     try {
       setLoading(true);
+      // Đổi bộ lọc → quay lại trang đầu
+      offSetRef.current = 1;
+      hasMoreRef.current = true;
+      setHasMore(true);
 
       let filter = {
         MaDA: _filter.MaDA,
         MaKhu: _filter.MaKhu,
         MaPK: _filter.MaPK,
-        MaTT: null,
+        MaTT: _filter.MaTT,
+        FormCode: _filter.FormCode,
         KyHieu: _filter?.KyHieu,
-        Limit: 16,
+        Limit: PAGE_SIZE,
         offSet: 1,
       };
       void loadDataByDA(_filter.MaDA);
 
       const res = await ProductService.getProducts(filter);
+      const data = res?.data || [];
+      setProducts2(data);
 
-      setProducts2(res?.data || []);
+      offSetRef.current = data.length + 1;
+      const total = (res as any)?.total ?? data.length;
+      const more =
+        data.length >= PAGE_SIZE && (total === 0 || data.length < total);
+      hasMoreRef.current = more;
+      setHasMore(more);
     } catch (error) {
       console.log("error load products", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Tải thêm sản phẩm khi cuộn tới cuối danh sách.
+  // Tự động dừng khi đã tải hết (hasMore = false) → không gọi API nữa.
+  const loadMore = async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) return;
+
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const f = filterCondition;
+      const requestOffset = offSetRef.current;
+      const filter = {
+        MaDA: f.MaDA,
+        MaKhu: f.MaKhu,
+        MaPK: f.MaPK,
+        MaTT: f.MaTT,
+        FormCode: f.FormCode,
+        KyHieu: f?.KyHieu,
+        Limit: PAGE_SIZE,
+        offSet: requestOffset,
+      };
+
+      const res = await ProductService.getProducts(filter);
+      const data = res?.data || [];
+
+      setProducts2((prev) => {
+        // Loại bỏ trùng lặp: phân trang theo offset + order created_at (không
+        // unique) có thể trả lại cùng 1 sản phẩm ở các trang khác nhau.
+        const seen = new Set(prev.map((p) => p.MaSP));
+        const uniqueNew = data.filter((p) => {
+          if (!p?.MaSP || seen.has(p.MaSP)) return false;
+          seen.add(p.MaSP);
+          return true;
+        });
+
+        const merged = [...prev, ...uniqueNew];
+        // Tiến offset theo SỐ BẢN GHI THỰC NHẬN từ server (không dùng
+        // merged.length) để không bị lệch trang khi có bản ghi trùng.
+        offSetRef.current = requestOffset + data.length;
+        const total = (res as any)?.total ?? 0;
+        // Dừng khi: trang rỗng, hoặc trang cuối (< PAGE_SIZE), hoặc đã đủ total.
+        const more =
+          data.length >= PAGE_SIZE && (total === 0 || merged.length < total);
+        hasMoreRef.current = more;
+        setHasMore(more);
+        return merged;
+      });
+    } catch (error) {
+      console.log("error load more products", error);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  };
+
+  // Phát hiện cuộn gần tới cuối (còn cách đáy 200px) → nạp thêm
+  const handleScroll = (event: any) => {
+    if (viewMode !== "list") return;
+    const { layoutMeasurement, contentOffset, contentSize } =
+      event.nativeEvent;
+    if (
+      layoutMeasurement.height + contentOffset.y >=
+      contentSize.height - 200
+    ) {
+      void loadMore();
     }
   };
 
@@ -355,6 +471,27 @@ export default function ProductsScreen() {
   const getStatusColor = (status: number) => {
     const item = TrangThai.find((i) => i.MaTT === status);
     return item?.ColorWeb || "#9CA3AF";
+  };
+
+  // Chữ tự động đen/trắng theo độ sáng của màu nền (dễ đọc trên mọi màu danh mục)
+  const getStatusTextColor = (bg: string) => {
+    try {
+      let hex = String(bg || "").trim().replace("#", "");
+      if (hex.length === 3) {
+        hex = hex
+          .split("")
+          .map((c) => c + c)
+          .join("");
+      }
+      if (hex.length !== 6) return "#fff";
+      const r = parseInt(hex.slice(0, 2), 16) / 255;
+      const g = parseInt(hex.slice(2, 4), 16) / 255;
+      const b = parseInt(hex.slice(4, 6), 16) / 255;
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      return lum > 0.6 ? "#111827" : "#fff";
+    } catch {
+      return "#fff";
+    }
   };
 
   const handlePressProduct = (id: string) => {
@@ -429,8 +566,8 @@ export default function ProductsScreen() {
           price: item.GiaBan
             ? new Intl.NumberFormat("vi-VN").format(item.GiaBan)
             : "",
-          status: mapStatus(item.MaTT),
-          column: Number(item.MaVT),
+          status: mapStatusByTT(item),
+          column: String(item.MaVT),
         }));
 
         floorsMap[floorKey].units.push(...units);
@@ -438,13 +575,14 @@ export default function ProductsScreen() {
     });
 
     Object.values(floorsMap).forEach((floor: any) => {
-      floor.units.sort((a: any, b: any) => a.column - b.column);
+      // column là uuid (vi_tri) → sắp theo chuỗi
+      floor.units.sort((a: any, b: any) =>
+        String(a.column).localeCompare(String(b.column))
+      );
       floor.totalUnits = floor.units.length;
     });
 
-    return Object.values(floorsMap).sort(
-      (a: any, b: any) => b.floorNumber - a.floorNumber
-    );
+    return Object.values(floorsMap);
   };
 
   const buildStatusSummary = (floors: any[]) => {
@@ -767,6 +905,8 @@ export default function ProductsScreen() {
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        onScroll={handleScroll}
+        scrollEventThrottle={300}
       >
         <View style={styles.searchAndFilterRow}>
           <View style={styles.searchContainer}>
@@ -861,6 +1001,42 @@ export default function ProductsScreen() {
               </ScrollView>
             </View>
 
+            {/* Cao tầng / Thấp tầng — form_code: CAOTANG | THAPTANG | null */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>Loại sản phẩm</Text>
+              <View style={styles.filterOptionsGrid}>
+                {[
+                  { key: null, label: "Tất cả" },
+                  { key: "CAOTANG", label: "Cao tầng" },
+                  { key: "THAPTANG", label: "Thấp tầng" },
+                ].map((opt) => (
+                  <TouchableOpacity
+                    key={String(opt.key)}
+                    style={[
+                      styles.filterOption,
+                      filterCondition?.FormCode === opt.key &&
+                        styles.filterOptionActive,
+                    ]}
+                    onPress={() => {
+                      setFilterCondition((prev) => ({ ...prev, FormCode: opt.key }));
+                      void loadProducts2({ ...filterCondition, FormCode: opt.key });
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.filterOptionText,
+                        filterCondition?.FormCode === opt.key &&
+                          styles.filterOptionTextActive,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
             <View style={styles.filterSection}>
               <Text style={styles.filterSectionTitle}>Trạng thái</Text>
               <View style={styles.filterOptionsGrid}>
@@ -935,14 +1111,12 @@ export default function ProductsScreen() {
                   </Text>
                 </View>
 
-                {products2.map((product) => (
-                  // {filteredProducts.map((product) => (
-
+                {products2.map((product, index) => (
                   <TouchableOpacity
-                    key={product.maSP}
+                    key={`${product.MaSP}-${index}`}
                     style={styles.tableRow}
                     activeOpacity={0.7}
-                    onPress={() => handlePressProduct(product.maSP)}
+                    onPress={() => handlePressProduct(product.MaSP)}
                   >
                     <View
                       style={[styles.colStatus, styles.statusBadgeContainer]}
@@ -950,16 +1124,21 @@ export default function ProductsScreen() {
                       <View
                         style={[
                           styles.statusBadge,
-                          { backgroundColor: getStatusColor(product.maTT) },
+                          { backgroundColor: getStatusColor(product.MaTT) },
                         ]}
                       >
-                        <Text style={styles.statusBadgeText}>
-                          {getStatusLabel(product.maTT)}
+                        <Text
+                          style={[
+                            styles.statusBadgeText,
+                            { color: getStatusTextColor(getStatusColor(product.MaTT)) },
+                          ]}
+                        >
+                          {getStatusLabel(product.MaTT)}
                         </Text>
                       </View>
                     </View>
                     <Text style={[styles.tableText, styles.colCode]}>
-                      {product.maSanPham}
+                      {product.KyHieu || product.MaSP}
                     </Text>
                     <Text
                       style={[
@@ -968,10 +1147,25 @@ export default function ProductsScreen() {
                         styles.priceText,
                       ]}
                     >
-                      {formatCurrency(product?.tongGiaGomPBT)}
+                      {formatCurrency(product?.TongGomPBT)}
                     </Text>
                   </TouchableOpacity>
                 ))}
+              </View>
+            )}
+
+            {!loading && (
+              <View style={styles.footerContainer}>
+                {loadingMore ? (
+                  <View style={styles.footerLoading}>
+                    <ActivityIndicator size="small" color={Colors.primary} />
+                    <Text style={styles.footerText}>Đang tải thêm...</Text>
+                  </View>
+                ) : !hasMore && products2.length > 0 ? (
+                  <Text style={styles.footerText}>
+                    Đã hiển thị tất cả sản phẩm
+                  </Text>
+                ) : null}
               </View>
             )}
           </>
@@ -1461,6 +1655,20 @@ const styles = StyleSheet.create({
 
   loadingText: {
     marginTop: 10,
+    color: Colors.textSecondary,
+  },
+  footerContainer: {
+    paddingVertical: 20,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  footerLoading: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 8,
+  },
+  footerText: {
+    fontSize: 13,
     color: Colors.textSecondary,
   },
   disabledCell: {

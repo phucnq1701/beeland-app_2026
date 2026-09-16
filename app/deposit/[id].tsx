@@ -33,7 +33,7 @@ import {
   DepositDetail,
   DepositPaymentHistory,
 } from "@/mocks/deposits";
-import { HopDongService } from "@/sevices/HopDongService";
+import { DatCocService } from "@/sevicesSupabase/DatCocService";
 
 function formatCurrency(value: number): string {
   if (!value && value !== 0) return "0 đ";
@@ -83,25 +83,29 @@ function buildFallbackDetail(id: string, dataParam?: string): DepositDetail {
 
   return {
     ...parsed,
-    maDC: parsed.maDC || base.maDC,
-    soPhieu: parsed.soPhieu || base.soPhieu,
-    ngayDatCoc: parsed.ngayDatCoc || base.ngayDatCoc,
-    tenKH: parsed.tenKH || base.tenKH,
-    maSP: parsed.maSP || base.maSP,
-    soTienCoc: parsed.soTienCoc || base.soTienCoc,
-    trangThai: parsed.trangThai || base.trangThai,
-    tenDA: parsed.tenDA || base.tenDA,
-    colorTT: parsed.colorTT || base.colorTT,
-    soCMND: parsed?.SoCMND,
-    diDong: parsed?.DiDong ?? parsed?.DiDong2,
-    email: parsed?.email ?? "email@example.com",
-    diaChi: parsed?.DiaChi ?? "",
-    loaiSP: "Căn hộ",
-    dienTich: `${parsed?.DienTichTT} m2`,
-    donGia: parsed?.DonGiaTT,
-    ghiChu: "",
+    maDC: parsed.maDC || parsed.MaPDC || base.maDC,
+    soPhieu: parsed.soPhieu || parsed.SoPhieu || base.soPhieu,
+    ngayDatCoc: parsed.ngayDatCoc || parsed.NgayDatCoc || base.ngayDatCoc,
+    tenKH: parsed.tenKH || parsed.KhachHang || base.tenKH,
+    maSP: parsed.maSP || parsed.MaSanPham || base.maSP,
+    soTienCoc: parsed.soTienCoc ?? parsed.TienCoc ?? base.soTienCoc,
+    trangThai: parsed.trangThai || parsed.TenTT || base.trangThai,
+    tenDA: parsed.tenDA || parsed.TenDA || base.tenDA,
+    colorTT: parsed.colorTT || parsed.MauNen || base.colorTT,
+    soCMND: parsed?.SoCMND ?? "",
+    diDong: parsed?.DiDong ?? parsed?.DiDong2 ?? "",
+    email: parsed?.Email ?? parsed?.email ?? "",
+    diaChi: parsed?.DiaChi ?? parsed?.diaChi ?? "",
+    loaiSP: parsed?.LoaiCanHo || parsed?.loaiSP || "Căn hộ",
+    dienTich: parsed?.DienTich
+      ? `${parsed.DienTich} m²`
+      : parsed?.DienTichTT
+        ? `${parsed.DienTichTT} m²`
+        : "",
+    donGia: parsed?.DonGiaTT ?? parsed?.donGia ?? 0,
+    ghiChu: parsed?.GhiChu ?? "",
     nguoiTao: parsed?.NguoiNhap,
-    ngayTao: parsed.ngayDatCoc || base.ngayDatCoc,
+    ngayTao: parsed.ngayDatCoc || parsed.NgayDatCoc || base.ngayDatCoc,
     lichSuDongTien: [
       {
         ngayThu: parsed.ngayDatCoc || base.ngayDatCoc,
@@ -122,38 +126,65 @@ export default function DepositDetailScreen() {
   }>();
   const router = useRouter();
 
-  const [detail, setDetail] = useState<DepositDetail | null>(null);
+  const [detail, setDetail] = useState<any>(null);
+  const [lichTT, setLichTT] = useState<any[]>([]);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
-  const [lichSuThu, setLichSuThu] = useState([]);
+  const [lichSuThu, setLichSuThu] = useState<any[]>([]);
+
+  // Parse dòng lưới (fn_deposit_list) truyền sang để làm header ban đầu
+  const parseRow = () => {
+    let parsed: Record<string, any> = {};
+    if (dataParam) {
+      try {
+        parsed = JSON.parse(String(dataParam));
+      } catch {
+        console.log("[DepositDetail] Failed to parse data param");
+      }
+    }
+    return parsed;
+  };
 
   useEffect(() => {
-    const d = buildFallbackDetail(id || "", dataParam);
-
-    setDetail(d);
+    setDetail(buildFallbackDetail(id || "", dataParam));
+    void loadData();
   }, [id, dataParam]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
   const loadData = async () => {
-    let resLST = await HopDongService.getDetailLST({
-      MaPGC: Number(id),
-      isPhieuThu: true,
-    });
+    const row = parseRow();
+    try {
+      const res = await DatCocService.getDepositDetail({ row });
+      const header = res?.data || {};
 
-    const lichSuThu = resLST?.data.map((item) => ({
-      ngayThu: item.ngayThu
-        ? new Date(item.ngayThu).toISOString().slice(0, 10)
-        : "",
-
-      soTien: item.tienThu || 0,
-
-      ghiChu: `Thu đợt ${item.dotTT}${item.name ? " - " + item.name : ""}`,
-    }));
-    setLichSuThu(lichSuThu);
+      // Ghép header (đã enrich) vào detail để hiển thị đúng
+      const d: any = {
+        ...buildFallbackDetail(id || "", JSON.stringify(header)),
+        ...header,
+        email: header.Email || "",
+        soCMND: header.SoCMND || "",
+        diaChi: header.DiaChi || "",
+        diDong: header.DiDong || "",
+        loaiSP: header.LoaiCanHo || "Căn hộ",
+        TienCoc: Number(header.TienCoc ?? 0),
+        TongGiaTriHDMB: Number(header.TongGiaTriHDMB ?? header.TongGiaGomVAT ?? 0),
+        DaThu: Number(res?.tongDaThu ?? header.DaThu ?? 0),
+      };
+      setDetail(d);
+      setLichTT(res?.lichTT || []);
+      setLichSuThu(
+        (res?.phieuThu || []).map((x: any) => ({
+          ngayThu: x?.ngayThu
+            ? new Date(x.ngayThu).toISOString().slice(0, 10)
+            : "",
+          soTien: x?.tienThu || 0,
+          ghiChu: x?.dienGiai || (x?.soPT ? `Phiếu thu ${x.soPT}` : ""),
+        }))
+      );
+    } catch (err) {
+      console.log("[DepositDetail] loadData error", err);
+    }
   };
 
   useEffect(() => {
@@ -175,10 +206,12 @@ export default function DepositDetailScreen() {
 
   if (!detail) return null;
 
+  const tienCoc = Number(detail?.TienCoc ?? detail?.soTienCoc ?? 0);
+  const tongGia = Number(detail?.TongGiaTriHDMB ?? 0);
+  const daThu = Number(detail?.DaThu ?? 0);
+  const conLai = Math.max(0, tongGia - daThu);
   const progressPercent =
-    detail.TienCoc > 0
-      ? Math.round((detail.TienCoc / detail.TongGiaTriHDMB) * 100)
-      : 0;
+    tongGia > 0 ? Math.round((daThu / tongGia) * 100) : 0;
 
   return (
     <View style={styles.container}>
@@ -354,7 +387,7 @@ export default function DepositDetailScreen() {
                 <View>
                   <Text style={styles.statLabel}>Tiền cọc</Text>
                   <Text style={[styles.statValue, { color: "#3B82F6" }]}>
-                    {formatCurrencyShort(detail.TienCoc)}
+                    {formatCurrencyShort(tienCoc)}
                   </Text>
                 </View>
               </View>
@@ -370,7 +403,7 @@ export default function DepositDetailScreen() {
                 <View>
                   <Text style={styles.statLabel}>Đã đóng</Text>
                   <Text style={[styles.statValue, { color: "#10B981" }]}>
-                    {formatCurrencyShort(detail.TienCoc)}
+                    {formatCurrencyShort(daThu)}
                   </Text>
                 </View>
               </View>
@@ -386,21 +419,88 @@ export default function DepositDetailScreen() {
                 <View>
                   <Text style={styles.statLabel}>Còn lại</Text>
                   <Text style={[styles.statValue, { color: "#EF4444" }]}>
-                    {formatCurrencyShort(
-                      detail.TongGiaTriHDMB - detail?.TienCoc
-                    )}
+                    {formatCurrencyShort(conLai)}
                   </Text>
                 </View>
               </View>
             </View>
 
             <View style={styles.valueRow}>
-              <Text style={styles.valueLabel}>Tổng tiền đặt cọc</Text>
-              <Text style={styles.valueAmount}>
-                {formatCurrency(detail.TienCoc)}
-              </Text>
+              <Text style={styles.valueLabel}>Tiền đặt cọc</Text>
+              <Text style={styles.valueAmount}>{formatCurrency(tienCoc)}</Text>
             </View>
           </View>
+
+          {lichTT.length > 0 && (
+            <View style={styles.scheduleCard}>
+              <Text style={styles.sectionTitle}>Lịch thanh toán</Text>
+              <View style={styles.scheduleRowHeader}>
+                <Text style={[styles.scheduleHeadText, { width: 36 }]}>
+                  Đt
+                </Text>
+                <Text style={[styles.scheduleHeadText, { width: 82 }]}>
+                  Ngày
+                </Text>
+                <Text
+                  style={[
+                    styles.scheduleHeadText,
+                    { width: 46, textAlign: "right" },
+                  ]}
+                >
+                  Tỷ lệ
+                </Text>
+                <Text style={[styles.scheduleHeadText, styles.scheduleNum]}>
+                  Phải thu
+                </Text>
+                <Text style={[styles.scheduleHeadText, styles.scheduleNum]}>
+                  Đã thu
+                </Text>
+                <Text style={[styles.scheduleHeadText, styles.scheduleNum]}>
+                  Còn lại
+                </Text>
+              </View>
+
+              {lichTT.map((r: any, idx: number) => (
+                <View key={idx} style={styles.scheduleRow}>
+                  <Text style={[styles.scheduleText, { width: 36 }]}>
+                    {r.DotTT ?? idx + 1}
+                  </Text>
+                  <Text style={[styles.scheduleText, { width: 82 }]}>
+                    {formatDate(r.NgayTT)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.scheduleText,
+                      { width: 46, textAlign: "right" },
+                    ]}
+                  >
+                    {r.TyLeTT ? `${r.TyLeTT}%` : ""}
+                  </Text>
+                  <Text style={[styles.scheduleText, styles.scheduleNum]}>
+                    {formatCurrencyShort(r.PhaiThu)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.scheduleText,
+                      styles.scheduleNum,
+                      { color: "#10B981" },
+                    ]}
+                  >
+                    {formatCurrencyShort(r.DaThu)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.scheduleText,
+                      styles.scheduleNum,
+                      { color: "#EF4444" },
+                    ]}
+                  >
+                    {formatCurrencyShort(r.ConLai)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
 
           <View style={styles.historyCard}>
             <Text style={styles.sectionTitle}>Lịch sử đóng tiền</Text>
@@ -783,6 +883,51 @@ const styles = StyleSheet.create({
     fontWeight: "800" as const,
     color: Colors.primary,
     letterSpacing: -0.3,
+  },
+  scheduleCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
+      },
+      android: { elevation: 3 },
+      web: { boxShadow: "0 3px 12px rgba(0,0,0,0.07)" },
+    }),
+  },
+  scheduleRowHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingBottom: 8,
+    marginBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.06)",
+  },
+  scheduleHeadText: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    color: Colors.textSecondary,
+  },
+  scheduleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.04)",
+  },
+  scheduleText: {
+    fontSize: 12,
+    color: Colors.text,
+    fontWeight: "500" as const,
+  },
+  scheduleNum: {
+    flex: 1,
+    textAlign: "right" as const,
   },
   historyCard: {
     backgroundColor: Colors.white,

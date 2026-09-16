@@ -15,6 +15,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import Colors from "@/constants/colors";
 import { AuthService } from "@/sevices/AuthService";
+import { AuthSupabaseService } from "@/sevicesSupabase/AuthService";
+import { persistTenantFromJwt } from "@/sevicesSupabase/cloudTenant";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -34,21 +36,117 @@ export default function LoginScreen() {
     try {
       setLoading(true);
 
-      const res = await AuthService.login({
-        TenCTDKVT: companyCode.trim(),
-        Email: username.trim(),
-        Password: password,
-      });
-
-      if (res?.status === 200) {
-        const token = res?.acessToken;
-
-        if (token) {
-          await AsyncStorage.setItem("@token", token);
-          await AsyncStorage.setItem("tenCTDKVT", companyCode.trim());
+      const res = await AuthSupabaseService.login(
+        //   {
+        //   TenCTDKVT: companyCode.trim(),
+        //   Email: username.trim(),
+        //   Password: password,
+        // }
+        {
+          action: "login",
+          maCTDK: companyCode.trim(),
+          email: username.trim(),
+          password: password,
+          typeAccount: "SYSTEM",
         }
+      );
+      console.log("[Login] cloud-auth response keys:", Object.keys(res || {}));
+      console.log("[Login] full response:", JSON.stringify(res)?.slice(0, 3000));
+      if (res?.status === 200) {
+        const dataObj = (res as any)?.data && typeof (res as any).data === "object" ? (res as any).data : {};
+        const token =
+          (res as any)?.acessToken ??
+          (res as any)?.accessToken ??
+          (res as any)?.token ??
+          dataObj?.acessToken ??
+          dataObj?.accessToken ??
+          dataObj?.token ??
+          "";
+        // Backend mới có thể trả jwt ở nhiều chỗ khác nhau — quét hết
+        let supabaseJwt =
+          (res as any)?.jwt ??
+          (res as any)?.cloud_jwt ??
+          (res as any)?.supabase_jwt ??
+          (res as any)?.cloudJwt ??
+          dataObj?.jwt ??
+          dataObj?.cloud_jwt ??
+          dataObj?.supabase_jwt ??
+          dataObj?.cloudJwt ??
+          dataObj?.access_token ??
+          "";
+        try {
+          const {
+            decodeJwtPayload,
+            isJwtExpired,
+            findJwtInObject,
+            looksLikeJwt,
+          } = await import("@/sevicesSupabase/cloudTenant");
+          // Quét đệ quy phòng backend đổi tên key chứa JWT
+          if (!supabaseJwt || !looksLikeJwt(supabaseJwt)) {
+            const scanned = findJwtInObject(res);
+            if (scanned) {
+              console.log("[Login] tìm thấy JWT bằng quét đệ quy response");
+              supabaseJwt = scanned;
+            }
+          }
+          const p = decodeJwtPayload(supabaseJwt || "");
+          console.log(
+            `[Login] jwt exp=${p?.exp} now=${Math.floor(Date.now() / 1000)} expired=${isJwtExpired(supabaseJwt || "")} company_id=${p?.company_id || p?.ma_ctdk} company_code=${p?.company_code} role=${p?.role}`
+          );
+          if (!supabaseJwt) console.log("[Login] WARN không tìm thấy cloud_jwt trong response, kiểm tra keys ở trên");
+          if (supabaseJwt && isJwtExpired(supabaseJwt)) console.log("[Login] WARN jwt vừa nhận đã expired, báo AI web kiểm tra expiresIn/secret");
+        } catch {}
 
-        router.replace("/(tabs)/home");
+        // Lưu session khi có token HOẶC jwt (trước đây chỉ lưu khi có token
+        // nên nhiều tài khoản vào được home nhưng mọi API Supabase đều rỗng).
+        // Không bao giờ lưu chuỗi rỗng vào @supabase_jwt.
+        if (token || supabaseJwt) {
+          // Xoá sạch phiên cũ trước khi ghi mới để tránh kẹt token/tenant cũ
+          await AsyncStorage.multiRemove([
+            "@supabase_jwt",
+            "@company_id",
+            "@tenant_id",
+            "@cloud_company_id",
+            "@employee_id",
+            "@user_company_id",
+            "@branch_id",
+            "@ma_nv",
+            "@type_account",
+            "maCTDK_UUID",
+          ]);
+          if (token) {
+            await AsyncStorage.setItem("@token", token);
+          }
+          if (supabaseJwt) {
+            await AsyncStorage.setItem("@supabase_jwt", supabaseJwt);
+          } else {
+            await AsyncStorage.removeItem("@supabase_jwt");
+          }
+          await AsyncStorage.setItem("maCTDK", String(dataObj?.maCTDK ?? (res as any)?.maCTDK ?? ""));
+          await AsyncStorage.setItem("tenCTDKVT", companyCode.trim());
+          await persistTenantFromJwt(supabaseJwt || "", companyCode.trim(), res);
+          try {
+            const { getSessionStatus } = await import("@/sevicesSupabase/cloudTenant");
+            const st = await getSessionStatus();
+            console.log(
+              `[Login] session sau khi lưu: ok=${st.ok} reason=${st.reason} tenant=${st.tenantId} hasJwt=${st.hasJwt} expired=${st.jwtExpired}`
+            );
+            if (!st.ok) {
+              Alert.alert(
+                "Thông báo",
+                "Đăng nhập thành công nhưng thiếu thông tin công ty (tenant). Vui lòng liên hệ quản trị để kiểm tra tài khoản."
+              );
+              return;
+            }
+          } catch {}
+          router.replace("/(tabs)/home");
+        } else {
+          console.log("[Login] WARN response 200 nhưng không có token/jwt nào");
+          Alert.alert(
+            "Thông báo",
+            "Máy chủ không trả phiên đăng nhập (thiếu token). Vui lòng thử lại hoặc liên hệ quản trị."
+          );
+        }
       } else {
         Alert.alert("Thông báo", res?.message || "Đăng nhập thất bại");
       }

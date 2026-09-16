@@ -26,8 +26,8 @@ import {
 } from "lucide-react-native";
 
 import Colors from "@/constants/colors";
-import { ProjectService } from "@/sevices/ProjectService";
-import { BookingService } from "@/sevices/BookingService";
+import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { BookingService } from "@/sevicesSupabase/BookingService";
 
 const STATUS_CONFIGS = {
   active: {
@@ -165,14 +165,7 @@ export default function LockedUnitsScreen() {
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<"all" | "active" | "expired">("all");
 
-  const [filterCondition, setFilterCondition] = useState({
-    TuNgay: "2000-01-01",
-    DenNgay: "2100-01-01",
-    DuAn: "",
-    inputSearch: "",
-    Offset: 1,
-    Limit: 10,
-  });
+  const [limit, setLimit] = useState(50);
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -185,75 +178,41 @@ export default function LockedUnitsScreen() {
     };
 
     void loadProjects();
+    // Quét lock hết hạn lúc vào màn (theo web sweepExpiredLocks)
+    void BookingService.sweepExpiredLocks();
   }, []);
+
+  const fetchLockList = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await BookingService.listProductLocks({
+        maDA: selectedProjects,
+        keyword: searchInput,
+        limit,
+      });
+
+      const list = res?.data || [];
+      setTotalRows(list.length);
+      setDataLook(list);
+    } catch (error) {
+      console.log("listProductLocks error", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedProjects, searchInput, limit]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setFilterCondition((prev) => ({
-        ...prev,
-        inputSearch: searchInput,
-        Offset: 1,
-        Limit: 10,
-      }));
+      void fetchLockList();
     }, 500);
-
     return () => clearTimeout(timer);
-  }, [searchInput]);
-
-  useEffect(() => {
-    setFilterCondition((prev) => ({
-      ...prev,
-      DuAn: selectedProjects.length
-        ? "," + selectedProjects.join(",") + ","
-        : "",
-      Offset: 1,
-      Limit: 10,
-    }));
-  }, [selectedProjects]);
-
-  const fetchLockList = useCallback(async (isLoadMore = false) => {
-    try {
-      if (isLoadMore) {
-        setLoadingMore(true);
-      } else {
-        setLoading(true);
-      }
-      const res = await BookingService.getLockList(filterCondition);
-
-      const list = res?.data || [];
-      console.log(list, "lock list data");
-
-      setTotalRows(list?.[0]?.totalRows || 0);
-
-      if (isLoadMore) {
-        setDataLook((prev) => [...prev, ...list]);
-      } else {
-        setDataLook(list);
-      }
-    } catch (error) {
-      console.log("getLockList error", error);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [filterCondition]);
-
-  useEffect(() => {
-    void fetchLockList(false);
   }, [fetchLockList]);
 
   const loadMore = () => {
     if (loadingMore || loading) return;
-    if (dataLook.length >= totalRows) return;
-
-    const newLimit = filterCondition.Limit + 10;
-
-    setFilterCondition((prev) => ({
-      ...prev,
-      Limit: newLimit,
-    }));
-
-    void fetchLockList(true);
+    setLoadingMore(true);
+    setLimit((prev) => prev + 50);
+    setLoadingMore(false);
   };
 
   const formatLockTime = (dateStr: string) => {

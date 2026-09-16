@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,11 +7,12 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { CreditCard, ChevronRight, Check } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { customers } from "@/mocks/customers";
+import { BookingService } from "@/sevicesSupabase/BookingService";
 
 type PaymentMethod = "bank_transfer";
 
@@ -38,12 +39,52 @@ const paymentOptions: PaymentOption[] = [
 export default function PaymentMethodScreen() {
   const router = useRouter();
   const { bookingId } = useLocalSearchParams();
-  const { customerId } = useLocalSearchParams<{ customerId: string }>();
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(
     null
   );
+  const [customer, setCustomer] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const customer = customers.find((c) => c.id === customerId);
+  useEffect(() => {
+    const fetchCustomer = async () => {
+      if (!bookingId) {
+        setLoading(false);
+        return;
+      }
+      try {
+        let booking: any = null;
+        try {
+          const detailRes = await BookingService.getBookingDetail(String(bookingId));
+          if (detailRes?.data) {
+            booking = detailRes.data;
+          }
+        } catch {}
+
+        if (!booking) {
+          const res = await BookingService.listBookings({
+            keyword: String(bookingId),
+            pageSize: 1,
+            pageIndex: 1,
+          });
+          booking = res?.data?.[0];
+        }
+
+        if (booking) {
+          setCustomer({
+            id: booking?.khach_hang_id || booking?.ma_kh || booking?.customerId || "",
+            name: booking?.customerName || booking?.khachHang || booking?.ten_kh || "",
+            phone: booking?.customerPhone || booking?.di_dong || booking?.dien_thoai || "",
+            maKH: booking?.maKH || booking?.ma_kh || "",
+          });
+        }
+      } catch (error) {
+        console.log("Error fetching customer:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCustomer();
+  }, [bookingId]);
 
   const handleContinue = () => {
     if (!selectedMethod) {
@@ -54,12 +95,23 @@ export default function PaymentMethodScreen() {
     router.push({
       pathname: "/booking/qr-payment",
       params: {
-        customerId: customerId || "",
+        customerId: customer?.id || "",
         paymentMethod: selectedMethod,
         bookingId: bookingId,
       },
     });
   };
+
+  if (loading) {
+    return (
+      <View
+        style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+      >
+        <ActivityIndicator size="large" color="#f5ca1c" />
+        <Text style={{ marginTop: 10 }}>Đang tải dữ liệu...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

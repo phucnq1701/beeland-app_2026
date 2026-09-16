@@ -23,7 +23,9 @@ import {
   X,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { DocumentService } from "@/sevices/DocumentService";
+import { DocumentService } from "@/sevicesSupabase/DocumentService";
+import { Paths, File as FsFile } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 
 // cấu hình icon theo type
 const FILE_TYPE_CONFIG: Record<
@@ -48,6 +50,36 @@ const getTypeConfig = (type: string) =>
     label: type.toUpperCase(),
   };
 
+// Định dạng Office: link từ service đã là Office Online Viewer URL
+const OFFICE_EXTS = ["doc", "docx", "xls", "xlsx", "ppt", "pptx"];
+
+const OFFICE_MIME: Record<string, string> = {
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+
+const OFFICE_UTI: Record<string, string> = {
+  doc: "com.microsoft.word.doc",
+  docx: "org.openxmlformats.wordprocessingml.document",
+  xls: "com.microsoft.excel.xls",
+  xlsx: "org.openxmlformats.spreadsheetml.sheet",
+  ppt: "com.microsoft.powerpoint.ppt",
+  pptx: "org.openxmlformats.presentationml.presentation",
+};
+
+/** Lấy URL file gốc từ Office Viewer URL (để tải file về) */
+function extractRawFileUrl(viewerUrl: string): string {
+  try {
+    const match = viewerUrl.match(/[?&]src=([^&]+)/);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  } catch {}
+  return viewerUrl;
+}
+
 interface DocumentItem {
   id: number;
   name: string;
@@ -66,7 +98,7 @@ export default function DocumentsScreen() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [selectedType, setSelectedType] = useState<string>("all");
-  const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
+  const [searchTimer, setSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   const loadData = async (inputSearch: string = "") => {
     try {
@@ -134,6 +166,79 @@ export default function DocumentsScreen() {
     return webTypes.includes(type.toLowerCase());
   };
 
+  /**
+   * Tải file Office về máy rồi mở bằng Quick Look / Word / Pages.
+   * Báo lỗi cụ thể nếu thất bại (không im lặng).
+   */
+  const downloadAndShare = async (doc: DocumentItem) => {
+    const rawUrl = extractRawFileUrl(doc.link);
+    const ext = OFFICE_EXTS.includes(doc.type.toLowerCase())
+      ? doc.type.toLowerCase()
+      : "docx";
+
+    try {
+      const baseName = (doc.name || `tai-lieu.${ext}`).replace(
+        /[^\w.\-() ]+/g,
+        "_"
+      );
+      // Timestamp để tránh dùng file cache cũ
+      const safeName = `${Date.now()}_${baseName}`;
+
+      const target = new FsFile(Paths.cache, safeName);
+      const downloaded = await FsFile.downloadFileAsync(rawUrl, target);
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(downloaded.uri, {
+          mimeType: OFFICE_MIME[ext],
+          dialogTitle: "Mở tài liệu bằng",
+          UTI: OFFICE_UTI[ext],
+        });
+        return;
+      }
+
+      // Máy không hỗ trợ share → mở file gốc bằng trình duyệt
+      await Linking.openURL(rawUrl);
+    } catch (e: any) {
+      console.log("[Documents] Download error:", e);
+      Alert.alert(
+        "Lỗi tải file",
+        String(e?.message || e) ||
+          "Không tải được tài liệu. Thử mở bằng trình duyệt."
+      );
+    }
+  };
+
+  /**
+   * File Office: cho người dùng CHỌN cách mở — minh bạch, không bao giờ
+   * trắng trơn im lặng (giống web: mở Office Viewer sang tab mới).
+   */
+  const openOfficeDocument = (doc: DocumentItem) => {
+    Alert.alert(
+      "Mở tài liệu",
+      doc.name || "Chọn cách mở file Word/Excel",
+      [
+        {
+          text: "Mở bằng trình duyệt",
+          onPress: () => {
+            // Giống web: window.open(officeViewerUrl) sang tab mới
+            Linking.openURL(doc.link).catch(() =>
+              Alert.alert(
+                "Lỗi",
+                "Không mở được trình duyệt. Thử tải về & mở bằng ứng dụng."
+              )
+            );
+          },
+        },
+        {
+          text: "Tải về & mở",
+          onPress: () => void downloadAndShare(doc),
+        },
+        { text: "Hủy", style: "cancel" },
+      ],
+      { cancelable: true }
+    );
+  };
+
   const handleDocumentPress = (document: DocumentItem) => {
     console.log("[Documents] Document pressed", document);
 
@@ -144,8 +249,14 @@ export default function DocumentsScreen() {
 
     const fileType = document.type.toLowerCase();
 
+    // File Office: tải về + mở bằng Quick Look/Word (không bao giờ trắng trơn)
+    if (OFFICE_EXTS.includes(fileType)) {
+      void openOfficeDocument(document);
+      return;
+    }
+
     if (canOpenInWebView(fileType)) {
-      // mở trong app bằng WebView
+      // mở trong app bằng WebView (pdf/ảnh/txt)
       router.push({
         pathname: "/documents/viewer",
         params: {

@@ -16,8 +16,8 @@ import { Calendar, Lock } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
-import { BookingService } from "@/sevices/BookingService";
-import { ProductService } from "@/sevices/ProductService";
+import { BookingService } from "@/sevicesSupabase/BookingService";
+import { ProductService } from "@/sevicesSupabase/ProductService";
 import { Format_Date } from "@/components/utils/common";
 
 export default function LockDetailScreen() {
@@ -28,7 +28,7 @@ export default function LockDetailScreen() {
 
   const [data, setData] = useState<any>(null);
   const [bannerProduct, setBannerProduct] = useState<any[]>([]);
-  const [dataProduct, setDataProduct] = useState<any[]>([]);
+  const [dataProduct, setDataProduct] = useState<any>(null);
 
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [isLocked, setIsLocked] = useState<boolean>(false);
@@ -47,14 +47,15 @@ export default function LockDetailScreen() {
 
   const loadData = async () => {
     setLoading(true)
-    const res = await BookingService.getLockDetail({
+    const res = await BookingService.getLockDetailCloud({
       ID: id,
     });
 
     if (res?.data) {
       setData(res.data);
 
-      const time = res.data.thoiGianConLai || 0;
+      // ThoiGianConLai là giây (tính từ het_han_luc)
+      const time = res.data.ThoiGianConLai || 0;
       if (time > 0) {
         setIsLocked(true);
         setRemainingSeconds(time);
@@ -126,8 +127,11 @@ export default function LockDetailScreen() {
     if (isLocked) return;
 
     try {
-      const res = await BookingService.lockCan({
-        maSP: data?.maSP,
+      // Tạo lock cloud: RPC đổi trạng thái SP (2→18) + insert phiếu LOCK
+      const res = await BookingService.createLock({
+        maSP: data?.maSP ?? data?.MaSP,
+        kyHieu: data?.kyHieu ?? data?.KyHieu,
+        maDA: data?.MaDA,
       });
 
       if (res?.status === 2000) {
@@ -135,6 +139,7 @@ export default function LockDetailScreen() {
 
         setIsLocked(true);
         setRemainingSeconds(seconds);
+        void loadData();
       }
     } catch (err) {
       console.log("Lock error", err);
@@ -266,14 +271,14 @@ export default function LockDetailScreen() {
             </TouchableOpacity>
           )} */}
 
-            {remainingSeconds > 0 && data?.isHienThiBook && (
+            {remainingSeconds > 0 && (
               <TouchableOpacity
                 style={[styles.actionButton, styles.bookButton]}
                 onPress={() =>
                   router.push({
                     pathname: "/booking/create",
                     params: {
-                      dataBooking: JSON.stringify(dataProduct),
+                      dataBooking: JSON.stringify(dataProduct || data),
                     },
                   })
                 }

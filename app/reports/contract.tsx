@@ -733,7 +733,7 @@ export default function ContractReportScreen() {
             <FileText size={22} color="#3B82F6" />
           </View>
           <View style={styles.totalBody}>
-            <Text style={styles.totalLabel}>Tổng giá trị hợp đồng</Text>
+            <Text style={styles.totalLabel}>Tổng giá trị HĐ</Text>
             <Text style={[styles.totalValue, { color: "#3B82F6" }]}>
               {totalContractValue}
             </Text>

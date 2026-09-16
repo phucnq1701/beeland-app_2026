@@ -27,8 +27,8 @@ import {
   Home,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BookingService } from "@/sevices/BookingService";
-import { ProductService } from "@/sevices/ProductService";
+import { BookingService } from "@/sevicesSupabase/BookingService";
+import { ProductService } from "@/sevicesSupabase/ProductService";
 
 export default function ProductDetailScreen() {
   const { id, lockMinutes } = useLocalSearchParams<{
@@ -43,7 +43,9 @@ export default function ProductDetailScreen() {
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [data, setData] = useState<any>(null);
-  const [bannerProduct, setBannerProduct] = useState([]);
+  const [bannerProduct, setBannerProduct] = useState<Array<{ HinhAnh?: string }>>(
+    []
+  );
 
   // const loadData = async () => {
   //   let res = await BookingService.getLockDetail({
@@ -89,51 +91,25 @@ export default function ProductDetailScreen() {
   }, [lockMinutes]);
   const [currentImageIndex, setCurrentImageIndex] = useState<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const flatListRef = useRef<FlatList<string>>(null);
+  const flatListRef = useRef<FlatList<{ HinhAnh?: string }>>(null);
   const screenWidth = Dimensions.get("window").width;
 
+  // Tiêu đề hiển thị lấy từ dữ liệu cloud (data), không dùng mocks.
   const property: Property | undefined = useMemo(() => {
-    const pid = "1";
-    if (!pid) return undefined;
-
-    const found = featuredProperties.find((p) => p.id === pid);
-    if (found) return found;
-
-    const productMatch = products.find((p) => p.id === pid);
-    if (productMatch) {
-      const fp = featuredProperties.find((f) => f.id === productMatch.id);
-      if (fp) return fp;
-    }
-
-    for (const block of overviewBlocks) {
-      for (const floor of block.floors) {
-        const unit = floor.units.find((u) => u.id === pid);
-        if (unit) {
-          const priceNum =
-            parseFloat(unit.price.replace(",", ".")) * 1000000000;
-          return {
-            id: unit.id,
-            title: `${block.name} - ${unit.code}`,
-            location: `${floor.name}, ${block.name}`,
-            price: `${unit.price} tỷ`,
-            image:
-              "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&h=600&fit=crop",
-            images: [
-              "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&h=600&fit=crop",
-              "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&h=600&fit=crop",
-              "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&h=600&fit=crop",
-            ],
-            area: 72,
-            clearArea: 65.8,
-            priceValue: priceNum,
-            code: unit.code,
-          };
-        }
-      }
-    }
-
-    return undefined;
-  }, [id]);
+    if (!data) return undefined;
+    return {
+      id: String(data?.MaSP ?? id ?? ""),
+      title: data?.TenDA || data?.KyHieu || "Sản phẩm",
+      location: data?.DiaChi || "",
+      price: "",
+      image: "",
+      images: [],
+      area: Number(data?.DienTich) || 0,
+      clearArea: Number(data?.DTThongThuy) || 0,
+      priceValue: Number(data?.TongGiaTriHDMB) || 0,
+      code: data?.KyHieu || "",
+    } as Property;
+  }, [data, id]);
 
   const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat("vi-VN", {
@@ -149,17 +125,21 @@ export default function ProductDetailScreen() {
   // };
 
   useEffect(() => {
-    if (isLocked && remainingSeconds > 0) {
-      timerRef.current = setInterval(() => {
-        setRemainingSeconds((prev) => {
-          if (prev <= 1) {
-            setIsLocked(false);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (!isLocked) return;
+
+    // Hết giờ lock → quét hết hạn (trả SP về Mở bán) + tải lại trạng thái
+    if (remainingSeconds <= 0) {
+      void (async () => {
+        await BookingService.sweepExpiredLocks();
+        await getProducts();
+        setIsLocked(false);
+      })();
+      return;
     }
+
+    timerRef.current = setInterval(() => {
+      setRemainingSeconds((prev) => Math.max(0, prev - 1));
+    }, 1000);
 
     return () => {
       if (timerRef.current) {
@@ -168,7 +148,7 @@ export default function ProductDetailScreen() {
     };
   }, [isLocked, remainingSeconds]);
 
-  if (!property) {
+  if (!loading && !data) {
     return (
       <View style={styles.missingContainer} testID="product-not-found">
         <Text style={styles.missingTitle}>Không tìm thấy sản phẩm</Text>
@@ -189,19 +169,53 @@ export default function ProductDetailScreen() {
 
     return `${mins < 10 ? "0" + mins : mins}:${secs < 10 ? "0" + secs : secs}`;
   };
+
+  const statusName = String(
+    data?.TenTT ||
+    data?.ten_tt ||
+    data?.TrangThai ||
+    data?.status ||
+    data?.tt?.item_name ||
+    ""
+  )
+    .toLowerCase()
+    .trim();
+  const isBookingStatus =
+    statusName.includes("booking") ||
+    statusName.includes("chờ duyệt") ||
+    statusName.includes("cho duyet") ||
+    statusName.includes("đã book") ||
+    statusName.includes("da book") ||
+    statusName.includes("giữ chỗ") ||
+    statusName.includes("giu cho") ||
+    String(data?.MaTT) === "5" ||
+    String(data?.MaTT) === "6" ||
+    String(data?.ma_tt) === "5" ||
+    String(data?.ma_tt) === "6";
+  const isUnavailableStatus =
+    isBookingStatus ||
+    statusName.includes("đã bán") ||
+    statusName.includes("đặt cọc") ||
+    statusName.includes("thanh lý") ||
+    statusName.includes("hợp đồng");
   const handleLock = async () => {
     if (isLocked) return;
 
     try {
-      const res = await BookingService.lockCan({
+      // Tạo lock cloud: RPC đổi SP (2→18) + insert phiếu LOCK
+      const res = await BookingService.createLock({
         maSP: id,
+        kyHieu: data?.KyHieu,
+        maDA: data?.MaDA,
       });
 
       if (res?.status === 2000) {
         const seconds = res?.data || 0;
 
         setIsLocked(true);
-        setRemainingSeconds(seconds); 
+        setRemainingSeconds(seconds);
+        // Tải lại để cập nhật trạng thái SP (Đã Lock)
+        await getProducts();
       }
     } catch (err) {
       console.log("Lock error", err);
@@ -209,9 +223,9 @@ export default function ProductDetailScreen() {
   };
 
   const displayImages =
-    property.images && property.images.length > 0
+    property?.images && property.images.length > 0
       ? property.images
-      : [property.image];
+      : [property?.image].filter(Boolean);
 
   const handleScroll = (event: any) => {
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -223,7 +237,7 @@ export default function ProductDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: property.title }} />
+      <Stack.Screen options={{ title: property?.title || "Sản phẩm" }} />
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -268,7 +282,7 @@ export default function ProductDetailScreen() {
                 onPress={() => {
                   setIsFavorite(!isFavorite);
                   console.log("[Product] Favorite toggled", {
-                    id: property.id,
+                    id: property?.id,
                     isFavorite: !isFavorite,
                   });
                 }}
@@ -284,15 +298,15 @@ export default function ProductDetailScreen() {
                 testID="action-share"
                 style={[styles.heroIconBtn]}
                 onPress={async () => {
-                  console.log("[Product] Share pressed", { id: property.id });
+                  console.log("[Product] Share pressed", { id: property?.id });
                   try {
-                    const shareUrl = `https://app.com/product/${property.id}`;
-                    const shareMessage = `${property.title} - ${property.price}\n${property.location}\n${shareUrl}`;
+                    const shareUrl = `https://app.com/product/${property?.id}`;
+                    const shareMessage = `${property?.title} - ${property?.price}\n${property?.location}\n${shareUrl}`;
 
                     await Share.share({
                       message: shareMessage,
                       url: shareUrl,
-                      title: property.title,
+                      title: property?.title,
                     });
                   } catch (error) {
                     console.error("[Product] Share error:", error);
@@ -331,7 +345,9 @@ export default function ProductDetailScreen() {
               <View style={styles.pricePill}>
                 <DollarSign color={Colors.white} size={16} />
                 <Text style={styles.priceText}>
-                  {(data?.TongGiaTriHDMB / 1000000000).toFixed(2)} tỷ
+                  {Number(data?.TongGiaTriHDMB) > 0
+                    ? `${(Number(data.TongGiaTriHDMB) / 1000000000).toFixed(2)} tỷ`
+                    : "Liên hệ"}
                 </Text>
               </View>
             </View>
@@ -348,25 +364,27 @@ export default function ProductDetailScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Chi tiết giá</Text>
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 testID="action-calculator"
                 style={styles.calculatorBtn}
                 onPress={() => {
                   console.log("[Product] Calculator pressed", {
-                    id: property.id,
+                    id: property?.id,
                   });
-                  router.push(`/price-calculator/${property.id}`);
+                  router.push(`/price-calculator/${property?.id}`);
                 }}
               >
                 <Calculator color={Colors.primary} size={20} />
                 <Text style={styles.calculatorBtnText}>Tính giá</Text>
-              </TouchableOpacity>
+              </TouchableOpacity> */}
             </View>
             <View style={styles.priceDetails}>
-              {property.clearArea && (
+              {Number(data?.DTThongThuy) > 0 && (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Diện tích thông thủy:</Text>
-                  <Text style={styles.detailValue}>{data?.DTThongThuy} m²</Text>
+                  <Text style={styles.detailValue}>
+                    {data?.DTThongThuy} m²
+                  </Text>
                 </View>
               )}
               <View style={styles.detailRow}>
@@ -388,7 +406,7 @@ export default function ProductDetailScreen() {
                 </Text>
               </View>
               <View style={[styles.detailRow, styles.totalRow]}>
-                <Text style={styles.totalLabel}>Tổng giá trị hợp đồng:</Text>
+                <Text style={styles.totalLabel}>Tổng giá trị HĐ:</Text>
                 <Text style={styles.totalValue}>
                   {formatCurrency(data?.TongGiaTriHDMB)}
                 </Text>
@@ -420,9 +438,15 @@ export default function ProductDetailScreen() {
             {data?.isHienThiBook ? (
               <TouchableOpacity
                 testID="action-book"
-                style={[styles.actionButton, styles.bookButton]}
-                activeOpacity={0.85}
+                style={[
+                  styles.actionButton,
+                  styles.bookButton,
+                  isBookingStatus && styles.disabledButton,
+                ]}
+                activeOpacity={isBookingStatus ? 1 : 0.85}
+                disabled={isBookingStatus}
                 onPress={() => {
+                  if (isBookingStatus) return;
                   router.push({
                     pathname: "/booking/create",
                     params: {
@@ -431,8 +455,18 @@ export default function ProductDetailScreen() {
                   });
                 }}
               >
-                <Calendar color={Colors.white} size={20} />
-                <Text style={styles.actionButtonText}>Book ngay</Text>
+                <Calendar
+                  color={isBookingStatus ? "#9CA3AF" : Colors.white}
+                  size={20}
+                />
+                <Text
+                  style={[
+                    styles.actionButtonText,
+                    isBookingStatus && styles.disabledButtonText,
+                  ]}
+                >
+                  {isBookingStatus ? "Đã booking" : "Book ngay"}
+                </Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -628,10 +662,16 @@ const styles = StyleSheet.create({
   bookButton: {
     backgroundColor: Colors.primary,
   },
+  disabledButton: {
+    backgroundColor: "#E5E7EB",
+  },
   actionButtonText: {
     color: Colors.white,
     fontSize: 16,
     fontWeight: "700" as const,
+  },
+  disabledButtonText: {
+    color: "#9CA3AF",
   },
   lockedButton: {
     backgroundColor: "#8B5CF6",

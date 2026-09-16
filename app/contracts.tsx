@@ -30,10 +30,8 @@ import {
   SlidersHorizontal,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { CustomerService } from "@/sevices/CustomerService";
-import { FilterService } from "@/sevices/FilterService";
-import { ProjectService } from "@/sevices/ProjectService";
-import { HopDongService } from "@/sevices/HopDongService";
+import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { HopDongService } from "@/sevicesSupabase/HopDongService";
 
 interface Contract {
   maHD: string;
@@ -180,6 +178,7 @@ const ContractCard = React.memo(
     );
   }
 );
+ContractCard.displayName = "ContractCard";
 
 export default function ContractsScreen() {
   const router = useRouter();
@@ -209,7 +208,7 @@ export default function ContractsScreen() {
     MaTT: 0,
     inputSearch: "",
     Offset: 1,
-    Limit: 20,
+    Limit: 50,
   });
 
   
@@ -227,7 +226,7 @@ export default function ContractsScreen() {
   const loadInitData = useCallback(async () => {
     try {
       const [resTT, resDA] = await Promise.all([
-        FilterService.getStatusTransaction({ Type: 2 }),
+        HopDongService.getTT({ Type: 2 }),
         ProjectService.getProjects({}),
       ]);
 

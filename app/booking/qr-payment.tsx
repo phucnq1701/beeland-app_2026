@@ -17,12 +17,9 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Copy, Share2, Check, ArrowLeft, Upload, X } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 import Colors from "@/constants/colors";
-import { customers } from "@/mocks/customers";
-import { CartService } from "@/sevices/CartServices";
-import { CustomerService } from "@/sevices/CustomerService";
-import { BookingService } from "@/sevices/BookingService";
-
-
+import { BookingService } from "@/sevicesSupabase/BookingService";
+import { CartService } from "@/sevicesSupabase/CartServices";
+import { CustomerService } from "@/sevicesSupabase/CustomerService";
 
 export default function QRPaymentScreen() {
   const router = useRouter();
@@ -38,33 +35,82 @@ export default function QRPaymentScreen() {
   const [nganHang, setNganHang] = useState<any[]>([]);
   const [imgQR, setImgQR] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [bookingData, setBookingData] = useState<any>(null);
 
   const loadData = async () => {
     setLoading(true);
-    const result = await CartService.getBanks();
-    setNganHang(result.data ?? []);
-    setSelectedBank(result?.data[0]);
+    try {
+      // Lấy danh sách ngân hàng
+      const result = await CartService.getBanks();
+      setNganHang(result.data ?? []);
+      if (result?.data?.[0]) {
+        setSelectedBank(result.data[0]);
+        await generateQRCode(result.data[0]);
+      }
 
+      // Lấy thông tin booking
+      if (bookingId) {
+        let booking: any = null;
+        try {
+          const detailRes = await BookingService.getBookingDetail(String(bookingId));
+          if (detailRes?.data) {
+            booking = detailRes.data;
+          }
+        } catch {}
+
+        if (!booking) {
+          const res = await BookingService.listBookings({
+            keyword: String(bookingId),
+            pageSize: 1,
+            pageIndex: 1,
+          });
+          booking = res?.data?.[0];
+        }
+
+        if (booking) {
+          setBookingData({
+            id: booking?.maPGC || booking?.ma_pgc_id || booking?.id || "",
+            tongGia: booking?.tien_giu_cho || booking?.tongGiaGomVAT || booking?.tong_gia || 0,
+            khachHang: booking?.khachHang || booking?.customerName || booking?.ten_kh || "",
+            soPhieu: booking?.so_phieu || booking?.soPhieu || "",
+          });
+        }
+      }
+    } catch (error) {
+      console.log("Error loading data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateQRCode = async (bank: any) => {
+    if (!bank?.SoTK) return;
     let _payload = {
-      accountNo: result?.data[0]?.SoTK,
-      accountName: result?.data[0]?.ChuTaiKhoan,
+      accountNo: bank?.SoTK,
+      accountName: bank?.ChuTaiKhoan,
       acqId: 970436,
-      addInfo: "Thanh toán booking",
-      amount: 50000000,
+      addInfo: `Thanh toán booking ${bookingId}`,
+      amount: bookingData?.tongGia || 0,
       template: "compact",
     };
 
-    let _resQR = await CustomerService.getQRCode(_payload);
-    setImgQR(_resQR.data);
-    setLoading(false);
+    try {
+      const _resQR = await CustomerService.getQRCode(_payload);
+      setImgQR(_resQR.data);
+    } catch (error) {
+      console.log("Error generating QR:", error);
+    }
   };
 
   useEffect(() => {
     void loadData();
   }, []);
 
-  const customer = customers.find((c) => c.id === customerId);
-  const bookingAmount = 50000000;
+  useEffect(() => {
+    if (selectedBank?.SoTK && bookingData?.tongGia) {
+      generateQRCode(selectedBank);
+    }
+  }, [selectedBank, bookingData]);
 
   const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat("vi-VN", {
@@ -74,11 +120,10 @@ export default function QRPaymentScreen() {
   };
 
   const bookingIdStr = String(bookingId ?? "");
-
-
+  const bookingAmount = bookingData?.tongGia || 0;
 
   const handleCopyAccount = async () => {
-    await Clipboard.setStringAsync(selectedBank.accountNumber);
+    await Clipboard.setStringAsync(selectedBank.accountNumber || selectedBank.SoTK || "");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -92,9 +137,9 @@ export default function QRPaymentScreen() {
     try {
       await Share.share({
         message: `Thông tin chuyển khoản:\nNgân hàng: ${String(
-          selectedBank.name ?? ""
-        )}\nSố TK: ${String(selectedBank.accountNumber ?? "")}\nChủ TK: ${String(
-          selectedBank.accountName ?? ""
+          selectedBank.name ?? selectedBank.TeNH ?? ""
+        )}\nSố TK: ${String(selectedBank.accountNumber ?? selectedBank.SoTK ?? "")}\nChủ TK: ${String(
+          selectedBank.accountName ?? selectedBank.ChuTaiKhoan ?? ""
         )}\nSố tiền: ${formatCurrency(
           bookingAmount
         )}\nNội dung: Thanh toan booking ${bookingIdStr}`,
@@ -219,18 +264,8 @@ export default function QRPaymentScreen() {
 
   const handleSelectBank = async (bank: any) => {
     setLoading(true);
-    let _payload = {
-      accountNo: bank?.SoTK,
-      accountName: bank?.ChuTaiKhoan,
-      acqId: 970436,
-      addInfo: "Thanh toán booking",
-      amount: 50000000,
-      template: "compact",
-    };
-
-    let _resQR = await CustomerService.getQRCode(_payload);
-    setImgQR(_resQR.data);
     setSelectedBank(bank);
+    await generateQRCode(bank);
     setLoading(false);
   };
 
@@ -268,18 +303,29 @@ export default function QRPaymentScreen() {
               </Text>
             </View>
 
-            {customer && (
+            {bookingData && (
               <View style={styles.customerInfoCard}>
                 <View style={styles.customerInfoRow}>
                   <Text style={styles.customerInfoLabel}>Khách hàng:</Text>
-                  <Text style={styles.customerInfoValue}>{customer.name}</Text>
+                  <Text style={styles.customerInfoValue}>
+                    {bookingData.khachHang}
+                  </Text>
                 </View>
                 <View style={styles.customerInfoRow}>
                   <Text style={styles.customerInfoLabel}>Mã booking:</Text>
-                  <Text style={styles.customerInfoValue}>#{bookingIdStr}</Text>
+                  <Text style={styles.customerInfoValue}>
+                    #{bookingIdStr}
+                  </Text>
+                </View>
+                <View style={styles.customerInfoRow}>
+                  <Text style={styles.customerInfoLabel}>Số tiền:</Text>
+                  <Text style={[styles.customerInfoValue, styles.amountStyle]}>
+                    {formatCurrency(bookingAmount)}
+                  </Text>
                 </View>
               </View>
             )}
+
             <View style={styles.bankSelector}>
               <Text style={styles.sectionTitle}>Chọn ngân hàng</Text>
 
@@ -301,7 +347,6 @@ export default function QRPaymentScreen() {
                       activeOpacity={0.7}
                       onPress={() => handleSelectBank(bank)}
                     >
-                      {/* Logo placeholder */}
                       <Text style={styles.bankLogo}>🏦</Text>
 
                       <Text
@@ -334,38 +379,6 @@ export default function QRPaymentScreen() {
                 })}
               </ScrollView>
             </View>
-            {/* 
-        <View style={styles.bankSelector}>
-          <Text style={styles.sectionTitle}>Chọn ngân hàng</Text>
-          <View style={styles.bankList}>
-            {nganHang.map((bank) => (
-              <TouchableOpacity
-                key={bank.MaNH}
-                style={[
-                  styles.bankButton,
-                  selectedBank.MaNH === bank.MaNH && styles.bankButtonSelected,
-                ]}
-                activeOpacity={0.7}
-                onPress={() => setSelectedBank(bank)}
-              >
-                <Text style={styles.bankLogo}>{bank.logo}</Text>
-                <Text
-                  style={[
-                    styles.bankName,
-                    selectedBank.MaNH === bank.MaNH && styles.bankNameSelected,
-                  ]}
-                >
-                  {bank.TeNH}
-                </Text>
-                {selectedBank.MaNH === bank.MaNH && (
-                  <View style={styles.bankCheck}>
-                    <Check color={Colors.white} size={16} />
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View> */}
 
             <View style={styles.qrContainer}>
               <View style={styles.qrCard}>
@@ -628,6 +641,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text,
     fontWeight: "700" as const,
+  },
+  amountStyle: {
+    color: Colors.primary,
   },
   bankSelector: {
     marginBottom: 24,
@@ -1006,7 +1022,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   modalConfirmButtonDisabled: {
-    opacity: 0.5,
+    backgroundColor: Colors.border,
   },
   modalConfirmButtonText: {
     fontSize: 16,
