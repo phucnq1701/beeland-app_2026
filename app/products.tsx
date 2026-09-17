@@ -564,7 +564,7 @@ export default function ProductsScreen() {
           id: item.MaSP,
           code: item.KyHieu,
           price: item.GiaBan
-            ? new Intl.NumberFormat("vi-VN").format(item.GiaBan)
+            ? new Intl.NumberFormat("vi-VN").format(Math.round(item.GiaBan))
             : "",
           status: mapStatusByTT(item),
           column: String(item.MaVT),

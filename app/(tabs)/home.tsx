@@ -341,7 +341,7 @@ export default function HomeScreen() {
     const n =
       typeof v === "string" ? Number(String(v).replace(/[^\d.-]/g, "")) : Number(v);
     if (!Number.isFinite(n)) return "—";
-    return `${n.toLocaleString("vi-VN")}đ`;
+    return `${Math.round(n).toLocaleString("vi-VN")}đ`;
   };
   const handlePressProperty = useCallback(
     (property: any) => {

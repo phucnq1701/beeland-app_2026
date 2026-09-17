@@ -121,7 +121,7 @@ export default function ReceiptsScreen() {
       total: receipts.length,
       completed: receipts.filter((r) => r.status === 'completed').length,
       pending: receipts.filter((r) => r.status === 'pending').length,
-      totalAmount: new Intl.NumberFormat('vi-VN').format(totalAmount),
+      totalAmount: new Intl.NumberFormat('vi-VN').format(Math.round(totalAmount)),
     };
   }, []);
 

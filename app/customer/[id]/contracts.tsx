@@ -37,7 +37,7 @@ interface Contract {
 
 function formatCurrency(value: number): string {
   if (!value && value !== 0) return "0";
-  return value.toLocaleString("vi-VN") + " đ";
+  return Math.round(value).toLocaleString("vi-VN") + " đ";
 }
 
 function formatDate(dateStr: string): string {

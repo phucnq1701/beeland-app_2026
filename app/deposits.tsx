@@ -44,7 +44,7 @@ function formatCurrency(value: number): string {
     const mil = value / 1000000;
     return mil % 1 === 0 ? `${mil} triệu` : `${mil.toFixed(1)} triệu`;
   }
-  return new Intl.NumberFormat("vi-VN").format(value) + " đ";
+  return new Intl.NumberFormat("vi-VN").format(Math.round(value)) + " đ";
 }
 
 function formatDate(dateStr: string): string {
