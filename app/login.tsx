@@ -12,9 +12,8 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import Colors from "@/constants/colors";
-import { AuthService } from "@/sevices/AuthService";
+import { cacheCloudProfile, PROFILE_KEY } from "@/sevicesSupabase/CloudProfileService";
 import { AuthSupabaseService } from "@/sevicesSupabase/AuthService";
 import { persistTenantFromJwt } from "@/sevicesSupabase/cloudTenant";
 
@@ -51,7 +50,6 @@ export default function LoginScreen() {
         }
       );
       console.log("[Login] cloud-auth response keys:", Object.keys(res || {}));
-      console.log("[Login] full response:", JSON.stringify(res)?.slice(0, 3000));
       if (res?.status === 200) {
         const dataObj = (res as any)?.data && typeof (res as any).data === "object" ? (res as any).data : {};
         const token =
@@ -103,6 +101,8 @@ export default function LoginScreen() {
         if (token || supabaseJwt) {
           // Xoá sạch phiên cũ trước khi ghi mới để tránh kẹt token/tenant cũ
           await AsyncStorage.multiRemove([
+            PROFILE_KEY,
+            "@token",
             "@supabase_jwt",
             "@company_id",
             "@tenant_id",
@@ -125,6 +125,7 @@ export default function LoginScreen() {
           await AsyncStorage.setItem("maCTDK", String(dataObj?.maCTDK ?? (res as any)?.maCTDK ?? ""));
           await AsyncStorage.setItem("tenCTDKVT", companyCode.trim());
           await persistTenantFromJwt(supabaseJwt || "", companyCode.trim(), res);
+          await cacheCloudProfile(res, supabaseJwt || "");
           try {
             const { getSessionStatus } = await import("@/sevicesSupabase/cloudTenant");
             const st = await getSessionStatus();

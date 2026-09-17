@@ -19,6 +19,7 @@ function normalizeProduct(r: any) {
     MaSP: v(r?.ma_sp),
     KyHieu: v(r?.ky_hieu),
     MaDA: v(r?.ma_da),
+    MaDACode: v(da?.ma_da_code),
     TenDA: v(da?.ten_da),
     DiaChi: v(da?.dia_chi),
     AnhDA: v(da?.image_url),
@@ -78,6 +79,8 @@ function normalizeProduct(r: any) {
     SanGiaoDich: v(r?.san_giao_dich),
     KhachHang: v(r?.khach_hang),
     HinhAnh: v(r?.hinh_anh),
+    // Liên kết mẫu căn (ảnh căn hộ gắn theo mẫu, không theo từng căn)
+    MaLCH: v(r?.ma_lch),
     GhiChu: v(r?.ghi_chu),
     MauNen: v(r?.mau_nen),
     STT: v(r?.stt),
@@ -144,6 +147,8 @@ const PRODUCT_SELECT = [
   "san_giao_dich",
   "ma_san",
   "khach_hang",
+  "ma_lch",
+  "ma_mau_nha",
   "ngay_nhap",
   "ngay_sua",
   "ty_le_vat",
@@ -156,8 +161,8 @@ const PRODUCT_SELECT = [
   "tong_gia_dat",
   "created_at",
   "updated_at",
-  // FK joins — lấy tên từ cloud_catalogs
-  "da:ma_da(id,ten_da,dia_chi,image_url)",
+  // FK joins — lấy tên từ cloud_catalogs (ma_da_code để tra ảnh du_an_anh)
+  "da:ma_da(id,ma_da_code,ten_da,dia_chi,image_url)",
   "khu:ma_khu(id,item_code,item_name)",
   "pk:ma_pk(id,item_code,item_name)",
   "tang:ma_tang(id,item_code,item_name)",
@@ -389,21 +394,88 @@ export const ProductService = {
   },
 
   /**
-   * Ảnh sản phẩm — cloud (bds_products.hinh_anh).
-   * Cloud chưa có bảng gallery ảnh riêng; chỉ có 1 cột hinh_anh (có thể
-   * chứa nhiều URL phân cách bởi dấu phẩy). Trả shape cũ: { data: [{ HinhAnh }] }
+   * Ảnh căn hộ (banner/gallery chi tiết SP) — web ghép 2 nguồn:
+   * 1. Ảnh riêng của căn: bds_products.hinh_anh (chuỗi JSON mảng URL hoặc
+   *    nhiều URL phân cách dấu phẩy).
+   * 2. Ảnh theo MẪU CĂN (nhãn "Mẫu: A1" trên web) — cloud_catalogs:
+   *    - Cao tầng: bds_products.ma_lch   → cloud_catalogs.id, catalog_type='loai_ch'
+   *    - Thấp tầng: bds_products.ma_mau_nha → cloud_catalogs.id, catalog_type='mau_nha'
+   *    Ảnh nằm ở raw.Images (mảng {name, path, url}) + raw.ImageUrl (đại diện).
+   * Fallback cuối (SP + mẫu đều trống): "Ảnh background" dự án
+   * (cloud_catalogs catalog_type=du_an_anh) → image_url → ảnh mặc định.
+   * Trả shape cũ: { data: [{ HinhAnh }] }
    */
   getBannerProduct: async (payload: any = {}) => {
     const companyId = await getCompanyId();
     const validJwt = await getValidSupabaseJwt();
     if (!validJwt) return { data: [DEFAULT_BANNER] };
 
+    // Tuyệt đối hoá URL (giống resolveUploadUrl của web): dữ liệu cũ có thể
+    // lưu đường dẫn tương đối với máy chủ file upload.beesky.vn
+    const resolveUploadUrl = (u?: string | null): string => {
+      const s = String(u || "").trim();
+      if (!s) return "";
+      if (/^(https?:|data:|blob:)/i.test(s)) return s;
+      return `https://upload.beesky.vn/${s.replace(/^\/+/, "")}`;
+    };
+
+    /** raw của 1 dòng cloud_catalogs → mảng URL ảnh */
+    const extractCatalogImages = (raw: any): string[] => {
+      const out: string[] = [];
+      const images = raw?.Images;
+      if (Array.isArray(images)) {
+        images.forEach((img: any) => {
+          const u = resolveUploadUrl(img?.url || img?.path || img?.name);
+          if (u) out.push(u);
+        });
+      }
+      const imageMain = resolveUploadUrl(raw?.ImageUrl);
+      if (imageMain && !out.includes(imageMain)) out.unshift(imageMain);
+      return out;
+    };
+
+    /** Lấy ảnh mẫu căn: thử khớp id (uuid) trước, không thấy thì khớp item_code */
+    const fetchMauCanImages = async (
+      mauId: string | null | undefined,
+      catalogType: "loai_ch" | "mau_nha"
+    ): Promise<string[]> => {
+      const key = String(mauId || "").trim();
+      if (!key || key === "null") return [];
+
+      // Dữ liệu cũ có thể lưu item_code thay vì uuid trong ma_lch/ma_mau_nha
+      const filters: Array<Record<string, string>> = [];
+      if (UUID_RE.test(key)) filters.push({ id: `eq.${key}` });
+      filters.push({ item_code: `eq.${key}` });
+
+      for (const f of filters) {
+        try {
+          const p: Record<string, string> = {
+            select: "raw",
+            catalog_type: `eq.${catalogType}`,
+            limit: "1",
+            ...f,
+          };
+          if (companyId && UUID_RE.test(companyId)) {
+            p.ma_ctdk_uid = `eq.${companyId}`;
+          }
+          const res = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
+            params: p,
+          });
+          const rows = Array.isArray(res.data) ? res.data : [];
+          if (rows.length > 0) return extractCatalogImages(rows[0]?.raw);
+        } catch (err) {
+          console.log(`ERROR fetchMauCanImages (${catalogType}):`, err);
+        }
+      }
+      return [];
+    };
+
     try {
       const maSP = payload?.maSP ?? payload?.MaSP;
       if (!maSP) return { data: [DEFAULT_BANNER] };
 
       const params: Record<string, string> = {
-        select: "hinh_anh,da:ma_da(image_url)",
+        select: "hinh_anh,ma_lch,ma_mau_nha,da:ma_da(ma_da_code,image_url)",
         ma_sp: `eq.${maSP}`,
         limit: "1",
       };
@@ -415,15 +487,75 @@ export const ProductService = {
         params,
       });
       const rows = Array.isArray(res.data) ? res.data : [];
-      const raw = String(rows[0]?.hinh_anh || "");
-      let urls = raw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const row = rows[0];
 
-      // Fallback: không có ảnh SP → lấy ảnh dự án → cuối cùng dùng ảnh mặc định
-      if (urls.length === 0 && rows[0]?.da?.image_url) {
-        urls = [String(rows[0].da.image_url)];
+      // 1) Ảnh riêng của căn: hinh_anh có thể là JSON mảng hoặc chuỗi cách dấu phẩy
+      let urls: string[] = [];
+      const rawHA = row?.hinh_anh;
+      const strHA = rawHA == null ? "" : String(rawHA).trim();
+      if (strHA.startsWith("[")) {
+        try {
+          const arr = JSON.parse(strHA);
+          if (Array.isArray(arr)) {
+            urls = arr
+              .map((it: any) =>
+                resolveUploadUrl(
+                  typeof it === "string" ? it : it?.url || it?.path || it?.name
+                )
+              )
+              .filter(Boolean);
+          }
+        } catch {
+          // JSON lỗi → xử lý như chuỗi thường bên dưới
+        }
+      }
+      if (urls.length === 0 && strHA) {
+        urls = strHA
+          .split(",")
+          .map((s) => resolveUploadUrl(s))
+          .filter(Boolean);
+      }
+
+      // 2) Căn chưa có ảnh → lấy ảnh theo MẪU CĂN (giống web)
+      if (urls.length === 0) {
+        // Cao tầng: ma_lch → catalog_type 'loai_ch'
+        urls = await fetchMauCanImages(row?.ma_lch, "loai_ch");
+        // Thấp tầng: ma_mau_nha → catalog_type 'mau_nha'
+        if (urls.length === 0) {
+          urls = await fetchMauCanImages(row?.ma_mau_nha, "mau_nha");
+        }
+      }
+
+      // 3) Fallback cuối: "Ảnh background" dự án (du_an_anh) — đúng như hiện tại
+      if (urls.length === 0) {
+        const maDaCode = row?.da?.ma_da_code;
+        if (maDaCode != null && maDaCode !== "") {
+          try {
+            const anhParams: Record<string, string> = {
+              select: "raw",
+              catalog_type: "eq.du_an_anh",
+              item_code: `eq.${maDaCode}`,
+              limit: "1",
+            };
+            // cloud_catalogs dùng cột ma_ctdk_uid (uuid) — KHÔNG phải ma_ctdk
+            if (companyId && UUID_RE.test(companyId)) {
+              anhParams.ma_ctdk_uid = `eq.${companyId}`;
+            }
+            const anhRes = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
+              params: anhParams,
+            });
+            const anhRows = Array.isArray(anhRes.data) ? anhRes.data : [];
+            const rawAnh = anhRows[0]?.raw || {};
+            const bg = resolveUploadUrl(rawAnh?.anh_background);
+            if (bg) urls = [bg];
+          } catch (anhErr) {
+            console.log("ERROR getBannerProduct (du_an_anh):", anhErr);
+          }
+        }
+      }
+      if (urls.length === 0 && row?.da?.image_url) {
+        const img = resolveUploadUrl(row.da.image_url);
+        if (img) urls = [img];
       }
       if (urls.length === 0) {
         return { data: [DEFAULT_BANNER] };

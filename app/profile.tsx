@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -6,32 +6,35 @@ import {
   ScrollView,
   Dimensions,
   ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
-import { Stack } from "expo-router";
-import { UserService } from "@/sevices/UserService";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { CloudProfileService, CloudProfile } from "@/sevicesSupabase/CloudProfileService";
 import Colors from "@/constants/colors";
 
 const { width } = Dimensions.get("window");
 
 export default function ProfileScreen() {
-  const [user, setUser] = useState<any>(null);
+  const router = useRouter();
+  const [user, setUser] = useState<CloudProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
 
-  const loadUser = async () => {
-    try {
-      setLoading(true);
-      const res = await UserService.userInfo();
-      setUser(res?.data);
-    } catch (error) {
-      console.log("load user error:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadUser();
-  }, []);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    setUser(null);
+    setError(null);
+    setLoading(true);
+    void CloudProfileService.userInfo().then((res) => {
+      if (active) setUser(res.data);
+    }).catch((reason: unknown) => {
+      if (active) setError(reason instanceof Error ? reason.message : "Không tải được hồ sơ.");
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [retry]));
 
   if (loading) {
     return (
@@ -39,6 +42,21 @@ export default function ProfileScreen() {
         <Stack.Screen options={{ title: "Thông tin cá nhân" }} />
         <ActivityIndicator size="large" color={Colors.primary} />
         <Text style={styles.loadingText}>Đang tải thông tin...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Stack.Screen options={{ title: "Thông tin cá nhân" }} />
+        <Text style={styles.loadingText}>{error}</Text>
+        <TouchableOpacity onPress={() => setRetry((value) => value + 1)}>
+          <Text style={styles.loadingText}>Thử lại</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/login")}>
+          <Text style={styles.loadingText}>Đăng nhập lại</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -63,21 +81,21 @@ export default function ProfileScreen() {
       <View style={styles.infoContainer}>
         <View style={styles.infoRow}>
           <Text style={styles.label}>Họ tên</Text>
-          <Text style={styles.value}>{user?.HoTen}</Text>
+          <Text style={styles.value}>{user?.HoTen || "Chưa cập nhật"}</Text>
         </View>
 
         <View style={styles.divider} />
 
         <View style={styles.infoRow}>
           <Text style={styles.label}>Email</Text>
-          <Text style={styles.value}>{user?.Email}</Text>
+          <Text style={styles.value}>{user?.Email || "Chưa cập nhật"}</Text>
         </View>
 
         <View style={styles.divider} />
 
         <View style={styles.infoRow}>
           <Text style={styles.label}>Số điện thoại</Text>
-          <Text style={styles.value}>{user?.DiDong}</Text>
+          <Text style={styles.value}>{user?.DiDong || "Chưa cập nhật"}</Text>
         </View>
       </View>
     </ScrollView>

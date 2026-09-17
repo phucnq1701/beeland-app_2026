@@ -113,6 +113,7 @@ export default function HomeScreen() {
         item?.ngayDangKy ?? item?.ngay_tao ?? item?.created_at ?? raw?.NgayTao ?? null,
       tenTT: item?.tenTT ?? "",
       status: item?.status ?? item?.tenTT ?? "",
+      statusColor: item?.statusColor || Colors.primary,
       _raw: item,
     };
   }
@@ -614,12 +615,12 @@ export default function HomeScreen() {
                         {property.district}
                       </Text>
                     </View>
-                    <View style={styles.propertyFooter}>
+                    {/* <View style={styles.propertyFooter}>
                       <Text style={styles.propertyPrice}>{property.price}</Text>
                       <View style={styles.arrowButton}>
                         <ChevronRight color={Colors.white} size={18} />
                       </View>
-                    </View>
+                    </View> */}
                   </View>
                 </LinearGradient>
               </TouchableOpacity>
@@ -719,9 +720,9 @@ export default function HomeScreen() {
               <ChevronRight color={Colors.primary} size={18} />
             </TouchableOpacity>
           </View>
-          {booking.map((booking) => (
+          {booking.map((booking, index) => (
             <TouchableOpacity
-              key={booking.maPGC}
+              key={`${booking.maPGC}-${index}`}
               style={styles.recentCard}
               activeOpacity={0.7}
               onPress={() =>
@@ -799,9 +800,9 @@ export default function HomeScreen() {
               <ChevronRight color={Colors.primary} size={18} />
             </TouchableOpacity>
           </View>
-          {khachHang.map((customer) => (
+          {khachHang.map((customer, index) => (
             <TouchableOpacity
-              key={customer._raw?.id || customer.maKH}
+              key={`${customer._raw?.id || customer.maKH}-${index}`}
               style={styles.recentCard}
               activeOpacity={0.7}
               onPress={() =>
@@ -839,31 +840,24 @@ export default function HomeScreen() {
               </View>
               <View
                 style={[
-                  styles.statusBadge,
-                  {
-                    backgroundColor:
-                      customer.status === "active"
-                        ? "rgba(16,185,129,0.1)"
-                        : customer.status === "potential"
-                        ? "rgba(59,130,246,0.1)"
-                        : "rgba(200,200,200,0.15)",
-                  },
+                  styles.customerStatusBadge,
+                  { backgroundColor: `${customer.statusColor}18` },
                 ]}
               >
+                <View
+                  style={[
+                    styles.badgeDot,
+                    { backgroundColor: customer.statusColor },
+                  ]}
+                />
                 <Text
                   style={[
                     styles.statusBadgeText,
-                    {
-                      color:
-                        customer.status === "active"
-                          ? Colors.success
-                          : customer.status === "potential"
-                          ? Colors.accent.blue
-                          : Colors.textTertiary,
-                    },
+                    { color: customer.statusColor },
                   ]}
+                  numberOfLines={1}
                 >
-                  {customer.tenTT ?? "Không xác định"}
+                  {customer.status || "Tiềm năng"}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -889,9 +883,9 @@ export default function HomeScreen() {
               <ChevronRight color={Colors.primary} size={18} />
             </TouchableOpacity>
           </View>
-          {lichHen.map((apt) => (
+          {lichHen.map((apt, index) => (
             <TouchableOpacity
-              key={apt.maLH}
+              key={`${apt.maLH}-${index}`}
               style={styles.recentCard}
               activeOpacity={0.7}
               onPress={() =>
@@ -1447,6 +1441,14 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     fontSize: 11,
     fontWeight: "600" as const,
+  },
+  customerStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
   },
   featureCard: {
     width: (width - 40 - 20) / 3,

@@ -770,6 +770,242 @@ export const BookingService = {
     }
   },
 
+  /**
+   * Chi tiết booking theo đúng mapping web BookingFormDialog.tsx +
+   * BookingDocsCloudService.getBookingEditDetail.
+   * Trả về 1 object gồm: phiếu (cloud_bookings + cloud_pgc_phieu_giucho),
+   * khách hàng (cloud_customers + tt_khach_hang), sàn, sản phẩm, dự án,
+   * giá theo bảng giá (price_list_items), chính sách/tiến độ/quà tặng.
+   */
+  getBookingEditDetail: async (bookingIdOrCode: string) => {
+    const idStr = String(bookingIdOrCode || "").trim();
+    if (!idStr) return { data: null };
+    if (!(await getValidSupabaseJwt())) {
+      throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+    }
+    const companyId = await getCompanyId();
+
+    // Không embed FK: schema cache thiếu quan hệ không làm mất cả phiếu.
+    // RLS lọc các bảng danh mục bằng company_id trong JWT.
+    const get = async (table: string, params: Record<string, string>) => {
+      const res = await axiosApiSupabase.get(`rest/v1/${table}`, {
+        params: { select: "*", limit: "1", ...params },
+      });
+      return Array.isArray(res.data) ? res.data[0] ?? null : null;
+    };
+    const byId = (table: string, id: unknown) =>
+      UUID_RE.test(String(id ?? ""))
+        ? get(table, { id: `eq.${id}` })
+        : Promise.resolve(null);
+    const jsonObject = (value: any): Record<string, any> => {
+      if (typeof value === "string") {
+        try { value = JSON.parse(value); } catch { return {}; }
+      }
+      return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    };
+    const numberOrNull = (value: any): number | null =>
+      value == null || value === "" || !Number.isFinite(Number(value))
+        ? null
+        : Number(value);
+    const booleanOrNull = (value: any): boolean | null => {
+      if (value === true || value === 1 || value === "1" || value === "true") return true;
+      if (value === false || value === 0 || value === "0" || value === "false") return false;
+      return null;
+    };
+
+    try {
+      const isUid = UUID_RE.test(idStr);
+      // 1) Phiếu booking
+      let booking: any = null;
+      {
+        const params: Record<string, string> = {
+          select: "*",
+          loai_ct: "eq.BOOKING",
+          limit: "1",
+        };
+        if (companyId && UUID_RE.test(companyId))
+          params.ma_ctdk_id = `eq.${companyId}`;
+        if (isUid) params.id = `eq.${idStr}`;
+        else params.so_phieu = `eq.${idStr}`;
+        booking = await get("cloud_bookings", params);
+        // fallback theo ma_pgc_id
+        if (!booking && isUid) {
+          const p2 = { ...params };
+          delete p2.id;
+          p2.ma_pgc_id = `eq.${idStr}`;
+          booking = await get("cloud_bookings", p2);
+        }
+      }
+      if (!booking) return { data: null };
+
+      // 2) Vòng đời: UUID trước, số phiếu chỉ là liên kết dự phòng.
+      const pgcTenant: Record<string, string> =
+        companyId && UUID_RE.test(companyId) ? { ma_ctdk_uid: `eq.${companyId}` } : {};
+      let pgc: any = null;
+      if (UUID_RE.test(String(booking.ma_pgc_id ?? ""))) {
+        pgc = await get("cloud_pgc_phieu_giucho", {
+          ...pgcTenant, id: `eq.${booking.ma_pgc_id}`,
+        });
+      }
+      if (!pgc && booking.so_phieu) {
+        pgc = await get("cloud_pgc_phieu_giucho", {
+          ...pgcTenant, so_phieu_gc: `eq.${booking.so_phieu}`,
+        });
+      }
+
+      const ttHopDong = jsonObject(pgc?.tt_hop_dong);
+      const maDotGia = ttHopDong.MaDotGia || null;
+      const maCS = ttHopDong.MaCS || pgc?.ma_cs || null;
+      const sanPhamId = pgc?.san_pham_id || booking.ma_sp_id || null;
+      const [product, kh, san, policy, priceList, priceItem, status] = await Promise.all([
+        byId("bds_products", sanPhamId),
+        byId("cloud_customers", booking.khach_hang_id || pgc?.khach_hang_id),
+        byId("dm_companies", pgc?.san_id || booking.ma_san_id),
+        byId("da_sales_policies", maCS),
+        // Phiếu cũ vẫn cần tên bảng giá đã hết hiệu lực.
+        byId("price_lists", maDotGia),
+        UUID_RE.test(String(maDotGia)) && UUID_RE.test(String(sanPhamId))
+          ? get("price_list_items", {
+              price_list_id: `eq.${maDotGia}`, product_id: `eq.${sanPhamId}`,
+            })
+          : Promise.resolve(null),
+        byId("cloud_catalogs", booking.trang_thai_id),
+      ]);
+      const projectId = pgc?.project_id || booking.ma_da_id || product?.ma_da;
+      const maCSTong = ttHopDong.MaCSTong || policy?.pricing_config_id || null;
+      const maTDTT = ttHopDong.MaTDTT || policy?.payment_schedule_id || null;
+      const [project, pricingConfig, paymentSchedule] = await Promise.all([
+        byId("da_projects", projectId),
+        byId("cloud_pricing_configs", maCSTong),
+        byId("da_payment_schedules", maTDTT),
+      ]);
+
+      // Schema thực tế: cloud_sales_settings.ma_da là UUID da_projects.id,
+      // không phải ma_da_code (ví dụ "2"). Không suy ra hạn từ số phút.
+      let settings: any = null;
+      if (UUID_RE.test(String(project?.id ?? ""))) {
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        settings = await get("cloud_sales_settings", {
+          select: "thoi_gian_booking,tien_booking,tien_dat_coc,booking_uu_tien,tu_ngay,den_ngay",
+          ma_da: `eq.${project.id}`,
+          ap_dung: "is.true",
+          and: `(or(tu_ngay.is.null,tu_ngay.lte.${today}),or(den_ngay.is.null,den_ngay.gte.${today}))`,
+          order: "tu_ngay.desc.nullslast",
+        });
+      }
+
+      // Giữ bản chụp quà tặng; chỉ bổ sung danh mục nếu bản chụp thiếu.
+      const khuyenMai: any[] = Array.isArray(pgc?.khuyen_mai) ? pgc.khuyen_mai : [];
+      const promotions = await Promise.all(khuyenMai.map(async (value: any) => {
+        const km = jsonObject(value);
+        const promotionId = [km.ID, km.MaKM].find((v) => UUID_RE.test(String(v ?? "")));
+        const needsCatalog = !km.TenQuaTang || !km.TenKhuyenMai ||
+          km.SoLuong == null || km.GiaTri == null;
+        const catalog = needsCatalog ? await byId("da_promotions", promotionId) : null;
+        return {
+          id: promotionId ?? null,
+          tenKhuyenMai: km.TenKhuyenMai || km.ten_khuyen_mai || catalog?.ten_khuyen_mai || null,
+          tenQuaTang: km.TenQuaTang || km.ten_qua_tang || catalog?.ten_qua_tang || null,
+          soLuong: numberOrNull(km.SoLuong ?? km.so_luong ?? catalog?.so_luong),
+          giaTri: numberOrNull(km.GiaTri ?? km.gia_tri ?? catalog?.gia_tri),
+        };
+      }));
+
+      // Bản chụp khách hàng tại thời điểm lập phiếu
+      const ttKH = jsonObject(pgc?.tt_khach_hang);
+      const customer = {
+        id: kh?.id ?? booking.khach_hang_id ?? pgc?.khach_hang_id ?? null,
+        maSoKH: kh?.ma_so_kh || null,
+        tenKH: kh?.ten_kh || ttKH.TenKH || null,
+        cccd: kh?.cccd || ttKH.SoCMND || ttKH.CCCD || null,
+        dienThoai: kh?.dien_thoai || ttKH.DiDong || null,
+        email: kh?.email || ttKH.Email || null,
+        diaChi: ttKH.DiaChi || null,
+      };
+
+      const tienGiuCho =
+        numberOrNull(policy?.tien_booking) ??
+        numberOrNull(booking.tien_giu_cho) ??
+        numberOrNull(settings?.tien_booking) ??
+        numberOrNull(settings?.tien_dat_coc);
+      const tongGia =
+        numberOrNull(priceItem?.total_payment) ??
+        numberOrNull(product?.tong_gia_tri_hdmb) ??
+        numberOrNull(booking.tong_gia);
+      // Không tính lại giá. Chỉ fallback block sản phẩm khi thiếu dòng bảng giá.
+      const price = priceItem ?? {
+        area: product?.dien_tich_thong_thuy,
+        unit_price_vat: product?.don_gia_da_vat,
+        total_before_vat: product?.tong_gia_chua_vat,
+        vat_amount: product?.tien_vat,
+        maintenance_amount: product?.tien_phi_bao_tri,
+        total_payment: product?.tong_gia_tri_hdmb,
+      };
+      const uuTien =
+        booleanOrNull(jsonObject(booking.raw).UuTien) ??
+        booleanOrNull(jsonObject(pgc?.payload).UuTien) ??
+        booleanOrNull(settings?.booking_uu_tien);
+
+      const soPhieu = pgc?.so_phieu_gc || booking.so_phieu || null;
+
+      return {
+        data: {
+          // Phiếu
+          id: booking.id,
+          maPGC: pgc?.id ?? booking.ma_pgc_id,
+          soPhieu,
+          so_phieu_gc: soPhieu,
+          state: booking.state,
+          maTT: booking.ma_tt ?? status?.item_code ?? null,
+          tenTT: booking.ten_tt || status?.item_name || STATE_LABEL[booking.state] || booking.state || null,
+          ngayGiuCho: booking.ngay_giu_cho ?? pgc?.ngay_giu_cho ?? null,
+          ngayNhap: booking.ngay_nhap,
+          hetHanLuc: booking.het_han_luc,
+          giaiDoan: pgc?.giai_doan ?? null,
+          nhanVien: booking.nhan_vien,
+          ghiChu: booking.ghi_chu,
+          // Header
+          tongGia,
+          tienGiuCho,
+          thoiGianBooking: numberOrNull(settings?.thoi_gian_booking),
+          uuTien,
+          daThu: numberOrNull(booking.da_thu ?? pgc?.da_thu),
+          // Khách hàng
+          customer,
+          ttKhachHang: ttKH,
+          // Sàn / dự án / sản phẩm
+          san: san ? { id: san.id, tenCongTy: san.ten_cong_ty || san.ten_ct || null } : null,
+          project,
+          product,
+          sanPhamId,
+          // Bảng giá + giá tính sẵn
+          priceList: priceList ?? null,
+          priceItem: priceItem ?? null,
+          price,
+          priceSource: priceItem ? "price_list_items" : "bds_products",
+          // Chính sách & cấu hình
+          policy: policy ?? null,
+          pricingConfig: pricingConfig ?? null,
+          paymentSchedule: paymentSchedule ?? null,
+          maDotGia,
+          maCS,
+          maCSTong,
+          maTDTT,
+          // Quà tặng
+          promotions,
+          khuyenMai,
+          // jsonb gốc
+          pgcRaw: pgc,
+          bookingRaw: booking,
+        },
+      };
+    } catch (error) {
+      // UI phân biệt lỗi tải với phiếu không tồn tại; không hiển thị dữ liệu giả.
+      throw error;
+    }
+  },
+
   /** Danh sách trạng thái booking thay FilterService.getStatusTransaction */
   getBookingStatus: async () => {
     const companyCode = await getCompanyCode();
@@ -1158,12 +1394,82 @@ export const BookingService = {
       .post("api/beeland/add-images-booking", dataInit)
       .then((res) => res.data);
   },
-  getListImageGC: async (payload: any = {}) => {
-    const dataInit = {
-      ...payload,
+  /** Ảnh booking trên self-host; MaPGC là UUID vòng đời, không phải số phiếu. */
+  getListImageGC: async (payload: { MaPGC?: string; maPGC?: string } = {}) => {
+    if (!(await getValidSupabaseJwt())) {
+      throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+    }
+    const maPGC = String(payload.MaPGC ?? payload.maPGC ?? "").trim();
+    if (!UUID_RE.test(maPGC)) {
+      throw new Error("Thiếu UUID phiếu giữ chỗ để tải ảnh booking.");
+    }
+    const companyCode = (await getCompanyCode()).trim().toLowerCase();
+    if (!companyCode) throw new Error("Không xác định được mã tenant.");
+
+    // Phân trang để không bỏ ảnh khi PostgREST giới hạn số dòng trả về.
+    const rows: any[] = [];
+    const pageSize = 100;
+    for (let offset = 0; ; offset += pageSize) {
+      const res = await axiosApiSupabase.get("rest/v1/cloud_generic_records", {
+        params: {
+          select: "record_id,payload,created_at",
+          endpoint: "eq.admin/hop-dong/anh-giu-cho",
+          ma_ctdk: `eq.${companyCode}`,
+          "payload->>MaPGC": `eq.${maPGC}`,
+          is_deleted: "is.false",
+          order: "created_at.asc,record_id.asc",
+          limit: String(pageSize),
+          offset: String(offset),
+        },
+      });
+      if (!Array.isArray(res.data)) throw new Error("Dữ liệu ảnh booking không hợp lệ.");
+      rows.push(...res.data);
+      if (res.data.length < pageSize) break;
+    }
+
+    const paths = rows.flatMap((row) => {
+      const record = row.payload ?? {};
+      const images = Array.isArray(record.Images)
+        ? record.Images.filter((v: unknown): v is string => typeof v === "string" && !!v.trim())
+        : [];
+      const legacy = record.uri || record.Url;
+      const values = images.length ? images : typeof legacy === "string" && legacy.trim() ? [legacy] : [];
+      return values.map((value: string, index: number) => ({
+        id: `${row.record_id ?? record.ID}:${index}`,
+        recordId: String(row.record_id ?? record.ID ?? ""),
+        path: value.trim(),
+      }));
+    });
+    if (!paths.length) return { data: [] };
+
+    let baseUrl = "https://upload.beesky.vn/";
+    if (paths.some((image) => !/^https?:\/\//i.test(image.path))) {
+      const res = await axiosApiSupabase.get("rest/v1/upload_configs", {
+        params: {
+          select: "provider,config",
+          ma_ctdk: `eq.${companyCode}`,
+          ma_ct: "is.null",
+          limit: "1",
+        },
+      });
+      const configured = res.data?.[0]?.config?.public_base_url;
+      if (typeof configured === "string" && configured.trim()) {
+        if (!/^https?:\/\//i.test(configured.trim())) {
+          throw new Error("Cấu hình URL máy chủ ảnh không hợp lệ.");
+        }
+        baseUrl = configured.trim();
+      }
+      // Chỉ dùng mặc định khi không có cấu hình, không che lỗi API cấu hình.
+    }
+    return {
+      data: paths.map((image) => ({
+        id: image.id,
+        recordId: image.recordId,
+        uri: /^https?:\/\//i.test(image.path)
+          ? image.path
+          : `${baseUrl.replace(/\/+$/, "")}/${image.path.replace(/^\/+/, "")}`,
+        name: image.path.split("/").pop()?.split(/[?#]/)[0] || "Ảnh booking",
+      })),
     };
-    return await axiosApi
-      .post("api/admin/hop-dong/anh-giu-cho", dataInit)
-      .then((res) => res.data);
   },
 };
