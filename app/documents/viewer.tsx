@@ -14,29 +14,10 @@ import { WebView } from "react-native-webview";
 import { Paths, File } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
-// Định dạng Office không render trực tiếp trong WebView iOS.
-const OFFICE_EXTS = ["doc", "docx", "xls", "xlsx", "ppt", "pptx"];
-
-const OFFICE_VIEWER_HOST = "view.officeapps.live.com";
-
-function getFileExtension(url: string, fallback: string): string {
-  try {
-    const clean = url.split("?")[0].split("#")[0];
-    const ext = clean.substring(clean.lastIndexOf(".") + 1).toLowerCase();
-    return ext && ext.length <= 5 ? ext : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-/**
- * QUY TẮC: file Office KHÔNG trả URL gốc — phải đóng gói thành
- * https://view.officeapps.live.com/op/view.aspx?src=<URL_FILE_GOC_DA_URL_ENCODE>
- */
-function toOfficeViewerUrl(fileUrl: string): string {
-  if (fileUrl.includes(OFFICE_VIEWER_HOST)) return fileUrl; // đã wrap, tránh double
-  return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(fileUrl)}`;
-}
+import {
+  getRawDocumentUrl, getDocumentType, getDocumentFileName,
+  getOfficeViewerUrl, OFFICE_TYPES, OFFICE_MIME, OFFICE_UTI,
+} from "@/components/utils/documentLinks";
 
 export default function DocumentViewer() {
   const { link, type, name } = useLocalSearchParams<{
@@ -45,42 +26,42 @@ export default function DocumentViewer() {
     name: string;
   }>();
 
-  const decodedLink = link ? decodeURIComponent(link) : "";
-  const lowerType = (type || "").toLowerCase();
-  const isOffice =
-    OFFICE_EXTS.includes(lowerType) || decodedLink.includes(OFFICE_VIEWER_HOST);
+  let decodedLink = "";
+  try {
+    decodedLink = getRawDocumentUrl(link || "");
+  } catch {
+    // Show an actionable error screen instead of throwing during render.
+  }
+  const lowerType = getDocumentType(type || "", name || "", decodedLink);
+  const isOffice = OFFICE_TYPES.includes(lowerType);
 
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState("");
   const [webHeight, setWebHeight] = useState(200);
   const [txtContent, setTxtContent] = useState<string>("");
-  const autoOpened = useRef(false);
+  const downloadLock = useRef(false);
 
-  // URL Office Viewer cuối cùng (link vào đã wrap thì giữ nguyên)
-  const viewerUrl = isOffice ? toOfficeViewerUrl(decodedLink) : decodedLink;
-
-  const openInBrowser = async () => {
+  // Only open on a user gesture; no automatic redirect to Office Online.
+  const openUrl = async (url: string) => {
+    setError("");
     try {
-      await Linking.openURL(viewerUrl);
+      if (Platform.OS === "web") {
+        window.open(url, "_blank", "noopener,noreferrer");
+      } else {
+        await Linking.openURL(url);
+      }
     } catch {
-      Alert.alert("Lỗi", "Không mở được trình duyệt");
+      setError("Không mở được trình duyệt. Bạn có thể thử tải file về.");
     }
   };
-
-  // File Office: tự động mở bằng trình duyệt hệ thống (giống hành vi web)
-  useEffect(() => {
-    if (isOffice && viewerUrl && !autoOpened.current) {
-      autoOpened.current = true;
-      void openInBrowser();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOffice, viewerUrl]);
+  const openInBrowser = () => openUrl(decodedLink);
 
   /* =========================
       TXT
   ========================= */
   useEffect(() => {
-    if (lowerType === "txt" && decodedLink && !decodedLink.includes(OFFICE_VIEWER_HOST)) {
+    if (lowerType === "txt" && decodedLink) {
       setLoading(true);
       fetch(decodedLink)
         .then((res) => res.text())
@@ -94,43 +75,34 @@ export default function DocumentViewer() {
       TẢI FILE + MỞ BẰNG APP KHÁC
   ========================= */
   const handleDownloadAndOpen = async () => {
-    if (!decodedLink) return;
+    if (!decodedLink || downloadLock.current) return;
+    if (Platform.OS === "web") {
+      await openInBrowser();
+      return;
+    }
+    downloadLock.current = true;
+    setDownloading(true);
+    setError("");
     try {
-      if (Platform.OS === "web") {
-        window.open(decodedLink, "_blank");
+      if (!(await Sharing.isAvailableAsync())) {
+        setError("Thiết bị không hỗ trợ chia sẻ file. Hãy chọn mở link file gốc.");
         return;
       }
-
-      setDownloading(true);
-
-      const fileName =
-        (name && name.trim()) ||
-        `document.${getFileExtension(decodedLink, "docx")}`;
-      const safeName = fileName.replace(/[^\w.\-() ]+/g, "_");
-
-      // API expo-file-system v19: File + Paths + downloadFileAsync
-      const target = new File(Paths.cache, safeName);
-      const downloaded = target.exists
-        ? target
-        : await File.downloadFileAsync(decodedLink, target);
-
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(downloaded.uri, {
-          mimeType:
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          dialogTitle: "Mở tài liệu bằng",
-          UTI: "org.openxmlformats.wordprocessingml.document",
-        });
-      } else {
-        await Linking.openURL(decodedLink);
-      }
+      // Use the raw file URL, never the Office HTML page; do not reuse stale cache.
+      const safeName = getDocumentFileName(name || "", lowerType);
+      const target = new File(Paths.cache, `${Date.now()}_${safeName}`);
+      const downloaded = await File.downloadFileAsync(decodedLink, target);
+      if (!downloaded.size) throw new Error("File tải về rỗng.");
+      await Sharing.shareAsync(downloaded.uri, {
+        mimeType: OFFICE_MIME[lowerType],
+        dialogTitle: "Lưu vào Tệp hoặc mở bằng ứng dụng",
+        UTI: OFFICE_UTI[lowerType],
+      });
     } catch (e) {
-      console.log("Download/open error:", e);
-      Alert.alert(
-        "Lỗi",
-        "Không tải/mở được tài liệu. Thử mở bằng trình duyệt."
-      );
+      const detail = e instanceof Error ? e.message : String(e);
+      setError(`Không tải/mở được tài liệu: ${detail}. Bạn có thể thử mở link file gốc.`);
     } finally {
+      downloadLock.current = false;
       setDownloading(false);
     }
   };
@@ -162,6 +134,18 @@ export default function DocumentViewer() {
   /* =========================
       FILE OFFICE
   ========================= */
+  if (!decodedLink) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ title: name || "Xem tài liệu", headerBackTitle: "Quay lại" }} />
+        <View style={styles.center}>
+          <Text style={styles.hintTitle}>Đường dẫn tài liệu không hợp lệ</Text>
+          <Text style={styles.hintText}>Quay lại danh sách và thử tải lại tài liệu.</Text>
+        </View>
+      </View>
+    );
+  }
+
   if (isOffice) {
     return (
       <View style={styles.container}>
@@ -170,17 +154,19 @@ export default function DocumentViewer() {
         />
 
         <View style={styles.center}>
-          <Text style={styles.hintTitle}>Đang mở tài liệu…</Text>
+          <Text style={styles.hintTitle}>{name || "Tài liệu Office"}</Text>
           <Text style={styles.hintText}>
-            Tài liệu Word/Excel được mở bằng trình duyệt (giống trên web). Nếu
-            không tự mở, bấm nút bên dưới.
+            Mở file gốc không qua Microsoft Office Online. Trình duyệt có thể
+            xem trước hoặc tải xuống tùy thiết bị. Bạn cũng có thể lưu vào Tệp
+            (Files) hoặc mở bằng Word/Pages/Excel đã cài đặt.
           </Text>
+          {!!error && <Text accessibilityRole="alert" style={[styles.hintText, { color: "#B91C1C", marginTop: 12 }]}>{error}</Text>}
 
           <TouchableOpacity
             style={[styles.primaryBtn, { marginTop: 20 }]}
             onPress={openInBrowser}
           >
-            <Text style={styles.primaryBtnText}>Mở bằng trình duyệt</Text>
+            <Text style={styles.primaryBtnText}>Mở link file gốc</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -192,10 +178,22 @@ export default function DocumentViewer() {
               <ActivityIndicator size="small" color="#E86F25" />
             ) : (
               <Text style={styles.secondaryBtnText}>
-                Tải về & mở bằng ứng dụng khác
+                {Platform.OS === "web" ? "Tải file gốc bằng trình duyệt" : "Tải về / Lưu vào Tệp / Mở bằng…"}
               </Text>
             )}
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.secondaryBtn, { marginTop: 12 }]}
+            onPress={() => void openUrl(getOfficeViewerUrl(decodedLink))}
+          >
+            <Text style={styles.secondaryBtnText}>Thử xem bằng Office Online</Text>
+          </TouchableOpacity>
+          <Text style={[styles.hintText, { marginTop: 16 }]}>
+            Office Online là dịch vụ Microsoft và cần truy cập được file qua
+            Internet. Nếu trắng trang, quay lại và mở file gốc. Simulator có thể
+            không có ứng dụng Word/Pages hay đầy đủ tùy chọn lưu file như máy thật.
+          </Text>
         </View>
       </View>
     );

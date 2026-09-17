@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -31,42 +31,52 @@ import {
 } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import Colors from "@/constants/colors";
-import { bookings } from "@/mocks/bookings";
-import { ProductService } from "@/sevicesSupabase/ProductService";
-import { BookingService } from "@/sevices/BookingService";
+import { BookingService } from "@/sevicesSupabase/BookingService";
 import { CartService } from "@/sevices/CartServices";
 
 export default function BookingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  const mockBooking = bookings?.[0];
-
   const [data, setData] = useState<any>(null);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [isUploading] = useState<boolean>(false);
-  const [loading, setLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const requestVersion = useRef(0);
 
   const [showImagesModal, setShowImagesModal] = useState(false);
   const [images, setImages] = useState<any[]>([]);
   const [loadingImages, setLoadingImages] = useState(false);
+  const [imagesError, setImagesError] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const fadeAnim = useState(new Animated.Value(0))[0];
 
   const loadData = useCallback(async () => {
+    const version = ++requestVersion.current;
     setLoading(true);
+    setLoadError(null);
+    setData(null);
     try {
-      const res = await ProductService.getGiuCho({ MaPGC: id });
-      setData(res?.data ?? null);
+      const res = await BookingService.getBookingEditDetail(String(id ?? ""));
+      if (version === requestVersion.current) setData(res?.data ?? null);
     } catch (error) {
-      console.log("load booking error", error);
+      if (version === requestVersion.current) {
+        setLoadError(error instanceof Error && error.message.includes("đăng nhập")
+          ? error.message
+          : "Không tải được chi tiết booking. Vui lòng thử lại.");
+      }
+    } finally {
+      if (version === requestVersion.current) setLoading(false);
     }
-    setLoading(false);
   }, [id]);
 
   useEffect(() => {
+    setImages([]);
+    setUploadedImage(null);
     void loadData();
+    return () => { requestVersion.current += 1; };
   }, [loadData]);
 
   useEffect(() => {
@@ -82,34 +92,65 @@ export default function BookingDetailScreen() {
   const loadImages = async () => {
     try {
       setLoadingImages(true);
+      setImagesError(null);
+      setImages([]);
       const res = await BookingService.getListImageGC({
-        maPGC: booking.id,
+        // Giống web: UUID vòng đời, fallback UUID booking nếu chưa liên kết.
+        MaPGC: data?.maPGC || data?.id,
       });
       setImages(res?.data ?? []);
     } catch (error) {
       console.log("load images error", error);
+      setImagesError("Không tải được hình ảnh giao dịch. Vui lòng thử lại.");
     } finally {
       setLoadingImages(false);
     }
   };
 
-  const booking = {
-    id: data?.MaPGC ?? mockBooking?.id ?? null,
-    amountValue: data?.TongGiaTriHD ?? mockBooking?.amountValue ?? 0,
-    amount: data?.TongGiaTriHD
-      ? new Intl.NumberFormat("vi-VN").format(data.TongGiaTriHD)
-      : mockBooking?.amount ?? null,
-    productCode: data?.MaSanPham ?? mockBooking?.productCode ?? null,
-    customerName: data?.HoTenKH ?? mockBooking?.customerName ?? null,
-    customerPhone: data?.DienThoai ?? mockBooking?.customerPhone ?? null,
-    projectName: data?.TenDuan ?? mockBooking?.projectName ?? null,
-    bookingDate: data?.NgayGD ?? mockBooking?.bookingDate ?? null,
-    expiryDate: mockBooking?.expiryDate ?? null,
-    status: data?.MaTT,
-    MaTT: data?.MaTT,
+  const fmtVND = (v: any) =>
+    v != null && v !== "" && Number.isFinite(Number(v))
+      ? new Intl.NumberFormat("vi-VN").format(Number(v))
+      : null;
+
+  const money = (value: any) => {
+    const formatted = fmtVND(value);
+    return formatted == null ? null : `${formatted} VNĐ`;
+  };
+  const dateTime = (value: any) => {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toLocaleString("vi-VN");
   };
 
-  const statusConfig: Record<number, { text: string; color: string; bg: string; icon: string }> = {
+  const booking = {
+    id: data?.id ?? null,
+    soPhieu: data?.soPhieu ?? null,
+    amountValue: data?.tongGia ?? 0,
+    amount: fmtVND(data?.tongGia),
+    tienGiuCho: fmtVND(data?.tienGiuCho),
+    productCode:
+      data?.product?.ky_hieu ?? data?.product?.ma_sp ?? null,
+    customerName: data?.customer?.tenKH ?? null,
+    customerPhone: data?.customer?.dienThoai ?? null,
+    customerCccd: data?.customer?.cccd ?? null,
+    customerEmail: data?.customer?.email ?? null,
+    sanName: data?.san?.tenCongTy ?? null,
+    projectName: data?.project?.ten_da ?? null,
+    bookingDate: data?.ngayGiuCho ?? data?.ngayNhap ?? null,
+    expiryDate: data?.hetHanLuc ?? null,
+    priceListName: data?.priceList?.name ?? null,
+    policyName: data?.policy?.ten_cs ?? null,
+    paymentScheduleName: data?.paymentSchedule?.name ?? null,
+    nhanVien: data?.nhanVien ?? null,
+    status: data?.state,
+    MaTT: data?.maTT ?? data?.state,
+  };
+
+  const statusConfig: Record<string, { text: string; color: string; bg: string; icon: string }> = {
+    PENDING: { text: "Chờ duyệt", color: "#B45309", bg: "#FEF3C7", icon: "⏳" },
+    APPROVED: { text: "Đã duyệt", color: "#047857", bg: "#D1FAE5", icon: "✅" },
+    CANCELLED: { text: "Hủy booking", color: "#991B1B", bg: "#FEE2E2", icon: "❌" },
+    EXPIRED: { text: "Hết hạn", color: "#991B1B", bg: "#FEE2E2", icon: "⏳" },
     1: { text: "Chờ duyệt", color: "#B45309", bg: "#FEF3C7", icon: "⏳" },
     6: { text: "Đã duyệt", color: "#047857", bg: "#D1FAE5", icon: "✅" },
     8: { text: "Đặt cọc chờ duyệt", color: "#92400E", bg: "#FEF3C7", icon: "⏳" },
@@ -143,7 +184,6 @@ export default function BookingDetailScreen() {
     });
     if (!result.canceled) {
       const uri = result.assets[0].uri;
-      setUploadedImage(uri);
       void handleUploadComplete(uri);
     }
   };
@@ -153,6 +193,8 @@ export default function BookingDetailScreen() {
       Alert.alert("Lỗi", "Vui lòng chọn ảnh chuyển khoản");
       return;
     }
+    if (isUploading) return;
+    setIsUploading(true);
     try {
       const formData = new FormData();
       formData.append("Image", {
@@ -167,44 +209,67 @@ export default function BookingDetailScreen() {
           imgs.push({ Image: link });
         });
         const _resBk = await BookingService.addImageBooking({
-          MaPGC: booking.id,
+          MaPGC: data?.maPGC ?? data?.soPhieu,
           RequestIMG: imgs,
         });
         if (_resBk?.status === 2000) {
-          setLoading(false);
+          setUploadedImage(imageUri);
           Alert.alert(
             "Thành công",
             "Ảnh chuyển khoản đã được gửi. Chúng tôi sẽ xác nhận thanh toán trong 15-30 phút.",
             [{ text: "OK", onPress: () => router.push("/bookings") }]
           );
         } else {
-          setLoading(false);
           Alert.alert("Lỗi", "Lỗi thêm ảnh vào booking!");
         }
       } else {
-        setLoading(false);
         Alert.alert("Lỗi", "Lỗi tải ảnh chuyển khoản");
       }
     } catch (error) {
-      setLoading(false);
       console.log("Upload error:", error);
       Alert.alert("Lỗi", "Upload ảnh thất bại");
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  if (!booking) {
+  if (!loading && !data) {
     return (
       <View style={styles.container}>
         <Stack.Screen options={{ title: "Chi tiết Booking" }} />
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Không tìm thấy booking</Text>
+          <Text style={styles.errorText}>{loadError ?? "Không tìm thấy booking"}</Text>
+          <TouchableOpacity onPress={() => void loadData()} style={styles.closeButton} accessibilityLabel="Thử tải lại">
+            <Text style={styles.infoRowLabel}>↻</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
   }
 
-  const currentStatus = statusConfig[booking?.MaTT as number];
-  const isActiveBooking = booking?.MaTT !== 6 && booking?.MaTT !== 16;
+  const currentStatus = statusConfig[String(booking.MaTT)] ??
+    statusConfig[String(data?.state)] ??
+    { text: "Chưa xác định", color: "#374151", bg: "#F3F4F6", icon: "•" };
+  const isActiveBooking =
+    (data?.state === "PENDING" || String(booking.MaTT) === "1") &&
+    !["APPROVED", "CANCELLED", "EXPIRED"].includes(data?.state) &&
+    (!data?.giaiDoan || data.giaiDoan === "GIUCHO");
+
+  const priceRows: { key: string; label: string; unit?: string }[] = [
+    { key: "area", label: "Diện tích thông thủy", unit: "m²" },
+    { key: "unit_price_vat", label: "Đơn giá gồm VAT" },
+    { key: "total_before_vat", label: "Tổng giá chưa VAT" },
+    { key: "vat_amount", label: "Tiền VAT" },
+    { key: "maintenance_amount", label: "Phí bảo trì" },
+    { key: "total_payment", label: "Tổng giá gồm PBT" },
+  ];
+  const lowRiseRows = [
+    { key: "land_unit_price", label: "Đơn giá đất" },
+    { key: "land_total", label: "Tổng giá đất" },
+    { key: "area_xd", label: "Diện tích xây dựng", unit: "m²" },
+    { key: "construction_unit_price", label: "Đơn giá xây dựng" },
+    { key: "total_after_vat", label: "Tổng giá sau VAT" },
+  ].filter((row) => data?.price?.[row.key] != null);
 
   const InfoRow = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | null | undefined }) => (
     <View style={styles.infoRow}>
@@ -212,7 +277,7 @@ export default function BookingDetailScreen() {
         <View style={styles.infoIconCircle}>{icon}</View>
         <Text style={styles.infoRowLabel}>{label}</Text>
       </View>
-      <Text style={styles.infoRowValue} numberOfLines={2}>{value || "—"}</Text>
+      <Text style={styles.infoRowValue}>{value || "—"}</Text>
     </View>
   );
 
@@ -241,13 +306,13 @@ export default function BookingDetailScreen() {
             <View style={styles.topSection}>
               <View style={styles.idRow}>
                 <Hash size={16} color={Colors.textSecondary} />
-                <Text style={styles.bookingIdText}>{booking.id}</Text>
+                <Text style={styles.bookingIdText}>{booking.soPhieu ?? "—"}</Text>
               </View>
               {currentStatus && (
                 <View style={[styles.statusChip, { backgroundColor: currentStatus.bg }]}>
                   <Text style={styles.statusIcon}>{currentStatus.icon}</Text>
                   <Text style={[styles.statusLabel, { color: currentStatus.color }]}>
-                    {currentStatus.text}
+                    {data?.tenTT || currentStatus.text}
                   </Text>
                 </View>
               )}
@@ -258,7 +323,7 @@ export default function BookingDetailScreen() {
                 <Banknote size={20} color="#fff" />
                 <Text style={styles.amountTitle}>Giá trị hợp đồng</Text>
               </View>
-              <Text style={styles.amountValue}>{booking.amount} <Text style={styles.amountCurrency}>VNĐ</Text></Text>
+              <Text style={styles.amountValue}>{booking.amount ?? "—"} <Text style={styles.amountCurrency}>VNĐ</Text></Text>
             </View>
 
             <View style={styles.detailCard}>
@@ -288,32 +353,107 @@ export default function BookingDetailScreen() {
               />
               <View style={styles.separator} />
               <InfoRow
+                icon={<User size={16} color={Colors.accent.blue} />}
+                label="CCCD"
+                value={booking.customerCccd}
+              />
+              <View style={styles.separator} />
+              <InfoRow icon={<User size={16} color={Colors.primary} />} label="Mã khách hàng" value={data?.customer?.maSoKH} />
+              <InfoRow icon={<User size={16} color={Colors.primary} />} label="Email" value={booking.customerEmail} />
+              <InfoRow icon={<Building2 size={16} color={Colors.primary} />} label="Địa chỉ" value={data?.customer?.diaChi} />
+              <View style={styles.separator} />
+              <InfoRow
+                icon={<Banknote size={16} color={Colors.accent.green} />}
+                label="Tiền giữ chỗ"
+                value={booking.tienGiuCho ? `${booking.tienGiuCho} VNĐ` : null}
+              />
+              <View style={styles.separator} />
+              <InfoRow
+                icon={<Building2 size={16} color={Colors.accent.purple} />}
+                label="Sàn giao dịch"
+                value={booking.sanName}
+              />
+              <View style={styles.separator} />
+              <InfoRow
+                icon={<User size={16} color={Colors.accent.blue} />}
+                label="Nhân viên"
+                value={booking.nhanVien}
+              />
+              <InfoRow icon={<Clock size={16} color={Colors.primary} />} label="Thời gian giữ chỗ" value={data?.thoiGianBooking != null ? `${fmtVND(data.thoiGianBooking)} phút` : null} />
+              <InfoRow icon={<CheckCircle size={16} color={Colors.primary} />} label="Booking ưu tiên" value={data?.uuTien == null ? null : data.uuTien ? "Có" : "Không"} />
+              <InfoRow icon={<Banknote size={16} color={Colors.primary} />} label="Đã thu" value={money(data?.daThu)} />
+              <View style={styles.separator} />
+              <InfoRow
+                icon={<Package size={16} color={Colors.primary} />}
+                label="Bảng giá"
+                value={booking.priceListName}
+              />
+              <View style={styles.separator} />
+              <InfoRow
+                icon={<Package size={16} color={Colors.primary} />}
+                label="Chính sách bán hàng"
+                value={booking.policyName}
+              />
+              <View style={styles.separator} />
+              <InfoRow icon={<Package size={16} color={Colors.primary} />} label="Cấu hình tính giá" value={data?.pricingConfig?.name ?? data?.pricingConfig?.ten_cau_hinh ?? data?.pricingConfig?.ten_cs ?? data?.maCSTong} />
+              <View style={styles.separator} />
+              <InfoRow
+                icon={<Package size={16} color={Colors.primary} />}
+                label="Tiến độ thanh toán"
+                value={booking.paymentScheduleName}
+              />
+              <View style={styles.separator} />
+              <InfoRow
                 icon={<Clock size={16} color={Colors.accent.cyan} />}
                 label="Ngày booking"
-                value={
-                  booking.bookingDate
-                    ? new Date(booking.bookingDate).toLocaleDateString("vi-VN")
-                    : null
-                }
+                value={dateTime(booking.bookingDate)}
               />
               <View style={styles.separator} />
               <InfoRow
                 icon={<Calendar size={16} color={Colors.accent.orange} />}
-                label="Ngày hết hạn"
-                value={
-                  booking.expiryDate
-                    ? new Date(booking.expiryDate).toLocaleDateString("vi-VN")
-                    : null
-                }
+                label="Hết hạn lúc"
+                value={dateTime(booking.expiryDate)}
               />
+            </View>
+
+            <View style={styles.detailCard}>
+              <Text style={styles.sectionTitle}>Thông tin giá sản phẩm theo bảng giá</Text>
+              {data?.priceSource === "bds_products" && (
+                <Text style={styles.emptySub}>Chưa có dòng giá theo bảng giá đã chọn. Hiển thị giá từ sản phẩm.</Text>
+              )}
+              {[...priceRows, ...lowRiseRows].map((row) => (
+                <InfoRow
+                  key={row.key}
+                  icon={<Banknote size={16} color={Colors.primary} />}
+                  label={row.label}
+                  value={row.unit
+                    ? (fmtVND(data?.price?.[row.key]) != null ? `${fmtVND(data.price[row.key])} ${row.unit}` : null)
+                    : money(data?.price?.[row.key])}
+                />
+              ))}
+            </View>
+
+            <View style={styles.detailCard}>
+              <Text style={styles.sectionTitle}>Quà tặng / Khuyến mãi</Text>
+              {!data?.promotions?.length ? (
+                <Text style={styles.emptySub}>Chưa có quà tặng được chọn</Text>
+              ) : data.promotions.map((promotion: any, index: number) => (
+                <View key={`${promotion.id ?? "gift"}-${index}`}>
+                  {index > 0 && <View style={styles.separator} />}
+                  <InfoRow icon={<Package size={16} color={Colors.primary} />} label="Khuyến mãi" value={promotion.tenKhuyenMai} />
+                  <InfoRow icon={<Package size={16} color={Colors.primary} />} label="Quà tặng" value={promotion.tenQuaTang} />
+                  <InfoRow icon={<Hash size={16} color={Colors.primary} />} label="Số lượng" value={fmtVND(promotion.soLuong)} />
+                  <InfoRow icon={<Banknote size={16} color={Colors.primary} />} label="Giá trị" value={money(promotion.giaTri)} />
+                </View>
+              ))}
             </View>
 
             <TouchableOpacity
               style={styles.imageButton}
               activeOpacity={0.7}
               onPress={async () => {
-                await loadImages();
                 setShowImagesModal(true);
+                await loadImages();
               }}
             >
               <View style={styles.imageButtonLeft}>
@@ -336,7 +476,7 @@ export default function BookingDetailScreen() {
                   onPress={handlePickImage}
                   disabled={isUploading}
                 >
-                  {loading ? (
+                  {isUploading ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
                     <Upload size={18} color="#fff" />
@@ -357,7 +497,7 @@ export default function BookingDetailScreen() {
                           onPress: () => {
                             router.push({
                               pathname: "/booking/qr-payment",
-                              params: { bookingId: booking.id },
+                              params: { bookingId: booking.soPhieu ?? booking.id },
                             });
                           },
                         },
@@ -415,6 +555,14 @@ export default function BookingDetailScreen() {
             <View style={styles.modalCentered}>
               <ActivityIndicator size="large" color={Colors.primary} />
             </View>
+          ) : imagesError ? (
+            <View style={styles.modalCentered}>
+              <Text style={styles.emptyTitle}>Lỗi tải hình ảnh</Text>
+              <Text style={styles.emptySub}>{imagesError}</Text>
+              <TouchableOpacity onPress={() => void loadImages()} style={styles.imageButton}>
+                <Text style={styles.imageButtonTitle}>Thử lại</Text>
+              </TouchableOpacity>
+            </View>
           ) : images.length === 0 ? (
             <View style={styles.modalCentered}>
               <View style={styles.emptyImageIcon}>
@@ -428,10 +576,11 @@ export default function BookingDetailScreen() {
               contentContainerStyle={styles.imagesGrid}
             >
               {images.map((img: any, index: number) => {
-                const uri = img.uri || img.Image || img.HinhAnh;
+                const uri = img.uri;
                 return (
                   <TouchableOpacity
-                    key={index}
+                    key={img.id ?? String(index)}
+                    accessibilityLabel={img.name ?? "Xem ảnh booking"}
                     onPress={() => {
                       setShowImagesModal(false);
                       setPreviewImage(uri);
@@ -494,6 +643,8 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   topSection: {
+    flexWrap: "wrap",
+    gap: 8,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -607,6 +758,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   infoRowLabel: {
+    flexShrink: 1,
     fontSize: 13,
     color: Colors.textSecondary,
     fontWeight: "500" as const,

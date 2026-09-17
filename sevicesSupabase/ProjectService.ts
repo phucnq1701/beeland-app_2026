@@ -1,9 +1,42 @@
 import axiosApiSupabase from "./axiosApiSupabase";
 import { getCompanyId, getValidSupabaseJwt } from "./cloudTenant";
 
-// Chuẩn hoá 1 dự án da_projects -> field UI cũ đang dùng ở Home
-function normalizeProject(raw: any) {
-  const imageUrl = (raw?.image_url || "").trim();
+// Máy chủ file upload của web (POST multipart Image, TenCTDK, Project=beeland_admin_web).
+// cloud_catalogs.raw lưu đường dẫn TƯƠNG ĐỐI (vd "upload/beeland_admin_web/brg/anhDuAn_xxx.jpg")
+// → ghép tiền tố https://upload.beesky.vn/ để có URL đầy đủ.
+const FILE_SERVER = "https://upload.beesky.vn/";
+
+/** Chuẩn hoá URL ảnh: tuyệt đối hoá đường dẫn tương đối với máy chủ file */
+function absUrl(u?: string | null): string {
+  const s = String(u || "").trim();
+  if (!s) return "";
+  if (/^https?:\/\//i.test(s)) return s;
+  return FILE_SERVER + s.replace(/^\/+/, "");
+}
+
+/** raw.anh_* của 1 dòng cloud_catalogs (catalog_type = 'du_an_anh') */
+type DuAnAnhRaw = {
+  anh_icon?: string;
+  anh_so_do?: string;
+  anh_background?: string;
+  anh_so_do_3d?: string;
+};
+
+/**
+ * Chuẩn hoá 1 dự án da_projects → field UI cũ đang dùng ở Home.
+ * Ảnh hiển thị (icon) lấy theo WEB: Ảnh background → Ảnh icon → image_url.
+ * (image_url của da_projects KHÔNG phải "Ảnh background" trên web)
+ */
+function normalizeProject(raw: any, anh?: DuAnAnhRaw | null) {
+  const imageUrl = absUrl(raw?.image_url);
+  // 4 ảnh đúng của web (cloud_catalogs.raw)
+  const anhBackground = absUrl(anh?.anh_background);
+  const anhIcon = absUrl(anh?.anh_icon);
+  const anhSoDo = absUrl(anh?.anh_so_do);
+  const anhSoDo3d = absUrl(anh?.anh_so_do_3d);
+  // Ảnh đại diện hiển thị: web dùng "Ảnh background" làm banner/nền dự án
+  const displayImage = anhBackground || anhIcon || imageUrl;
+
   const statusText = (raw?.ten_tt || "").trim();
   const maTT = raw?.ma_tt != null ? String(raw.ma_tt) : "";
   return {
@@ -13,8 +46,17 @@ function normalizeProject(raw: any) {
     ma_da_code: raw?.ma_da_code,
     TenDA: raw?.ten_da || raw?.ten_viet_tat || "Dự án",
     ten_da: raw?.ten_da,
-    icon: imageUrl || "",
+    // Ảnh chính cho UI (Home banner, danh sách, chi tiết dự án)
+    icon: displayImage,
+    background: displayImage,
+    // 4 ảnh chuẩn theo web
+    anh_background: anhBackground,
+    anh_icon: anhIcon,
+    anh_so_do: anhSoDo,
+    anh_so_do_3d: anhSoDo3d,
+    // Giữ image_url gốc để tham chiếu (không dùng làm banner)
     image_url: imageUrl,
+    mapImage: anhSoDo || displayImage,
     district: raw?.dia_chi || "",
     dia_chi: raw?.dia_chi || "",
     MaTT: maTT,
@@ -28,16 +70,62 @@ function normalizeProject(raw: any) {
   };
 }
 
-function normalizeProjectImages(raw: any) {
+/** row cloud_catalogs → ảnh dự án (shape getProjectImages cũ) */
+function normalizeProjectImages(catalog: any) {
+  const raw: DuAnAnhRaw = catalog?.raw || {};
+  const background = absUrl(raw.anh_background);
+  const icon = absUrl(raw.anh_icon);
+  const soDo = absUrl(raw.anh_so_do);
+  const display = background || icon;
   return {
-    icon: raw?.anh_icon || "",
-    mapImage: raw?.anh_so_do || "",
-    background: raw?.anh_background || "",
+    icon: display,
+    mapImage: soDo || display,
+    background: display || "",
   };
 }
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Lấy ảnh (du_an_anh) của NHIỀU dự án trong 1 query.
+ * Web lưu ảnh vào cloud_catalogs: catalog_type='du_an_anh',
+ * item_code = ma_da_code (mã số dự án), raw = { anh_icon, anh_so_do, anh_background, anh_so_do_3d }
+ * → trả Map: ma_da_code (string) → DuAnAnhRaw
+ */
+async function fetchDuAnAnhMap(
+  maDaCodes: Array<string | number>
+): Promise<Record<string, DuAnAnhRaw>> {
+  const map: Record<string, DuAnAnhRaw> = {};
+  const codes = Array.from(
+    new Set(maDaCodes.filter((c) => c != null && String(c).trim() !== "").map(String))
+  );
+  if (codes.length === 0) return map;
+
+  try {
+    const companyId = await getCompanyId();
+    const params: Record<string, string> = {
+      select: "item_code,raw",
+      catalog_type: "eq.du_an_anh",
+      item_code: `in.(${codes.join(",")})`,
+    };
+    // cloud_catalogs dùng cột ma_ctdk_uid (uuid) — KHÔNG phải ma_ctdk
+    if (companyId && UUID_RE.test(companyId)) {
+      params.ma_ctdk_uid = `eq.${companyId}`;
+    }
+
+    const res = await axiosApiSupabase.get("rest/v1/cloud_catalogs", { params });
+    const rows = Array.isArray(res.data) ? res.data : [];
+    rows.forEach((r: any) => {
+      if (r?.item_code != null) {
+        map[String(r.item_code)] = r?.raw || {};
+      }
+    });
+  } catch (error) {
+    console.log("ERROR fetchDuAnAnhMap (cloud_catalogs du_an_anh):", error);
+  }
+  return map;
+}
 
 export const ProjectService = {
   getProjects: async (payload: any = {}) => {
@@ -74,7 +162,13 @@ export const ProjectService = {
       });
 
       const rows = Array.isArray(res.data) ? res.data : [];
-      const data = rows.map(normalizeProject);
+
+      // Ảnh dự án đúng nằm ở cloud_catalogs (catalog_type=du_an_anh) —
+      // batch 1 query theo toàn bộ ma_da_code rồi ghép vào từng dự án
+      const anhMap = await fetchDuAnAnhMap(rows.map((r: any) => r?.ma_da_code));
+      const data = rows.map((r: any) =>
+        normalizeProject(r, r?.ma_da_code != null ? anhMap[String(r.ma_da_code)] : null)
+      );
 
       return { data };
     } catch (error) {
@@ -83,8 +177,32 @@ export const ProjectService = {
     }
   },
 
-  // Lấy ảnh dự án theo MaDA — giữ API cũ, hiện da_projects đã có image_url nên trả null để UI fallback
-  getProjectImages: async (_maDA: string | number) => {
-    return { data: null as null | ReturnType<typeof normalizeProjectImages> };
+  // Ảnh dự án theo MaDA (ma_da_code) — đọc cloud_catalogs catalog_type='du_an_anh'
+  getProjectImages: async (maDA: string | number) => {
+    const validJwt = await getValidSupabaseJwt();
+    if (!validJwt || maDA == null || maDA === "") {
+      return { data: null as null | ReturnType<typeof normalizeProjectImages> };
+    }
+    try {
+      const companyId = await getCompanyId();
+      const params: Record<string, string> = {
+        select: "item_code,raw",
+        catalog_type: "eq.du_an_anh",
+        item_code: `eq.${maDA}`,
+        limit: "1",
+      };
+      // cloud_catalogs dùng cột ma_ctdk_uid (uuid) — KHÔNG phải ma_ctdk
+      if (companyId && UUID_RE.test(companyId)) {
+        params.ma_ctdk_uid = `eq.${companyId}`;
+      }
+      const res = await axiosApiSupabase.get("rest/v1/cloud_catalogs", { params });
+      const rows = Array.isArray(res.data) ? res.data : [];
+      return {
+        data: rows.length > 0 ? normalizeProjectImages(rows[0]) : null,
+      };
+    } catch (error) {
+      console.log("ERROR getProjectImages (cloud_catalogs):", error);
+      return { data: null as null | ReturnType<typeof normalizeProjectImages> };
+    }
   },
 };

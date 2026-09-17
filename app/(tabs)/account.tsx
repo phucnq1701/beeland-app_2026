@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   View,
   Text,
@@ -8,9 +9,11 @@ import {
   Platform,
   Dimensions,
   Alert,
+  ActivityIndicator,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
   User,
   Settings,
@@ -28,7 +31,12 @@ import {
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
-import { UserService } from "@/sevices/UserService";
+import { CloudProfileService, CloudProfile } from "@/sevicesSupabase/CloudProfileService";
+import {
+  deleteCurrentEmployee,
+  clearDeletedEmployeeSession,
+  DeletedEmployeeSession,
+} from "@/sevicesSupabase/AccountDeletionService";
 
 const { width } = Dimensions.get("window");
 
@@ -111,9 +119,23 @@ export default function AccountScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [showAllManagement, setShowAllManagement] = React.useState(false);
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<CloudProfile | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  const queryClient = useQueryClient();
+  const [deleting, setDeleting] = useState(false);
+  const [employeeDeleted, setEmployeeDeleted] = useState(false);
+  const deleteBusy = useRef(false);
+  const confirmationOpen = useRef(false);
+  const deletedSession = useRef<DeletedEmployeeSession | null>(null);
 
   const handleLogout = () => {
+    if (deleteBusy.current) return;
+    if (deletedSession.current) {
+      void performDeleteAccount();
+      return;
+    }
     router.push("/login");
   };
 
@@ -121,37 +143,73 @@ export default function AccountScreen() {
     router.push(route as never);
   };
 
-  const loadData = async () => {
-    const res = await UserService.userInfo();
-    setData(res?.data ?? null);
-  };
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    setData(null);
+    setLoadingProfile(true);
+    setProfileError(null);
+    void CloudProfileService.userInfo().then((res) => {
+      if (active && !deleteBusy.current && !deletedSession.current) setData(res.data);
+    }).catch((error: unknown) => {
+      if (active) setProfileError(error instanceof Error ? error.message : "Không tải được hồ sơ.");
+    }).finally(() => {
+      if (active) setLoadingProfile(false);
+    });
+    return () => { active = false; };
+  }, [retry]));
 
-  const handleDeleteAccount = () => {
-    if (Platform.OS === "web") {
-      if (window.confirm("Bạn có chắc chắn muốn xóa tài khoản? Hành động này không thể hoàn tác.")) {
-        router.push("/login");
+  const performDeleteAccount = async () => {
+    if (deleteBusy.current) return;
+    deleteBusy.current = true;
+    setDeleting(true);
+    try {
+      // Khi đã xóa nhưng dọn phiên lỗi, chỉ thử dọn phiên lại, không DELETE lần hai.
+      if (!deletedSession.current) {
+        deletedSession.current = await deleteCurrentEmployee();
+        setEmployeeDeleted(true);
+        setData(null);
       }
-    } else {
-      Alert.alert(
-        "Xóa tài khoản",
-        "Bạn có chắc chắn muốn xóa tài khoản? Hành động này không thể hoàn tác.",
-        [
-          { text: "Hủy", style: "cancel" },
-          {
-            text: "Xóa",
-            style: "destructive",
-            onPress: () => {
-              router.push("/login");
-            },
-          },
-        ]
-      );
+      await clearDeletedEmployeeSession(deletedSession.current);
+      queryClient.clear();
+      if (router.canDismiss()) router.dismissAll();
+      router.replace("/login");
+    } catch (error: unknown) {
+      const title = deletedSession.current ? "Chưa đăng xuất được" : "Không thể xóa";
+      const message = error instanceof Error ? error.message : "Có lỗi xảy ra. Vui lòng thử lại.";
+      if (Platform.OS === "web") window.alert(`${title}\n${message}`);
+      else Alert.alert(title, message);
+    } finally {
+      deleteBusy.current = false;
+      setDeleting(false);
     }
   };
 
-  useEffect(() => {
-    void loadData();
-  }, []);
+  const handleDeleteAccount = () => {
+    if (deleteBusy.current || confirmationOpen.current) return;
+    if (deletedSession.current) {
+      void performDeleteAccount();
+      return;
+    }
+    const message = "Bạn có chắc chắn muốn xóa hồ sơ nhân viên của mình như trên web và đăng xuất khỏi app? Không thể hoàn tác việc xóa hồ sơ. Tài khoản đăng nhập trên hệ thống không bị vô hiệu hóa.";
+    confirmationOpen.current = true;
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(message);
+      confirmationOpen.current = false;
+      if (confirmed) void performDeleteAccount();
+    } else {
+      Alert.alert("Xóa tài khoản", message, [
+        { text: "Hủy", style: "cancel", onPress: () => { confirmationOpen.current = false; } },
+        {
+          text: "Xóa",
+          style: "destructive",
+          onPress: () => {
+            confirmationOpen.current = false;
+            void performDeleteAccount();
+          },
+        },
+      ], { cancelable: true, onDismiss: () => { confirmationOpen.current = false; } });
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -203,8 +261,24 @@ export default function AccountScreen() {
               </LinearGradient>
               <View style={styles.statusDot} />
             </View>
-            <Text style={styles.profileName}>{data?.HoTen}</Text>
-            <Text style={styles.profileEmail}>{data?.Email}</Text>
+            {loadingProfile ? (
+              <ActivityIndicator color={Colors.primary} accessibilityLabel="Đang tải hồ sơ" />
+            ) : profileError ? (
+              <>
+                <Text style={styles.profileEmail}>{profileError}</Text>
+                <TouchableOpacity onPress={() => setRetry((value) => value + 1)}>
+                  <Text style={styles.seeAllText}>Thử lại</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => router.push("/login")}>
+                  <Text style={styles.seeAllText}>Đăng nhập lại</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.profileName}>{data?.HoTen || "Chưa cập nhật họ tên"}</Text>
+                <Text style={styles.profileEmail}>{data?.Email || "Chưa cập nhật email"}</Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -274,6 +348,7 @@ export default function AccountScreen() {
                   index === menuItems.length - 1 && styles.menuItemLast,
                 ]}
                 activeOpacity={0.8}
+                disabled={deleting || (employeeDeleted && item.id !== "3")}
                 onPress={() => {
                   if (item.id === "1") {
                     router.push("/profile");
@@ -291,7 +366,9 @@ export default function AccountScreen() {
                   >
                     <item.icon color={item.color} size={22} />
                   </View>
-                  <Text style={styles.menuItemText}>{item.title}</Text>
+                  <Text style={styles.menuItemText}>
+                    {item.id === "3" && employeeDeleted ? "Thử đăng xuất lại" : item.title}
+                  </Text>
                 </View>
                 <ChevronRight color={Colors.textTertiary} size={20} />
               </TouchableOpacity>
@@ -302,6 +379,7 @@ export default function AccountScreen() {
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
+          disabled={deleting}
           activeOpacity={0.9}
         >
           <LinearGradient
@@ -314,11 +392,34 @@ export default function AccountScreen() {
           <Text style={styles.logoutText}>Đăng xuất</Text>
         </TouchableOpacity>
       </ScrollView>
+      <Modal visible={deleting} transparent animationType="fade" onRequestClose={() => {}}>
+        <View style={styles.deletingOverlay}>
+          <View style={styles.deletingCard}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.menuItemText}>
+              {employeeDeleted ? "Đang đăng xuất..." : "Đang xóa hồ sơ nhân viên..."}
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  deletingOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deletingCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 18,
+    padding: 28,
+    gap: 16,
+    alignItems: "center",
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.background,

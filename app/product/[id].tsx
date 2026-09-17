@@ -275,7 +275,7 @@ export default function ProductDetailScreen() {
               pointerEvents="none"
             />
 
-            <View style={[styles.heroActions, { top: insets.top - 50 }]}>
+            {/* <View style={[styles.heroActions, { top: insets.top - 50 }]}>
               <TouchableOpacity
                 testID="action-favorite"
                 style={[styles.heroIconBtn]}
@@ -315,7 +315,7 @@ export default function ProductDetailScreen() {
               >
                 <Share2 color={Colors.white} size={20} />
               </TouchableOpacity>
-            </View>
+            </View> */}
 
             {bannerProduct.length > 1 && (
               <View style={styles.paginationDots}>

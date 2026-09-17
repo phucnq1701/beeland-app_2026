@@ -1106,15 +1106,18 @@ export default function ProductsScreen() {
                   <Text style={[styles.tableHeaderText, styles.colCode]}>
                     Mã sản phẩm
                   </Text>
-                  <Text style={[styles.tableHeaderText, styles.colPrice]}>
-                    Tổng giá trị gồm PBT
+                  <Text style={[styles.tableHeaderText, styles.colPrice, styles.priceHeaderText]}>
+                    {"Tổng giá trị\ngồm PBT"}
                   </Text>
                 </View>
 
                 {products2.map((product, index) => (
                   <TouchableOpacity
                     key={`${product.MaSP}-${index}`}
-                    style={styles.tableRow}
+                    style={[
+                      styles.tableRow,
+                      index % 2 === 1 && styles.tableRowAlt,
+                    ]}
                     activeOpacity={0.7}
                     onPress={() => handlePressProduct(product.MaSP)}
                   >
@@ -1146,6 +1149,9 @@ export default function ProductsScreen() {
                         styles.colPrice,
                         styles.priceText,
                       ]}
+                      numberOfLines={Number(product?.TongGomPBT || 0) < 99_000_000_000 ? 1 : 0}
+                      adjustsFontSizeToFit={Number(product?.TongGomPBT || 0) < 99_000_000_000}
+                      minimumFontScale={0.8}
                     >
                       {formatCurrency(product?.TongGomPBT)}
                     </Text>
@@ -1334,32 +1340,46 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text,
   },
-  colStatus: {
-    width: 110,
-  },
-  colCode: {
-    flex: 1,
-  },
-  colPrice: {
-    width: 100,
-    textAlign: "right" as const,
-    paddingRight: 4,
-  },
-  statusBadgeContainer: {
-    alignItems: "flex-start",
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusBadgeText: {
-    fontSize: 12,
-    fontWeight: "600" as const,
-    color: Colors.white,
-  },
-  priceText: {
-    fontWeight: "500" as const,
+   colStatus: {
+     width: 100,
+   },
+   colCode: {
+     flex: 1,
+     minWidth: 0,
+     paddingRight: 8,
+   },
+   colPrice: {
+     width: 120,
+     textAlign: "right" as const,
+   },
+   priceHeaderText: {
+     fontSize: 12,
+     lineHeight: 16,
+   },
+   statusBadgeContainer: {
+     alignItems: "flex-start",
+   },
+   statusBadge: {
+     alignSelf: "flex-start" as const,
+     maxWidth: "80%",
+     flexShrink: 1,
+     paddingHorizontal: 8,
+     paddingVertical: 4,
+     borderRadius: 20,
+   },
+   statusBadgeText: {
+     fontSize: 10,
+     lineHeight: 14,
+     fontWeight: "600" as const,
+     color: Colors.white,
+   },
+   priceText: {
+     fontSize: 14,
+     fontWeight: "600" as const,
+     fontVariant: ["tabular-nums"] as const,
+   },
+  tableRowAlt: {
+    backgroundColor: "#FCFCFD",
   },
   filterPanel: {
     backgroundColor: Colors.white,
