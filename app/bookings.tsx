@@ -725,7 +725,7 @@ export default function BookingsScreen() {
                   <View style={styles.cardRight}>
                     <Text style={styles.amount}>
                       {new Intl.NumberFormat("vi-VN").format(
-                        booking.tongGiaGomVAT
+                        Math.round(Number(booking.tongGiaGomVAT) || 0)
                       )}{" "}
                       đ
                     </Text>

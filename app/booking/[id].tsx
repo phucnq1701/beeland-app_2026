@@ -107,10 +107,13 @@ export default function BookingDetailScreen() {
     }
   };
 
-  const fmtVND = (v: any) =>
+  const fmtNumber = (v: any, isMoney = false) =>
     v != null && v !== "" && Number.isFinite(Number(v))
-      ? new Intl.NumberFormat("vi-VN").format(Number(v))
+      ? new Intl.NumberFormat("vi-VN").format(
+          isMoney ? Math.round(Number(v)) : Number(v)
+        )
       : null;
+  const fmtVND = (v: any) => fmtNumber(v, true);
 
   const money = (value: any) => {
     const formatted = fmtVND(value);
@@ -379,7 +382,7 @@ export default function BookingDetailScreen() {
                 label="Nhân viên"
                 value={booking.nhanVien}
               />
-              <InfoRow icon={<Clock size={16} color={Colors.primary} />} label="Thời gian giữ chỗ" value={data?.thoiGianBooking != null ? `${fmtVND(data.thoiGianBooking)} phút` : null} />
+              <InfoRow icon={<Clock size={16} color={Colors.primary} />} label="Thời gian giữ chỗ" value={data?.thoiGianBooking != null ? `${fmtNumber(data.thoiGianBooking)} phút` : null} />
               <InfoRow icon={<CheckCircle size={16} color={Colors.primary} />} label="Booking ưu tiên" value={data?.uuTien == null ? null : data.uuTien ? "Có" : "Không"} />
               <InfoRow icon={<Banknote size={16} color={Colors.primary} />} label="Đã thu" value={money(data?.daThu)} />
               <View style={styles.separator} />
@@ -427,7 +430,7 @@ export default function BookingDetailScreen() {
                   icon={<Banknote size={16} color={Colors.primary} />}
                   label={row.label}
                   value={row.unit
-                    ? (fmtVND(data?.price?.[row.key]) != null ? `${fmtVND(data.price[row.key])} ${row.unit}` : null)
+                    ? (fmtNumber(data?.price?.[row.key]) != null ? `${fmtNumber(data.price[row.key])} ${row.unit}` : null)
                     : money(data?.price?.[row.key])}
                 />
               ))}
@@ -442,7 +445,7 @@ export default function BookingDetailScreen() {
                   {index > 0 && <View style={styles.separator} />}
                   <InfoRow icon={<Package size={16} color={Colors.primary} />} label="Khuyến mãi" value={promotion.tenKhuyenMai} />
                   <InfoRow icon={<Package size={16} color={Colors.primary} />} label="Quà tặng" value={promotion.tenQuaTang} />
-                  <InfoRow icon={<Hash size={16} color={Colors.primary} />} label="Số lượng" value={fmtVND(promotion.soLuong)} />
+                  <InfoRow icon={<Hash size={16} color={Colors.primary} />} label="Số lượng" value={fmtNumber(promotion.soLuong)} />
                   <InfoRow icon={<Banknote size={16} color={Colors.primary} />} label="Giá trị" value={money(promotion.giaTri)} />
                 </View>
               ))}

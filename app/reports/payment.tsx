@@ -79,7 +79,7 @@ const formatShort = (num: number) => {
   if (num >= 1_000_000_000)
     return `${(num / 1_000_000_000).toFixed(1).replace(/\.0$/, "")} tỷ`;
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(0)} tr`;
-  return new Intl.NumberFormat("vi-VN").format(num);
+  return new Intl.NumberFormat("vi-VN").format(Math.round(num));
 };
 
 function buildDateRange(filters: Filters): { TuNgay: string; DenNgay: string } {
@@ -435,7 +435,7 @@ export default function PaymentReportScreen() {
       data.map((item: any) => ({
         id: item.ID,
         receiptCode: item.SoPT,
-        amount: `${item.TienThu.toLocaleString("vi-VN")}₫`,
+        amount: `${Math.round(item.TienThu).toLocaleString("vi-VN")}₫`,
         customerName: item.TenKH,
         projectName: item.DienGiai,
         paymentDate: new Date(item.NgayThu).toLocaleDateString("vi-VN"),

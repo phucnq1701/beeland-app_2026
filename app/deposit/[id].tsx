@@ -37,7 +37,7 @@ import { DatCocService } from "@/sevicesSupabase/DatCocService";
 
 function formatCurrency(value: number): string {
   if (!value && value !== 0) return "0 đ";
-  return new Intl.NumberFormat("vi-VN").format(value) + " đ";
+  return new Intl.NumberFormat("vi-VN").format(Math.round(value)) + " đ";
 }
 
 function formatCurrencyShort(value: number): string {
@@ -50,7 +50,7 @@ function formatCurrencyShort(value: number): string {
     const mil = value / 1000000;
     return mil % 1 === 0 ? `${mil} tr` : `${mil.toFixed(1)} tr`;
   }
-  return new Intl.NumberFormat("vi-VN").format(value) + " đ";
+  return new Intl.NumberFormat("vi-VN").format(Math.round(value)) + " đ";
 }
 
 function formatDate(dateStr: string): string {
