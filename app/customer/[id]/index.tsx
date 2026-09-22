@@ -355,7 +355,7 @@ export default function CustomerDetailScreen() {
           <ChevronRight color={Colors.textTertiary} size={20} />
         </TouchableOpacity>
 
-        <View style={[styles.sectionWrap, { marginBottom: 40 }]}>
+        {/* <View style={[styles.sectionWrap, { marginBottom: 40 }]}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
               <FileText color={Colors.accent.purple} size={18} />
@@ -408,7 +408,7 @@ export default function CustomerDetailScreen() {
               ))}
             </View>
           )}
-        </View>
+        </View> */}
       </ScrollView>
 
       <Modal visible={showAddHistoryModal} transparent animationType="slide">

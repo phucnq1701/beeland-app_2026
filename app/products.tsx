@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   Text,
@@ -8,7 +14,12 @@ import {
   TextInput,
   ActivityIndicator,
 } from "react-native";
-import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
+import {
+  Stack,
+  useRouter,
+  useLocalSearchParams,
+  useFocusEffect,
+} from "expo-router";
 import {
   Search,
   List,
@@ -39,10 +50,6 @@ type ViewMode = "list" | "grid" | "overview";
 
 // Số sản phẩm mỗi lần gọi API (phân trang cuộn vô hạn)
 const PAGE_SIZE = 16;
-
-
-
-
 
 export default function ProductsScreen() {
   const { showFavorites } = useLocalSearchParams<{ showFavorites?: string }>();
@@ -77,6 +84,16 @@ export default function ProductsScreen() {
   const offSetRef = useRef(1);
   const loadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
+
+  // Default filter values (used to detect changes for "Đặt lại" button highlight)
+  const defaultFilterRef = useRef<Record<string, any>>({
+    MaDA: Number(MaDA) || null,
+    MaKhu: null,
+    MaPK: null,
+    MaTT: null,
+    FormCode: null,
+    KyHieu: "",
+  });
 
   const [filterCondition, setFilterCondition] = useState<Record<string, any>>({
     MaDA: Number(MaDA) || null,
@@ -196,7 +213,8 @@ export default function ProductsScreen() {
   }, [hubConnection]);
 
   const applyChangeFilter = (p: string, v: any) => {
-    let _filter = filterCondition;
+    // Tạo bản sao để tránh mutate state trực tiếp (gây không re-render)
+    let _filter = { ...filterCondition };
     switch (p) {
       case "MaDA":
         _filter[p] = v;
@@ -298,6 +316,17 @@ export default function ProductsScreen() {
       const ma = Number(MaDA);
       const finalMa = isNaN(ma) ? resDA?.data?.[0]?.MaDA : ma;
 
+      // Cập nhật defaultFilterRef để khớp với trạng thái ban đầu thực tế
+      // (tránh isFilterChanged = true ngay khi load trang)
+      defaultFilterRef.current = {
+        MaDA: finalMa ?? -1,
+        MaKhu: null,
+        MaPK: null,
+        MaTT: null,
+        FormCode: null,
+        KyHieu: "",
+      };
+
       void loadDataByDA(finalMa);
 
       const resTT = await FilterService.getStatusSP({});
@@ -369,6 +398,68 @@ export default function ProductsScreen() {
     }
   };
 
+  // Tìm kiếm sản phẩm theo từ khoá (mã sản phẩm / ký hiệu / số căn hộ).
+  // Giống loadProducts2 nhưng KHÔNG load lại khu vực + lưới (tránh gọi API nặng khi gõ tìm kiếm).
+  const searchProducts = async (_filter: any) => {
+    try {
+      setLoading(true);
+      // Tìm kiếm mới → quay lại trang đầu
+      offSetRef.current = 1;
+      hasMoreRef.current = true;
+      setHasMore(true);
+
+      const filter = {
+        MaDA: _filter.MaDA,
+        MaKhu: _filter.MaKhu,
+        MaPK: _filter.MaPK,
+        MaTT: _filter.MaTT,
+        FormCode: _filter.FormCode,
+        KyHieu: _filter?.KyHieu,
+        Limit: PAGE_SIZE,
+        offSet: 1,
+      };
+
+      const res = await ProductService.getProducts(filter);
+      const data = res?.data || [];
+      setProducts2(data);
+
+      offSetRef.current = data.length + 1;
+      const total = (res as any)?.total ?? data.length;
+      const more =
+        data.length >= PAGE_SIZE && (total === 0 || data.length < total);
+      hasMoreRef.current = more;
+      setHasMore(more);
+    } catch (error) {
+      console.log("error search products", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Ô tìm kiếm → lọc theo Mã sản phẩm (KyHieu): debounce 500ms rồi mới gọi API.
+  // ProductService map KyHieu thành or=(ky_hieu,ma_sp,so_can_ho) ilike trên server.
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      const nextFilter = { ...filterCondition, KyHieu: text.trim() };
+      setFilterCondition(nextFilter);
+      void searchProducts(nextFilter);
+    }, 500);
+  };
+
+  // Dọn dẹp timer debounce khi unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, []);
+
   // Tải thêm sản phẩm khi cuộn tới cuối danh sách.
   // Tự động dừng khi đã tải hết (hasMore = false) → không gọi API nữa.
   const loadMore = async () => {
@@ -426,8 +517,7 @@ export default function ProductsScreen() {
   // Phát hiện cuộn gần tới cuối (còn cách đáy 200px) → nạp thêm
   const handleScroll = (event: any) => {
     if (viewMode !== "list") return;
-    const { layoutMeasurement, contentOffset, contentSize } =
-      event.nativeEvent;
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
     if (
       layoutMeasurement.height + contentOffset.y >=
       contentSize.height - 200
@@ -436,16 +526,10 @@ export default function ProductsScreen() {
     }
   };
 
-  // useEffect(() => {
-  //   void loadProducts();
-  
-  // }, []);
-  useFocusEffect(
-    useCallback(() => {
-      console.log("🔁 Screen focus → gọi lại API");
-      void loadProducts();
-    }, [])
-  );
+  // Chỉ load mặc định khi mount lần đầu (không reload khi back từ chi tiết SP)
+  useEffect(() => {
+    void loadProducts();
+  }, []);
 
   useEffect(() => {
     if (rightRef.current) {
@@ -476,7 +560,9 @@ export default function ProductsScreen() {
   // Chữ tự động đen/trắng theo độ sáng của màu nền (dễ đọc trên mọi màu danh mục)
   const getStatusTextColor = (bg: string) => {
     try {
-      let hex = String(bg || "").trim().replace("#", "");
+      let hex = String(bg || "")
+        .trim()
+        .replace("#", "");
       if (hex.length === 3) {
         hex = hex
           .split("")
@@ -503,6 +589,27 @@ export default function ProductsScreen() {
     if (number === null || number === undefined) return "#ccc";
     return "#" + (Number(number) >>> 0).toString(16).slice(-6);
   };
+
+  // Check if filter has changed from default (for "Đặt lại" button highlight)
+  const isFilterChanged = useMemo(() => {
+    const defaultFilter = defaultFilterRef.current;
+    const currentFilter = filterCondition;
+    const isEqual = (a: any, b: any) => {
+      if (a === b) return true;
+      if (Number.isNaN(a) && Number.isNaN(b)) return true;
+      if (a == null && b == null) return true;
+      return false;
+    };
+    return (
+      !isEqual(currentFilter.MaDA, defaultFilter.MaDA) ||
+      !isEqual(currentFilter.MaKhu, defaultFilter.MaKhu) ||
+      !isEqual(currentFilter.MaPK, defaultFilter.MaPK) ||
+      !isEqual(currentFilter.MaTT, defaultFilter.MaTT) ||
+      !isEqual(currentFilter.FormCode, defaultFilter.FormCode) ||
+      !isEqual(currentFilter.KyHieu, defaultFilter.KyHieu)
+    );
+  }, [filterCondition]);
+
   const currentOverviewBlock = overviewBlocks[0];
   const overviewStats = getOverviewStats(currentOverviewBlock);
 
@@ -649,7 +756,9 @@ export default function ProductsScreen() {
                 selectedOverviewStatus === item.key &&
                   styles.statusSummaryItemActive,
               ]}
-              onPress={() => setSelectedOverviewStatus(item.key as UnitStatus | "all")}
+              onPress={() =>
+                setSelectedOverviewStatus(item.key as UnitStatus | "all")
+              }
               activeOpacity={0.8}
             >
               <Text style={styles.statusSummaryLabel}>{item.label}</Text>
@@ -663,7 +772,9 @@ export default function ProductsScreen() {
           const filteredUnits =
             selectedOverviewStatus === "all"
               ? floor.units
-              : floor.units.filter((u: any) => u.status === selectedOverviewStatus);
+              : floor.units.filter(
+                  (u: any) => u.status === selectedOverviewStatus
+                );
 
           if (filteredUnits.length === 0) return null;
 
@@ -913,10 +1024,12 @@ export default function ProductsScreen() {
             <Search color={Colors.textSecondary} size={20} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Tìm kiếm theo tên dự án, mã căn, loại..."
+              placeholder="Tìm kiếm theo mã sản phẩm, số căn hộ..."
               placeholderTextColor={Colors.textSecondary}
               value={searchQuery}
-              onChangeText={setSearchQuery}
+              onChangeText={handleSearchChange}
+              autoCapitalize="none"
+              autoCorrect={false}
             />
           </View>
 
@@ -938,7 +1051,43 @@ export default function ProductsScreen() {
         {filterExpanded && (
           <View style={styles.filterPanel}>
             <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Dự án</Text>
+              <View style={styles.filterSectionHeader}>
+                <Text style={styles.filterSectionTitle}>Dự án</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.resetFilterButton,
+                    isFilterChanged && styles.resetFilterButtonHighlight,
+                  ]}
+                  disabled={!isFilterChanged}
+                  onPress={() => {
+                    // Reset toàn bộ bộ lọc về mặc định
+                    const firstProject = duAn?.[0];
+                    const defaultMaDA =
+                      firstProject?.MaDA ?? (Number(MaDA) || null);
+                    const resetFilter = {
+                      MaDA: defaultMaDA,
+                      MaKhu: null,
+                      MaPK: null,
+                      MaTT: null,
+                      FormCode: null,
+                      KyHieu: "",
+                    };
+                    setFilterCondition(resetFilter);
+                    setSearchQuery("");
+                    void loadProducts2(resetFilter);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.resetFilterText,
+                      isFilterChanged && styles.resetFilterTextHighlight,
+                    ]}
+                  >
+                    Đặt lại
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <ScrollView style={{ maxHeight: 200 }}>
                 <View style={styles.filterOptionsGrid}>
                   {duAn.map((project) => (
@@ -1018,8 +1167,14 @@ export default function ProductsScreen() {
                         styles.filterOptionActive,
                     ]}
                     onPress={() => {
-                      setFilterCondition((prev) => ({ ...prev, FormCode: opt.key }));
-                      void loadProducts2({ ...filterCondition, FormCode: opt.key });
+                      setFilterCondition((prev) => ({
+                        ...prev,
+                        FormCode: opt.key,
+                      }));
+                      void loadProducts2({
+                        ...filterCondition,
+                        FormCode: opt.key,
+                      });
                     }}
                     activeOpacity={0.7}
                   >
@@ -1100,15 +1255,17 @@ export default function ProductsScreen() {
             ) : (
               <View style={styles.productTable}>
                 <View style={styles.tableHeader}>
-                  <Text style={[styles.tableHeaderText, styles.colStatus]}>
-                    Trạng thái
-                  </Text>
-                  <Text style={[styles.tableHeaderText, styles.colCode]}>
-                    Mã sản phẩm
-                  </Text>
-                  <Text style={[styles.tableHeaderText, styles.colPrice, styles.priceHeaderText]}>
-                    {"Tổng giá trị\ngồm PBT"}
-                  </Text>
+                  <View style={[styles.colStatus]}>
+                    <Text>Trạng thái</Text>
+                  </View>
+                  <View style={[styles.colCode]}>
+                    <Text>Mã sản phẩm</Text>
+                  </View>
+                  <View style={[styles.colPrice]}>
+                    <Text style={[styles.priceHeaderText]}>
+                      {"Tổng giá trị gồm PBT"}
+                    </Text>
+                  </View>
                 </View>
 
                 {products2.map((product, index) => (
@@ -1133,30 +1290,48 @@ export default function ProductsScreen() {
                         <Text
                           style={[
                             styles.statusBadgeText,
-                            { color: getStatusTextColor(getStatusColor(product.MaTT)) },
+                            {
+                              color: getStatusTextColor(
+                                getStatusColor(product.MaTT)
+                              ),
+                            },
                           ]}
                         >
                           {getStatusLabel(product.MaTT)}
                         </Text>
                       </View>
                     </View>
-                    <Text style={[styles.tableText, styles.colCode]}>
+                    <Text style={[ styles.colCode]}>
                       {product.KyHieu || product.MaSP}
                     </Text>
                     <Text
                       style={[
-                        styles.tableText,
+                        
                         styles.colPrice,
                         styles.priceText,
                       ]}
-                      numberOfLines={Number(product?.TongGomPBT || 0) < 99_000_000_000 ? 1 : 0}
-                      adjustsFontSizeToFit={Number(product?.TongGomPBT || 0) < 99_000_000_000}
+                      numberOfLines={
+                        Number(product?.TongGomPBT || 0) < 99_000_000_000
+                          ? 1
+                          : 0
+                      }
+                      adjustsFontSizeToFit={
+                        Number(product?.TongGomPBT || 0) < 99_000_000_000
+                      }
                       minimumFontScale={0.8}
                     >
                       {formatCurrency(product?.TongGomPBT)}
                     </Text>
                   </TouchableOpacity>
                 ))}
+
+                {products2.length === 0 && (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>
+                      Không tìm thấy sản phẩm phù hợp
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
 
@@ -1307,9 +1482,10 @@ const styles = StyleSheet.create({
     fontWeight: "700" as const,
     color: Colors.primary,
   },
+
   productTable: {
     backgroundColor: Colors.white,
-    borderRadius: 12,
+    borderRadius: 10,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.border,
@@ -1317,69 +1493,74 @@ const styles = StyleSheet.create({
   tableHeader: {
     flexDirection: "row",
     backgroundColor: "#F9FAFB",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 0,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-  },
-  tableHeaderText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.textSecondary,
   },
   tableRow: {
     flexDirection: "row",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 0,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
     alignItems: "center",
-    position: "relative" as const,
   },
-  tableText: {
+  colStatus: {
+    width: 110,
+    borderRightWidth: 1,
+    borderRightColor: Colors.border,
+    paddingHorizontal: 8,
+  },
+  colCode: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    borderRightWidth: 1,
+    borderRightColor: Colors.border,
+  },
+  colPrice: {
+    width: 130,
+    paddingHorizontal: 8,
+    textAlign: "right",
+  },
+  priceHeaderText: {
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign:'right'
+  },
+  statusBadgeContainer: {
+    alignItems: "flex-start",
+  },
+  statusBadge: {
+    alignSelf: "flex-start" as const,
+    maxWidth: "80%",
+    flexShrink: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "600" as const,
+    color: Colors.white,
+  },
+  priceText: {
     fontSize: 14,
-    color: Colors.text,
+    fontWeight: "600" as const,
+    fontVariant: ["tabular-nums"] as const,
   },
-   colStatus: {
-     width: 100,
-   },
-   colCode: {
-     flex: 1,
-     minWidth: 0,
-     paddingRight: 8,
-   },
-   colPrice: {
-     width: 120,
-     textAlign: "right" as const,
-   },
-   priceHeaderText: {
-     fontSize: 12,
-     lineHeight: 16,
-   },
-   statusBadgeContainer: {
-     alignItems: "flex-start",
-   },
-   statusBadge: {
-     alignSelf: "flex-start" as const,
-     maxWidth: "80%",
-     flexShrink: 1,
-     paddingHorizontal: 8,
-     paddingVertical: 4,
-     borderRadius: 20,
-   },
-   statusBadgeText: {
-     fontSize: 10,
-     lineHeight: 14,
-     fontWeight: "600" as const,
-     color: Colors.white,
-   },
-   priceText: {
-     fontSize: 14,
-     fontWeight: "600" as const,
-     fontVariant: ["tabular-nums"] as const,
-   },
   tableRowAlt: {
     backgroundColor: "#FCFCFD",
+  },
+  emptyContainer: {
+    paddingVertical: 32,
+    alignItems: "center" as const,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
   },
   filterPanel: {
     backgroundColor: Colors.white,
@@ -1392,11 +1573,39 @@ const styles = StyleSheet.create({
   filterSection: {
     marginBottom: 20,
   },
+  filterSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
   filterSectionTitle: {
     fontSize: 15,
     fontWeight: "600" as const,
     color: Colors.text,
     marginBottom: 12,
+  },
+  resetFilterButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "#E5E7EB",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    opacity: 0.6,
+  },
+  resetFilterButtonHighlight: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+    opacity: 1,
+  },
+  resetFilterText: {
+    fontSize: 12,
+    fontWeight: "500" as const,
+    color: "#9CA3AF",
+  },
+  resetFilterTextHighlight: {
+    color: Colors.white,
   },
   filterOptionsGrid: {
     flexDirection: "row",

@@ -29,6 +29,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { ProductService } from "@/sevicesSupabase/ProductService";
+import {
+  PriceServices,
+  ActivePriceListItem,
+} from "@/sevicesSupabase/PriceServices";
 
 export default function ProductDetailScreen() {
   const { id, lockMinutes } = useLocalSearchParams<{
@@ -43,9 +47,14 @@ export default function ProductDetailScreen() {
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [data, setData] = useState<any>(null);
-  const [bannerProduct, setBannerProduct] = useState<Array<{ HinhAnh?: string }>>(
-    []
+  const [bannerProduct, setBannerProduct] = useState<
+    Array<{ HinhAnh?: string }>
+  >([]);
+  // Bảng giá đang hiệu lực (price_list_items qua RPC get_active_price_for_product)
+  const [activePrice, setActivePrice] = useState<ActivePriceListItem | null>(
+    null
   );
+  const [priceLoading, setPriceLoading] = useState<boolean>(false);
 
   // const loadData = async () => {
   //   let res = await BookingService.getLockDetail({
@@ -59,6 +68,24 @@ export default function ProductDetailScreen() {
     const result = await ProductService.getBannerProduct({ maSP: id });
     setBannerProduct(result.data ?? []);
   };
+
+  // Giá đang hiệu lực theo bảng giá (RPC get_active_price_for_product).
+  // Không có bảng giá → activePrice = null, UI fallback về giá trên sản phẩm.
+  const getActivePrice = async (product: any) => {
+    setPriceLoading(true);
+    try {
+      const result = await PriceServices.getActivePriceForProduct({
+        productId: product?.ID,
+        maSP: product?.MaSP ?? id,
+      });
+      console.log(result, "activePrice");
+
+      setActivePrice(result.data);
+    } finally {
+      setPriceLoading(false);
+    }
+  };
+
   const getProducts = async () => {
     setLoading(true);
     const result = await ProductService.getDetailProducts({ maSP: id });
@@ -66,6 +93,9 @@ export default function ProductDetailScreen() {
       const seconds = result.data.ThoiGianConLai || 0;
 
       setData(result.data);
+
+      // Ưu tiên bảng giá: lấy giá hiệu lực theo sản phẩm (không chặn UI chính)
+      void getActivePrice(result.data);
 
       if (seconds > 0) {
         setIsLocked(true);
@@ -172,11 +202,11 @@ export default function ProductDetailScreen() {
 
   const statusName = String(
     data?.TenTT ||
-    data?.ten_tt ||
-    data?.TrangThai ||
-    data?.status ||
-    data?.tt?.item_name ||
-    ""
+      data?.ten_tt ||
+      data?.TrangThai ||
+      data?.status ||
+      data?.tt?.item_name ||
+      ""
   )
     .toLowerCase()
     .trim();
@@ -244,38 +274,39 @@ export default function ProductDetailScreen() {
           <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
         </View>
       ) : (
-        <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: insets.bottom + 24 },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.heroCard} testID="product-hero">
-            <FlatList
-              ref={flatListRef}
-              data={bannerProduct}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              keyExtractor={(item, index) => `image-${index}`}
-              renderItem={({ item }) => (
-                <Image
-                  source={{ uri: item?.HinhAnh }}
-                  style={[styles.heroImage, { width: screenWidth }]}
-                  contentFit="cover"
-                />
-              )}
-            />
-            <LinearGradient
-              colors={["transparent", "rgba(0,0,0,0.85)"]}
-              style={styles.heroOverlay}
-              pointerEvents="none"
-            />
+        <>
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: insets.bottom + 120 },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.heroCard} testID="product-hero">
+              <FlatList
+                ref={flatListRef}
+                data={bannerProduct}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+                keyExtractor={(item, index) => `image-${index}`}
+                renderItem={({ item }) => (
+                  <Image
+                    source={{ uri: item?.HinhAnh }}
+                    style={[styles.heroImage, { width: screenWidth }]}
+                    contentFit="cover"
+                  />
+                )}
+              />
+              <LinearGradient
+                colors={["transparent", "rgba(0,0,0,0.85)"]}
+                style={styles.heroOverlay}
+                pointerEvents="none"
+              />
 
-            {/* <View style={[styles.heroActions, { top: insets.top - 50 }]}>
+              {/* <View style={[styles.heroActions, { top: insets.top - 50 }]}>
               <TouchableOpacity
                 testID="action-favorite"
                 style={[styles.heroIconBtn]}
@@ -317,54 +348,56 @@ export default function ProductDetailScreen() {
               </TouchableOpacity>
             </View> */}
 
-            {bannerProduct.length > 1 && (
-              <View style={styles.paginationDots}>
-                {bannerProduct.map((_, index) => (
-                  <View
-                    key={`dot-${index}`}
-                    style={[
-                      styles.dot,
-                      index === currentImageIndex && styles.activeDot,
-                    ]}
-                  />
-                ))}
-              </View>
-            )}
+              {bannerProduct.length > 1 && (
+                <View style={styles.paginationDots}>
+                  {bannerProduct.map((_, index) => (
+                    <View
+                      key={`dot-${index}`}
+                      style={[
+                        styles.dot,
+                        index === currentImageIndex && styles.activeDot,
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
 
-            <View style={styles.heroInfo}>
-              <Text style={styles.heroTitle}>{data?.TenDA}</Text>
+              <View style={styles.heroInfo}>
+                <Text style={styles.heroTitle}>{data?.TenDA}</Text>
 
-              <View style={styles.rowCenter}>
-                <Home color={Colors.white} size={16} />
-                <Text style={styles.heroSubtitle}> {data?.KyHieu}</Text>
-              </View>
-              <View style={styles.rowCenter}>
-                <MapPin color={Colors.white} size={16} />
-                <Text style={styles.heroSubtitle}>{data?.DiaChi}</Text>
-              </View>
-              <View style={styles.pricePill}>
-                <DollarSign color={Colors.white} size={16} />
-                <Text style={styles.priceText}>
-                  {Number(data?.TongGiaTriHDMB) > 0
-                    ? `${(Number(data.TongGiaTriHDMB) / 1000000000).toFixed(2)} tỷ`
-                    : "Liên hệ"}
-                </Text>
+                <View style={styles.rowCenter}>
+                  <Home color={Colors.white} size={16} />
+                  <Text style={styles.heroSubtitle}> {data?.KyHieu}</Text>
+                </View>
+                <View style={styles.rowCenter}>
+                  <MapPin color={Colors.white} size={16} />
+                  <Text style={styles.heroSubtitle}>{data?.DiaChi}</Text>
+                </View>
+                <View style={styles.pricePill}>
+                  <DollarSign color={Colors.white} size={16} />
+                  <Text style={styles.priceText}>
+                    {Number(data?.TongGiaTriHDMB) > 0
+                      ? `${(Number(data.TongGiaTriHDMB) / 1000000000).toFixed(
+                          2
+                        )} tỷ`
+                      : "Liên hệ"}
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Thông tin căn hộ</Text>
-            <Text style={styles.sectionText}>
-              Căn hộ tiêu chuẩn hiện đại, tiện ích nội khu đầy đủ, vị trí kết
-              nối thuận tiện.
-            </Text>
-          </View>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Thông tin căn hộ</Text>
+              <Text style={styles.sectionText}>
+                Căn hộ tiêu chuẩn hiện đại, tiện ích nội khu đầy đủ, vị trí kết
+                nối thuận tiện.
+              </Text>
+            </View>
 
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Chi tiết giá</Text>
-              {/* <TouchableOpacity
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Chi tiết giá</Text>
+                {/* <TouchableOpacity
                 testID="action-calculator"
                 style={styles.calculatorBtn}
                 onPress={() => {
@@ -377,44 +410,138 @@ export default function ProductDetailScreen() {
                 <Calculator color={Colors.primary} size={20} />
                 <Text style={styles.calculatorBtnText}>Tính giá</Text>
               </TouchableOpacity> */}
+              </View>
+              <View style={styles.priceDetails}>
+                {priceLoading ? (
+                  <View style={styles.priceLoadingRow}>
+                    <ActivityIndicator size="small" color={Colors.primary} />
+                    <Text style={styles.priceLoadingText}>
+                      Đang tải bảng giá...
+                    </Text>
+                  </View>
+                ) : activePrice ? (
+                  <>
+                    {/* Luôn hiển thị đủ các trường — null/sai giá trị → 0 */}
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>
+                        Diện tích thông thủy:
+                      </Text>
+                      <Text style={styles.detailValue}>
+                        {Number(activePrice?.area) || 0} m²
+                      </Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Đơn giá chưa VAT:</Text>
+                      <Text style={styles.detailValue}>
+                        {formatCurrency(Number(activePrice?.unit_price) || 0)}
+                      </Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Tổng giá chưa VAT:</Text>
+                      <Text style={styles.detailValue}>
+                        {formatCurrency(
+                          Number(activePrice?.total_before_vat) || 0
+                        )}
+                      </Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Tiền VAT:</Text>
+                      <Text style={styles.detailValue}>
+                        {formatCurrency(Number(activePrice?.vat_amount) || 0)}
+                      </Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Tổng giá gồm VAT:</Text>
+                      <Text style={styles.detailValue}>
+                        {formatCurrency(
+                          Number(activePrice?.total_after_vat) || 0
+                        )}
+                      </Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Phí bảo trì:</Text>
+                      <Text style={styles.detailValue}>
+                        {formatCurrency(
+                          Number(activePrice?.maintenance_amount) || 0
+                        )}
+                      </Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Tổng giá gồm PBT:</Text>
+                      <Text style={styles.detailValue}>
+                        {formatCurrency(
+                          Number(activePrice?.total_payment) || 0
+                        )}
+                      </Text>
+                    </View>
+                    <View style={[styles.detailRow, styles.totalRow]}>
+                      <Text style={styles.totalLabel}>Tổng giá trị HĐMB:</Text>
+                      <Text style={styles.totalValue}>
+                        {formatCurrency(
+                          Number(activePrice?.contract_total_value) || 0
+                        )}
+                      </Text>
+                    </View>
+                    <View style={styles.noteRow}>
+                      <Text style={styles.noteLabel}>Ghi chú:</Text>
+                      <Text style={styles.noteText}>
+                        {activePrice?.note || "-"}
+                      </Text>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    {/* Trạng thái không có bảng giá áp dụng */}
+                    {/* <View style={styles.noPriceBanner}>
+                      <Text style={styles.noPriceText}>
+                        Chưa có bảng giá áp dụng
+                      </Text>
+                    </View> */}
+                    {/* Fallback: hiển thị giá từ dữ liệu sản phẩm (giữ tương thích) */}
+                    {Number(data?.DTThongThuy) > 0 && (
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>
+                          Diện tích thông thủy:
+                        </Text>
+                        <Text style={styles.detailValue}>
+                          {data?.DTThongThuy} m²
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Tổng giá gồm VAT:</Text>
+                      <Text style={styles.detailValue}>
+                        {formatCurrency(data?.TongGiaGomVAT)}
+                      </Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Tiền VAT:</Text>
+                      <Text style={styles.detailValue}>
+                        {formatCurrency(data?.TienVAT)}
+                      </Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Phí bảo trì:</Text>
+                      <Text style={styles.detailValue}>
+                        {formatCurrency(data?.PhiBaoTri)}
+                      </Text>
+                    </View>
+                    <View style={[styles.detailRow, styles.totalRow]}>
+                      <Text style={styles.totalLabel}>Tổng giá trị HĐ:</Text>
+                      <Text style={styles.totalValue}>
+                        {formatCurrency(data?.TongGiaTriHDMB)}
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </View>
             </View>
-            <View style={styles.priceDetails}>
-              {Number(data?.DTThongThuy) > 0 && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Diện tích thông thủy:</Text>
-                  <Text style={styles.detailValue}>
-                    {data?.DTThongThuy} m²
-                  </Text>
-                </View>
-              )}
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Tổng giá gồm VAT:</Text>
-                <Text style={styles.detailValue}>
-                  {formatCurrency(data?.TongGiaGomVAT)}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Tiền VAT:</Text>
-                <Text style={styles.detailValue}>
-                  {formatCurrency(data?.TienVAT)}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Phí bảo trì:</Text>
-                <Text style={styles.detailValue}>
-                  {formatCurrency(data?.PhiBaoTri)}
-                </Text>
-              </View>
-              <View style={[styles.detailRow, styles.totalRow]}>
-                <Text style={styles.totalLabel}>Tổng giá trị HĐ:</Text>
-                <Text style={styles.totalValue}>
-                  {formatCurrency(data?.TongGiaTriHDMB)}
-                </Text>
-              </View>
-            </View>
-          </View>
+          </ScrollView>
 
-          <View style={styles.bottomActions}>
+          {/* Thanh hành động cố định đáy màn hình — nền trắng che nội dung cuộn phía dưới */}
+          <View
+            style={[styles.bottomActions, { paddingBottom: insets.bottom }]}
+          >
             <TouchableOpacity
               style={[
                 styles.actionButton,
@@ -470,7 +597,7 @@ export default function ProductDetailScreen() {
               </TouchableOpacity>
             ) : null}
           </View>
-        </ScrollView>
+        </>
       )}
     </View>
   );
@@ -480,7 +607,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   scrollContent: { paddingBottom: 24 },
   heroCard: {
-    height: 320,
+    height: 240,
     backgroundColor: Colors.white,
   },
   heroImage: { width: "100%", height: "100%" },
@@ -606,8 +733,8 @@ const styles = StyleSheet.create({
   priceDetails: {
     backgroundColor: Colors.white,
     borderRadius: 12,
-    padding: 16,
-    marginTop: 12,
+    // padding: 16,
+    // marginTop: 12,
   },
   detailRow: {
     flexDirection: "row",
@@ -641,19 +768,68 @@ const styles = StyleSheet.create({
     fontWeight: "800" as const,
     color: Colors.primary,
   },
+  priceLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 16,
+  },
+  priceLoadingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  noPriceBanner: {
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FDBA74",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  noPriceText: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: "#C2410C",
+  },
+  noteRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingTop: 10,
+  },
+  noteLabel: {
+    fontSize: 15,
+    color: Colors.textSecondary,
+  },
+  noteText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "600" as const,
+    color: Colors.text,
+  },
   bottomActions: {
+    position: "absolute" as const,
+    left: 0,
+    right: 0,
+    bottom: 0,
     flexDirection: "row",
     gap: 12,
     paddingHorizontal: 20,
-    marginTop: 24,
+    paddingTop: 12,
+    paddingBottom: 20,
+    backgroundColor: Colors.white,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
   },
   actionButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 16,
+    gap: 10,
+    paddingVertical: 13,
     borderRadius: 12,
   },
   lockButton: {

@@ -1,7 +1,12 @@
 import axiosApi from "./axiosApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyCode, getCompanyId, getValidSupabaseJwt } from "./cloudTenant";
+import {
+  getCompanyCode,
+  getCompanyId,
+  getEmployeeId,
+  getValidSupabaseJwt,
+} from "./cloudTenant";
 
 /** Lock căn — theo web ProductLockService.ts */
 const LOCK_DOC_TYPE = "LOCK";
@@ -228,6 +233,9 @@ async function createBookingLifecycleRow(input: {
   const giaTriSauCK = Number(
     payload?.TongGiaGomVATPBT ?? payload?.TongGomVAT ?? tongGia
   );
+  // Quy chuẩn: mọi cột FK ghi theo UUID. nguoi_nhap_id (uuid → dm_employees)
+  // chỉ set khi có employee id hợp lệ.
+  const employeeId = await getEmployeeId();
   const row: Record<string, any> = {
     ma_ctdk_uid: companyId,
     giai_doan: "GIUCHO",
@@ -236,6 +244,8 @@ async function createBookingLifecycleRow(input: {
     khach_hang_id: khUid,
     san_id: UUID_RE.test(String(sanId ?? "")) ? String(sanId) : null,
     trang_thai_id: trangThaiId,
+    nguoi_nhap_id:
+      employeeId && UUID_RE.test(employeeId) ? employeeId : null,
     so_phieu_gc: soPhieu,
     ngay_giu_cho: nowIso,
     ngay_nhap: nowIso,
@@ -412,18 +422,48 @@ export const BookingService = {
           : [];
       if (states.length > 0) params.state = `in.(${states.join(",")})`;
 
-      // Lọc ngày (ngay_nhap, cho phép null)
+      // Lọc ngày (ngay_nhap) — dùng plain params (AND) nối vào URL.
+      // KHÔNG dùng or nhiều nhóm: gateway BỎ qua or=(...),(...) (đã test thật —
+      // multi-group or bị drop → trả tất cả bản ghi). Mốc quá rộng (màn Booking
+      // mặc định 2000-01-01..2100-01-01) được coi là không giới hạn.
       const tuNgay = payload?.tuNgay ?? payload?.TuNgay;
       const denNgay = payload?.denNgay ?? payload?.DenNgay;
-      if (tuNgay) params.or = `(ngay_nhap.gte.${tuNgay},ngay_nhap.is.null)`;
-      if (denNgay) {
-        const den = `(ngay_nhap.lte.${denNgay},ngay_nhap.is.null)`;
-        params.or = params.or ? `${params.or},${den}` : den;
-      }
+      const effTu =
+        tuNgay && String(tuNgay) > "1900-01-01" ? String(tuNgay) : "";
+      const effDen =
+        denNgay && String(denNgay) < "2999-12-31" ? String(denNgay) : "";
+      const dateQs: string[] = [];
+      if (effTu) dateQs.push(`ngay_nhap=gte.${effTu}`);
+      if (effDen) dateQs.push(`ngay_nhap=lte.${effDen}`);
 
-      // Tìm theo số phiếu
+      // Tìm theo số phiếu + tên/mã khách hàng.
+      // PostgREST bản này KHÔNG hỗ trợ cột embed (kh.ten_kh) trong or= (PGRST100)
+      // → tra UUID khách (ten_kh/ten_cong_ty/ma_so_kh) trước, rồi or với
+      // khach_hang_id.in.(...) — chỉ dùng cột của chính bảng cloud_bookings.
       const kw = String(payload?.keyword ?? payload?.inputSearch ?? "").trim();
-      if (kw) params.so_phieu = `ilike.*${kw.replace(/[,()]/g, "")}*`;
+      if (kw) {
+        const safe = kw.replace(/[,()]/g, "");
+        let khIds: string[] = [];
+        try {
+          const r = await axiosApiSupabase.get("rest/v1/cloud_customers", {
+            params: {
+              select: "id",
+              ma_ctdk: `eq.${companyId}`,
+              or: `(ten_kh.ilike.*${safe}*,ten_cong_ty.ilike.*${safe}*,ma_so_kh.ilike.*${safe}*)`,
+              limit: "100",
+            },
+          });
+          khIds = (Array.isArray(r.data) ? r.data : [])
+            .map((x: any) => String(x?.id ?? ""))
+            .filter((x: string) => UUID_RE.test(x));
+        } catch {}
+        // or= BẮT BUỘC bọc ngoặc và CHỈ ĐÚNG 1 NHÓM (gateway làm hỏng or=
+        // không ngoặc và BỎ or nhiều nhóm — đã test thật).
+        const kwOr = khIds.length > 0
+          ? `(so_phieu.ilike.*${safe}*,khach_hang_id.in.(${khIds.join(",")}))`
+          : `(so_phieu.ilike.*${safe}*)`;
+        params.or = kwOr;
+      }
 
       // Phân trang
       const pageSize = Math.max(1, Number(payload?.pageSize ?? payload?.Limit ?? 50));
@@ -433,10 +473,15 @@ export const BookingService = {
       params.offset = String(from);
       params.limit = String(pageSize);
 
-      const res = await axiosApiSupabase.get("rest/v1/cloud_bookings", {
-        params,
-        headers: { Prefer: "count=exact" },
-      });
+      const res = await axiosApiSupabase.get(
+        dateQs.length > 0
+          ? `rest/v1/cloud_bookings?${dateQs.join("&")}`
+          : "rest/v1/cloud_bookings",
+        {
+          params,
+          headers: { Prefer: "count=exact" },
+        }
+      );
       const rows = Array.isArray(res.data) ? res.data : [];
       const range = (res.headers?.["content-range"] as string) || "";
       const total = range.includes("/")
@@ -465,22 +510,35 @@ export const BookingService = {
       const maSP = String(payload?.MaSP ?? payload?.maSP ?? "").trim();
       if (!maSP) return { status: 2000, isBooking: false };
 
+      // Chuẩn UUID: resolve id sản phẩm trước (ma_sp/ky_hieu là text; or= không
+      // ngoặc bị gateway làm hỏng, ilike trên cột uuid ma_sp_id lỗi 400 →
+      // checkBooking trước đây luôn âm thầm trả isBooking=false).
+      let spUid: string | null = null;
+      try {
+        const safe = maSP.replace(/[,()]/g, "");
+        const r = await axiosApiSupabase.get("rest/v1/bds_products", {
+          params: {
+            select: "id",
+            or: `(ma_sp.eq.${safe},ky_hieu.eq.${safe})`,
+            limit: "1",
+          },
+        });
+        const prows = Array.isArray(r.data) ? r.data : [];
+        spUid = prows[0]?.id || null;
+      } catch {}
+      if (!spUid) return { status: 2000, isBooking: false };
+
       const res = await axiosApiSupabase.get("rest/v1/cloud_bookings", {
         params: {
-          select: "id,ma_sp_id,so_phieu,sp:bds_products!ma_sp_id(ma_sp,ky_hieu)",
+          select: "id,so_phieu",
           ma_ctdk_id: `eq.${companyId}`,
           loai_ct: "eq.BOOKING",
-          or: `so_phieu.ilike.*${maSP}*,ma_sp_id.ilike.*${maSP}*`,
-          limit: "20",
+          ma_sp_id: `eq.${spUid}`,
+          limit: "1",
         },
       });
       const rows = Array.isArray(res.data) ? res.data : [];
-      const hit = rows.some(
-        (r: any) =>
-          String(r?.sp?.ma_sp ?? "").trim() === maSP ||
-          String(r?.sp?.ky_hieu ?? "").trim() === maSP
-      );
-      return { status: 2000, isBooking: hit };
+      return { status: 2000, isBooking: rows.length > 0 };
     } catch (error) {
       console.log("ERROR checkBooking:", error);
       return { status: 2000, isBooking: false };
@@ -547,7 +605,11 @@ export const BookingService = {
         }
       }
 
-      // Resolve uuid khách hàng (MaKH có thể là ma_so_kh hoặc uuid)
+      // Resolve uuid khách hàng (MaKH có thể là ma_so_kh hoặc uuid).
+      // KHÔNG gộp ma_so_kh (text) với id (uuid) trong 1 or=: khi mã KH không
+      // phải uuid (vd "KH-00006"), so sánh id.eq."KH-00006" làm Postgres lỗi
+      // 22P02 "invalid input syntax for type uuid" → cả query chết 400 →
+      // "Không tìm thấy khách hàng". Khi không phải uuid chỉ tra ma_so_kh.
       let khUid: string | null = null;
       {
         const v = String(maKH).trim();
@@ -558,7 +620,7 @@ export const BookingService = {
               params: {
                 select: "id",
                 ma_ctdk: `eq.${companyId}`,
-                or: `(ma_so_kh.eq.${v},id.eq.${v})`,
+                ma_so_kh: `eq.${v}`,
                 limit: "1",
               },
             });

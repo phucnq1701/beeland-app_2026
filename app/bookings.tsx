@@ -651,109 +651,115 @@ export default function BookingsScreen() {
                 </Text>
               </View>
             ) : (
-              data.map((booking, index) => (
-                <TouchableOpacity
-                  key={`${booking?.maPGC ?? booking?.id ?? booking?.soPhieu ?? "row"}-${index}`}
-                  style={styles.bookingCard}
-                  activeOpacity={0.8}
-                  // onPress={() => router.push(`/booking/${booking.maPGC}`)}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/booking/[id]",
-                      params: { id: booking.maPGC },
-                    })
-                  }
-                >
-                  <BlurView
-                    intensity={25}
-                    tint="dark"
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <LinearGradient
-                    colors={[
-                      "rgba(255,255,255,0.08)",
-                      "rgba(255,255,255,0.02)",
-                    ]}
-                    style={StyleSheet.absoluteFill}
-                  />
+              <>
+                {/* Table Header */}
+                <View style={styles.tableHeader}>
+                  <View style={styles.headerCell}>
+                    <Text style={styles.headerText}>STT</Text>
+                  </View>
+                  <View style={styles.headerCell}>
+                    <Text style={styles.headerText}>Số phiếu</Text>
+                  </View>
+                  <View style={styles.headerCell}>
+                    <Text style={styles.headerText}>Khách hàng</Text>
+                  </View>
+                  <View style={styles.headerCell}>
+                    <Text style={styles.headerText}>Sản phẩm</Text>
+                  </View>
+                  <View style={styles.headerCell}>
+                    <Text style={styles.headerText}>Dự án</Text>
+                  </View>
+                  <View style={styles.headerCell}>
+                    <Text style={styles.headerText}>Ngày giữ chỗ</Text>
+                  </View>
+                  <View style={styles.headerCell}>
+                    <Text style={styles.headerText}>Trạng thái</Text>
+                  </View>
+                  <View style={styles.headerCell}>
+                    <Text style={styles.headerText}>Tổng tiền</Text>
+                  </View>
+                </View>
 
-                  <View style={styles.cardLeft}>
-                    <View style={styles.cardHeader}>
-                      <View
-                        style={[
-                          styles.statusDot,
-                          { backgroundColor: statusColors[booking.tenTT] },
-                        ]}
-                      />
-                      <Text style={styles.bookingId}>#{booking.maSanPham}</Text>
-                      <BlurView
-                        intensity={30}
-                        tint="dark"
-                        style={[
-                          styles.priorityBadge,
-                          { backgroundColor: priorityBgColors[booking.tenTT] },
-                        ]}
-                      >
-                        <Text
+                {data.map((booking, index) => (
+                  <TouchableOpacity
+                    key={`${booking?.maPGC ?? booking?.id ?? booking?.soPhieu ?? "row"}-${index}`}
+                    style={styles.bookingCard}
+                    activeOpacity={0.8}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/booking/[id]",
+                        params: { id: booking.maPGC },
+                      })
+                    }
+                  >
+                    <BlurView
+                      intensity={25}
+                      tint="dark"
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <LinearGradient
+                      colors={[
+                        "rgba(255,255,255,0.08)",
+                        "rgba(255,255,255,0.02)",
+                      ]}
+                      style={StyleSheet.absoluteFill}
+                    />
+
+                    <View style={styles.tableRow}>
+                      <View style={styles.cell}>
+                        <Text style={styles.cellText}>{index + 1}</Text>
+                      </View>
+                      <View style={styles.cell}>
+                        <Text style={styles.cellText}>{booking.soPhieu}</Text>
+                      </View>
+                      <View style={styles.cell}>
+                        <Text style={styles.cellText}>{booking.khachHang}</Text>
+                      </View>
+                      <View style={styles.cell}>
+                        <Text style={styles.cellText}>{booking.maSanPham}</Text>
+                      </View>
+                      <View style={styles.cell}>
+                        <Text style={styles.cellText}>{booking.tenDA}</Text>
+                      </View>
+                      <View style={styles.cell}>
+                        <Text style={styles.cellText}>
+                          {new Date(booking.ngayGiuCho).toLocaleDateString(
+                            "vi-VN",
+                            { day: "2-digit", month: "2-digit", year: "numeric" }
+                          )}
+                        </Text>
+                      </View>
+                      <View style={styles.cell}>
+                        <BlurView
+                          intensity={30}
+                          tint="dark"
                           style={[
-                            styles.priorityText,
-                            { color: priorityColors[booking.tenTT] },
+                            styles.statusBadge,
+                            { backgroundColor: priorityBgColors[booking.tenTT] },
                           ]}
                         >
-                          {booking?.tenTT}
+                          <Text
+                            style={[
+                              styles.statusText,
+                              { color: priorityColors[booking.tenTT] },
+                            ]}
+                          >
+                            {booking?.tenTT}
+                          </Text>
+                        </BlurView>
+                      </View>
+                      <View style={styles.cell}>
+                        <Text style={styles.amount}>
+                          {new Intl.NumberFormat("vi-VN").format(
+                            Math.round(Number(booking.tongGiaGomVAT) || 0)
+                          )}{" "}
+                          đ
                         </Text>
-                      </BlurView>
+                      </View>
                     </View>
-
-                    <Text style={styles.customerName}>{booking.khachHang}</Text>
-                    <Text style={styles.productCode}>{booking.soPhieu}</Text>
-
-                    <View style={styles.dateRow}>
-                      <Text style={styles.dateText}>
-                        {new Date(booking.ngayGiuCho).toLocaleDateString(
-                          "vi-VN",
-                          { day: "2-digit", month: "2-digit", year: "numeric" }
-                        )}
-                      </Text>
-                      <Text style={styles.dateSeparator}>•</Text>
-                      <Text style={styles.projectName} numberOfLines={1}>
-                        {booking.tenDA}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.cardRight}>
-                    <Text style={styles.amount}>
-                      {new Intl.NumberFormat("vi-VN").format(
-                        Math.round(Number(booking.tongGiaGomVAT) || 0)
-                      )}{" "}
-                      đ
-                    </Text>
-                    <BlurView
-                      intensity={30}
-                      tint="dark"
-                      // style={[
-                      //   styles.statusBadge,
-                      //   { backgroundColor: statusBgColors[booking.status] },
-                      // ]}
-                    >
-                      {/* <Text
-                      style={[
-                        styles.statusText,
-                        { color: statusColors[booking.status] },
-                      ]}
-                    >
-                      {statusLabels[booking.status]}
-                    </Text> */}
-                    </BlurView>
-                    <ChevronRight
-                      color={Colors.textTertiary}
-                      size={20}
-                      style={{ marginTop: 4 }}
-                    />
-                  </View>
-                </TouchableOpacity>
-              ))
+                  </TouchableOpacity>
+                ))}
+              </>
             )}
           </View>
         )}
@@ -1000,118 +1006,95 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  cardLeft: {
-    flex: 1,
-    gap: 6,
+  tableHeader: {
+    flexDirection: "row",
+    backgroundColor: Colors.glass.light,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
   },
-  cardHeader: {
+  headerCell: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRightWidth: 1,
+    borderRightColor: Colors.glass.border,
+    paddingHorizontal: 4,
+  },
+  headerText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.primary,
+    textAlign: "center",
+  },
+  tableRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
-  priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    overflow: "hidden",
+  cell: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRightWidth: 1,
+    borderRightColor: Colors.glass.border,
+    paddingHorizontal: 4,
   },
-  priorityText: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  bookingId: {
+  cellText: {
     fontSize: 13,
-    fontWeight: "700",
-    color: Colors.text,
-  },
-  customerName: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: Colors.text,
-  },
-  productCode: {
-    fontSize: 13,
-    color: Colors.textSecondary,
     fontWeight: "500",
-  },
-  dateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  dateText: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-  },
-  dateSeparator: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-  },
-  projectName: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-    flex: 1,
-  },
-  cardRight: {
-    alignItems: "flex-end",
-    gap: 6,
-    marginLeft: 12,
+    color: Colors.text,
+    textAlign: "center",
   },
   amount: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: Colors.primary,
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.text,
+    textAlign: "center",
   },
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 10,
-    overflow: "hidden",
+    borderRadius: 12,
   },
   statusText: {
     fontSize: 11,
     fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  loadingContainer: {
+    alignItems: "center",
+    paddingVertical: 40,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
   },
   emptyState: {
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-    gap: 16,
+    paddingVertical: 40,
+    gap: 12,
   },
   emptyIconContainer: {
     width: 80,
     height: 80,
-    borderRadius: 24,
+    borderRadius: 40,
     justifyContent: "center",
     alignItems: "center",
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
   },
   emptyText: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "600",
     color: Colors.text,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: "center",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop:100
-  },
-
-  loadingText: {
-    marginTop: 10,
-    color: Colors.textSecondary,
+    fontSize: 13,
+    color: Colors.textTertiary,
   },
 });
