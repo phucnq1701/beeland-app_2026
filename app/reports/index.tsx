@@ -105,7 +105,9 @@ function buildDateRange(f: Filters): { TuNgay: string; DenNgay: string } {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function ReportsScreen() {
+export default function ReportsScreen({
+  embedded,
+}: { embedded?: boolean } = {}) {
   const router = useRouter();
   // const { width } = useWindowDimensions();
   // const isSmallScreen = width < 380;
@@ -277,12 +279,18 @@ export default function ReportsScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
+          // Bật header (cả khi nhúng trong tab menu) để nội dung không bị
+          // che bởi status bar/notch — header tự xử lý safe-area.
+          headerShown: true,
           title: "Báo cáo",
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()}>
-              <ChevronLeft color={Colors.text} size={24} />
-            </TouchableOpacity>
-          ),
+          // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
+          headerLeft: embedded
+            ? undefined
+            : () => (
+                <TouchableOpacity onPress={() => router.back()}>
+                  <ChevronLeft color={Colors.text} size={24} />
+                </TouchableOpacity>
+              ),
         }}
       />
 

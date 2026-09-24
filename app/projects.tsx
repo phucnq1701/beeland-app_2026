@@ -20,7 +20,9 @@ import { ProjectService } from "@/sevicesSupabase/ProjectService";
 const DEFAULT_PROJECT_IMAGE =
   "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/css461kotbkumrm0wjakm";
 
-export default function ProjectsScreen() {
+export default function ProjectsScreen({
+  embedded,
+}: { embedded?: boolean } = {}) {
   const router = useRouter();
 
   const [projects, setProjects] = useState<any[]>([]);
@@ -166,6 +168,9 @@ export default function ProjectsScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
+          // Bật header (cả khi nhúng trong tab menu) để nội dung không bị
+          // che bởi status bar/notch — header tự xử lý safe-area.
+          headerShown: true,
           title: "Dự án",
           headerStyle: { backgroundColor: "#FAFAFA" },
           headerTintColor: Colors.text,

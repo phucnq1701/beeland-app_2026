@@ -73,7 +73,9 @@ const statusConfig = {
   cancelled: { label: "Đã hủy", color: "#EF4444" },
 };
 
-export default function AppointmentsScreen() {
+export default function AppointmentsScreen({
+  embedded,
+}: { embedded?: boolean } = {}) {
   const { id, dataFromHome } = useLocalSearchParams();
   const openedFromHome = useRef(false);
   const [viewMode, setViewMode] = useState<ViewMode>("list");

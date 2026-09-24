@@ -36,4 +36,4 @@ bun.lockb.tmp
 *.ipa
 
 # TypeScript
-*.tsbuildinfo
+*.tsbuildinfo.expo/

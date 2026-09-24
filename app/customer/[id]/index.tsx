@@ -169,8 +169,9 @@ export default function CustomerDetailScreen() {
           options={{
             headerShown: true,
             title: "Chi tiết khách hàng",
-            headerStyle: { backgroundColor: Colors.primary },
-            headerTintColor: Colors.white,
+            headerStyle: { backgroundColor: Colors.background },
+            headerTintColor: Colors.text,
+            headerShadowVisible: false,
           }}
         />
         <View style={styles.loadingWrap}>
@@ -189,12 +190,13 @@ export default function CustomerDetailScreen() {
         options={{
           headerShown: true,
           title: "Chi tiết khách hàng",
-          headerStyle: { backgroundColor: Colors.primary },
-          headerTintColor: Colors.white,
+          headerStyle: { backgroundColor: Colors.background },
+          headerTintColor: Colors.text,
           headerTitleStyle: { fontWeight: "700", fontSize: 18 },
+          headerShadowVisible: false,
           headerLeft: () => (
             <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
-              <ChevronLeft color={Colors.white} size={24} />
+              <ChevronLeft color={Colors.text} size={24} />
             </TouchableOpacity>
           ),
           headerRight: () => (
@@ -203,10 +205,10 @@ export default function CustomerDetailScreen() {
                 onPress={() => router.push(`/customer/${customer.id}/edit`)}
                 style={{ padding: 4 }}
               >
-                <Edit2 color={Colors.white} size={20} />
+                <Edit2 color={Colors.text} size={20} />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleDeleteCustomer} style={{ padding: 4 }}>
-                <Trash2 color={Colors.white} size={20} />
+                <Trash2 color={Colors.error} size={20} />
               </TouchableOpacity>
             </View>
           ),
@@ -355,7 +357,7 @@ export default function CustomerDetailScreen() {
           <ChevronRight color={Colors.textTertiary} size={20} />
         </TouchableOpacity>
 
-        <View style={[styles.sectionWrap, { marginBottom: 40 }]}>
+        {/* <View style={[styles.sectionWrap, { marginBottom: 40 }]}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
               <FileText color={Colors.accent.purple} size={18} />
@@ -408,7 +410,7 @@ export default function CustomerDetailScreen() {
               ))}
             </View>
           )}
-        </View>
+        </View> */}
       </ScrollView>
 
       <Modal visible={showAddHistoryModal} transparent animationType="slide">
@@ -461,7 +463,7 @@ export default function CustomerDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F6F8",
+    backgroundColor: Colors.background,
   },
   scrollView: {
     flex: 1,
@@ -481,12 +483,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 24,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderRadius: 16,
+    margin: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
+        shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.06,
         shadowRadius: 12,
       },

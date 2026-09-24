@@ -19,18 +19,12 @@ import {
   Settings,
   LogOut,
   ChevronRight,
-  Building2,
-  Package,
-  Lock,
-  Calendar,
-  Users,
-  Receipt,
-  FileText,
   Trash2,
   Sparkles,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
+import { features } from "@/mocks/features";
 import { CloudProfileService, CloudProfile } from "@/sevicesSupabase/CloudProfileService";
 import {
   deleteCurrentEmployee,
@@ -51,7 +45,7 @@ interface ManagementItem {
   id: string;
   title: string;
   icon: React.ComponentType<any>;
-  route: string;
+  route: string | null;
   color: string;
 }
 
@@ -61,59 +55,30 @@ const menuItems: MenuItem[] = [
   { id: "3", title: "Xóa tài khoản", icon: Trash2, color: Colors.error },
 ];
 
-const managementItems: ManagementItem[] = [
-  {
-    id: "1",
-    title: "Dự án",
-    icon: Building2,
-    route: "/projects",
-    color: Colors.iconOrange,
-  },
-  {
-    id: "2",
-    title: "Sản phẩm",
-    icon: Package,
-    route: "/products",
-    color: Colors.iconBlue,
-  },
-  {
-    id: "3",
-    title: "Lock căn",
-    icon: Lock,
-    route: "/locked-units",
-    color: Colors.iconYellow,
-  },
-  {
-    id: "4",
-    title: "Lịch hẹn",
-    icon: Calendar,
-    route: "/appointments",
-    color: Colors.iconGreen,
-  },
-  {
-    id: "5",
-    title: "Khách hàng",
-    icon: Users,
-    route: "/customers",
-    color: Colors.iconPink,
-  },
-  {
-    id: "6",
-    title: "Booking",
-    icon: Receipt,
-    route: "/bookings",
-    color: Colors.iconBlue,
-  },
+// Route cho từng tính năng — đồng bộ với màn "Tất cả quản lý" / Home.
+// null = tính năng chưa có màn hình (Hoa hồng).
+const featureRoutes: Record<string, string | null> = {
+  "1": "/projects",
+  "2": "/products",
+  "3": "/appointments",
+  "4": "/locked-units",
+  "5": "/bookings",
+  "6": "/customers",
+  "7": null,
+  "8": "/contracts",
+  "9": "/reports",
+  "13": "/deposits",
+};
 
-  {
-    id: "8",
-    title: "Hợp đồng",
-    icon: FileText,
-    route: "/contracts",
-    color: Colors.iconPurple,
-  },
-
-];
+// Lấy ĐỦ danh sách tính năng từ features (10 mục) thay vì hardcode 7 mục —
+// icon/tên/màu dùng chung với Home & Tất cả quản lý để luôn nhất quán.
+const managementItems: ManagementItem[] = features.map((f) => ({
+  id: f.id,
+  title: f.title,
+  icon: f.icon,
+  route: featureRoutes[f.id] ?? null,
+  color: f.iconColor,
+}));
 
 export default function AccountScreen() {
   const insets = useSafeAreaInsets();
@@ -139,7 +104,11 @@ export default function AccountScreen() {
     router.push("/login");
   };
 
-  const handleManagementItemPress = (route: string) => {
+  const handleManagementItemPress = (route: string | null) => {
+    if (!route) {
+      console.log("[Account] Tính năng chưa có màn hình:", route);
+      return;
+    }
     router.push(route as never);
   };
 

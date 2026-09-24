@@ -407,15 +407,16 @@ export default function ContractDetailScreen() {
           options={{
             headerShown: true,
             title: "Chi tiết hợp đồng",
-            headerStyle: { backgroundColor: Colors.primary },
-            headerTintColor: Colors.white,
+            headerStyle: { backgroundColor: Colors.background },
+            headerTintColor: Colors.text,
             headerTitleStyle: { fontWeight: "700" as const, fontSize: 18 },
+            headerShadowVisible: false,
             headerLeft: () => (
               <TouchableOpacity
                 onPress={() => router.back()}
                 style={{ padding: 4 }}
               >
-                <ChevronLeft color={Colors.white} size={24} />
+                <ChevronLeft color={Colors.text} size={24} />
               </TouchableOpacity>
             ),
           }}
@@ -441,15 +442,16 @@ export default function ContractDetailScreen() {
         options={{
           headerShown: true,
           title: "Chi tiết hợp đồng",
-          headerStyle: { backgroundColor: Colors.primary },
-          headerTintColor: Colors.white,
+          headerStyle: { backgroundColor: Colors.background },
+          headerTintColor: Colors.text,
           headerTitleStyle: { fontWeight: "700" as const, fontSize: 18 },
+          headerShadowVisible: false,
           headerLeft: () => (
             <TouchableOpacity
               onPress={() => router.back()}
               style={{ padding: 4 }}
             >
-              <ChevronLeft color={Colors.white} size={24} />
+              <ChevronLeft color={Colors.text} size={24} />
             </TouchableOpacity>
           ),
         }}
@@ -877,7 +879,7 @@ export default function ContractDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F2F3F7",
+    backgroundColor: Colors.background,
   },
   scrollContent: {
     padding: 16,

@@ -16,6 +16,8 @@ function normalizeProduct(r: any) {
   const tang = r?.tang;
   const tt = r?.tt;
   return {
+    // UUID bds_products.id — dùng cho RPC get_active_price_for_product
+    ID: v(r?.id),
     MaSP: v(r?.ma_sp),
     KyHieu: v(r?.ky_hieu),
     MaDA: v(r?.ma_da),
@@ -209,7 +211,8 @@ export const ProductService = {
       // Web AI: order created_at desc (không dùng stt), phân trang offset/limit
       const params: Record<string, string> = {
         select: PRODUCT_SELECT,
-        order: "created_at.desc",
+        // order: "created_at.desc",
+        order: "ky_hieu.asc,created_at.desc",
         limit: String(limit),
         offset: String(Math.max(0, Number(offset) - 1)), // legacy offSet is 1-based
       };
@@ -266,7 +269,10 @@ export const ProductService = {
       const kw = String(keyword ?? "").trim();
       if (kw) {
         const safe = kw.replace(/[,()]/g, "");
-        params.or = `ky_hieu.ilike.*${safe}*,ma_sp.ilike.*${safe}*,so_can_ho.ilike.*${safe}*`;
+        // BẮT BUỘC bọc ngoặc đơn quanh giá trị or=: gateway phía trước PostgREST
+        // làm hỏng or= không ngoặc (dính thành tên cột "orky_hieu" → lỗi 400 →
+        // kết quả rỗng). Đã test thật: or=(ky_hieu.ilike.*2009*,...) → 200 OK.
+        params.or = `(ky_hieu.ilike.*${safe}*,ma_sp.ilike.*${safe}*,so_can_ho.ilike.*${safe}*)`;
       }
 
       const res = await axiosApiSupabase.get("rest/v1/bds_products", {
@@ -385,8 +391,43 @@ export const ProductService = {
 
       const rows = Array.isArray(res.data) ? res.data : [];
       const data = rows.length > 0 ? normalizeProduct(rows[0]) : null;
+      if (!data) return { data: null };
 
-      return { data };
+      // Lock còn hiệu lực cho căn này (cloud_bookings loai_ct=LOCK, state=LOCKED,
+      // het_han_luc > now) → trả ThoiGianConLai (giây) để chi tiết SP chạy
+      // đếm ngược trên nút "Lock căn" khi vào lại màn.
+      let secondsLeft = 0;
+      try {
+        if (companyId && UUID_RE.test(companyId) && data?.ID && UUID_RE.test(String(data.ID))) {
+          const now = new Date().toISOString();
+          const resLock = await axiosApiSupabase.get("rest/v1/cloud_bookings", {
+            params: {
+              select: "id,so_phieu,state,ngay_giu_cho,het_han_luc",
+              ma_ctdk_id: `eq.${companyId}`,
+              loai_ct: "eq.LOCK",
+              state: "eq.LOCKED",
+              ma_sp_id: `eq.${data.ID}`,
+              het_han_luc: `gt.${now}`,
+              order: "het_han_luc.desc",
+              limit: "1",
+            },
+          });
+          const lockRows = Array.isArray(resLock.data) ? resLock.data : [];
+          const lock = lockRows[0];
+          if (lock?.het_han_luc) {
+            secondsLeft = Math.max(
+              0,
+              Math.floor(
+                (new Date(lock.het_han_luc).getTime() - Date.now()) / 1000
+              )
+            );
+          }
+        }
+      } catch (e) {
+        console.log("[Product] tra lock con hieu luc loi (bo qua):", e);
+      }
+
+      return { data: { ...data, ThoiGianConLai: secondsLeft } };
     } catch (error) {
       console.log("ERROR getDetailProducts (bds_products):", error);
       return { data: null };

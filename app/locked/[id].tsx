@@ -12,7 +12,7 @@ import {
 import { useLocalSearchParams, Stack, useRouter } from "expo-router";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Calendar, Lock } from "lucide-react-native";
+import { Calendar, ChevronLeft } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
@@ -175,7 +175,24 @@ export default function LockDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: data?.tenDA || "Chi tiết lock" }} />
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          title: data?.tenDA || "Chi tiết lock",
+          headerStyle: { backgroundColor: Colors.background },
+          headerTintColor: Colors.text,
+          headerTitleStyle: { fontWeight: "700", fontSize: 18 },
+          headerShadowVisible: false,
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.headerBackButton}
+            >
+              <ChevronLeft color={Colors.text} size={24} />
+            </TouchableOpacity>
+          ),
+        }}
+      />
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -301,6 +318,10 @@ export default function LockDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
 
+  headerBackButton: {
+    marginLeft: 8,
+  },
+
   heroCard: {
     height: 320,
     backgroundColor: Colors.white,
@@ -334,6 +355,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginTop: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
 
   detailRow: {

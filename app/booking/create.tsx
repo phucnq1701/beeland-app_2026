@@ -71,7 +71,16 @@ function normalizeCustomer(item: any): BookingCustomer {
 
   return {
     id: item?.id ?? raw?.id ?? "",
-    maKH: String(item?.ma_kh ?? raw?.MaKH ?? item?.id ?? raw?.id ?? ""),
+    // Quy chuẩn: query theo id (uuid). Ưu tiên UUID thật; chỉ fallback về
+    // ma_so_kh (vd "KH-00006") khi chưa có id — BookingService sẽ tự resolve
+    // uuid từ ma_so_kh.
+    maKH: String(
+      item?.id && String(item.id).includes("-")
+        ? item.id
+        : raw?.id && String(raw.id).includes("-")
+          ? raw.id
+          : item?.ma_kh ?? raw?.MaKH ?? item?.id ?? raw?.id ?? ""
+    ),
     tenKH: (item?.ho_ten ?? raw?.TenKH ?? item?.ten_kh ?? raw?.ten_kh ?? "")
       .toString()
       .trim(),

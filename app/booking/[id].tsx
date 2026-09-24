@@ -34,6 +34,32 @@ import Colors from "@/constants/colors";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { CartService } from "@/sevices/CartServices";
 
+/** Chuẩn hoá màu hex (#RGB hoặc #RRGGBB) -> "RRGGBB" */
+const normalizeHex = (color?: string): string | null => {
+  if (!color || typeof color !== "string") return null;
+  const c = color.trim();
+  if (!c.startsWith("#")) return null;
+  let hex = c.slice(1);
+  if (hex.length === 3)
+    hex = hex
+      .split("")
+      .map((ch) => ch + ch)
+      .join("");
+  if (hex.length !== 6) return null;
+  return hex;
+};
+
+/** Tự chọn màu chữ (đen/trắng) tương phản với màu nền để dễ đọc */
+const getContrastTextColor = (bg?: string): string => {
+  const hex = normalizeHex(bg);
+  if (!hex) return "#FFFFFF";
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? "#1F2937" : "#FFFFFF";
+};
+
 export default function BookingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -253,6 +279,14 @@ export default function BookingDetailScreen() {
   const currentStatus = statusConfig[String(booking.MaTT)] ??
     statusConfig[String(data?.state)] ??
     { text: "Chưa xác định", color: "#374151", bg: "#F3F4F6", icon: "•" };
+  // Ưu tiên màu nền trạng thái chuẩn từ data (cloud_catalogs.color_code) để
+  // chip trạng thái ở chi tiết khớp với màu hiển thị ở danh sách booking.
+  const statusBgColor = normalizeHex(data?.colorCode)
+    ? String(data.colorCode)
+    : currentStatus.bg;
+  const statusFgColor = normalizeHex(data?.colorCode)
+    ? getContrastTextColor(data.colorCode)
+    : currentStatus.color;
   const isActiveBooking =
     (data?.state === "PENDING" || String(booking.MaTT) === "1") &&
     !["APPROVED", "CANCELLED", "EXPIRED"].includes(data?.state) &&
@@ -312,9 +346,9 @@ export default function BookingDetailScreen() {
                 <Text style={styles.bookingIdText}>{booking.soPhieu ?? "—"}</Text>
               </View>
               {currentStatus && (
-                <View style={[styles.statusChip, { backgroundColor: currentStatus.bg }]}>
+                <View style={[styles.statusChip, { backgroundColor: statusBgColor }]}>
                   <Text style={styles.statusIcon}>{currentStatus.icon}</Text>
-                  <Text style={[styles.statusLabel, { color: currentStatus.color }]}>
+                  <Text style={[styles.statusLabel, { color: statusFgColor }]}>
                     {data?.tenTT || currentStatus.text}
                   </Text>
                 </View>

@@ -16,13 +16,7 @@ const escapeIlike = (value: string) => value.replace(/[%,()]/g, "");
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Danh mục mặc định khi tenant chưa khai báo (dùng để UI không rỗng, KHÔNG phải UUID thật) */
-const DEFAULT_STATUS_CATALOG = [
-  { id: "potential", label: "Tiềm năng", value: "potential", color: "#F59E0B", code: "potential" },
-  { id: "active", label: "Đang giao dịch", value: "active", color: "#10B981", code: "active" },
-  { id: "completed", label: "Đã chốt cọc/HĐ", value: "completed", color: "#3B82F6", code: "completed" },
-  { id: "inactive", label: "Không hoạt động", value: "inactive", color: "#9CA3AF", code: "inactive" },
-];
+// Trạng thái KH KHÔNG hardcode: luôn đọc từ cloud_catalogs (xem getTrangThaiCatalogs).
 
 const DEFAULT_NGUON_CATALOG = [
   { id: "facebook", label: "Facebook / Ads", value: "facebook", code: "facebook" },
@@ -33,27 +27,94 @@ const DEFAULT_NGUON_CATALOG = [
 ];
 
 /**
- * Đọc danh mục từ cloud_catalogs theo tenant.
- * Thử cột tenant `ma_ctdk_uid` trước, nếu lỗi/không có dữ liệu thì fallback sang `ma_ctdk`.
+ * Đọc danh mục từ cloud_catalogs.
+ * Chuẩn DB (trang_thai_kh): select=id,item_code,item_name,color_code,ghi_chu,created_at;
+ * ma_ctdk_uid=eq.<uid công ty hiện tại>; catalog_type=eq.trang_thai_kh; order=created_at.asc.
+ * Fallback: cột tenant cũ `ma_ctdk` -> danh mục global -> không giới hạn tenant.
  */
-const fetchCatalogList = async (catalogType: string, selectCols: string) => {
+const fetchCatalogList = async (
+  catalogType: string,
+  selectCols: string,
+  order = "item_name.asc"
+) => {
   const tenantId = await getTenantId();
-  for (const tenantCol of ["ma_ctdk_uid", "ma_ctdk"]) {
+  const userCompanyId = await getUserCompanyId().catch(() => "");
+
+  const uidCandidates: string[] = [];
+  for (const id of [tenantId, userCompanyId]) {
+    if (id && UUID_RE.test(id) && !uidCandidates.includes(id)) uidCandidates.push(id);
+  }
+
+  const queries: Array<Record<string, string>> = [];
+  for (const uid of uidCandidates) {
+    queries.push({ ma_ctdk_uid: `eq.${uid}` });
+    queries.push({ ma_ctdk: `eq.${uid}` });
+  }
+  queries.push({ ma_ctdk: "eq.global" });
+  queries.push({});
+
+  for (const extra of queries) {
     try {
       const params: Record<string, string> = {
         select: selectCols,
         catalog_type: `eq.${catalogType}`,
-        order: "item_name.asc",
+        order,
+        ...extra,
       };
-      if (tenantId && UUID_RE.test(tenantId)) params[tenantCol] = `eq.${tenantId}`;
       const res = await axiosApiSupabase.get("rest/v1/cloud_catalogs", { params });
       const list = Array.isArray(res.data) ? res.data : [];
       if (list.length > 0) return list;
     } catch (e) {
-      // thử cột tenant kế tiếp
+      // thử query kế tiếp
     }
   }
   return [] as any[];
+};
+
+/** Bỏ dấu tiếng Việt + lower-case để so khớp tên trạng thái ổn định */
+const normalizeStatusText = (s: any): string =>
+  String(s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "d")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+/**
+ * Resolve trạng thái khách hàng -> UUID cloud_catalogs (catalog_type='trang_thai_kh').
+ * Nhận cả UUID, item_code (vd "active") hoặc tên (item_name).
+ * Trả null nếu không tìm thấy (khi đó lọc phía client theo tên).
+ */
+const resolveStatusUuid = async (
+  statusIdOrCode?: string,
+  statusLabel?: string
+): Promise<string | null> => {
+  const v = String(statusIdOrCode || "").trim();
+  if (!v || v === "all") return null;
+  if (UUID_RE.test(v)) return v;
+
+  const clean = (s: string) => s.replace(/[(),]/g, "").trim();
+  const parts = [`id.eq.${clean(v)}`, `item_code.eq.${clean(v)}`];
+  const label = clean(String(statusLabel || ""));
+  if (label) parts.push(`item_name.eq.${label}`);
+
+  try {
+    const res = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
+      params: {
+        select: "id",
+        catalog_type: "eq.trang_thai_kh",
+        or: `(${parts.join(",")})`,
+        limit: "1",
+      },
+    });
+    const row = Array.isArray(res.data) ? res.data[0] : null;
+    if (row?.id && UUID_RE.test(String(row.id))) return String(row.id);
+  } catch (e) {
+    // không resolve được -> caller lọc phía client
+  }
+  return null;
 };
 
 /** Lấy 1 danh mục theo id (để bù tên/màu khi join không có) */
@@ -250,10 +311,11 @@ export function normalizeCustomerRow(raw: any) {
   const tenKH = (raw?.ten_kh || raw?.ten_cong_ty || raw?.name || raw?.ho_ten || "").toString().trim();
   const diDong = (raw?.di_dong || raw?.dien_thoai || raw?.phone || raw?.di_dong2 || raw?.dien_thoai_ct || "").toString().trim();
   
-  // Status & color resolving
+  // Status & color resolving — KHÔNG mặc định "Tiềm năng":
+  // khách chưa chọn trạng thái thì status rỗng để UI ẩn badge.
   const ttObj = raw?.trang_thai || raw?.tt || {};
-  const statusName = ttObj?.item_name || raw?.ten_tt || raw?.status || "Tiềm năng";
-  const statusColor = ttObj?.color_code || ttObj?.color_web || raw?.color_code || raw?.color_web || "#F59E0B";
+  const statusName = ttObj?.item_name || raw?.ten_tt || raw?.status || "";
+  const statusColor = ttObj?.color_code || ttObj?.color_web || raw?.color_code || raw?.color_web || "#9CA3AF";
 
   const nguonObj = raw?.nguon || {};
   const sourceName = nguonObj?.item_name || raw?.ten_nguon || raw?.source || "";
@@ -322,21 +384,37 @@ export function normalizeCustomerRow(raw: any) {
 }
 
 export const CustomerService = {
-  /** Lấy danh mục Trạng thái khách hàng từ cloud_catalogs */
+  /**
+   * Lấy danh mục Trạng thái khách hàng từ DB (KHÔNG hardcode) — đúng chuẩn:
+   *   select=id,item_code,item_name,color_code,ghi_chu,created_at
+   *   ma_ctdk_uid=eq.<uid_công_ty_hiện_tải>
+   *   catalog_type=eq.trang_thai_kh
+   *   order=created_at.asc
+   * value = id (UUID) để gửi thẳng xuống RPC fn_customer_list (p_ma_tt_id).
+   * Trả [] nếu DB không có dữ liệu (UI chỉ hiện "Tất cả", không hiện list bịa).
+   */
   getTrangThaiCatalogs: async () => {
     try {
-      const list = await fetchCatalogList("trang_thai_kh", "id,item_code,item_name,color_code");
-      if (list.length === 0) return DEFAULT_STATUS_CATALOG;
+      const list = await fetchCatalogList(
+        "trang_thai_kh",
+        "id,item_code,item_name,color_code,ghi_chu,created_at",
+        "created_at.asc"
+      );
+      if (list.length === 0) {
+        console.log("[Customer] cloud_catalogs trang_thai_kh trả rỗng");
+        return [];
+      }
       return list.map((item: any) => ({
         id: item.id,
         label: item.item_name || item.item_code,
         value: item.id,
-        color: item.color_code || "#F59E0B",
+        color: item.color_code || "#9CA3AF",
         code: item.item_code,
+        ghiChu: item.ghi_chu || "",
       }));
     } catch (e) {
       console.log("Error getTrangThaiCatalogs:", e);
-      return DEFAULT_STATUS_CATALOG;
+      return [];
     }
   },
 
@@ -444,12 +522,15 @@ export const CustomerService = {
     search = "",
     isPersonal,
     maTtId,
+    statusLabel,
     limit = 20,
     offset = 0,
   }: {
     search?: string;
     isPersonal?: boolean;
     maTtId?: string;
+    /** Tên trạng thái trên pill (để resolve/fallback lọc phía client) */
+    statusLabel?: string;
     limit?: number;
     offset?: number;
   } = {}) => {
@@ -482,27 +563,75 @@ export const CustomerService = {
       const employeeId = await resolveRpcEmployeeId(rpcTenantId);
       const companyIds = await getUserCompanyIds();
 
-      const rpcPayload: Record<string, any> = {
-        p_ma_ctdk: rpcTenantId,
-        p_employee_id: employeeId,
-        p_company_ids: companyIds || null,
-        p_is_personal: typeof isPersonal === "boolean" ? isPersonal : null,
-        p_ma_tt_id: maTtId && maTtId !== "all" && UUID_RE.test(maTtId) ? maTtId : null,
-        p_input_search: search.trim() || null,
-        p_offset: offset,
-        p_limit: limit,
+      // Bộ lọc trạng thái: resolve value của pill -> UUID catalog
+      // (value có thể là mã kiểu "active" khi danh mục fallback mặc định)
+      const wantStatusFilter = !!maTtId && maTtId !== "all";
+      const statusUuid = wantStatusFilter
+        ? await resolveStatusUuid(maTtId, statusLabel)
+        : null;
+
+      const callRpc = async (pOffset: number, pLimit: number) => {
+        const rpcPayload: Record<string, any> = {
+          p_ma_ctdk: rpcTenantId,
+          p_employee_id: employeeId,
+          p_company_ids: companyIds || null,
+          p_is_personal: typeof isPersonal === "boolean" ? isPersonal : null,
+          p_ma_tt_id: statusUuid,
+          p_input_search: search.trim() || null,
+          p_offset: pOffset,
+          p_limit: pLimit,
+        };
+        const res = await axiosApiSupabase.post(
+          "rest/v1/rpc/fn_customer_list",
+          rpcPayload
+        );
+        return Array.isArray(res.data) ? res.data : [];
       };
 
-      const resRpc = await axiosApiSupabase.post("rest/v1/rpc/fn_customer_list", rpcPayload);
-      if (Array.isArray(resRpc.data) && resRpc.data.length > 0) {
-        const rows = resRpc.data;
-        const total = rows[0]?.total_count != null ? Number(rows[0].total_count) : rows.length;
-        const data = rows.map(normalizeCustomerRow);
-        return { data, total, hasMore: offset + data.length < total };
+      // Case 1: không lọc trạng thái, hoặc đã có UUID để RPC lọc
+      if (!wantStatusFilter || statusUuid) {
+        const rows = await callRpc(offset, limit);
+        if (rows.length > 0) {
+          const total =
+            rows[0]?.total_count != null ? Number(rows[0].total_count) : rows.length;
+          let data = rows.map(normalizeCustomerRow);
+
+          // Phòng trường hợp RPC không lọc theo p_ma_tt_id: nếu thấy dòng có
+          // trạng thái KHÁC trạng thái đang chọn thì lọc xác nhận phía client.
+          if (wantStatusFilter && statusUuid) {
+            const hasOtherStatus = rows.some((r: any) => {
+              const id = r?.ma_tt_id || r?.trang_thai?.id || r?.tt?.id || null;
+              return id != null && String(id) !== String(statusUuid);
+            });
+            if (hasOtherStatus) {
+              const label = normalizeStatusText(statusLabel);
+              data = data.filter(
+                (r) => !!label && normalizeStatusText(r.status) === label
+              );
+            }
+          }
+
+          return { data, total, hasMore: offset + data.length < total };
+        }
+
+        // RPC trả rỗng là kết quả hợp lệ và phải tôn trọng phạm vi quyền Web.
+        return { data: [], total: 0, hasMore: false };
       }
 
-      // RPC trả rỗng là kết quả hợp lệ và phải tôn trọng phạm vi quyền Web.
-      return { data: [], total: 0, hasMore: false };
+      // Case 2: không resolve được UUID -> RPC không lọc được,
+      // tải cửa sổ rộng rồi lọc phía client theo TÊN trạng thái.
+      const windowSize = Math.min(2000, Math.max(500, offset + limit * 5));
+      const rawRows = await callRpc(0, windowSize);
+      const label = normalizeStatusText(statusLabel || maTtId);
+      const filtered = rawRows
+        .map(normalizeCustomerRow)
+        .filter((r) => !!label && normalizeStatusText(r.status) === label);
+      const data = filtered.slice(offset, offset + limit);
+      return {
+        data,
+        total: filtered.length,
+        hasMore: offset + data.length < filtered.length,
+      };
     } catch (rpcError: any) {
       console.log("ERROR fn_customer_list:", rpcError?.response?.data || rpcError);
       return { data: [], total: 0, hasMore: false };

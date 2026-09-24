@@ -472,7 +472,8 @@ export default function CustomerEditScreen() {
             <Text style={styles.sectionTitle}>Phân loại khách hàng</Text>
           </View>
 
-          {/* Trạng thái */}
+          {/* Trạng thái — chỉ hiện khi DB có danh mục (không fix cứng) */}
+          {statusOptions.length > 0 && (
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Trạng thái</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tagScroll}>
@@ -510,6 +511,7 @@ export default function CustomerEditScreen() {
               })}
             </ScrollView>
           </View>
+          )}
 
           {/* Nguồn khách */}
           <View style={styles.inputGroup}>
