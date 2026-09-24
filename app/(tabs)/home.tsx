@@ -333,8 +333,53 @@ export default function HomeScreen() {
     "đã thanh lý": "#F3F4F6",
   };
 
-  const statusBgOf = (t: any) => STATUS_BG[normalizeStatusKey(t)] ?? "#64748B";
-  const statusFgOf = (t: any) => STATUS_FG[normalizeStatusKey(t)] ?? "#F1F5F9";
+  // Chuẩn hoá mã màu từ cloud (color_code): có/không dấu #, #RGB → #RRGGBB
+  const normalizeStatusColor = (color: any): string | null => {
+    let c = String(color ?? "").trim();
+    if (!c) return null;
+    if (!c.startsWith("#")) c = `#${c}`;
+    if (c.length === 4) {
+      c =
+        "#" +
+        c
+          .slice(1)
+          .split("")
+          .map((ch) => ch + ch)
+          .join("");
+    }
+    return /^#[0-9A-Fa-f]{6}$/.test(c) ? c : null;
+  };
+
+  // Chọn màu chữ/icon tương phản với màu nền trạng thái (đen/trắng)
+  const contrastTextColorOf = (bg: string): string => {
+    try {
+      const hex = bg.replace("#", "");
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.6 ? "#1F2937" : "#FFFFFF";
+    } catch {
+      return "#FFFFFF";
+    }
+  };
+
+  // Màu nền trạng thái: ưu tiên colorCode từ data (cloud_catalogs.color_code),
+  // fallback về bảng màu tĩnh theo tên trạng thái.
+  const bookingStatusBgOf = (booking: any): string =>
+    normalizeStatusColor(booking?.colorCode) ??
+    STATUS_BG[normalizeStatusKey(booking?.tenTT)] ??
+    "#64748B";
+
+  // Màu chữ/icon trên nền trạng thái: nếu nền lấy từ data → tự chọn đen/trắng
+  // theo độ sáng; nếu nền từ bảng tĩnh → giữ màu chữ nhạt đã thiết kế.
+  const bookingStatusFgOf = (booking: any): string => {
+    const key = normalizeStatusKey(booking?.tenTT);
+    if (!normalizeStatusColor(booking?.colorCode) && STATUS_FG[key]) {
+      return STATUS_FG[key];
+    }
+    return contrastTextColorOf(bookingStatusBgOf(booking));
+  };
 
   /** Hiển thị tiền: nhận number/string/null — null thì hiện "—" thay vì "đ" trơ trọi */
   const formatMoney = (v: any) => {
@@ -735,12 +780,12 @@ export default function HomeScreen() {
               <View
                 style={[
                   styles.recentIconBox,
-                  { backgroundColor: statusBgOf(booking.tenTT) },
+                  { backgroundColor: bookingStatusBgOf(booking) },
                 ]}
               >
                 <ClipboardList
                   size={20}
-                  color={statusFgOf(booking.tenTT)}
+                  color={bookingStatusFgOf(booking)}
                 />
               </View>
               <View style={styles.recentCardContent}>
@@ -764,13 +809,13 @@ export default function HomeScreen() {
                 <View
                   style={[
                     styles.statusBadge,
-                    { backgroundColor: statusBgOf(booking.tenTT) },
+                    { backgroundColor: bookingStatusBgOf(booking) },
                   ]}
                 >
                   <Text
                     style={[
                       styles.statusBadgeText,
-                      { color: statusFgOf(booking.tenTT) },
+                      { color: bookingStatusFgOf(booking) },
                     ]}
                   >
                     {booking.tenTT}
@@ -838,33 +883,36 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               </View>
-              <View
-                style={[
-                  styles.customerStatusBadge,
-                  { backgroundColor: `${customer.statusColor}18` },
-                ]}
-              >
+              {/* Badge trạng thái — chỉ hiện khi khách đã có trạng thái */}
+              {customer.status ? (
                 <View
                   style={[
-                    styles.badgeDot,
-                    { backgroundColor: customer.statusColor },
+                    styles.customerStatusBadge,
+                    { backgroundColor: `${customer.statusColor}18` },
                   ]}
-                />
-                <Text
-                  style={[
-                    styles.statusBadgeText,
-                    { color: customer.statusColor },
-                  ]}
-                  numberOfLines={1}
                 >
-                  {customer.status || "Tiềm năng"}
-                </Text>
-              </View>
+                  <View
+                    style={[
+                      styles.badgeDot,
+                      { backgroundColor: customer.statusColor },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.statusBadgeText,
+                      { color: customer.statusColor },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {customer.status}
+                  </Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={styles.recentSection}>
+        {/* <View style={styles.recentSection}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleContainer}>
               <LinearGradient
@@ -914,48 +962,10 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               </View>
-              {/* <View
-                style={[
-                  styles.statusBadge,
-                  {
-                    backgroundColor:
-                      apt.status === "confirmed"
-                        ? "rgba(16,185,129,0.1)"
-                        : apt.status === "pending"
-                        ? "rgba(245,158,11,0.1)"
-                        : apt.status === "completed"
-                        ? "rgba(59,130,246,0.1)"
-                        : "rgba(239,68,68,0.1)",
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusBadgeText,
-                    {
-                      color:
-                        apt.status === "confirmed"
-                          ? Colors.success
-                          : apt.status === "pending"
-                          ? Colors.warning
-                          : apt.status === "completed"
-                          ? Colors.accent.blue
-                          : Colors.error,
-                    },
-                  ]}
-                >
-                  {apt.status === "confirmed"
-                    ? "Xác nhận"
-                    : apt.status === "pending"
-                    ? "Chờ XN"
-                    : apt.status === "completed"
-                    ? "Hoàn thành"
-                    : "Đã hủy"}
-                </Text>
-              </View> */}
+             
             </TouchableOpacity>
           ))}
-        </View>
+        </View> */}
 
         {/* <View style={styles.recentSection}>
           <View style={styles.sectionHeader}>

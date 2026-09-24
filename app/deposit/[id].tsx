@@ -66,6 +66,32 @@ function formatDate(dateStr: string): string {
   }
 }
 
+/** Làm tối màu chữ theo màu nền để dễ đọc (nền lấy chuẩn từ data) */
+function darkenColor(color: string, factor = 0.62): string {
+  try {
+    let hex = String(color || "").trim();
+    if (!hex.startsWith("#")) return color;
+    hex = hex.slice(1);
+    if (hex.length === 3) {
+      hex = hex
+        .split("")
+        .map((c) => c + c)
+        .join("");
+    }
+    if (hex.length !== 6) return color;
+    const toHex = (v: number) =>
+      Math.max(0, Math.min(255, Math.round(v)))
+        .toString(16)
+        .padStart(2, "0");
+    const r = parseInt(hex.slice(0, 2), 16) * factor;
+    const g = parseInt(hex.slice(2, 4), 16) * factor;
+    const b = parseInt(hex.slice(4, 6), 16) * factor;
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  } catch {
+    return color;
+  }
+}
+
 function buildFallbackDetail(id: string, dataParam?: string): DepositDetail {
   if (DEMO_DEPOSIT_DETAILS[id]) return DEMO_DEPOSIT_DETAILS[id];
 
@@ -206,6 +232,10 @@ export default function DepositDetailScreen() {
 
   if (!detail) return null;
 
+  // Màu trạng thái lấy chuẩn từ data (MauNen/color_code), chữ tự làm tối theo nền
+  const statusColor = detail?.colorTT || Colors.primary;
+  const statusTextColor = darkenColor(statusColor);
+
   const tienCoc = Number(detail?.TienCoc ?? detail?.soTienCoc ?? 0);
   const tongGia = Number(detail?.TongGiaTriHDMB ?? 0);
   const daThu = Number(detail?.DaThu ?? 0);
@@ -219,15 +249,16 @@ export default function DepositDetailScreen() {
         options={{
           headerShown: true,
           title: "Chi tiết đặt cọc",
-          headerStyle: { backgroundColor: Colors.primary },
-          headerTintColor: Colors.white,
+          headerStyle: { backgroundColor: Colors.background },
+          headerTintColor: Colors.text,
           headerTitleStyle: { fontWeight: "700" as const, fontSize: 18 },
+          headerShadowVisible: false,
           headerLeft: () => (
             <TouchableOpacity
               onPress={() => router.back()}
               style={{ padding: 4 }}
             >
-              <ChevronLeft color={Colors.white} size={24} />
+              <ChevronLeft color={Colors.text} size={24} />
             </TouchableOpacity>
           ),
         }}
@@ -245,10 +276,10 @@ export default function DepositDetailScreen() {
               <View
                 style={[
                   styles.iconWrap,
-                  { backgroundColor: `${detail.colorTT}15` },
+                  { backgroundColor: `${statusColor}15` },
                 ]}
               >
-                <Landmark color={detail.colorTT} size={22} />
+                <Landmark color={statusTextColor} size={22} />
               </View>
               <View style={styles.infoHeaderText}>
                 <Text style={styles.depositNumber}>{detail.soPhieu}</Text>
@@ -257,16 +288,16 @@ export default function DepositDetailScreen() {
               <View
                 style={[
                   styles.statusBadge,
-                  { backgroundColor: `${detail.colorTT}18` },
+                  { backgroundColor: `${statusColor}18` },
                 ]}
               >
                 <View
                   style={[
                     styles.statusDot,
-                    { backgroundColor: detail.colorTT },
+                    { backgroundColor: statusColor },
                   ]}
                 />
-                <Text style={[styles.statusText, { color: detail.colorTT }]}>
+                <Text style={[styles.statusText, { color: statusTextColor }]}>
                   {detail.trangThai}
                 </Text>
               </View>
@@ -614,7 +645,7 @@ export default function DepositDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F2F3F7",
+    backgroundColor: Colors.background,
   },
   scrollContent: {
     padding: 16,
@@ -667,9 +698,9 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 8,
   },
   statusDot: {

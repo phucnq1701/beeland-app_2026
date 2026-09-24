@@ -12,18 +12,36 @@ import {
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import Colors from '@/constants/colors';
 import { features } from '@/mocks/features';
-import { Settings, ChevronUp, ChevronDown } from 'lucide-react-native';
+import { Settings, ChevronUp, ChevronDown, House, LayoutGrid } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  loadMenuTabIds,
+  saveMenuTabIds,
+  MAX_MENU_TABS,
+  MENU_TAB_FEATURE_IDS,
+  DEFAULT_MENU_TAB_IDS,
+} from '@/components/utils/menuTabs';
 
 const { width } = Dimensions.get('window');
 const STORAGE_KEY = '@home_features_config';
 const MAX_HOME_FEATURES = 6;
 
+type ConfigTab = 'home' | 'menu';
+
 export default function AllManagementScreen() {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<ConfigTab>('home');
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
+
+  // Cấu hình các mục trên trang chủ (tối đa 6)
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [originalSelectedIds, setOriginalSelectedIds] = useState<string[]>([]);
+
+  // Cấu hình 2 tab menu ở giữa tab bar (mặc định: 2 mục đầu tiên)
+  const [menuSelectedIds, setMenuSelectedIds] =
+    useState<string[]>(DEFAULT_MENU_TAB_IDS);
+  const [menuOriginalIds, setMenuOriginalIds] =
+    useState<string[]>(DEFAULT_MENU_TAB_IDS);
 
   useEffect(() => {
     loadConfiguration();
@@ -54,22 +72,58 @@ export default function AllManagementScreen() {
       setSelectedIds(defaultIds);
       setOriginalSelectedIds(defaultIds);
     }
+
+    // Cấu hình tab menu
+    try {
+      const menuIds = await loadMenuTabIds();
+      setMenuSelectedIds(menuIds);
+      setMenuOriginalIds(menuIds);
+    } catch (error) {
+      console.log('[AllManagement] Load menu tabs error:', error instanceof Error ? error.message : String(error));
+      setMenuSelectedIds(DEFAULT_MENU_TAB_IDS);
+      setMenuOriginalIds(DEFAULT_MENU_TAB_IDS);
+    }
+  };
+
+  // Danh sách đang cấu hình theo tab hiện tại
+  const activeSelectedIds = activeTab === 'home' ? selectedIds : menuSelectedIds;
+
+  // Tab menu chỉ cho chọn các mục có màn hình tương ứng
+  const selectableFeatures =
+    activeTab === 'menu'
+      ? features.filter(f => MENU_TAB_FEATURE_IDS.includes(f.id))
+      : features;
+
+  const handleTabSwitch = (tab: ConfigTab) => {
+    if (tab === activeTab) return;
+    // Huỷ các thay đổi chưa lưu khi chuyển tab
+    setSelectedIds(originalSelectedIds);
+    setMenuSelectedIds(menuOriginalIds);
+    setIsEditMode(false);
+    setActiveTab(tab);
   };
 
   const handleEditPress = () => {
     if (isEditMode) {
       setSelectedIds(originalSelectedIds);
+      setMenuSelectedIds(menuOriginalIds);
     }
     setIsEditMode(!isEditMode);
   };
 
   const handleSavePress = async () => {
     try {
-      const config = { selectedIds };
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-      setOriginalSelectedIds(selectedIds);
+      if (activeTab === 'home') {
+        const config = { selectedIds };
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+        setOriginalSelectedIds(selectedIds);
+        console.log('[AllManagement] Home configuration saved', { selectedIds });
+      } else {
+        await saveMenuTabIds(menuSelectedIds);
+        setMenuOriginalIds(menuSelectedIds);
+        console.log('[AllManagement] Menu tabs configuration saved', { menuSelectedIds });
+      }
       setIsEditMode(false);
-      console.log('[AllManagement] Configuration saved', { selectedIds });
       if (Platform.OS === 'web') {
         alert('Đã lưu cấu hình thành công!');
       } else {
@@ -88,40 +142,69 @@ export default function AllManagementScreen() {
   const handleFeatureToggle = (featureId: string) => {
     if (!isEditMode) return;
 
-    const isSelected = selectedIds.includes(featureId);
-    if (isSelected) {
-      setSelectedIds(selectedIds.filter(id => id !== featureId));
-    } else {
-      if (selectedIds.length >= MAX_HOME_FEATURES) {
-        if (Platform.OS === 'web') {
-          alert(`Bạn chỉ có thể chọn tối đa ${MAX_HOME_FEATURES} mục`);
-        } else {
-          Alert.alert('Giới hạn', `Bạn chỉ có thể chọn tối đa ${MAX_HOME_FEATURES} mục`);
+    if (activeTab === 'home') {
+      const isSelected = selectedIds.includes(featureId);
+      if (isSelected) {
+        setSelectedIds(selectedIds.filter(id => id !== featureId));
+      } else {
+        if (selectedIds.length >= MAX_HOME_FEATURES) {
+          if (Platform.OS === 'web') {
+            alert(`Bạn chỉ có thể chọn tối đa ${MAX_HOME_FEATURES} mục`);
+          } else {
+            Alert.alert('Giới hạn', `Bạn chỉ có thể chọn tối đa ${MAX_HOME_FEATURES} mục`);
+          }
+          return;
         }
-        return;
+        setSelectedIds([...selectedIds, featureId]);
       }
-      setSelectedIds([...selectedIds, featureId]);
+    } else {
+      const isSelected = menuSelectedIds.includes(featureId);
+      if (isSelected) {
+        if (menuSelectedIds.length <= 1) {
+          if (Platform.OS === 'web') {
+            alert('Cần chọn ít nhất 1 mục cho tab menu');
+          } else {
+            Alert.alert('Giới hạn', 'Cần chọn ít nhất 1 mục cho tab menu');
+          }
+          return;
+        }
+        setMenuSelectedIds(menuSelectedIds.filter(id => id !== featureId));
+      } else {
+        if (menuSelectedIds.length >= MAX_MENU_TABS) {
+          if (Platform.OS === 'web') {
+            alert(`Bạn chỉ có thể chọn tối đa ${MAX_MENU_TABS} mục cho tab menu`);
+          } else {
+            Alert.alert('Giới hạn', `Bạn chỉ có thể chọn tối đa ${MAX_MENU_TABS} mục cho tab menu`);
+          }
+          return;
+        }
+        setMenuSelectedIds([...menuSelectedIds, featureId]);
+      }
     }
   };
 
   const handleMoveUp = (featureId: string) => {
     if (!isEditMode) return;
-    const currentIndex = selectedIds.indexOf(featureId);
+    const list = activeSelectedIds;
+    const setter = activeTab === 'home' ? setSelectedIds : setMenuSelectedIds;
+    const currentIndex = list.indexOf(featureId);
     if (currentIndex <= 0) return;
-    
-    const newOrder = [...selectedIds];
+
+    const newOrder = [...list];
     [newOrder[currentIndex - 1], newOrder[currentIndex]] = [newOrder[currentIndex], newOrder[currentIndex - 1]];
-    setSelectedIds(newOrder);
+    setter(newOrder);
   };
 
   const handleMoveDown = (featureId: string) => {
     if (!isEditMode) return;
-    const currentIndex = selectedIds.indexOf(featureId);
-    if (currentIndex >= selectedIds.length - 1) return;
-    
-    const newOrder = [...selectedIds];
+    const list = activeSelectedIds;
+    const setter = activeTab === 'home' ? setSelectedIds : setMenuSelectedIds;
+    const currentIndex = list.indexOf(featureId);
+    if (currentIndex >= list.length - 1) return;
+
+    const newOrder = [...list];
     [newOrder[currentIndex], newOrder[currentIndex + 1]] = [newOrder[currentIndex + 1], newOrder[currentIndex]];
-    setSelectedIds(newOrder);
+    setter(newOrder);
   };
 
   const handleFeaturePress = (featureId: string) => {
@@ -131,7 +214,7 @@ export default function AllManagementScreen() {
     }
 
     console.log('[AllManagement] Feature pressed', { featureId });
-    
+
     if (featureId === '1') {
       router.push('/projects');
     } else if (featureId === '2') {
@@ -159,6 +242,11 @@ export default function AllManagementScreen() {
       console.log('[AllManagement] No route defined for feature', { featureId });
     }
   };
+
+  const editModeHintText =
+    activeTab === 'home'
+      ? `Chọn ${selectedIds.length}/${MAX_HOME_FEATURES} mục hiển thị trên trang chủ`
+      : `Chọn ${menuSelectedIds.length}/${MAX_MENU_TABS} mục hiển thị trên thanh tab (giữa Home và Tài khoản)`;
 
   return (
     <View style={styles.container}>
@@ -188,14 +276,44 @@ export default function AllManagementScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Segmented control: Trang chủ | Cấu hình menu */}
+        <View style={styles.tabSwitchContainer}>
+          <TouchableOpacity
+            style={[styles.tabSwitchButton, activeTab === 'home' && styles.tabSwitchButtonActive]}
+            onPress={() => handleTabSwitch('home')}
+            activeOpacity={0.8}
+          >
+            <House
+              color={activeTab === 'home' ? Colors.white : Colors.textSecondary}
+              size={16}
+              strokeWidth={2.5}
+            />
+            <Text style={[styles.tabSwitchText, activeTab === 'home' && styles.tabSwitchTextActive]}>
+              Trang chủ
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabSwitchButton, activeTab === 'menu' && styles.tabSwitchButtonActive]}
+            onPress={() => handleTabSwitch('menu')}
+            activeOpacity={0.8}
+          >
+            <LayoutGrid
+              color={activeTab === 'menu' ? Colors.white : Colors.textSecondary}
+              size={16}
+              strokeWidth={2.5}
+            />
+            <Text style={[styles.tabSwitchText, activeTab === 'menu' && styles.tabSwitchTextActive]}>
+              Cấu hình menu
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {isEditMode && (
           <View style={styles.editModeHeader}>
             <View style={styles.editModeHeaderContent}>
               <Settings color={Colors.primary} size={20} />
               <View style={styles.editModeTextContainer}>
-                <Text style={styles.editModeText}>
-                  Chọn {selectedIds.length}/{MAX_HOME_FEATURES} mục hiển thị trên trang chủ
-                </Text>
+                <Text style={styles.editModeText}>{editModeHintText}</Text>
                 <Text style={styles.editModeSubText}>
                   Sử dụng nút mũi tên để thay đổi thứ tự hiển thị
                 </Text>
@@ -204,9 +322,11 @@ export default function AllManagementScreen() {
           </View>
         )}
 
-        <Text style={styles.sectionTitle}>Các mục đã chọn ({selectedIds.length})</Text>
+        <Text style={styles.sectionTitle}>
+          {activeTab === 'home' ? 'Các mục đã chọn' : 'Tab menu hiển thị'} ({activeSelectedIds.length})
+        </Text>
         <View style={styles.selectedItemsContainer}>
-          {selectedIds.map((id, index) => {
+          {activeSelectedIds.map((id, index) => {
             const feature = features.find(f => f.id === id);
             if (!feature) return null;
 
@@ -242,22 +362,22 @@ export default function AllManagementScreen() {
                       onPress={() => handleMoveUp(feature.id)}
                       disabled={index === 0}
                     >
-                      <ChevronUp 
-                        color={index === 0 ? Colors.textLight : Colors.primary} 
-                        size={22} 
+                      <ChevronUp
+                        color={index === 0 ? Colors.textLight : Colors.primary}
+                        size={22}
                         strokeWidth={2.5}
                       />
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[
                         styles.moveButton,
-                        index === selectedIds.length - 1 && styles.moveButtonDisabled,
+                        index === activeSelectedIds.length - 1 && styles.moveButtonDisabled,
                       ]}
                       onPress={() => handleMoveDown(feature.id)}
-                      disabled={index === selectedIds.length - 1}
+                      disabled={index === activeSelectedIds.length - 1}
                     >
-                      <ChevronDown 
-                        color={index === selectedIds.length - 1 ? Colors.textLight : Colors.primary} 
+                      <ChevronDown
+                        color={index === activeSelectedIds.length - 1 ? Colors.textLight : Colors.primary}
                         size={22}
                         strokeWidth={2.5}
                       />
@@ -271,8 +391,8 @@ export default function AllManagementScreen() {
 
         <Text style={styles.sectionTitle}>Tất cả các mục</Text>
         <View style={styles.featuresGrid}>
-          {features.map((feature) => {
-            const isSelected = selectedIds.includes(feature.id);
+          {selectableFeatures.map((feature) => {
+            const isSelected = activeSelectedIds.includes(feature.id);
             if (isSelected) return null;
             return (
               <TouchableOpacity
@@ -311,44 +431,84 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
-  featuresGrid: {
+  tabSwitchContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 20,
   },
-  featureCard: {
-    width: (width - 40 - 32) / 3,
-    aspectRatio: 1,
+  tabSwitchButton: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    backgroundColor: Colors.white,
-    borderRadius: 20,
-    padding: 16,
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  tabSwitchButtonActive: {
+    backgroundColor: Colors.primary,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
       },
       android: {
-        elevation: 4,
+        elevation: 3,
+      },
+    }),
+  },
+  tabSwitchText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+  },
+  tabSwitchTextActive: {
+    color: Colors.white,
+  },
+  // Grid 4 mục trên 1 hàng — gọn gàng
+  featuresGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  featureCard: {
+    width: (width - 40 - 30) / 4,
+    aspectRatio: 0.9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
       },
       web: {
-        boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
+        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.06)',
       },
     }),
   },
   featureIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
   },
   featureTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.text,
     textAlign: 'center',
@@ -449,30 +609,31 @@ const styles = StyleSheet.create({
     elevation: 16,
   },
   selectedItemsContainer: {
-    gap: 12,
+    gap: 10,
     marginBottom: 32,
   },
+  // Card hiện đại: nền trắng, bo tròn lớn, đổ bóng mềm — không viền
   selectedItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 2,
-    borderColor: Colors.primary,
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingLeft: 14,
+    paddingRight: 8,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
       },
       android: {
-        elevation: 3,
+        elevation: 2,
       },
       web: {
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+        boxShadow: '0 4px 16px rgba(15, 23, 42, 0.06)',
       },
     }),
   },
@@ -483,17 +644,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   orderNumberBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.primary,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(232, 111, 37, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   orderNumberText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700' as const,
-    color: Colors.white,
+    color: Colors.primary,
   },
   selectedItemContent: {
     flex: 1,
@@ -502,9 +663,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   selectedIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -516,17 +677,17 @@ const styles = StyleSheet.create({
   },
   moveButtonsContainer: {
     flexDirection: 'column',
-    gap: 4,
+    gap: 2,
   },
   moveButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 34,
+    height: 30,
+    borderRadius: 10,
     backgroundColor: 'rgba(232, 111, 37, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   moveButtonDisabled: {
-    backgroundColor: Colors.background,
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
   },
 });

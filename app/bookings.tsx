@@ -15,16 +15,13 @@ import {
   Filter,
   X,
   ChevronRight,
+  ChevronLeft,
+  ChevronUp,
+  ChevronDown,
   Calendar,
-  Sparkles,
 } from "lucide-react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { BlurView } from "expo-blur";
 import Colors from "@/constants/colors";
-import { bookings, BookingStatus, BookingPriority } from "@/mocks/bookings";
-import { featuredProperties } from "@/mocks/properties";
 import { BookingService } from "@/sevicesSupabase/BookingService";
-import { FilterService } from "@/sevicesSupabase/FilterService";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
 
 /** Loại bỏ bản ghi trùng theo id ổn định (maPGC -> id -> soPhieu), giữ bản đầu tiên */
@@ -44,7 +41,35 @@ const dedupeBookings = (list: any[]): any[] => {
   return out;
 };
 
-export default function BookingsScreen() {
+/** Chuẩn hoá màu hex (#RGB hoặc #RRGGBB) -> "RRGGBB" */
+const normalizeHex = (color?: string): string | null => {
+  if (!color || typeof color !== "string") return null;
+  const c = color.trim();
+  if (!c.startsWith("#")) return null;
+  let hex = c.slice(1);
+  if (hex.length === 3)
+    hex = hex
+      .split("")
+      .map((ch) => ch + ch)
+      .join("");
+  if (hex.length !== 6) return null;
+  return hex;
+};
+
+/** Tự chọn màu chữ (đen/trắng) tương phản với màu nền để dễ đọc */
+const getContrastTextColor = (bg?: string): string => {
+  const hex = normalizeHex(bg);
+  if (!hex) return "#FFFFFF";
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? "#1F2937" : "#FFFFFF";
+};
+
+export default function BookingsScreen({
+  embedded,
+}: { embedded?: boolean } = {}) {
   const router = useRouter();
 
   const searchTimeout = useRef<any>(null);
@@ -53,11 +78,6 @@ export default function BookingsScreen() {
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string[]>([]);
-
-  const [selectedStatus, setSelectedStatus] = useState<BookingStatus | "all">(
-    "all"
-  );
 
   const [showFilters, setShowFilters] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -228,348 +248,229 @@ export default function BookingsScreen() {
   /* ---------------- CLEAR FILTER ---------------- */
 
   const clearFilters = () => {
+    const resetFilter = {
+      ...filterCondition,
+      DuAn: "",
+      MaTT: 0,
+      inputSearch: "",
+      Offset: 1,
+    };
+
+    setFilterCondition(resetFilter);
     setSearchQuery("");
-    setSelectedProjects([]);
-    setSelectedStatus("all");
+    setSelectTT("");
     setShowFilters(false);
+
+    // Nếu danh sách dự án đang trống thì effect [selectedProjects] không chạy,
+    // nên gọi tải lại trực tiếp để đảm bảo về trạng thái "Tất cả".
+    if (selectedProjects.length === 0) {
+      loadData2(resetFilter);
+    }
+    setSelectedProjects([]);
   };
 
+  // Có bộ lọc đang hoạt động: chọn dự án hoặc chọn trạng thái khác "Tất cả" (id 0)
   const hasActiveFilters =
-    selectedProjects.length > 0 || selectedStatus !== "all";
+    selectedProjects.length > 0 || Number(filterCondition.MaTT) !== 0;
 
-  const statusLabels: Record<BookingStatus | "all", string> = {
-    all: "Tất cả",
-    waiting: "Chờ thanh toán",
-    paid: "Đã thanh toán",
-    expired: "Hết hạn",
-  };
+  // Map tên trạng thái -> màu trả về từ data (pgc_trang_thai.color_code)
+  const statusColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    statusList.forEach((s: any) => {
+      if (s?.title) map[s.title] = s.ColorWeb || Colors.primary;
+    });
+    return map;
+  }, [statusList]);
 
-  const statusColors: Record<any, string> = {
-    "Chờ duyệt": "#F59E0B",
-    "Đã duyệt": "#10B981",
-    "Hủy booking": "#EF4444",
-  };
+  const getStatusColor = (tenTT?: string): string =>
+    (tenTT && statusColorMap[tenTT]) || Colors.primary;
 
-  const statusBgColors: Record<BookingStatus, string> = {
-    waiting: "rgba(245, 158, 11, 0.2)",
-    paid: "rgba(16, 185, 129, 0.2)",
-    expired: "rgba(239, 68, 68, 0.2)",
-  };
-
-  const priorityColors: Record<any, string> = {
-    "Chờ duyệt": "#FCA5A5",
-    "Đã duyệt": "#FDBA74",
-    "Huỷ booking": "#93C5FD",
-  };
-
-  const priorityBgColors: Record<any, string> = {
-    "Chờ duyệt": "rgba(252, 165, 165, 0.2)",
-    "Đã duyệt": "rgba(253, 186, 116, 0.2)",
-    "Huỷ booking": "rgba(147, 197, 253, 0.2)",
-  };
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: "",
+          headerShown: true,
+          title: "Booking",
           headerStyle: {
             backgroundColor: Colors.background,
           },
           headerTintColor: Colors.text,
+          headerTitleStyle: {
+            fontWeight: "700",
+            fontSize: 18,
+          },
           headerShadowVisible: false,
-          headerTransparent: true,
+          // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
+          headerLeft: embedded
+            ? undefined
+            : () => (
+                <TouchableOpacity
+                  onPress={() => router.back()}
+                  style={styles.headerBackButton}
+                >
+                  <ChevronLeft color={Colors.text} size={24} />
+                </TouchableOpacity>
+              ),
         }}
       />
 
-      {/* Background */}
-      <LinearGradient
-        colors={Colors.gradients.background}
-        style={styles.backgroundGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
-      <View style={styles.orb1} />
-      <View style={styles.orb2} />
-
       <ScrollView
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.greetingRow}>
-            <Sparkles size={14} color={Colors.accent.purple} />
-            <Text style={styles.greeting}>Quản lý</Text>
-          </View>
-          <Text style={styles.headerTitle}>Booking</Text>
-        </View>
-
         {/* Search & Filter */}
-        <View style={styles.searchSection}>
-          <BlurView intensity={30} tint="dark" style={styles.searchContainer}>
-            <Search color={Colors.textTertiary} size={20} />
+        <View style={styles.searchAndFilterRow}>
+          <View style={styles.searchContainer}>
+            <Search color={Colors.textSecondary} size={20} />
             <TextInput
               style={styles.searchInput}
               placeholder="Tìm kiếm booking, khách hàng..."
-              placeholderTextColor={Colors.textTertiary}
+              placeholderTextColor={Colors.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
             />
             {searchQuery !== "" && (
               <TouchableOpacity onPress={() => setSearchQuery("")}>
-                <X color={Colors.textTertiary} size={20} />
+                <X color={Colors.textSecondary} size={20} />
               </TouchableOpacity>
             )}
-          </BlurView>
+          </View>
 
           <TouchableOpacity
             style={[
               styles.filterButton,
               hasActiveFilters && styles.filterButtonActive,
             ]}
+            activeOpacity={0.7}
             onPress={() => setShowFilters(!showFilters)}
           >
-            <BlurView
-              intensity={hasActiveFilters ? 0 : 30}
-              tint="dark"
-              style={StyleSheet.absoluteFill}
-            />
-            {hasActiveFilters && (
-              <LinearGradient
-                colors={Colors.gradients.primary}
-                style={StyleSheet.absoluteFill}
-              />
+            <Filter color={Colors.primary} size={18} />
+            <Text style={styles.filterText}>Bộ lọc</Text>
+            {showFilters ? (
+              <ChevronUp color={Colors.primary} size={18} />
+            ) : (
+              <ChevronDown color={Colors.primary} size={18} />
             )}
-            <Filter
-              color={hasActiveFilters ? Colors.white : Colors.text}
-              size={20}
-            />
           </TouchableOpacity>
         </View>
 
         {/* Filters Panel */}
         {showFilters && (
-          <BlurView intensity={40} tint="dark" style={styles.filtersPanel}>
-            <LinearGradient
-              colors={["rgba(255,255,255,0.05)", "transparent"]}
-              style={StyleSheet.absoluteFill}
-            />
+          <View style={styles.filterPanel}>
             <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Dự án</Text>
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterOptions}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.filterChip,
-                    selectedProjects.length === 0 && styles.filterChipActive,
-                  ]}
-                  onPress={() => {
-                    setSelectedProjects([]);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      selectedProjects.length === 0 &&
-                        styles.filterChipTextActive,
-                    ]}
+              <View style={styles.filterSectionHeader}>
+                <Text style={styles.filterSectionTitle}>Dự án</Text>
+                {hasActiveFilters && (
+                  <TouchableOpacity
+                    style={styles.resetFilterButton}
+                    onPress={clearFilters}
+                    activeOpacity={0.7}
                   >
-                    Tất cả
-                  </Text>
-                </TouchableOpacity>
+                    <Text style={styles.resetFilterText}>Đặt lại</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
 
-                {duAn.map((project) => {
-                  const active = selectedProjects.includes(project.MaDA);
-
-                  return (
-                    <TouchableOpacity
-                      key={project.MaDA}
+              <ScrollView style={{ maxHeight: 200 }}>
+                <View style={styles.filterOptionsGrid}>
+                  <TouchableOpacity
+                    style={[
+                      styles.filterOption,
+                      selectedProjects.length === 0 &&
+                        styles.filterOptionActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedProjects([]);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text
                       style={[
-                        styles.filterChip,
-                        active ? styles.filterChipActive : null,
+                        styles.filterOptionText,
+                        selectedProjects.length === 0 &&
+                          styles.filterOptionTextActive,
                       ]}
-                      onPress={() => {
-                        if (active) {
-                          setSelectedProjects((prev) =>
-                            prev.filter((id) => id !== project.MaDA)
-                          );
-                        } else {
-                          setSelectedProjects((prev) => [
-                            ...prev,
-                            project.MaDA,
-                          ]);
-                        }
-                      }}
                     >
-                      <Text
-                        style={[
-                          styles.filterChipText,
-                          active ? styles.filterChipTextActive : null,
-                        ]}
-                      >
-                        {project.TenDA}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
+                      Tất cả
+                    </Text>
+                  </TouchableOpacity>
 
-            <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Trạng thái</Text>
+                  {duAn.map((project) => {
+                    const active = selectedProjects.includes(project.MaDA);
 
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterOptions}
-              >
-                <View style={styles.filterOptions}>
-                  {statusList.map((status) => (
-                    <TouchableOpacity
-                      key={status?.id}
-                      style={[
-                        styles.filterChip,
-                        filterCondition?.MaTT === status?.id &&
-                          styles.filterChipActive,
-                      ]}
-                      onPress={() => {
-                        applyChangeFilter("TrangThai", status?.id);
-                      }}
-                    >
-                      <Text
+                    return (
+                      <TouchableOpacity
+                        key={project.MaDA}
                         style={[
-                          styles.filterChipText,
-                          filterCondition?.MaTT === status?.id &&
-                            styles.filterChipTextActive,
+                          styles.filterOption,
+                          active && styles.filterOptionActive,
                         ]}
+                        onPress={() => {
+                          if (active) {
+                            setSelectedProjects((prev) =>
+                              prev.filter((id) => id !== project.MaDA)
+                            );
+                          } else {
+                            setSelectedProjects((prev) => [
+                              ...prev,
+                              project.MaDA,
+                            ]);
+                          }
+                        }}
+                        activeOpacity={0.7}
                       >
-                        {status?.title}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <Text
+                          style={[
+                            styles.filterOptionText,
+                            active && styles.filterOptionTextActive,
+                          ]}
+                        >
+                          {project.TenDA}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </ScrollView>
             </View>
 
-            {hasActiveFilters && (
-              <TouchableOpacity
-                style={styles.clearButton}
-                onPress={clearFilters}
-              >
-                <Text style={styles.clearButtonText}>Xóa bộ lọc</Text>
-              </TouchableOpacity>
-            )}
-          </BlurView>
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>Trạng thái</Text>
+
+              <View style={styles.filterOptionsGrid}>
+                {statusList.map((status) => (
+                  <TouchableOpacity
+                    key={status?.id}
+                    style={[
+                      styles.filterOption,
+                      filterCondition?.MaTT === status?.id &&
+                        styles.filterOptionActive,
+                    ]}
+                    onPress={() => {
+                      applyChangeFilter("TrangThai", status?.id);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.filterOptionText,
+                        filterCondition?.MaTT === status?.id &&
+                          styles.filterOptionTextActive,
+                      ]}
+                    >
+                      {status?.title}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
         )}
 
         {/* Stats Row - Clickable Status Tabs */}
-        {/* <View style={styles.statsContainer}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={[
-              styles.statCardWrapper,
-              selectedStatus === "all" && styles.statCardSelected,
-            ]}
-            onPress={() => setSelectedStatus("all")}
-          >
-            <BlurView intensity={30} tint="dark" style={styles.statCard}>
-              <LinearGradient
-                colors={
-                  selectedStatus === "all"
-                    ? ["rgba(139, 92, 246, 0.45)", "rgba(139, 92, 246, 0.2)"]
-                    : ["rgba(139, 92, 246, 0.3)", "rgba(139, 92, 246, 0.1)"]
-                }
-                style={StyleSheet.absoluteFill}
-              />
-              <Text style={styles.statValue}>{stats.total}</Text>
-              <Text style={styles.statLabel}>Tất cả</Text>
-            </BlurView>
-          </TouchableOpacity>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={[
-              styles.statCardWrapper,
-              selectedStatus === "waiting" && styles.statCardSelected,
-            ]}
-            onPress={() =>
-              setSelectedStatus(
-                selectedStatus === "waiting" ? "all" : "waiting"
-              )
-            }
-          >
-            <BlurView intensity={30} tint="dark" style={styles.statCard}>
-              <LinearGradient
-                colors={
-                  selectedStatus === "waiting"
-                    ? ["rgba(245, 158, 11, 0.45)", "rgba(245, 158, 11, 0.2)"]
-                    : ["rgba(245, 158, 11, 0.3)", "rgba(245, 158, 11, 0.1)"]
-                }
-                style={StyleSheet.absoluteFill}
-              />
-              <Text style={[styles.statValue, { color: Colors.iconYellow }]}>
-                {stats.waiting}
-              </Text>
-              <Text style={styles.statLabel}>Chờ TT</Text>
-            </BlurView>
-          </TouchableOpacity>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={[
-              styles.statCardWrapper,
-              selectedStatus === "paid" && styles.statCardSelected,
-            ]}
-            onPress={() =>
-              setSelectedStatus(selectedStatus === "paid" ? "all" : "paid")
-            }
-          >
-            <BlurView intensity={30} tint="dark" style={styles.statCard}>
-              <LinearGradient
-                colors={
-                  selectedStatus === "paid"
-                    ? ["rgba(16, 185, 129, 0.45)", "rgba(16, 185, 129, 0.2)"]
-                    : ["rgba(16, 185, 129, 0.3)", "rgba(16, 185, 129, 0.1)"]
-                }
-                style={StyleSheet.absoluteFill}
-              />
-              <Text style={[styles.statValue, { color: Colors.iconGreen }]}>
-                {stats.paid}
-              </Text>
-              <Text style={styles.statLabel}>Đã TT</Text>
-            </BlurView>
-          </TouchableOpacity>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={[
-              styles.statCardWrapper,
-              selectedStatus === "expired" && styles.statCardSelected,
-            ]}
-            onPress={() =>
-              setSelectedStatus(
-                selectedStatus === "expired" ? "all" : "expired"
-              )
-            }
-          >
-            <BlurView intensity={30} tint="dark" style={styles.statCard}>
-              <LinearGradient
-                colors={
-                  selectedStatus === "expired"
-                    ? ["rgba(239, 68, 68, 0.45)", "rgba(239, 68, 68, 0.2)"]
-                    : ["rgba(239, 68, 68, 0.3)", "rgba(239, 68, 68, 0.1)"]
-                }
-                style={StyleSheet.absoluteFill}
-              />
-              <Text style={[styles.statValue, { color: Colors.error }]}>
-                {stats.expired}
-              </Text>
-              <Text style={styles.statLabel}>Hết hạn</Text>
-            </BlurView>
-          </TouchableOpacity>
-        </View> */}
-
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -578,55 +479,31 @@ export default function BookingsScreen() {
         >
           {statusList.map((status) => {
             const active = selectTT === status.title;
+            const count =
+              status.id === 0
+                ? dataAll?.length
+                : dataAll?.filter((item) => item?.tenTT === status.title)
+                    ?.length;
 
             return (
               <TouchableOpacity
                 key={status.id}
-                activeOpacity={0.7}
+                activeOpacity={0.8}
                 style={[
-                  styles.statCardWrapper,
+                  styles.statCard,
+                  { backgroundColor: status.ColorWeb },
                   active && styles.statCardSelected,
                 ]}
                 onPress={() => handleTT(status?.title)}
               >
-                <BlurView intensity={30} tint="dark" style={styles.statCard}>
-                  <LinearGradient
-                    colors={
-                      active
-                        ? [`${status.ColorWeb}80`, `${status.ColorWeb}40`]
-                        : [`${status.ColorWeb}60`, `${status.ColorWeb}20`]
-                    }
-                    style={StyleSheet.absoluteFill}
-                  />
-
-                  <Text style={[styles.statValue, { color: status.ColorWeb }]}>
-                    {status.id === 0
-                      ? dataAll?.length
-                      : dataAll?.filter(
-                          (item) => item?.tenTT === status.title
-                        )?.length}
-                  </Text>
-
-                  <Text style={styles.statLabel} numberOfLines={1}>
-                    {status.title}
-                  </Text>
-                </BlurView>
+                <Text style={styles.statValue}>{count}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>
+                  {status.title}
+                </Text>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
-
-        {/* Active filter indicator */}
-        {selectedStatus !== "all" && (
-          <View style={styles.activeFilterRow}>
-            <Text style={styles.activeFilterText}>
-              Đang lọc: {statusLabels[selectedStatus]} ({data.length})
-            </Text>
-            <TouchableOpacity onPress={() => setSelectedStatus("all")}>
-              <X color={Colors.textSecondary} size={16} />
-            </TouchableOpacity>
-          </View>
-        )}
 
         {/* Booking List */}
         {loading ? (
@@ -638,13 +515,9 @@ export default function BookingsScreen() {
           <View style={styles.listContainer}>
             {data.length === 0 ? (
               <View style={styles.emptyState}>
-                <BlurView
-                  intensity={30}
-                  tint="dark"
-                  style={styles.emptyIconContainer}
-                >
+                <View style={styles.emptyIconContainer}>
                   <Calendar color={Colors.textSecondary} size={48} />
-                </BlurView>
+                </View>
                 <Text style={styles.emptyText}>Không tìm thấy booking nào</Text>
                 <Text style={styles.emptySubtext}>
                   Thử thay đổi bộ lọc hoặc tìm kiếm khác
@@ -652,34 +525,6 @@ export default function BookingsScreen() {
               </View>
             ) : (
               <>
-                {/* Table Header */}
-                <View style={styles.tableHeader}>
-                  <View style={styles.headerCell}>
-                    <Text style={styles.headerText}>STT</Text>
-                  </View>
-                  <View style={styles.headerCell}>
-                    <Text style={styles.headerText}>Số phiếu</Text>
-                  </View>
-                  <View style={styles.headerCell}>
-                    <Text style={styles.headerText}>Khách hàng</Text>
-                  </View>
-                  <View style={styles.headerCell}>
-                    <Text style={styles.headerText}>Sản phẩm</Text>
-                  </View>
-                  <View style={styles.headerCell}>
-                    <Text style={styles.headerText}>Dự án</Text>
-                  </View>
-                  <View style={styles.headerCell}>
-                    <Text style={styles.headerText}>Ngày giữ chỗ</Text>
-                  </View>
-                  <View style={styles.headerCell}>
-                    <Text style={styles.headerText}>Trạng thái</Text>
-                  </View>
-                  <View style={styles.headerCell}>
-                    <Text style={styles.headerText}>Tổng tiền</Text>
-                  </View>
-                </View>
-
                 {data.map((booking, index) => (
                   <TouchableOpacity
                     key={`${booking?.maPGC ?? booking?.id ?? booking?.soPhieu ?? "row"}-${index}`}
@@ -692,70 +537,78 @@ export default function BookingsScreen() {
                       })
                     }
                   >
-                    <BlurView
-                      intensity={25}
-                      tint="dark"
-                      style={StyleSheet.absoluteFill}
-                    />
-                    <LinearGradient
-                      colors={[
-                        "rgba(255,255,255,0.08)",
-                        "rgba(255,255,255,0.02)",
-                      ]}
-                      style={StyleSheet.absoluteFill}
-                    />
-
-                    <View style={styles.tableRow}>
-                      <View style={styles.cell}>
-                        <Text style={styles.cellText}>{index + 1}</Text>
-                      </View>
-                      <View style={styles.cell}>
-                        <Text style={styles.cellText}>{booking.soPhieu}</Text>
-                      </View>
-                      <View style={styles.cell}>
-                        <Text style={styles.cellText}>{booking.khachHang}</Text>
-                      </View>
-                      <View style={styles.cell}>
-                        <Text style={styles.cellText}>{booking.maSanPham}</Text>
-                      </View>
-                      <View style={styles.cell}>
-                        <Text style={styles.cellText}>{booking.tenDA}</Text>
-                      </View>
-                      <View style={styles.cell}>
-                        <Text style={styles.cellText}>
-                          {new Date(booking.ngayGiuCho).toLocaleDateString(
-                            "vi-VN",
-                            { day: "2-digit", month: "2-digit", year: "numeric" }
-                          )}
-                        </Text>
-                      </View>
-                      <View style={styles.cell}>
-                        <BlurView
-                          intensity={30}
-                          tint="dark"
+                    <View style={styles.cardLeft}>
+                      <View style={styles.cardHeader}>
+                        <View
                           style={[
-                            styles.statusBadge,
-                            { backgroundColor: priorityBgColors[booking.tenTT] },
+                            styles.statusDot,
+                            { backgroundColor: getStatusColor(booking.tenTT) },
                           ]}
-                        >
-                          <Text
+                        />
+                        <Text style={styles.bookingId} numberOfLines={1}>
+                          #{booking.maSanPham || booking.soPhieu || "—"}
+                        </Text>
+                        {booking?.tenTT ? (
+                          <View
                             style={[
-                              styles.statusText,
-                              { color: priorityColors[booking.tenTT] },
+                              styles.priorityBadge,
+                              {
+                                backgroundColor: getStatusColor(booking.tenTT),
+                              },
                             ]}
                           >
-                            {booking?.tenTT}
-                          </Text>
-                        </BlurView>
+                            <Text
+                              style={[
+                                styles.priorityText,
+                                {
+                                  color: getContrastTextColor(
+                                    getStatusColor(booking.tenTT)
+                                  ),
+                                },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {booking.tenTT}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
-                      <View style={styles.cell}>
-                        <Text style={styles.amount}>
-                          {new Intl.NumberFormat("vi-VN").format(
-                            Math.round(Number(booking.tongGiaGomVAT) || 0)
-                          )}{" "}
-                          đ
+
+                      <Text style={styles.customerName} numberOfLines={1}>
+                        {booking.khachHang}
+                      </Text>
+                      <Text style={styles.productCode} numberOfLines={1}>
+                        {booking.soPhieu}
+                      </Text>
+
+                      <View style={styles.dateRow}>
+                        <Text style={styles.dateText}>
+                          {booking.ngayGiuCho
+                            ? new Date(booking.ngayGiuCho).toLocaleDateString(
+                                "vi-VN",
+                                {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                }
+                              )
+                            : "--"}
+                        </Text>
+                        <Text style={styles.dateSeparator}>•</Text>
+                        <Text style={styles.projectName} numberOfLines={1}>
+                          {booking.tenDA}
                         </Text>
                       </View>
+                    </View>
+
+                    <View style={styles.cardRight}>
+                      <Text style={styles.amount} numberOfLines={1}>
+                        {new Intl.NumberFormat("vi-VN").format(
+                          Math.round(Number(booking.tongGiaGomVAT) || 0)
+                        )}{" "}
+                        đ
+                      </Text>
+                      <ChevronRight color={Colors.textTertiary} size={20} />
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -773,74 +626,33 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  backgroundGradient: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  headerBackButton: {
+    marginLeft: 8,
   },
-  orb1: {
-    position: "absolute",
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: "rgba(139, 92, 246, 0.15)",
-    top: -50,
-    right: -50,
-    filter: Platform.OS === "web" ? "blur(60px)" : undefined,
-  },
-  orb2: {
-    position: "absolute",
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: "rgba(232, 111, 37, 0.1)",
-    bottom: 100,
-    left: -50,
-    filter: Platform.OS === "web" ? "blur(50px)" : undefined,
+  content: {
+    flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
+    padding: 15,
     paddingBottom: 40,
   },
-  header: {
-    marginBottom: 20,
-  },
-  greetingRow: {
+  searchAndFilterRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginBottom: 4,
-  },
-  greeting: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    fontWeight: "500",
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: Colors.text,
-    letterSpacing: -0.5,
-  },
-  searchSection: {
-    flexDirection: "row",
-    gap: 10,
+    gap: 12,
     marginBottom: 16,
   },
   searchContainer: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 16,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
     paddingHorizontal: 16,
-    height: 52,
+    paddingVertical: 12,
     gap: 12,
-    overflow: "hidden",
     borderWidth: 1,
-    borderColor: Colors.glass.border,
+    borderColor: Colors.border,
   },
   searchInput: {
     flex: 1,
@@ -848,224 +660,211 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   filterButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    justifyContent: "center",
+    flexDirection: "row",
     alignItems: "center",
-    overflow: "hidden",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.glass.border,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
   },
   filterButtonActive: {
     borderColor: Colors.primary,
   },
-  filtersPanel: {
-    borderRadius: 20,
-    padding: 16,
+  filterText: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    color: Colors.primary,
+  },
+  filterPanel: {
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    padding: 20,
     marginBottom: 16,
-    overflow: "hidden",
     borderWidth: 1,
-    borderColor: Colors.glass.border,
+    borderColor: Colors.border,
   },
   filterSection: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: "700",
+  filterSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  filterSectionTitle: {
+    fontSize: 15,
+    fontWeight: "600" as const,
     color: Colors.text,
     marginBottom: 12,
   },
-  filterOptions: {
+  resetFilterButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: Colors.primary,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  resetFilterText: {
+    fontSize: 12,
+    fontWeight: "500" as const,
+    color: Colors.white,
+  },
+  filterOptionsGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.glass.light,
+  filterOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.glass.border,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
   },
-  filterChipActive: {
+  filterOptionActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
-  filterChipText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.textSecondary,
+  filterOptionText: {
+    fontSize: 14,
+    fontWeight: "500" as const,
+    color: Colors.text,
   },
-  filterChipTextActive: {
+  filterOptionTextActive: {
     color: Colors.white,
   },
-  clearButton: {
-    marginTop: 8,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderRadius: 12,
-    backgroundColor: Colors.glass.light,
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-  },
-  clearButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.text,
-  },
   statsScroll: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   statsScrollContent: {
-    flexDirection: "row",
-    gap: 10,
-    paddingRight: 4,
-  },
-  statsContainer: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 20,
-  },
-  statCardWrapper: {
-    width: 110,
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1.5,
-    borderColor: "transparent",
-  },
-  statCardSelected: {
-    borderColor: Colors.primary,
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
+    gap: 8,
+    paddingVertical: 2,
   },
   statCard: {
-    paddingVertical: 16,
-    alignItems: "center",
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  activeFilterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginBottom: 12,
-    paddingVertical: 6,
     paddingHorizontal: 14,
-    backgroundColor: "rgba(139, 92, 246, 0.1)",
-    borderRadius: 20,
-    alignSelf: "center",
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center" as const,
+    minWidth: 72,
   },
-  activeFilterText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.primary,
+  statCardSelected: {
+    borderWidth: 2.5,
+    borderColor: Colors.white,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
   },
   statValue: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: Colors.text,
-    marginBottom: 4,
+    fontSize: 18,
+    fontWeight: "800" as const,
+    color: Colors.white,
+    marginBottom: 2,
   },
   statLabel: {
-    fontSize: 11,
-    color: Colors.textTertiary,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: Colors.white,
+    letterSpacing: 0.3,
   },
   listContainer: {
     gap: 10,
   },
   bookingCard: {
     flexDirection: "row",
-    borderRadius: 20,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
     padding: 16,
     alignItems: "center",
-    overflow: "hidden",
     borderWidth: 1,
-    borderColor: Colors.glass.border,
+    borderColor: Colors.border,
     ...Platform.select({
       ios: {
-        shadowColor: Colors.accent.cyan,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
       },
       android: {
-        elevation: 3,
+        elevation: 2,
       },
     }),
   },
-  tableHeader: {
-    flexDirection: "row",
-    backgroundColor: Colors.glass.light,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 4,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-  },
-  headerCell: {
+  cardLeft: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRightWidth: 1,
-    borderRightColor: Colors.glass.border,
-    paddingHorizontal: 4,
+    gap: 6,
   },
-  headerText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.primary,
-    textAlign: "center",
-  },
-  tableRow: {
+  cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 4,
+    gap: 8,
   },
-  cell: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRightWidth: 1,
-    borderRightColor: Colors.glass.border,
-    paddingHorizontal: 4,
+  priorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+    overflow: "hidden",
+    flexShrink: 1,
   },
-  cellText: {
+  priorityText: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  bookingId: {
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "700" as const,
     color: Colors.text,
-    textAlign: "center",
+    flexShrink: 1,
+  },
+  customerName: {
+    fontSize: 15,
+    fontWeight: "700" as const,
+    color: Colors.text,
+  },
+  productCode: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    fontWeight: "500" as const,
+  },
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  dateText: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+  },
+  dateSeparator: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+  },
+  projectName: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    flex: 1,
+  },
+  cardRight: {
+    alignItems: "flex-end",
+    gap: 6,
+    marginLeft: 12,
   },
   amount: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Colors.text,
-    textAlign: "center",
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontSize: 16,
+    fontWeight: "800" as const,
+    color: Colors.primary,
   },
   loadingContainer: {
     alignItems: "center",
@@ -1087,10 +886,11 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: Colors.backgroundTertiary,
   },
   emptyText: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "600" as const,
     color: Colors.text,
   },
   emptySubtext: {

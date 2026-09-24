@@ -1,4 +1,10 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, {
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
 import {
   View,
   Text,
@@ -9,8 +15,14 @@ import {
   Dimensions,
   Share,
   ActivityIndicator,
+  Platform,
 } from "react-native";
-import { useLocalSearchParams, Stack, useRouter } from "expo-router";
+import {
+  useLocalSearchParams,
+  Stack,
+  useRouter,
+  useFocusEffect,
+} from "expo-router";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
@@ -109,6 +121,21 @@ export default function ProductDetailScreen() {
     getBannerProduct();
     getProducts();
   }, []);
+
+  // Khi quay lại màn (từ booking/lock/…): tải lại trạng thái mới nhất
+  // (lock còn hiệu lực, trạng thái SP) mà không cần thoát ra vào lại.
+  // Bỏ qua lần focus đầu vì effect trên đã load.
+  const isFirstFocusRef = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocusRef.current) {
+        isFirstFocusRef.current = false;
+        return;
+      }
+      void getProducts();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+  );
 
   useEffect(() => {
     if (lockMinutes) {
@@ -730,19 +757,15 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   backBtnText: { color: Colors.white, fontWeight: "700" as const },
+  // Không nền/Border riêng — dùng chung nền màn hình như mục "Thông tin căn hộ"
   priceDetails: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    // padding: 16,
-    // marginTop: 12,
+    marginTop: 4,
   },
   detailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingVertical: 8,
   },
   detailLabel: {
     fontSize: 15,
@@ -754,9 +777,9 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   totalRow: {
-    borderBottomWidth: 0,
-    paddingTop: 12,
-    marginTop: 4,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingTop: 4,
   },
   totalLabel: {
     fontSize: 16,

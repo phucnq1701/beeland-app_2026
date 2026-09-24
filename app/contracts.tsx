@@ -15,19 +15,20 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
-  Animated,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import {
   ChevronLeft,
+  ChevronUp,
+  ChevronDown,
   Search,
+  Filter,
   FileText,
   Calendar,
   X,
   ChevronRight,
   Building2,
   Hash,
-  SlidersHorizontal,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
@@ -85,31 +86,6 @@ function getStatusColor(status: string, colorWeb?: string): string {
   return statusColorMap[status] || Colors.accent.blue;
 }
 
-const DEMO_CONTRACTS: Contract[] = [
-  {
-    maHD: "DEMO-001",
-    soHopDong: "HD-2025-001234",
-    ngayKy: "2025-03-10",
-    tenKH: "Nguyễn Văn An",
-    maSP: "A-12-08",
-    tongGiaTri: 3250000000,
-    trangThai: "Đã duyệt",
-    tenDA: "Bee Land Tower",
-    colorTT: "#10B981",
-  },
-  {
-    maHD: "DEMO-002",
-    soHopDong: "HD-2025-001567",
-    ngayKy: "2025-03-15",
-    tenKH: "Trần Thị Bích Ngọc",
-    maSP: "B-05-02",
-    tongGiaTri: 4780000000,
-    trangThai: "Chờ duyệt",
-    tenDA: "Bee Land Riverside",
-    colorTT: "#F59E0B",
-  },
-];
-
 const ContractCard = React.memo(
   ({ item, onPress }: { item: Contract; onPress: () => void }) => {
     const sColor = getStatusColor(item.trangThai, item.colorTT);
@@ -117,11 +93,10 @@ const ContractCard = React.memo(
     return (
       <TouchableOpacity
         style={styles.contractCard}
-        activeOpacity={0.65}
+        activeOpacity={0.7}
         testID={`contract-card-${item.maHD}`}
         onPress={onPress}
       >
-        <View style={[styles.statusIndicator, { backgroundColor: sColor }]} />
         <View style={styles.cardBody}>
           <View style={styles.rowTop}>
             <View style={styles.rowTopLeft}>
@@ -134,7 +109,10 @@ const ContractCard = React.memo(
             </View>
             {item.trangThai ? (
               <View
-                style={[styles.statusChip, { backgroundColor: `${sColor}18` }]}
+                style={[
+                  styles.statusChip,
+                  { backgroundColor: `${sColor}18` },
+                ]}
               >
                 <View style={[styles.statusDot, { backgroundColor: sColor }]} />
                 <Text style={[styles.statusLabel, { color: sColor }]}>
@@ -171,7 +149,7 @@ const ContractCard = React.memo(
             <Text style={styles.priceValue}>
               {formatCurrency(item.tongGiaTri)}
             </Text>
-            <ChevronRight color={Colors.textLight} size={16} />
+            <ChevronRight color={Colors.textTertiary} size={16} />
           </View>
         </View>
       </TouchableOpacity>
@@ -180,7 +158,9 @@ const ContractCard = React.memo(
 );
 ContractCard.displayName = "ContractCard";
 
-export default function ContractsScreen() {
+export default function ContractsScreen({
+  embedded,
+}: { embedded?: boolean } = {}) {
   const router = useRouter();
   const searchTimeout = useRef<any>(null);
   const firstLoad = useRef(true);
@@ -188,14 +168,10 @@ export default function ContractsScreen() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [searchFocused, setSearchFocused] = useState<boolean>(false);
   const [showFilters, setShowFilters] = useState<boolean>(false);
-  const filterHeight = useRef(new Animated.Value(0)).current;
 
-  const [statusList, setStatusList] = useState<any[]>([]);
   const [duAn, setDuAn] = useState<any[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
-  const [selectedStatus, setSelectedStatus] = useState<number>(0);
 
   const [page, setPage] = useState(1);
   const [totalRows, setTotalRows] = useState(0);
@@ -211,69 +187,14 @@ export default function ContractsScreen() {
     Limit: 50,
   });
 
-  
-
-  const toggleFilters = useCallback(() => {
-    const toValue = showFilters ? 0 : 1;
-    setShowFilters(!showFilters);
-    Animated.timing(filterHeight, {
-      toValue,
-      duration: 250,
-      useNativeDriver: false,
-    }).start();
-  }, [showFilters, filterHeight]);
-
   const loadInitData = useCallback(async () => {
     try {
-      const [resTT, resDA] = await Promise.all([
-        HopDongService.getTT({ Type: 2 }),
-        ProjectService.getProjects({}),
-      ]);
-
-      const arr: any[] = [{ id: 0, title: "Tất cả", ColorWeb: Colors.primary }];
-      resTT?.data?.forEach((item: any) => {
-        arr.push({
-          id: item.MaTT,
-          title: item.TenTT,
-          ColorWeb: item.ColorWeb || Colors.accent.blue,
-        });
-      });
-      setStatusList(arr);
+      const resDA = await ProjectService.getProjects({});
       setDuAn(resDA?.data ?? []);
     } catch (err) {
       console.log("[Contracts] loadInitData error", err);
     }
   }, []);
-
-  // const loadContracts = useCallback(async (filter: any) => {
-  //   setLoading(true);
-  //   try {
-  //     const res = await HopDongService.get(filter);
-  //     console.log("[Contracts] Response:", JSON.stringify(res?.data?.length));
-  //     if (res?.data?.length) {
-  //       const mapped: Contract[] = res.data.map((item: any) => ({
-  //         maHD: item.maHDMB?.toString() || "",
-  //         soHopDong: item.soHDMB || "",
-  //         ngayKy: item.ngayKy || "",
-  //         tenKH: item.hoTenKH || "",
-  //         maSP: item.maSP?.toString() || "",
-  //         tongGiaTri: item.tongGiaGomVAT || 0,
-  //         trangThai: item.tenTT || "",
-  //         tenDA: item.tenDA || "",
-  //         colorTT: item.mauNen || "",
-  //       }));
-  //       setContracts(mapped);
-  //     } else {
-  //       console.log("[Contracts] No data from API, using demo contracts");
-  //       setContracts(DEMO_CONTRACTS);
-  //     }
-  //   } catch (err) {
-  //     console.log("[Contracts] loadContracts error, using demo contracts", err);
-  //     setContracts(DEMO_CONTRACTS);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // }, []);
 
   const loadContracts = useCallback(async (filter: any, isLoadMore = false) => {
     if (isLoadMore) {
@@ -284,7 +205,6 @@ export default function ContractsScreen() {
 
     try {
       const res = await HopDongService.get(filter);
-
 
       setTotalRows(res?.totalRows || 0);
 
@@ -374,45 +294,30 @@ export default function ContractsScreen() {
     });
   }, [selectedProjects, loadContracts]);
 
-  const handleStatusFilter = useCallback(
-    (statusId: number) => {
-      setSelectedStatus(statusId);
-      setFilterCondition((prev) => {
-        const newFilter = { ...prev, MaTT: statusId, Offset: 1 };
-        void loadContracts(newFilter);
-        return newFilter;
-      });
-    },
-    [loadContracts]
-  );
-
   const clearSearch = useCallback(() => {
     setSearchQuery("");
   }, []);
 
-  const hasActiveFilters = selectedProjects.length > 0 || selectedStatus !== 0;
+  const hasActiveFilters = selectedProjects.length > 0;
 
   const clearFilters = useCallback(() => {
     setSelectedProjects([]);
-    setSelectedStatus(0);
+    setSearchQuery("");
+    setPage(1);
+    setContracts([]);
     setShowFilters(false);
-    Animated.timing(filterHeight, {
-      toValue: 0,
-      duration: 250,
-      useNativeDriver: false,
-    }).start();
     const newFilter = {
       TuNgay: "2000-01-01",
       DenNgay: "2100-01-01",
       DuAn: "",
       MaTT: 0,
-      inputSearch: searchQuery,
+      inputSearch: "",
       Offset: 1,
-      Limit: 100,
+      Limit: 50,
     };
     setFilterCondition(newFilter);
     void loadContracts(newFilter);
-  }, [searchQuery, loadContracts, filterHeight]);
+  }, [loadContracts]);
 
   const handleContractPress = useCallback(
     (item: Contract) => {
@@ -441,14 +346,14 @@ export default function ContractsScreen() {
 
   const ListEmptyComponent = useMemo(
     () => (
-      <View style={styles.emptyWrap}>
-        <View style={styles.emptyIconCircle}>
-          <FileText color={Colors.textTertiary} size={36} />
+      <View style={styles.emptyState}>
+        <View style={styles.emptyIconContainer}>
+          <FileText color={Colors.textSecondary} size={36} />
         </View>
         <Text style={styles.emptyTitle}>
           {searchQuery.trim() ? "Không tìm thấy hợp đồng" : "Chưa có hợp đồng"}
         </Text>
-        <Text style={styles.emptyDesc}>
+        <Text style={styles.emptySubtext}>
           {searchQuery.trim()
             ? "Thử tìm kiếm với từ khóa khác"
             : "Danh sách hợp đồng trống"}
@@ -458,46 +363,42 @@ export default function ContractsScreen() {
     [searchQuery]
   );
 
-  const activeFilterCount =
-    (selectedProjects.length > 0 ? 1 : 0) + (selectedStatus !== 0 ? 1 : 0);
-
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
           headerShown: true,
           title: "Hợp đồng",
-          headerStyle: { backgroundColor: Colors.primary },
-          headerTintColor: Colors.white,
+          headerStyle: { backgroundColor: Colors.background },
+          headerTintColor: Colors.text,
           headerTitleStyle: { fontWeight: "700" as const, fontSize: 18 },
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={{ padding: 4 }}
-            >
-              <ChevronLeft color={Colors.white} size={24} />
-            </TouchableOpacity>
-          ),
+          headerShadowVisible: false,
+          // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
+          headerLeft: embedded
+            ? undefined
+            : () => (
+                <TouchableOpacity
+                  onPress={() => router.back()}
+                  style={styles.headerBackButton}
+                >
+                  <ChevronLeft color={Colors.text} size={24} />
+                </TouchableOpacity>
+              ),
         }}
       />
 
       <View style={styles.searchSection}>
-        <View style={styles.searchRow}>
-          <View
-            style={[styles.searchBar, searchFocused && styles.searchBarFocused]}
-          >
-            <Search
-              color={searchFocused ? Colors.primary : Colors.textTertiary}
-              size={18}
-            />
+        <View style={styles.searchAndFilterRow}>
+          <View style={styles.searchContainer}>
+            <Search color={Colors.textSecondary} size={20} />
             <TextInput
               style={styles.searchInput}
               placeholder="Tìm theo tên, SĐT, số hợp đồng..."
-              placeholderTextColor={Colors.textTertiary}
+              placeholderTextColor={Colors.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
+              autoCapitalize="none"
+              autoCorrect={false}
               testID="search-contracts-input"
             />
             {searchQuery.length > 0 ? (
@@ -505,124 +406,113 @@ export default function ContractsScreen() {
                 onPress={clearSearch}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <View style={styles.clearSearchBtn}>
-                  <X color={Colors.white} size={12} />
-                </View>
+                <X color={Colors.textSecondary} size={20} />
               </TouchableOpacity>
             ) : null}
           </View>
 
           <TouchableOpacity
             style={[
-              styles.filterBtn,
-              hasActiveFilters && styles.filterBtnActive,
+              styles.filterButton,
+              hasActiveFilters && styles.filterButtonActive,
             ]}
-            onPress={toggleFilters}
+            onPress={() => setShowFilters(!showFilters)}
             activeOpacity={0.7}
           >
-            <SlidersHorizontal
-              color={hasActiveFilters ? Colors.white : Colors.textSecondary}
-              size={18}
-            />
-            {activeFilterCount > 0 && (
-              <View style={styles.filterBadge}>
-                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
-              </View>
+            <Filter color={Colors.primary} size={18} />
+            <Text style={styles.filterText}>Bộ lọc</Text>
+            {showFilters ? (
+              <ChevronUp color={Colors.primary} size={18} />
+            ) : (
+              <ChevronDown color={Colors.primary} size={18} />
             )}
           </TouchableOpacity>
         </View>
 
         {showFilters && (
-          <View style={styles.filtersPanel}>
-            <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>DỰ ÁN</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterChips}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.filterChip,
-                    selectedProjects.length === 0 && styles.filterChipActive,
-                  ]}
-                  onPress={() => setSelectedProjects([])}
-                >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      selectedProjects.length === 0 &&
-                        styles.filterChipTextActive,
-                    ]}
+          <View style={styles.filterPanel}>
+            <View style={[styles.filterSection, { marginBottom: 0 }]}>
+              <View style={styles.filterSectionHeader}>
+                <Text style={styles.filterSectionTitle}>Dự án</Text>
+                {hasActiveFilters && (
+                  <TouchableOpacity
+                    style={styles.resetFilterButton}
+                    onPress={clearFilters}
+                    activeOpacity={0.7}
                   >
-                    Tất cả
-                  </Text>
-                </TouchableOpacity>
-                {duAn.map((project: any) => {
-                  const active = selectedProjects.includes(project.MaDA);
-                  return (
-                    <TouchableOpacity
-                      key={project.MaDA}
+                    <Text style={styles.resetFilterText}>Đặt lại</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <ScrollView style={{ maxHeight: 200 }}>
+                <View style={styles.filterOptionsGrid}>
+                  <TouchableOpacity
+                    style={[
+                      styles.filterOption,
+                      selectedProjects.length === 0 &&
+                        styles.filterOptionActive,
+                    ]}
+                    onPress={() => setSelectedProjects([])}
+                    activeOpacity={0.7}
+                  >
+                    <Text
                       style={[
-                        styles.filterChip,
-                        active && styles.filterChipActive,
+                        styles.filterOptionText,
+                        selectedProjects.length === 0 &&
+                          styles.filterOptionTextActive,
                       ]}
-                      onPress={() => {
-                        if (active) {
-                          setSelectedProjects((prev) =>
-                            prev.filter((id) => id !== project.MaDA)
-                          );
-                        } else {
-                          setSelectedProjects((prev) => [
-                            ...prev,
-                            project.MaDA,
-                          ]);
-                        }
-                      }}
                     >
-                      <Text
+                      Tất cả
+                    </Text>
+                  </TouchableOpacity>
+                  {duAn.map((project: any) => {
+                    const active = selectedProjects.includes(project.MaDA);
+                    return (
+                      <TouchableOpacity
+                        key={project.MaDA}
                         style={[
-                          styles.filterChipText,
-                          active && styles.filterChipTextActive,
+                          styles.filterOption,
+                          active && styles.filterOptionActive,
                         ]}
+                        onPress={() => {
+                          if (active) {
+                            setSelectedProjects((prev) =>
+                              prev.filter((id) => id !== project.MaDA)
+                            );
+                          } else {
+                            setSelectedProjects((prev) => [
+                              ...prev,
+                              project.MaDA,
+                            ]);
+                          }
+                        }}
+                        activeOpacity={0.7}
                       >
-                        {project.TenDA}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                        <Text
+                          style={[
+                            styles.filterOptionText,
+                            active && styles.filterOptionTextActive,
+                          ]}
+                        >
+                          {project.TenDA}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </ScrollView>
             </View>
 
-            {hasActiveFilters && (
-              <TouchableOpacity
-                style={styles.clearFilterBtn}
-                onPress={clearFilters}
-              >
-                <X color={Colors.error} size={14} />
-                <Text style={styles.clearFilterText}>Xóa bộ lọc</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
       </View>
 
       {loading ? (
-        <View style={styles.loadingWrap}>
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
         </View>
       ) : (
-        // <FlatList
-        //   data={contracts}
-        //   renderItem={renderContract}
-        //   keyExtractor={keyExtractor}
-        //   contentContainerStyle={styles.listContent}
-        //   showsVerticalScrollIndicator={false}
-        //   ListEmptyComponent={ListEmptyComponent}
-        //   ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-        // />
-
         <FlatList
           data={contracts}
           renderItem={renderContract}
@@ -630,12 +520,15 @@ export default function ContractsScreen() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={ListEmptyComponent}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           ListFooterComponent={
             loadingMore ? (
-              <ActivityIndicator style={{ marginVertical: 10 }} />
+              <ActivityIndicator
+                style={{ marginVertical: 10 }}
+                color={Colors.primary}
+              />
             ) : null
           }
         />
@@ -647,160 +540,130 @@ export default function ContractsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F2F3F7",
+    backgroundColor: Colors.background,
+  },
+  headerBackButton: {
+    marginLeft: 8,
   },
   searchSection: {
-    backgroundColor: Colors.white,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
-      android: { elevation: 3 },
-      web: { boxShadow: "0 3px 8px rgba(0,0,0,0.06)" },
-    }),
+    backgroundColor: Colors.background,
+    paddingHorizontal: 15,
+    paddingTop: 15,
   },
-  searchRow: {
+  searchAndFilterRow: {
     flexDirection: "row",
-    gap: 10,
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
   },
-  searchBar: {
+  searchContainer: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F2F3F7",
+    backgroundColor: Colors.white,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
-    gap: 8,
-    borderWidth: 1.5,
-    borderColor: "transparent",
-  },
-  searchBarFocused: {
-    borderColor: Colors.primary,
-    backgroundColor: "#FFF8F4",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.text,
-    paddingVertical: 0,
   },
-  clearSearchBtn: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: Colors.textTertiary,
-    justifyContent: "center",
+  filterButton: {
+    flexDirection: "row",
     alignItems: "center",
-  },
-  filterBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "#F2F3F7",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  filterBtnActive: {
-    backgroundColor: Colors.primary,
-  },
-  filterBadge: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    width: 16,
-    height: 16,
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 8,
-    backgroundColor: Colors.error,
-    justifyContent: "center",
-    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
   },
-  filterBadgeText: {
-    fontSize: 9,
-    fontWeight: "800" as const,
+  filterButtonActive: {
+    borderColor: Colors.primary,
+  },
+  filterText: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    color: Colors.primary,
+  },
+  filterPanel: {
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  filterSection: {
+    marginBottom: 20,
+  },
+  filterSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  filterSectionTitle: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    color: Colors.text,
+    marginBottom: 12,
+  },
+  resetFilterButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: Colors.primary,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  resetFilterText: {
+    fontSize: 12,
+    fontWeight: "500" as const,
     color: Colors.white,
   },
-  filtersPanel: {
-    marginTop: 14,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.05)",
-  },
-  filterGroup: {
-    marginBottom: 14,
-  },
-  filterLabel: {
-    fontSize: 11,
-    fontWeight: "700" as const,
-    color: Colors.textTertiary,
-    marginBottom: 8,
-    letterSpacing: 0.8,
-  },
-  filterChips: {
+  filterOptionsGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
-  filterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#F0F1F3",
+  filterOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "transparent",
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
   },
-  filterChipActive: {
+  filterOptionActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
-  filterChipText: {
-    fontSize: 13,
+  filterOptionText: {
+    fontSize: 14,
     fontWeight: "500" as const,
-    color: Colors.textSecondary,
+    color: Colors.text,
   },
-  filterChipTextActive: {
+  filterOptionTextActive: {
     color: Colors.white,
-    fontWeight: "600" as const,
   },
-  chipDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-  },
-  clearFilterBtn: {
-    flexDirection: "row",
+  loadingContainer: {
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-  },
-  clearFilterText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.error,
-  },
-
-  loadingWrap: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 14,
+    paddingVertical: 40,
+    gap: 12,
   },
   loadingText: {
     fontSize: 14,
     color: Colors.textSecondary,
-    fontWeight: "500" as const,
   },
   listContent: {
-    padding: 12,
+    paddingHorizontal: 15,
     paddingBottom: 40,
   },
   contractCard: {
@@ -808,24 +671,21 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 12,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Colors.border,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
       },
       android: { elevation: 2 },
-      web: { boxShadow: "0 2px 6px rgba(0,0,0,0.05)" },
     }),
-  },
-  statusIndicator: {
-    width: 4,
   },
   cardBody: {
     flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    padding: 16,
   },
   rowTop: {
     flexDirection: "row",
@@ -884,30 +744,28 @@ const styles = StyleSheet.create({
   priceValue: {
     fontSize: 13,
     fontWeight: "700" as const,
-    color: Colors.accent.green,
+    color: Colors.primary,
     letterSpacing: -0.3,
   },
-  emptyWrap: {
+  emptyState: {
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 80,
-    gap: 8,
+    paddingVertical: 40,
+    gap: 12,
   },
-  emptyIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: "rgba(232,111,37,0.08)",
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.backgroundTertiary,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
   },
   emptyTitle: {
-    fontSize: 17,
-    fontWeight: "700" as const,
+    fontSize: 16,
+    fontWeight: "600" as const,
     color: Colors.text,
   },
-  emptyDesc: {
+  emptySubtext: {
     fontSize: 13,
     color: Colors.textTertiary,
   },

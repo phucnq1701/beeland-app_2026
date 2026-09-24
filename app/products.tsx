@@ -51,7 +51,9 @@ type ViewMode = "list" | "grid" | "overview";
 // Số sản phẩm mỗi lần gọi API (phân trang cuộn vô hạn)
 const PAGE_SIZE = 16;
 
-export default function ProductsScreen() {
+export default function ProductsScreen({
+  embedded,
+}: { embedded?: boolean } = {}) {
   const { showFavorites } = useLocalSearchParams<{ showFavorites?: string }>();
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -526,10 +528,29 @@ export default function ProductsScreen() {
     }
   };
 
-  // Chỉ load mặc định khi mount lần đầu (không reload khi back từ chi tiết SP)
+  // Chỉ load mặc định khi mount lần đầu
   useEffect(() => {
     void loadProducts();
   }, []);
+
+  // Ref giữ filter mới nhất để dùng trong useFocusEffect (tránh stale closure)
+  const filterConditionRef = useRef(filterCondition);
+  filterConditionRef.current = filterCondition;
+
+  // Khi quay lại màn (sau khi lock/booking từ chi tiết SP): tải lại danh sách
+  // theo bộ lọc hiện tại để cập nhật trạng thái (Đã Lock, Booking…) mà không
+  // cần thoát ra vào lại. Bỏ qua lần focus đầu (mount đã load ở trên).
+  const isFirstFocusRef = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocusRef.current) {
+        isFirstFocusRef.current = false;
+        return;
+      }
+      void loadProducts2(filterConditionRef.current);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+  );
 
   useEffect(() => {
     if (rightRef.current) {
@@ -940,21 +961,25 @@ export default function ProductsScreen() {
           headerShown: true,
           title: "Sản phẩm",
           headerStyle: {
-            backgroundColor: Colors.primary,
+            backgroundColor: Colors.background,
           },
-          headerTintColor: Colors.white,
+          headerTintColor: Colors.text,
           headerTitleStyle: {
             fontWeight: "700",
             fontSize: 18,
           },
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={styles.headerBackButton}
-            >
-              <ChevronLeft color={Colors.white} size={24} />
-            </TouchableOpacity>
-          ),
+          headerShadowVisible: false,
+          // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
+          headerLeft: embedded
+            ? undefined
+            : () => (
+                <TouchableOpacity
+                  onPress={() => router.back()}
+                  style={styles.headerBackButton}
+                >
+                  <ChevronLeft color={Colors.text} size={24} />
+                </TouchableOpacity>
+              ),
           headerRight: () => (
             <View style={styles.headerViewMode}>
               <TouchableOpacity
@@ -967,7 +992,7 @@ export default function ProductsScreen() {
               >
                 <List
                   color={
-                    viewMode === "list" ? Colors.white : "rgba(255,255,255,0.5)"
+                    viewMode === "list" ? Colors.white : Colors.textTertiary
                   }
                   size={18}
                 />
@@ -985,7 +1010,7 @@ export default function ProductsScreen() {
               >
                 <Grid3x3
                   color={
-                    viewMode === "grid" ? Colors.white : "rgba(255,255,255,0.5)"
+                    viewMode === "grid" ? Colors.white : Colors.textTertiary
                   }
                   size={18}
                 />
@@ -1000,9 +1025,7 @@ export default function ProductsScreen() {
               >
                 <LayoutDashboard
                   color={
-                    viewMode === "overview"
-                      ? Colors.white
-                      : "rgba(255,255,255,0.5)"
+                    viewMode === "overview" ? Colors.white : Colors.textTertiary
                   }
                   size={18}
                 />
@@ -1263,7 +1286,7 @@ export default function ProductsScreen() {
                   </View>
                   <View style={[styles.colPrice]}>
                     <Text style={[styles.priceHeaderText]}>
-                      {"Tổng giá trị gồm PBT"}
+                      Tổng giá trị gồm PBT
                     </Text>
                   </View>
                 </View>
@@ -1301,15 +1324,11 @@ export default function ProductsScreen() {
                         </Text>
                       </View>
                     </View>
-                    <Text style={[ styles.colCode]}>
+                    <Text style={[styles.colCode]}>
                       {product.KyHieu || product.MaSP}
                     </Text>
                     <Text
-                      style={[
-                        
-                        styles.colPrice,
-                        styles.priceText,
-                      ]}
+                      style={[styles.colPrice, styles.priceText]}
                       numberOfLines={
                         Number(product?.TongGomPBT || 0) < 99_000_000_000
                           ? 1
@@ -1379,14 +1398,16 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   headerViewBtnActive: {
-    backgroundColor: "rgba(255,255,255,0.25)",
+    backgroundColor: Colors.primary,
   },
   content: {
     flex: 1,
   },
   scrollContent: {
     padding: 15,
-    paddingBottom: 40,
+    // Chừa chỗ cho tab bar phía dưới để nội dung (đặc biệt lưới Sản phẩm)
+    // không bị che và cuộn được đến hàng cuối cùng
+    paddingBottom: 100,
   },
   searchAndFilterRow: {
     flexDirection: "row",
@@ -1527,7 +1548,7 @@ const styles = StyleSheet.create({
   priceHeaderText: {
     fontSize: 12,
     lineHeight: 16,
-    textAlign:'right'
+    textAlign: "right",
   },
   statusBadgeContainer: {
     alignItems: "flex-start",

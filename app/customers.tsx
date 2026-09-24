@@ -18,6 +18,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { Stack, useRouter, useFocusEffect } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Search,
   ChevronLeft,
@@ -40,8 +41,11 @@ type CustomerTab = "all" | "personal" | "business";
 
 const PAGE_SIZE = 20;
 
-export default function CustomersScreen() {
+export default function CustomersScreen({
+  embedded,
+}: { embedded?: boolean } = {}) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<CustomerTab>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedStatusId, setSelectedStatusId] = useState<string>("all");
@@ -99,10 +103,16 @@ export default function CustomersScreen() {
 
     try {
       const isPersonal = tab === "personal" ? true : tab === "business" ? false : undefined;
+      // Tên trạng thái trên pill — service dùng để resolve UUID / lọc xác nhận phía client
+      const statusLabel =
+        statusId !== "all"
+          ? statusCatalogs.find((s: any) => s.value === statusId)?.label
+          : undefined;
       const res = await CustomerService.getCustomers({
         search,
         isPersonal,
         maTtId: statusId !== "all" ? statusId : undefined,
+        statusLabel,
         limit: PAGE_SIZE,
         offset,
       });
@@ -261,13 +271,15 @@ export default function CustomersScreen() {
             </View>
           </View>
 
-          {/* Badge Trạng thái */}
-          <View style={[styles.statusBadge, { backgroundColor: `${badgeColor}18` }]}>
-            <View style={[styles.statusDot, { backgroundColor: badgeColor }]} />
-            <Text style={[styles.statusText, { color: badgeColor }]} numberOfLines={1}>
-              {item.status || "Tiềm năng"}
-            </Text>
-          </View>
+          {/* Badge Trạng thái — chỉ hiện khi khách đã có trạng thái (không mặc định) */}
+          {item.status ? (
+            <View style={[styles.statusBadge, { backgroundColor: `${badgeColor}18` }]}>
+              <View style={[styles.statusDot, { backgroundColor: badgeColor }]} />
+              <Text style={[styles.statusText, { color: badgeColor }]} numberOfLines={1}>
+                {item.status}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Thông tin chính cốt lõi */}
@@ -352,14 +364,21 @@ export default function CustomersScreen() {
       />
 
       {/* Header Bar */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <ChevronLeft size={24} color="#1E293B" />
-        </TouchableOpacity>
+      <View
+        style={[
+          styles.header,
+          embedded && { paddingTop: insets.top + 8 },
+        ]}
+      >
+        {!embedded && (
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <ChevronLeft size={24} color="#1E293B" />
+          </TouchableOpacity>
+        )}
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Khách hàng</Text>
           <Text style={styles.headerSubtitle}>{total} khách hàng</Text>

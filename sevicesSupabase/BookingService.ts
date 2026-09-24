@@ -172,6 +172,9 @@ function normalizeBooking(raw: any) {
     soPhieu: raw?.so_phieu,
     so_phieu: raw?.so_phieu,
     tenTT,
+    // Màu nền chuẩn của trạng thái (cloud_catalogs.color_code) — dùng để
+    // đồng bộ màu chip trạng thái giữa chi tiết và danh sách booking.
+    colorCode: tt?.color_code ?? null,
     MaTT: tt?.item_code ?? "",
     state: raw?.state,
     khachHang: kh?.ten_kh || kh?.ten_cong_ty || "",
@@ -296,7 +299,7 @@ async function createBookingLifecycleRow(input: {
 
 // NOTE: embed FK có thể thiếu trên schema cache -> fallback select gọn nếu 400 PGRST200
 const BOOKING_SELECT_FULL =
-  "id,so_phieu,state,tong_gia,tien_giu_cho,da_thu,ngay_giu_cho,ngay_nhap,het_han_luc,thoi_gian_con_lai,created_at,ma_pgc_id,khach_hang_id,ma_da_id,ma_sp_id,ma_san_id,trang_thai_id,kh:cloud_customers!khach_hang_id(id,ten_kh,ten_cong_ty,dien_thoai,email,ma_so_kh),da:da_projects!ma_da_id(id,ten_da,ma_da_code),sp:bds_products!ma_sp_id(id,ma_sp,ky_hieu),san:dm_companies!ma_san_id(id,ma_dl,ten_ct,ten_ct_vt),tt:cloud_catalogs!trang_thai_id(id,item_code,item_name)";
+  "id,so_phieu,state,tong_gia,tien_giu_cho,da_thu,ngay_giu_cho,ngay_nhap,het_han_luc,thoi_gian_con_lai,created_at,ma_pgc_id,khach_hang_id,ma_da_id,ma_sp_id,ma_san_id,trang_thai_id,kh:cloud_customers!khach_hang_id(id,ten_kh,ten_cong_ty,dien_thoai,email,ma_so_kh),da:da_projects!ma_da_id(id,ten_da,ma_da_code),sp:bds_products!ma_sp_id(id,ma_sp,ky_hieu),san:dm_companies!ma_san_id(id,ma_dl,ten_ct,ten_ct_vt),tt:cloud_catalogs!trang_thai_id(id,item_code,item_name,color_code)";
 const BOOKING_SELECT_SIMPLE =
   "id,so_phieu,state,tong_gia,tien_giu_cho,da_thu,ngay_giu_cho,ngay_nhap,het_han_luc,thoi_gian_con_lai,created_at,ma_pgc_id,khach_hang_id,ma_da_id,ma_sp_id,ma_san_id,trang_thai_id";
 /** Select cho Home: FULL + tổng tiền từ phiếu giữ chỗ (dự phòng tong_gia null) */
@@ -1021,6 +1024,10 @@ export const BookingService = {
           state: booking.state,
           maTT: booking.ma_tt ?? status?.item_code ?? null,
           tenTT: booking.ten_tt || status?.item_name || STATE_LABEL[booking.state] || booking.state || null,
+          // Màu nền chuẩn của trạng thái (cloud_catalogs.color_code) — dùng để
+          // đồng bộ màu chip trạng thái giữa chi tiết và danh sách booking.
+          colorCode: status?.color_code ?? null,
+          status: status ?? null,
           ngayGiuCho: booking.ngay_giu_cho ?? pgc?.ngay_giu_cho ?? null,
           ngayNhap: booking.ngay_nhap,
           hetHanLuc: booking.het_han_luc,

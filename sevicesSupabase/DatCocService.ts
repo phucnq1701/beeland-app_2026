@@ -189,15 +189,25 @@ export const DatCocService = {
         "rest/v1/rpc/fn_deposit_list",
         body
       );
-
-      const rows = Array.isArray(res.data) ? res.data : [];
+      
+      // PostgREST có thể trả về object trực tiếp, hoặc bọc trong mảng 1 phần tử
+      // (tuỳ khai báo hàm returns jsonb / setof jsonb) -> chuẩn hoá cả 2 trường hợp
+      let payload: any = res.data;
+      if (Array.isArray(payload)) payload = payload[0];
+      // Trường hợp hàm trả về jsonb bị stringify
+      if (typeof payload === "string") {
+        try { payload = JSON.parse(payload); } catch { payload = null; }
+      }
+      
+      const rows: any[] = Array.isArray(payload?.rows) ? payload.rows : [];
       const mapped = rows.map(mapDepositRow);
-      const total = Number(rows[0]?.total_count);
-
+      const total = Number(payload?.total_count);
+      
       return {
         data: mapped,
         totalRows: Number.isFinite(total) && total > 0 ? total : mapped.length,
       };
+
     } catch (error) {
       console.log("ERROR DatCocService.get (fn_deposit_list):", error);
       return { data: [], totalRows: 0 };
