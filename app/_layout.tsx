@@ -5,7 +5,7 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import UpdateManager from "@/components/UpdateManager";
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
@@ -58,6 +58,7 @@ export default function RootLayout() {
       <GestureHandlerRootView style={styles.container}>
         <RootLayoutNav />
       </GestureHandlerRootView>
+      <UpdateManager />
     </QueryClientProvider>
   );
 }
