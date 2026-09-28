@@ -1,7 +1,38 @@
 import axiosApi from "./axiosApi";
 import axiosApiSupabase from "./axiosApiSupabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getValidSupabaseJwt } from "./cloudTenant";
+import { getValidSupabaseJwt, getCompanyId } from "./cloudTenant";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Map ma_da_code (text, vd "132") hoặc ID → da_projects.id (uuid).
+ * cloud_doc_folders.ma_da hiện tại là UUID FK da_projects(id).
+ */
+async function resolveProjectUuid(maDA: any): Promise<string | null> {
+  if (maDA == null || maDA === "" || maDA === -1) return null;
+  const value = String(maDA).trim();
+  if (UUID_RE.test(value)) return value;
+  try {
+    const res = await axiosApiSupabase.get("rest/v1/da_projects", {
+      params: { select: "id", ma_da_code: `eq.${value}`, limit: "1" },
+    });
+    const rows = Array.isArray(res.data) ? res.data : [];
+    if (rows.length > 0 && rows[0].id) return rows[0].id;
+
+    if (/^\d+$/.test(value)) {
+      const resById = await axiosApiSupabase.get("rest/v1/da_projects", {
+        params: { select: "id", id: `eq.${value}`, limit: "1" },
+      });
+      const rowsById = Array.isArray(resById.data) ? resById.data : [];
+      if (rowsById.length > 0 && rowsById[0].id) return rowsById[0].id;
+    }
+    return null;
+  } catch (error) {
+    console.log("ERROR resolveProjectUuid (da_projects):", error);
+    return null;
+  }
+}
 
 /**
  * Chuẩn hoá link file: giữ nguyên nếu đã là URL đầy đủ,
@@ -37,35 +68,28 @@ function toOfficeViewerUrl(fileUrl: string | null): string | null {
 }
 
 /**
- * Lấy ma_ctdk (text cũ, ví dụ "1") từ AsyncStorage.
- * Chỉ dùng maCTDK (mã cũ) — @company_code/tenCTDKVT là company code (vd "msr"),
- * không phải ma_ctdk text cũ của cloud_doc_folders/files.
- */
-async function getMaCtdkText(): Promise<string> {
-  const raw = (await AsyncStorage.getItem("maCTDK")) || "1";
-  return raw;
-}
-
-/**
  * Đếm số tệp + ảnh đại diện (file cũ nhất) cho 1 thư mục.
  * Gọi cloud_doc_files theo folder_seq rồi group.
  */
 async function getFolderStats(
   folderSeqs: number[],
   formId: number,
-  maCtdk: string
+  companyId: string
 ): Promise<Record<number, { count: number; firstFile: string | null }>> {
   const stats: Record<number, { count: number; firstFile: string | null }> = {};
   if (folderSeqs.length === 0) return stats;
 
   const params: Record<string, string> = {
     select: "folder_seq,link,created_at",
-    ma_ctdk: `eq.${maCtdk}`,
     form_id: `eq.${formId}`,
     folder_seq: `in.(${folderSeqs.join(",")})`,
     order: "created_at.asc",
     limit: "1000",
   };
+
+  if (companyId && UUID_RE.test(companyId)) {
+    params.ma_ctdk = `eq.${companyId}`;
+  }
 
   const res = await axiosApiSupabase.get("rest/v1/cloud_doc_files", { params });
   const rows = Array.isArray(res.data) ? res.data : [];
@@ -95,7 +119,7 @@ export const DocumentService = {
   // ===== DOCUMENT =====
   /**
    * Danh sách thư mục tài liệu — cloud (cloud_doc_folders).
-   * payload: { MaDA (ma_da_code), TypeDocument: "DOCUMENT" | "GALLERY" }
+   * payload: { MaDA (ma_da_code/id), TypeDocument: "DOCUMENT" | "GALLERY" }
    * Trả shape cũ: { data: [{ ID, Name, Color, Icon, SoLuong, FirstFile, GhiChu }] }
    */
   get: async (payload: any = {}) => {
@@ -110,11 +134,16 @@ export const DocumentService = {
       const type = payload?.TypeDocument ?? "DOCUMENT";
       const formId = type === "GALLERY" ? 323 : 488;
       const docType = type === "GALLERY" ? "GALLERY" : "DOCUMENT";
-      const maCtdk = await getMaCtdkText();
+      const companyId = await getCompanyId();
+
+      if (!companyId || !UUID_RE.test(companyId)) {
+        console.log("[Document] bỏ qua cloud_doc_folders vì company_id không phải UUID");
+        return { data: [] };
+      }
 
       const params: Record<string, string> = {
         select: "seq,id,name,color,icon,ghi_chu,ma_da,created_at",
-        ma_ctdk: `eq.${maCtdk}`,
+        ma_ctdk: `eq.${companyId}`,
         form_id: `eq.${formId}`,
         doc_type: `eq.${docType}`,
         order: "created_at.desc",
@@ -122,7 +151,13 @@ export const DocumentService = {
       };
 
       if (maDA != null && maDA !== "" && maDA !== -1) {
-        params.ma_da = `eq.${maDA}`;
+        const projectUuid = await resolveProjectUuid(maDA);
+        if (projectUuid) {
+          params.ma_da = `eq.${projectUuid}`;
+        } else {
+          // Lọc theo dự án nhưng không tìm thấy UUID -> trả về rỗng (fail-closed)
+          return { data: [] };
+        }
       }
 
       const res = await axiosApiSupabase.get("rest/v1/cloud_doc_folders", {
@@ -132,7 +167,7 @@ export const DocumentService = {
 
       // Đếm file + ảnh đại diện cho tất cả thư mục trong 1 lần gọi
       const seqs = rows.map((r: any) => Number(r.seq)).filter((n: number) => !isNaN(n));
-      const stats = await getFolderStats(seqs, formId, maCtdk);
+      const stats = await getFolderStats(seqs, formId, companyId);
 
       const data = rows.map((r: any) => {
         const seq = Number(r.seq);
@@ -145,7 +180,7 @@ export const DocumentService = {
           SoLuong: st.count,
           FirstFile: st.firstFile,
           GhiChu: r.ghi_chu ?? "",
-          MaDA: r.ma_da,
+          MaDA: payload?.MaDA ?? r.ma_da,
         };
       });
 
@@ -192,11 +227,16 @@ export const DocumentService = {
     try {
       const folderSeq = payload?.DocumentID ?? payload?.folderSeq;
       const keyword = payload?.InputSearch ?? payload?.keyword;
-      const maCtdk = await getMaCtdkText();
+      const companyId = await getCompanyId();
+
+      if (!companyId || !UUID_RE.test(companyId)) {
+        console.log("[Document] bỏ qua cloud_doc_files vì company_id không phải UUID");
+        return { data: [] };
+      }
 
       const params: Record<string, string> = {
         select: "seq,id,name,type,size,link,ghi_chu,created_at",
-        ma_ctdk: `eq.${maCtdk}`,
+        ma_ctdk: `eq.${companyId}`,
         folder_seq: `eq.${folderSeq}`,
         order: "sort_order.asc,created_at.asc",
         limit: "1000",
@@ -217,9 +257,6 @@ export const DocumentService = {
         Type: r.type ?? "",
         Size: r.size ?? 0,
         CreatedAt: r.created_at ?? new Date().toISOString(),
-        // Flow: path tương đối → URL gốc (upload.beesky.vn) → file Office
-        // (.docx/.xlsx/...) đóng gói thành Office Online Viewer URL.
-        // KHÔNG trả URL .docx gốc cho frontend.
         Link: toOfficeViewerUrl(resolveUploadUrl(r.link)),
         GhiChu: r.ghi_chu ?? "",
       }));
@@ -248,53 +285,6 @@ export const DocumentService = {
   deleteDetail: async (id: string | number) => {
     return await axiosApiSupabase
       .delete(`api/duan/documents/detail/${id}`)
-      .then((res) => res.data);
-  },
-
-  getDocument: async (maKieuFile: any) => {
-    return await axiosApiSupabase
-      .get(`api/admin/danhmuc/loaitailieu/${maKieuFile}`)
-      .then((res) => res.data);
-  },
-  getDetailDocument: async (payload: any) => {
-    return await axiosApiSupabase
-      .post("api/admin/du-an/tai-lieu/list", payload)
-      .then((res) => res.data);
-  },
-  getDetailVideo: async (payload: any) => {
-    return await axiosApiSupabase
-      .post("api/admin/danhmuc/thuvienvideo/list", payload)
-      .then((res) => res.data);
-  },
-
-  getIMG: async (payload: any = {}) => {
-    const tenCTDKVT = (await AsyncStorage.getItem("tenCTDKVT")) || "beesky";
-    const dataInit = {
-      TenCTDKVT: tenCTDKVT,
-      ...payload,
-    };
-    return await axiosApiSupabase
-      .post("api/beeland/get-ThuVienHinhAnh", dataInit)
-      .then((res) => res.data);
-  },
-  getVideo: async (payload: any = {}) => {
-    const tenCTDKVT = (await AsyncStorage.getItem("tenCTDKVT")) || "beesky";
-    const dataInit = {
-      TenCTDKVT: tenCTDKVT,
-      ...payload,
-    };
-    return await axiosApiSupabase
-      .post("api/beeland/get-ThuVienVideo", dataInit)
-      .then((res) => res.data);
-  },
-  getFolderVideo: async (payload: any = {}) => {
-    const tenCTDKVT = (await AsyncStorage.getItem("tenCTDKVT")) || "beesky";
-    const dataInit = {
-      TenCTDKVT: tenCTDKVT,
-      ...payload,
-    };
-    return await axiosApiSupabase
-      .post("api/duan/documents/get-list", dataInit)
       .then((res) => res.data);
   },
 };
