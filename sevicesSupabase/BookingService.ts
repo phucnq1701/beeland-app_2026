@@ -163,6 +163,12 @@ async function getStaffName(): Promise<string> {
   }
 }
 
+/** Lời báo lỗi của máy chủ (RAISE EXCEPTION → PostgREST response.data.message), không có thì fallback. */
+function serverMessage(error: any, fallback: string): string {
+  const m = error?.response?.data?.message;
+  return typeof m === "string" && m.trim() ? m.trim() : fallback;
+}
+
 const STATE_LABEL: Record<string, string> = {
   PENDING: "Chờ duyệt",
   APPROVED: "Đã duyệt",
@@ -217,107 +223,6 @@ function normalizeBooking(raw: any) {
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Tạo dòng vòng đời phiếu giữ chỗ trước khi ghi cloud_bookings.
- * Web đang làm đúng thứ tự này: cloud_pgc_phieu_giucho.id (UUID) sau đó được
- * gán vào cloud_bookings.ma_pgc_id. Không được truyền mã BK-* vào cột UUID.
- */
-async function createBookingLifecycleRow(input: {
-  companyId: string;
-  maPGC: string;
-  soPhieu: string;
-  spUid: string;
-  daUid: string | null;
-  khUid: string;
-  sanId: any;
-  trangThaiId: string | null;
-  payload: any;
-  staff: string;
-  nowIso: string;
-  tienGiuCho: number | null;
-  tongGia: number;
-}): Promise<string | null> {
-  const {
-    companyId,
-    maPGC,
-    soPhieu,
-    spUid,
-    daUid,
-    khUid,
-    sanId,
-    trangThaiId,
-    payload,
-    staff,
-    nowIso,
-    tienGiuCho,
-    tongGia,
-  } = input;
-
-  const phiBaoTri = Number(payload?.PhiBaoTri ?? payload?.phiBaoTri);
-  const giaTriSauCK = Number(
-    payload?.TongGiaGomVATPBT ?? payload?.TongGomVAT ?? tongGia
-  );
-  // Quy chuẩn: mọi cột FK ghi theo UUID. nguoi_nhap_id (uuid → dm_employees)
-  // chỉ set khi có employee id hợp lệ.
-  const employeeId = await getEmployeeId();
-  const row: Record<string, any> = {
-    ma_ctdk_uid: companyId,
-    giai_doan: "GIUCHO",
-    project_id: UUID_RE.test(String(daUid ?? "")) ? daUid : null,
-    san_pham_id: spUid,
-    khach_hang_id: khUid,
-    san_id: UUID_RE.test(String(sanId ?? "")) ? String(sanId) : null,
-    trang_thai_id: trangThaiId,
-    nguoi_nhap_id:
-      employeeId && UUID_RE.test(employeeId) ? employeeId : null,
-    so_phieu_gc: soPhieu,
-    ngay_giu_cho: nowIso,
-    ngay_nhap: nowIso,
-    tien_coc: tienGiuCho,
-    da_thu: Number(payload?.DaThu ?? payload?.daThu ?? 0),
-    phi_bao_tri: Number.isFinite(phiBaoTri) ? phiBaoTri : null,
-    gia_tri_hd: Number.isFinite(tongGia) ? tongGia : null,
-    gia_tri_hd_sau_ck: Number.isFinite(giaTriSauCK) ? giaTriSauCK : null,
-    ma_dot_gia: payload?.MaDotGia ?? payload?.maDotGia ?? null,
-    ma_cs: payload?.MaCS ?? payload?.maCS ?? null,
-    payload: { ...payload, MaPGC: maPGC, SoPhieu: soPhieu },
-    tt_hop_dong: {
-      MaPGC: maPGC,
-      SoPhieu: soPhieu,
-      MaSP: payload?.MaSP ?? payload?.maSP,
-      MaDA: payload?.MaDA ?? payload?.maDA,
-      TongGiaGomVAT: payload?.TongGiaGomVAT ?? payload?.TongGiaGomPBT,
-    },
-    tt_khach_hang: { MaKH: payload?.MaKH ?? payload?.maKH },
-    lich_su_chuyen_doi: [
-      {
-        giaiDoan: "GIUCHO",
-        thoiDiem: nowIso,
-        nguoiThucHien: staff || null,
-      },
-    ],
-  };
-
-  Object.keys(row).forEach((key) => {
-    if (row[key] === undefined || row[key] === null || row[key] === "") {
-      delete row[key];
-    }
-  });
-
-  try {
-    const res = await axiosApiSupabase.post(
-      "rest/v1/cloud_pgc_phieu_giucho",
-      row,
-      { headers: { Prefer: "return=representation" } }
-    );
-    const created = Array.isArray(res.data) ? res.data[0] : res.data;
-    return created?.id || null;
-  } catch (error) {
-    console.log("ERROR createBookingLifecycle:", error);
-    return null;
-  }
-}
 
 // NOTE: embed FK có thể thiếu trên schema cache -> fallback select gọn nếu 400 PGRST200
 const BOOKING_SELECT_FULL =
@@ -527,11 +432,10 @@ export const BookingService = {
    * Tạo booking mới — theo web addBookingAPI.
    * payload: { MaKH, MaSP, SanPhamId, KyHieu, MaSan, MaDA, TenDA, MaKhu,
    *   TongGiaGomPBT, DTThongThuy, TongGiaGomVAT, PhiBaoTri, TienGiuCho?, ... }
-   * - MaPGC = BK-<timestamp base36>, SoPhieu = MaPGC
-   * - TienGiuCho từ cloud_sales_settings.tien_dat_coc (fallback null)
-   * - HetHanLuc từ thoi_gian_booking (phút)
-   * - Insert cloud_bookings (state=PENDING, trang_thai_id='1' Chờ duyệt)
-   * - RPC BOOKING_CREATE (2 Mở bán → 11 Booking chờ duyệt)
+   * - TienGiuCho / HetHanLuc từ cài đặt bán hàng (tien_booking, thoi_gian_booking)
+   * - Ghi qua RPC fn_booking_create (máy chủ sinh số phiếu, ghi phiếu giữ chỗ + booking,
+   *   đổi căn 2/18 → 11); từ chối → { status: 5000, message: lời báo của máy chủ }
+   * - LockId (tuỳ chọn): phiếu lock khi booking từ căn đã lock
    */
   createBooking: async (payload: any = {}) => {
     const companyId = await getCompanyId();
@@ -548,9 +452,6 @@ export const BookingService = {
 
       const now = new Date();
       const nowIso = now.toISOString();
-      const maPGC =
-        payload?.MaPGC ?? `BK-${Date.now().toString(36).toUpperCase()}`;
-      const soPhieu = payload?.SoPhieu ?? maPGC;
 
       // Resolve uuid sản phẩm + dự án
       let spUid: string | null = payload?.SanPhamId || null;
@@ -636,98 +537,81 @@ export const BookingService = {
         if (Number.isFinite(t) && t > 0) tienGiuCho = t;
       }
 
-      // trang_thai_id = catalog '1' (Chờ duyệt) trong pgc_trang_thai
-      let trangThaiId: string | null = null;
-      try {
-        const r = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
-          params: {
-            select: "id",
-            catalog_type: "eq.pgc_trang_thai",
-            ma_ctdk: "eq.global",
-            item_code: "eq.1",
-            limit: "1",
-          },
-        });
-        const rows = Array.isArray(r.data) ? r.data : [];
-        trangThaiId = rows[0]?.id || null;
-      } catch {}
-
       const staff = await getStaffName();
-      const tongGia = Number(
-        payload?.TongGiaGomVAT ?? payload?.TongGiaGomPBT ?? 0
-      );
+      const employeeId = await getEmployeeId();
+      const num = (v: any) => {
+        if (v == null || v === "") return null;
+        const n = Number(String(v).replace(/,/g, ""));
+        return Number.isFinite(n) ? n : null;
+      };
+      const sanId = payload?.MaSan ?? payload?.maSan;
 
-      // Web tạo dòng vòng đời trước để lấy UUID, sau đó mới ghi cloud_bookings.
-      const pgcUid = await createBookingLifecycleRow({
-        companyId,
-        maPGC,
-        soPhieu,
-        spUid,
-        daUid,
-        khUid,
-        sanId: payload?.MaSan ?? payload?.maSan,
-        trangThaiId,
+      // Như web Product.addBookingAPI: một RPC fn_booking_create làm trọn giao dịch phía máy chủ
+      // (kiểm tra trạng thái căn: mã 2, hoặc mã 18 kèm phiếu lock còn hạn; ghi phiếu giữ chỗ +
+      // booking; đổi căn sang 11). Máy chủ từ chối → không có gì được ghi, trả nguyên lời báo lỗi.
+      const body = {
+        ma_ctdk_uid: companyId,
+        san_pham_id: spUid,
+        ma_sp: maSP,
+        ky_hieu: payload?.KyHieu ?? payload?.kyHieu ?? spRow?.ky_hieu ?? null,
+        khach_hang_id: khUid,
+        san_id: UUID_RE.test(String(sanId ?? "")) ? String(sanId) : null,
+        so_phieu: payload?.SoPhieu ?? null,
+        ngay_giu_cho: nowIso,
+        het_han_luc: hetHanLuc,
+        tien_giu_cho: tienGiuCho,
+        ghi_chu: payload?.GhiChu ?? payload?.ghiChu ?? null,
+        nguoi_nhap: staff || null,
+        nguoi_nhap_id: employeeId && UUID_RE.test(employeeId) ? employeeId : null,
+        price_list_id: payload?.MaDotGia ?? null,
+        sales_policy_id: payload?.MaCS ?? null,
+        pricing_config_id: payload?.MaCSTong ?? null,
+        payment_schedule_id: payload?.MaTDTT ?? null,
+        promotion_ids: (payload?.KhuyenMai || [])
+          .map((km: any) => km?.ID ?? km?.MaKM ?? km)
+          .filter(Boolean),
+        chinh_sach: payload?.ChinhSach ?? [],
+        lich_thanh_toan: payload?.LichThanhToan ?? [],
+        khuyen_mai: payload?.KhuyenMai ?? [],
         payload,
-        staff,
-        nowIso,
-        tienGiuCho,
-        tongGia,
-      });
-
-      // Insert phiếu BOOKING vào cloud_bookings (ma_pgc_id tham chiếu UUID cloud_pgc_phieu_giucho)
-      const resBooking = await axiosApiSupabase.post(
-        "rest/v1/cloud_bookings",
-        {
-          ma_ctdk_id: companyId,
-          loai_ct: "BOOKING",
-          so_phieu: soPhieu,
-          ma_pgc_id: pgcUid,
-          ma_da_id: daUid,
-          ma_sp_id: spUid,
-          ma_san_id: UUID_RE.test(String(payload?.MaSan ?? ""))
-            ? String(payload.MaSan)
-            : null,
-          khach_hang_id: khUid,
-          trang_thai_id: trangThaiId,
-          tong_gia: Number.isFinite(tongGia) ? tongGia : 0,
-          tien_giu_cho: tienGiuCho,
-          da_thu: 0,
-          state: "PENDING",
-          ngay_giu_cho: nowIso,
-          ngay_nhap: nowIso,
-          het_han_luc: hetHanLuc,
-          nhan_vien: staff,
-          ghi_chu: payload?.GhiChu ?? payload?.ghiChu ?? null,
+        tt_hop_dong: {
+          MaSP: maSP,
+          MaDA: payload?.MaDA ?? payload?.maDA,
+          TongGiaGomVAT: payload?.TongGiaGomVAT ?? payload?.TongGiaGomPBT,
         },
-        { headers: { Prefer: "return=representation" } }
-      );
-      const createdBooking = Array.isArray(resBooking.data)
-        ? resBooking.data[0]
-        : resBooking.data;
+        tt_khach_hang: { MaKH: maKH },
+        lock_id: payload?.LockId ?? null,
+        gia: {
+          dien_tich: num(payload?.DTThongThuy),
+          don_gia_gom_vat: num(payload?.DonGiaTT),
+          don_gia_chua_vat: num(payload?.DonGiaChuaVAT),
+          tong_chua_vat: num(payload?.TongGiaChuaVAT),
+          tien_vat: num(payload?.TienVAT),
+          tong_gom_vat: num(payload?.TongGiaGomVAT),
+          phi_bao_tri: num(payload?.PhiBaoTri),
+          gia_tri_hd: num(payload?.TongGiaGomPBT ?? payload?.TongGiaGomVAT),
+          don_gia_dat: num(payload?.DonGiaDat),
+          tong_gia_dat: num(payload?.TongGiaDat),
+          don_gia_xd: num(payload?.DonGiaXD),
+          thanh_tien_xd: num(payload?.ThanhTienXD),
+        },
+      };
 
-      // RPC đổi trạng thái SP (2 → 11 Booking chờ duyệt)
+      let created: any;
       try {
-        await axiosApiSupabase.post("rest/v1/rpc/fn_product_transaction", {
-          p_san_pham_id: spUid,
-          p_action: "BOOKING_CREATE",
-          p_next_product_code: "11",
-          p_require_codes: ["2"],
-          p_phieu_id: null,
-          p_next_pgc_code: "1",
-          p_so_phieu: soPhieu,
-          p_note: "Lập phiếu booking giữ chỗ",
-          p_user: staff || null,
-        });
+        const res = await axiosApiSupabase.post("rest/v1/rpc/fn_booking_create", { p_payload: body });
+        created = res.data || {};
       } catch (e) {
-        console.log("ERROR booking RPC:", e);
+        console.log("ERROR fn_booking_create:", e);
+        return { status: 5000, message: serverMessage(e, "Tạo booking thất bại") };
       }
 
       return {
         status: 2000,
-        data: createdBooking?.id || maPGC,
-        id: createdBooking?.id,
-        soPhieu: soPhieu,
-        maPGC: maPGC,
+        data: created.booking_id || created.phieu_giu_cho_id,
+        id: created.booking_id,
+        soPhieu: created.so_phieu,
+        maPGC: created.phieu_giu_cho_id,
       };
     } catch (error) {
       console.log("ERROR createBooking:", error);
@@ -1192,7 +1076,7 @@ export const BookingService = {
 
   /**
    * Tạo lock mới: đổi trạng thái SP qua RPC fn_product_transaction
-   * (2 Mở bán → 18 Đã Lock), rồi insert phiếu LOCK.
+   * (2 Mở bán → 18 Đã Lock); chỉ khi thành công mới insert phiếu LOCK.
    * payload: { maSP, kyHieu, maDA (uuid hoặc ma_da_code), minutes? }
    * Trả { status: 2000, data: seconds } giống legacy để UI cũ dùng được.
    */
@@ -1276,7 +1160,8 @@ export const BookingService = {
         soPhieu = `${kyHieu || maSP}/${yyyy}/${mm}/${count + 1}`;
       } catch {}
 
-      // 1) Đổi trạng thái SP qua RPC (2 → 18)
+      // 1) Đổi trạng thái SP qua RPC (2 → 18). Hệ thống từ chối (căn không còn "Mở bán"…) → DỪNG,
+      //    không tạo phiếu lock – như web CloudWriteService.lockProductCloudFirst.
       try {
         await axiosApiSupabase.post("rest/v1/rpc/fn_product_transaction", {
           p_san_pham_id: spUid,
@@ -1290,7 +1175,8 @@ export const BookingService = {
           p_user: staff || null,
         });
       } catch (e) {
-        console.log("ERROR lock RPC (tiếp tục insert phiếu):", e);
+        console.log("ERROR lock RPC:", e);
+        return { status: 5000, message: serverMessage(e, "Không lock được căn này") };
       }
 
       // 2) Insert phiếu LOCK
