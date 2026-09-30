@@ -1,5 +1,5 @@
 import { Image } from "expo-image";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { FlatList, NativeScrollEvent, NativeSyntheticEvent, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import ImageViewerModal from "@/components/ImageViewerModal";
@@ -24,7 +24,14 @@ export function ImageCarousel({ images, fallback, height = 260, onOpen, children
   const data = list.length ? list : [fallback];
   const [index, setIndex] = useState(0);
   const [viewer, setViewer] = useState<number | null>(null);
-  const [failed, setFailed] = useState<Record<number, boolean>>({});
+  // Đánh dấu ảnh lỗi theo URL (không theo vị trí) để ảnh thật tải về sau không bị ẩn nhầm
+  const [failed, setFailed] = useState<Record<string, boolean>>({});
+  const dataKey = data.join("|");
+
+  // Danh sách ảnh đổi (vd banner tải xong sau ảnh mặc định) → về ảnh đầu
+  useEffect(() => {
+    setIndex(0);
+  }, [dataKey]);
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     setIndex(Math.round(e.nativeEvent.contentOffset.x / width));
@@ -47,11 +54,13 @@ export function ImageCarousel({ images, fallback, height = 260, onOpen, children
             style={{ width, height }}
           >
             <Image
-              source={{ uri: failed[i] ? fallback : item }}
+              source={{ uri: failed[item] ? fallback : item }}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
               transition={150}
-              onError={() => setFailed((f) => ({ ...f, [i]: true }))}
+              onError={() => {
+                if (item !== fallback) setFailed((f) => ({ ...f, [item]: true }));
+              }}
             />
           </Pressable>
         )}

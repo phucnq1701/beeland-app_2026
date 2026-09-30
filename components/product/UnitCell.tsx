@@ -8,6 +8,8 @@ import { colors, radius } from "@/theme";
 export const UNIT_CELL_SIZE = 56;
 
 type Props = {
+  /** Mã sản phẩm – truyền lại cho onPress (để onPress ổn định, memo có tác dụng). */
+  id: string;
   code: string;
   /** Màu nền (hex) – từ dữ liệu hoặc từ token trạng thái. */
   bg: string;
@@ -17,29 +19,48 @@ type Props = {
   sub?: string;
   /** Vừa đổi trạng thái (realtime) → viền nổi bật trong giây lát. */
   highlight?: boolean;
-  onPress: () => void;
+  onPress: (id: string) => void;
   accessibilityLabel?: string;
 };
 
 /** Ô căn trong chế độ Lưới / Tổng quan. Kích thước ≥ 44 để dễ chạm. */
-function UnitCellBase({ code, bg, fg, sub, highlight, onPress, accessibilityLabel }: Props) {
+function UnitCellBase({ id, code, bg, fg, sub, highlight, onPress, accessibilityLabel }: Props) {
   const color = fg ?? statusTextColorOf(bg);
+  const label = code || "—";
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? `Căn ${code}`}
-      onPress={onPress}
+      accessibilityLabel={accessibilityLabel ?? `Căn ${label}`}
+      onPress={() => onPress(id)}
       style={({ pressed }) => [
         styles.cell,
         { backgroundColor: bg, opacity: pressed ? 0.8 : 1 },
         highlight ? styles.highlight : null,
       ]}
     >
-      <Text variant="label" color={color} numberOfLines={1} style={styles.code}>
-        {code}
+      {/* Ô rộng cố định: mã dài thì tự thu nhỏ chữ, không tràn sang ô bên cạnh */}
+      <Text
+        variant="label"
+        color={color}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+        allowFontScaling={false}
+        style={styles.code}
+      >
+        {label}
       </Text>
       {sub ? (
-        <Text variant="label" weight="regular" color={color} numberOfLines={1} style={styles.code}>
+        <Text
+          variant="label"
+          weight="regular"
+          color={color}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+          allowFontScaling={false}
+          style={styles.code}
+        >
           {sub}
         </Text>
       ) : null}
@@ -51,7 +72,8 @@ export const UnitCell = memo(UnitCellBase);
 
 const styles = StyleSheet.create({
   cell: {
-    minWidth: UNIT_CELL_SIZE,
+    width: UNIT_CELL_SIZE,
+    overflow: "hidden",
     minHeight: UNIT_CELL_SIZE - 12,
     paddingHorizontal: 4,
     borderRadius: radius.sm,
@@ -59,5 +81,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   highlight: { borderWidth: 3, borderColor: colors.brand },
-  code: { letterSpacing: 0 },
+  code: { letterSpacing: 0, maxWidth: UNIT_CELL_SIZE - 8, textAlign: "center" },
 });

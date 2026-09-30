@@ -44,6 +44,12 @@ import * as signalR from "@microsoft/signalr";
 
 type ViewMode = "list" | "grid" | "overview";
 
+/** Màu lưu dạng số nguyên (ARGB) trong dữ liệu → chuỗi hex. Ngoài component để tham chiếu ổn định. */
+const getHexColor = (number: any) => {
+  if (number === null || number === undefined) return colors.surfaceMuted;
+  return `#${(Number(number) >>> 0).toString(16).slice(-6)}`;
+};
+
 // Số sản phẩm mỗi lần gọi API (phân trang cuộn vô hạn)
 const PAGE_SIZE = 16;
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
@@ -439,6 +445,9 @@ export default function ProductsScreen({
   // Tải thêm sản phẩm khi cuộn tới cuối danh sách.
   // Tự động dừng khi đã tải hết (hasMore = false) → không gọi API nữa.
   const loadMore = async () => {
+    // Danh sách rỗng trong lúc tải lại (lọc/tìm/làm mới) cũng kích hoạt onEndReached → bỏ qua,
+    // tránh gửi thêm một request trang 1 song song như bản cuộn cũ không có
+    if (loading || products2.length === 0) return;
     if (loadingMoreRef.current || !hasMoreRef.current) return;
 
     loadingMoreRef.current = true;
@@ -541,16 +550,15 @@ export default function ProductsScreen({
     return item?.ColorWeb || null;
   };
 
-  const handlePressProduct = (id: string) => {
-    console.log("[Products] Navigate to product detail", { id });
-    router.push({ pathname: "/product/[id]", params: { id } });
-  };
+  // useCallback: truyền xuống BlockGrid/UnitCell (memo) – tránh vẽ lại mọi ô khi có sự kiện realtime
+  const handlePressProduct = useCallback(
+    (id: string) => {
+      console.log("[Products] Navigate to product detail", { id });
+      router.push({ pathname: "/product/[id]", params: { id } });
+    },
+    [router]
+  );
 
-  const getHexColor = (number: any) => {
-    if (number === null || number === undefined) return colors.surfaceMuted;
-    // Màu lưu dạng số nguyên (ARGB) trong dữ liệu → chuỗi hex
-    return `#${(Number(number) >>> 0).toString(16).slice(-6)}`;
-  };
 
   // Số nhóm lọc đang khác mặc định (hiện badge trên nút Bộ lọc)
   const getDefaultMaDA = () => {

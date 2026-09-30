@@ -123,10 +123,11 @@ const BlockGrid = ({
                       return (
                         <View key={`${floor.maTang}-${loc.maVT}`} style={styles.cell}>
                           <UnitCell
+                            id={unit.MaSP}
                             code={unit.KyHieu}
                             bg={unitColor(unit)}
                             highlight={changed}
-                            onPress={() => handlePressProduct(unit.MaSP)}
+                            onPress={handlePressProduct}
                           />
                         </View>
                       );

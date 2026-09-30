@@ -55,18 +55,19 @@ export function OverviewView({ dataGrid, selected, onSelect, onPressUnit }: Prop
             </Text>
           </View>
           <View style={styles.grid}>
-            {floor.shown.map((unit) => {
+            {floor.shown.map((unit, index) => {
               const meta = unitStatusMeta(unit.status);
               const c = TONE_COLORS[meta.tone];
               return (
                 <UnitCell
-                  key={unit.id}
+                  key={unit.id ?? `${floor.id}-${index}`}
+                  id={unit.id}
                   code={unit.code}
                   sub={unit.price || undefined}
                   bg={c.bg}
                   fg={c.fg}
-                  accessibilityLabel={`Căn ${unit.code}, ${meta.label}`}
-                  onPress={() => onPressUnit(unit.id)}
+                  accessibilityLabel={`Căn ${unit.code || "không rõ mã"}, ${meta.label}`}
+                  onPress={onPressUnit}
                 />
               );
             })}

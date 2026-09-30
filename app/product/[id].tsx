@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, Stack, useRouter, useFocusEffect } from "expo-router";
-import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarPlus, ChevronLeft, Lock, MapPin, PackageX } from "lucide-react-native";
 
 import { ImageCarousel } from "@/components/product/ImageCarousel";
+import { FocusStatusBar } from "@/components/ui/FocusStatusBar";
 import { PriceBreakdown } from "@/components/product/PriceBreakdown";
 import {
   BottomActionBar,
@@ -42,6 +42,8 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState<boolean>(false);
   const [locking, setLocking] = useState<boolean>(false);
   const lockInFlight = useRef(false);
+  // Chặn bấm "Tạo booking" 2 lần mở 2 màn tạo booking
+  const navigating = useRef(false);
 
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
@@ -102,6 +104,7 @@ export default function ProductDetailScreen() {
   const isFirstFocusRef = useRef(true);
   useFocusEffect(
     useCallback(() => {
+      navigating.current = false;
       if (isFirstFocusRef.current) {
         isFirstFocusRef.current = false;
         return;
@@ -236,7 +239,7 @@ export default function ProductDetailScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
+      <FocusStatusBar style="light" />
       <View style={styles.root}>
         <ScrollView contentContainerStyle={styles.scroll}>
           <View testID="product-hero">
@@ -309,7 +312,8 @@ export default function ProductDetailScreen() {
               disabled={isBookingStatus}
               style={styles.flex}
               onPress={() => {
-                if (isBookingStatus) return;
+                if (isBookingStatus || navigating.current) return;
+                navigating.current = true;
                 router.push({
                   pathname: "/booking/create",
                   params: {

@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { useLocalSearchParams, Stack, useRouter } from "expo-router";
-import { StatusBar } from "expo-status-bar";
+import { useLocalSearchParams, Stack, useRouter, useFocusEffect } from "expo-router";
 import { CalendarPlus, ChevronLeft, Lock, LockOpen } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ImageCarousel } from "@/components/product/ImageCarousel";
+import { FocusStatusBar } from "@/components/ui/FocusStatusBar";
 import { PriceBreakdown } from "@/components/product/PriceBreakdown";
 import {
   BottomActionBar,
@@ -42,6 +42,17 @@ export default function LockDetailScreen() {
   const [loading, setLoading] = useState<boolean>(false);
 
   const timerRef = useRef<any>(null);
+  // Lock đang còn hạn lúc mở màn / sau khi tải lại → khi đếm về 0 thì quét lock hết hạn đúng 1 lần
+  const wasActive = useRef(false);
+  const swept = useRef(false);
+  // Chặn bấm "Tạo booking" 2 lần mở 2 màn tạo booking
+  const navigating = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      navigating.current = false;
+    }, [])
+  );
 
   /* ---------------- Tải dữ liệu ---------------- */
 
@@ -107,6 +118,23 @@ export default function LockDetailScreen() {
     return () => clearInterval(timerRef.current);
   }, [remainingSeconds]);
 
+  // Hết giờ lock (giống chi tiết sản phẩm): trả căn về Mở bán + tải lại trạng thái, một lần
+  useEffect(() => {
+    if (remainingSeconds > 0) {
+      wasActive.current = true;
+      swept.current = false;
+      return;
+    }
+    if (wasActive.current && !swept.current) {
+      swept.current = true;
+      void (async () => {
+        await BookingService.sweepExpiredLocks();
+        await loadData();
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remainingSeconds]);
+
   const back = (
     <View style={[styles.back, { top: insets.top + space.sm }]}>
       <IconButton icon={ChevronLeft} variant="onDark" accessibilityLabel="Quay lại" onPress={() => router.back()} />
@@ -131,7 +159,7 @@ export default function LockDetailScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
+      <FocusStatusBar style="light" />
       <View style={styles.root}>
         <ScrollView contentContainerStyle={styles.scroll}>
           <ImageCarousel images={images} fallback={DEFAULT_IMAGE} height={240 + insets.top} />
@@ -191,14 +219,16 @@ export default function LockDetailScreen() {
               icon={CalendarPlus}
               title="Tạo booking"
               style={styles.flex}
-              onPress={() =>
+              onPress={() => {
+                if (navigating.current) return;
+                navigating.current = true;
                 router.push({
                   pathname: "/booking/create",
                   params: {
                     dataBooking: JSON.stringify(dataProduct || data),
                   },
-                })
-              }
+                });
+              }}
             />
           </BottomActionBar>
         ) : null}

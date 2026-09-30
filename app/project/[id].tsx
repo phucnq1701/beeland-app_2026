@@ -2,10 +2,10 @@ import React from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { StatusBar } from "expo-status-bar";
 import { ChevronLeft, FileText, ImageIcon, LucideIcon, Map, MapPin, Package } from "lucide-react-native";
 
 import { ImageCarousel } from "@/components/product/ImageCarousel";
+import { FocusStatusBar } from "@/components/ui/FocusStatusBar";
 import { Card, IconButton, ListItem, SectionHeader, Text } from "@/components/ui";
 import { colors, radius, space } from "@/theme";
 
@@ -64,7 +64,7 @@ export default function ProjectOptionsScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
+      <FocusStatusBar style="light" />
       {/* Màn trưng bày: ảnh tràn lên vùng status bar, nút quay lại nổi trên ảnh */}
       <View style={styles.root}>
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + space.xxl }}>

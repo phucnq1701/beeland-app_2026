@@ -8,20 +8,21 @@ import type { UnitStatus } from './productStatus';
 /**
  * MaTT là uuid → nhận diện trạng thái theo TÊN (TenTT) từ danh mục.
  * So khớp sau khi bỏ dấu (foldVietnamese) để "HĐMB", "hđmb", "HDMB", "da ban"… đều nhận đúng.
+ * Thứ tự quan trọng:
+ *  1. Tên có "huỷ" không bao giờ là đã bán (vd "Hủy HĐMB").
+ *  2. Từ khoá bán rõ ràng (đã bán, bàn giao, sổ đỏ, góp vốn, thanh lý) → đã bán.
+ *  3. "đặt cọc"/"cọc" → đã cọc (kể cả "Đặt cọc – chờ ký HĐMB").
+ *  4. HĐMB / hợp đồng mua bán / HĐ MB → đã bán.
  */
+const SOLD_WORDS = [/\bda ban\b/, /\bban giao\b/, /\bso do\b/, /\bgop von\b/, /\bthanh ly\b/];
+const CONTRACT_WORDS = [/hdmb/, /\bhop dong mua ban\b/, /\bhd\s*(mb|mua ban)\b/];
+
 export function unitStatusFromName(name: unknown): UnitStatus {
   const t = foldVietnamese(String(name || ''));
-  if (
-    t.includes('da ban') ||
-    t.includes('hdmb') ||
-    t.includes('hop dong mua ban') ||
-    t.includes('ban giao') ||
-    t.includes('so do') ||
-    t.includes('gop von') ||
-    t.includes('thanh ly')
-  )
-    return 'sold';
-  if (t.includes('dat coc')) return 'deposit';
+  const cancelled = /\bhuy\b/.test(t);
+  if (!cancelled && SOLD_WORDS.some((re) => re.test(t))) return 'sold';
+  if (t.includes('dat coc') || /\bcoc\b/.test(t)) return 'deposit';
+  if (!cancelled && CONTRACT_WORDS.some((re) => re.test(t))) return 'sold';
   if (t.includes('booking')) return 'booking';
   if (t.includes('giu cho') || t.includes('lock')) return 'locked';
   return 'available';

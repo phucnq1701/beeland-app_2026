@@ -70,3 +70,23 @@ test("HĐMB and other sold names match with or without Vietnamese diacritics", (
   assert.equal(o.unitStatusFromName("Đang bán"), "available");
   assert.equal(o.unitStatusFromName("Mở bán"), "available");
 });
+
+test("status matching avoids false positives from accent folding", () => {
+  // Đang ở giai đoạn cọc, chưa ký HĐMB → vẫn là Đã cọc (như bản cũ)
+  assert.equal(o.unitStatusFromName("Đặt cọc – chờ ký HĐMB"), "deposit");
+  assert.equal(o.unitStatusFromName("Chuyển cọc sang HĐMB"), "deposit");
+  // HĐMB đã huỷ không phải căn đã bán (bản cũ: Trống)
+  assert.equal(o.unitStatusFromName("Hủy HĐMB"), "available");
+  assert.equal(o.unitStatusFromName("HĐMB đã huỷ"), "available");
+  // "so do" chỉ khớp nguyên cụm "sổ đỏ", không khớp "hồ sơ đợi duyệt"
+  assert.equal(o.unitStatusFromName("Hồ sơ đợi duyệt"), "available");
+  assert.equal(o.unitStatusFromName("Đã cấp sổ đỏ"), "sold");
+  // Hủy booking vẫn giữ như bản cũ (khớp "booking")
+  assert.equal(o.unitStatusFromName("Hủy booking"), "booking");
+});
+
+test("abbreviated contract names are recognised as sold", () => {
+  for (const name of ["HĐ mua bán", "HĐ MB đã duyệt", "HD mua ban"]) {
+    assert.equal(o.unitStatusFromName(name), "sold", name);
+  }
+});
