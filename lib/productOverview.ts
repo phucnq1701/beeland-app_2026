@@ -28,11 +28,37 @@ export function unitStatusFromName(name: unknown): UnitStatus {
   return 'available';
 }
 
+/** So sánh mã căn tự nhiên: tách số và chữ, "A-2" < "A-10", "A-2" < "A-02-a". */
+export function compareUnitCode(a: unknown, b: unknown): number {
+  const pa = String(a ?? '').match(/\d+|\D+/g) ?? [];
+  const pb = String(b ?? '').match(/\d+|\D+/g) ?? [];
+  for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+    const x = pa[i];
+    const y = pb[i];
+    const nx = /^\d/.test(x);
+    const ny = /^\d/.test(y);
+    if (nx && ny) {
+      const d = Number(x) - Number(y);
+      if (d !== 0) return d;
+    } else if (x !== y) {
+      return x < y ? -1 : 1;
+    }
+  }
+  return pa.length - pb.length;
+}
+
 export type OverviewUnit = { id: string; code: string; price: string; status: UnitStatus; column: string };
 export type OverviewFloor = { id: string; name: string; floorNumber: number; units: OverviewUnit[]; totalUnits: number };
 
-/** Gom căn theo khu + tầng, sắp theo vị trí (chuỗi), giá hiển thị dạng "2.500.000.000". */
-export function buildOverviewFloors(dataGrid: unknown[]): OverviewFloor[] {
+/**
+ * Gom căn theo khu + tầng (giữ thứ tự tầng của dữ liệu – đã sắp theo danh mục tầng),
+ * trong tầng sắp theo số căn tự nhiên; giá hiển thị dạng "2.500.000.000".
+ * `statusOf` cho phép nhận trạng thái theo MÃ danh mục (mặc định: theo tên TenTT).
+ */
+export function buildOverviewFloors(
+  dataGrid: unknown[],
+  statusOf: (item: any) => UnitStatus = (item) => unitStatusFromName(item?.TenTT)
+): OverviewFloor[] {
   const floorsMap: Record<string, OverviewFloor> = {};
   (Array.isArray(dataGrid) ? dataGrid : []).forEach((block: any) => {
     const raw = block?.rawBlock;
@@ -45,14 +71,14 @@ export function buildOverviewFloors(dataGrid: unknown[]): OverviewFloor[] {
         id: item.MaSP,
         code: item.KyHieu,
         price: item.GiaBan ? formatNumberVN(item.GiaBan) : '',
-        status: unitStatusFromName(item?.TenTT),
+        status: statusOf(item),
         column: String(item.MaVT),
       }));
       floorsMap[key].units.push(...units);
     });
   });
   return Object.values(floorsMap).map((f) => {
-    f.units.sort((a, b) => String(a.column).localeCompare(String(b.column)));
+    f.units.sort((a, b) => compareUnitCode(a.code, b.code));
     f.totalUnits = f.units.length;
     return f;
   });

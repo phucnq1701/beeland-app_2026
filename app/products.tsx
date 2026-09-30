@@ -33,7 +33,8 @@ import {
   SkeletonList,
   Text,
 } from "@/components/ui";
-import { SummaryKey, unitStatusFromName } from "@/lib/productOverview";
+import { SummaryKey } from "@/lib/productOverview";
+import { applyRealtimeChange, resolveCatalogStatus, unitStatusOf } from "@/lib/productRealtime";
 import { colors, space } from "@/theme";
 import { ProductService } from "@/sevicesSupabase/ProductService";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
@@ -66,15 +67,17 @@ export default function ProductsScreen({
   const router = useRouter();
   const { MaDA } = useLocalSearchParams();
 
-  const scrollYRef = useRef(0);
-  const leftRef = useRef<ScrollView>(null);
-  const rightRef = useRef<ScrollView>(null);
 
   const [products2, setProducts2] = useState<any[]>([]);
   const [duAn, setDuAn] = useState<any[]>([]);
   const [khuVuc, setKhuVuc] = useState<any[]>([]);
   const [TrangThai, setTrangThai] = useState<any[]>([]);
+  const trangThaiRef = useRef<any[]>([]);
+  trangThaiRef.current = TrangThai;
   const [dataGrid, setDataGrid] = useState<any[]>([]);
+  // Bản mới nhất cho handler realtime (đăng ký một lần, tránh closure cũ)
+  const dataGridRef = useRef<any[]>([]);
+  dataGridRef.current = dataGrid;
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -141,52 +144,20 @@ export default function ProductsScreen({
 
     try {
       hubConnection.on("ChangeTable", (response: any) => {
-        console.log(response, "response");
+        // Tra trạng thái mới theo mã/uuid trong danh mục → cập nhật cả tên và màu (lib/productRealtime).
+        // Danh mục + lưới đọc qua ref vì handler chỉ đăng ký một lần.
+        const catalog = trangThaiRef.current;
+        const entry = resolveCatalogStatus(response?.maTT, catalog);
+        const { changedMaSP } = applyRealtimeChange(dataGridRef.current, response, catalog);
 
-        setDataGrid((prev) => {
-          return prev.map((block) => {
-            if (block.rawBlock?.maKhu !== response.data?.MaKhu) {
-              return block; // giữ nguyên reference
-            }
+        setDataGrid((prev) => applyRealtimeChange(prev, response, catalog).grid);
 
-            let changed = false;
-
-            const newFloors = block.rawBlock.floor.map((floor: any) => {
-              if (Number(floor.maTang) !== Number(response.data?.MaTang)) {
-                return floor;
-              }
-
-              const newDetails = floor.detailFloor.map((item: any) => {
-                if (Number(item.MaVT) !== Number(response.data?.MaVT)) {
-                  return item;
-                }
-
-                changed = true;
-
-                return {
-                  ...item,
-                  MaTT: response.maTT,
-                  MauNen: response.mauNen,
-                };
-              });
-
-              return {
-                ...floor,
-                detailFloor: newDetails,
-              };
-            });
-
-            if (!changed) return block;
-
-            return {
-              ...block,
-              rawBlock: {
-                ...block.rawBlock,
-                floor: newFloors,
-              },
-            };
-          });
-        });
+        // Danh sách: đổi trạng thái đúng dòng của căn vừa đổi
+        if (changedMaSP && entry) {
+          setProducts2((list) =>
+            list.map((p) => (p?.MaSP === changedMaSP ? { ...p, MaTT: entry.MaTT } : p))
+          );
+        }
         setLocalChange({
           MaTang: response.data?.MaTang,
           MaVT: response.data?.MaVT,
@@ -243,8 +214,8 @@ export default function ProductsScreen({
 
     void handleFormGrid(MaDA);
   };
-  // MaTT giờ là uuid → map trạng thái theo TÊN (TenTT) – logic ở lib/productOverview
-  const mapStatusByTT = (item: any) => unitStatusFromName(item?.TenTT);
+  // MaTT là uuid → nhóm trạng thái theo MÃ danh mục (fallback theo tên) – lib/productRealtime
+  const mapStatusByTT = (item: any) => unitStatusOf(item, trangThaiRef.current);
 
   const handleFormGrid = async (MaDA: any) => {
     const result = await PriceServices.getBlock({
@@ -524,21 +495,6 @@ export default function ProductsScreen({
     }, []),
   );
 
-  useEffect(() => {
-    if (rightRef.current) {
-      rightRef.current.scrollTo({
-        y: scrollYRef.current,
-        animated: false,
-      });
-    }
-
-    if (leftRef.current) {
-      leftRef.current.scrollTo({
-        y: scrollYRef.current,
-        animated: false,
-      });
-    }
-  }, [dataGrid]);
 
   const getStatusLabel = (status: number) => {
     const item = TrangThai.find((i) => i.MaTT === status);
@@ -802,9 +758,6 @@ export default function ProductsScreen({
                     <BlockGrid
                       key={block.rawBlock?.maKhu}
                       block={block}
-                      leftRef={leftRef}
-                      rightRef={rightRef}
-                      scrollYRef={scrollYRef}
                       localChange={localChange}
                       handlePressProduct={handlePressProduct}
                       getHexColor={getHexColor}
@@ -816,6 +769,7 @@ export default function ProductsScreen({
               ) : (
                 <OverviewView
                   dataGrid={dataGrid}
+                  catalog={TrangThai}
                   selected={selectedOverviewStatus}
                   onSelect={setSelectedOverviewStatus}
                   onPressUnit={handlePressProduct}

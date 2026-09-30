@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import {
   Check,
   ChevronDown,
@@ -74,6 +74,8 @@ export function FilterPanel({
 }: FilterPanelProps) {
   const canReset = activeCount > 0 && !!onReset;
   const sections = React.Children.toArray(children).filter(Boolean);
+  // Màn thấp (360dp) + nhiều dự án/khu/trạng thái: panel tự cuộn, không vượt quá ~nửa màn hình
+  const { height } = useWindowDimensions();
   return (
     <View style={styles.panel}>
       <View style={styles.panelHeader}>
@@ -99,11 +101,18 @@ export function FilterPanel({
           </Pressable>
         )}
       </View>
-      {sections.map((section, i) => (
-        <View key={i} style={i > 0 ? styles.sectionDivider : undefined}>
-          {section}
-        </View>
-      ))}
+      <ScrollView
+        style={{ maxHeight: Math.round(height * 0.5) }}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator
+      >
+        {sections.map((section, i) => (
+          <View key={i} style={i > 0 ? styles.sectionDivider : undefined}>
+            {section}
+          </View>
+        ))}
+      </ScrollView>
     </View>
   );
 }

@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, View } from "react-native";
 
 import { Card, Chip, EmptyState, Text } from "@/components/ui";
 import { buildOverviewFloors, overviewSummary, SummaryKey } from "@/lib/productOverview";
+import { CatalogStatus, unitStatusOf } from "@/lib/productRealtime";
 import { unitStatusMeta } from "@/lib/productStatus";
 import { colors, space } from "@/theme";
 
@@ -20,14 +21,19 @@ const TONE_COLORS: Record<string, { bg: string; fg: string }> = {
 
 type Props = {
   dataGrid: any[];
+  /** Danh mục trạng thái (FilterService.getStatusSP) – nhận trạng thái theo mã, đổi đúng khi realtime. */
+  catalog: CatalogStatus[];
   selected: SummaryKey;
   onSelect: (key: SummaryKey) => void;
   onPressUnit: (id: string) => void;
 };
 
 /** Chế độ "Tổng quan": tóm tắt số căn theo trạng thái + từng tầng dạng lưới ô. */
-export function OverviewView({ dataGrid, selected, onSelect, onPressUnit }: Props) {
-  const floors = useMemo(() => buildOverviewFloors(dataGrid), [dataGrid]);
+export function OverviewView({ dataGrid, catalog, selected, onSelect, onPressUnit }: Props) {
+  const floors = useMemo(
+    () => buildOverviewFloors(dataGrid, (item) => unitStatusOf(item, catalog)),
+    [dataGrid, catalog]
+  );
   const summary = useMemo(() => overviewSummary(floors), [floors]);
 
   const visibleFloors = floors

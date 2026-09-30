@@ -9,24 +9,23 @@ import { UNIT_CELL_SIZE, UnitCell } from "./UnitCell";
 
 const CELL_GAP = 4;
 const ROW_H = UNIT_CELL_SIZE - 12 + CELL_GAP;
+const HEAD_H = 28;
 
 /**
- * Lưới căn của một khu: cột trái là tầng (cuộn dọc đồng bộ), bên phải cuộn ngang theo vị trí.
+ * Lưới căn của một khu – kiểu bảng "cố định cột trái":
+ *  - Cột tầng đứng yên bên trái, phần căn cuộn NGANG theo vị trí.
+ *  - Cuộn DỌC do cả trang đảm nhận; hàng tầng và hàng căn cùng chiều cao (ROW_H) trong cùng
+ *    một khối nên luôn thẳng hàng (bản cũ dùng 2 ScrollView dọc lồng nhau + đồng bộ bằng ref,
+ *    thực tế không cuộn được và lệch khi có nhiều khu).
  * Màu ô lấy từ dữ liệu (ColorTT / MauNen); ô vừa đổi trạng thái (realtime) được viền nổi bật.
  */
 const BlockGrid = ({
   block,
-  leftRef,
-  rightRef,
-  scrollYRef,
   localChange,
   handlePressProduct,
   getHexColor,
 }: {
   block: any;
-  leftRef: any;
-  rightRef: any;
-  scrollYRef: any;
   localChange: any;
   handlePressProduct: (id: string) => void;
   getHexColor: (n: any) => string;
@@ -53,30 +52,28 @@ const BlockGrid = ({
       </Text>
 
       <View style={styles.row}>
-        {/* Cột tầng */}
-        <View>
-          <View style={[styles.cell, styles.headCell]}>
+        {/* Cột tầng (cố định) */}
+        <View style={styles.floorCol}>
+          <View style={[styles.floorCell, styles.headRow]}>
             <Text variant="label" color="textTertiary">
               T\V
             </Text>
           </View>
-          <ScrollView ref={leftRef} scrollEnabled={false} showsVerticalScrollIndicator={false}>
-            {floors.map((floor) => (
-              <View key={floor.maTang} style={[styles.cell, styles.floorCell]}>
-                <Text variant="label" color="textSecondary">
-                  {floor.tenTang?.replace("Tầng", "T")}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
+          {floors.map((floor) => (
+            <View key={floor.maTang} style={styles.floorCell}>
+              <Text variant="label" color="textSecondary" numberOfLines={1}>
+                {floor.tenTang?.replace("Tầng", "T")}
+              </Text>
+            </View>
+          ))}
         </View>
 
-        {/* Lưới vị trí */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        {/* Phần căn (cuộn ngang) */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.flex}>
           <View>
-            <View style={styles.row}>
+            <View style={[styles.row, styles.headRow]}>
               {locations.map((loc: any) => (
-                <View key={loc.maVT} style={[styles.cell, styles.headCell]}>
+                <View key={loc.maVT} style={[styles.cell, styles.headRow]}>
                   <Text variant="label" color="textTertiary" numberOfLines={1}>
                     {loc.tenVT || loc.maVT}
                   </Text>
@@ -84,58 +81,47 @@ const BlockGrid = ({
               ))}
             </View>
 
-            <ScrollView
-              ref={rightRef}
-              scrollEventThrottle={16}
-              onContentSizeChange={() => {
-                rightRef.current?.scrollTo({ y: scrollYRef.current, animated: false });
-              }}
-              onScroll={(e) => {
-                const y = e.nativeEvent.contentOffset.y;
-                scrollYRef.current = y;
-                leftRef.current?.scrollTo({ y, animated: false });
-              }}
-            >
-              {floors.map((floor) => {
-                const details = floor.detailFloor || [];
-                return (
-                  <View key={floor.maTang} style={styles.row}>
-                    {locations.map((loc: any) => {
-                      const unit = details.find((d: any) => {
-                        const vt = d.MaVT ?? d.MaViTri ?? d.ViTri;
-                        if (vt == null) return false;
-                        // ma_tang/vi_tri là uuid → so khớp bằng chuỗi
-                        return String(vt) === String(loc.maVT);
-                      });
+            {floors.map((floor) => {
+              const details = floor.detailFloor || [];
+              return (
+                <View key={floor.maTang} style={styles.row}>
+                  {locations.map((loc: any) => {
+                    const unit = details.find((d: any) => {
+                      const vt = d.MaVT ?? d.MaViTri ?? d.ViTri;
+                      if (vt == null) return false;
+                      // ma_tang/vi_tri là uuid → so khớp bằng chuỗi
+                      return String(vt) === String(loc.maVT);
+                    });
 
-                      if (!unit) {
-                        return (
-                          <View key={`${floor.maTang}-${loc.maVT}`} style={[styles.cell, styles.empty]}>
-                            <Lock size={14} color={colors.textTertiary} />
-                          </View>
-                        );
-                      }
-
-                      const changed =
-                        String(localChange?.MaTang) === String(floor.maTang) &&
-                        String(localChange?.MaVT) === String(loc.maVT);
-
+                    if (!unit) {
                       return (
                         <View key={`${floor.maTang}-${loc.maVT}`} style={styles.cell}>
-                          <UnitCell
-                            id={unit.MaSP}
-                            code={unit.KyHieu}
-                            bg={unitColor(unit)}
-                            highlight={changed}
-                            onPress={handlePressProduct}
-                          />
+                          <View style={styles.empty}>
+                            <Lock size={14} color={colors.textTertiary} />
+                          </View>
                         </View>
                       );
-                    })}
-                  </View>
-                );
-              })}
-            </ScrollView>
+                    }
+
+                    const changed =
+                      String(localChange?.MaTang) === String(floor.maTang) &&
+                      String(localChange?.MaVT) === String(loc.maVT);
+
+                    return (
+                      <View key={`${floor.maTang}-${loc.maVT}`} style={styles.cell}>
+                        <UnitCell
+                          id={unit.MaSP}
+                          code={unit.KyHieu}
+                          bg={unitColor(unit)}
+                          highlight={changed}
+                          onPress={handlePressProduct}
+                        />
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })}
           </View>
         </ScrollView>
       </View>
@@ -147,20 +133,23 @@ export default memo(BlockGrid);
 
 const styles = StyleSheet.create({
   title: { marginBottom: space.sm },
+  flex: { flex: 1 },
   row: { flexDirection: "row" },
+  floorCol: { width: 40 },
+  headRow: { height: HEAD_H },
+  floorCell: { height: ROW_H, justifyContent: "center", paddingLeft: 2 },
   cell: {
     width: UNIT_CELL_SIZE + CELL_GAP,
     height: ROW_H,
     alignItems: "center",
     justifyContent: "center",
   },
-  headCell: { height: 28 },
-  floorCell: { alignItems: "flex-start", paddingLeft: 2, width: 40 },
   empty: {
-    margin: CELL_GAP / 2,
     width: UNIT_CELL_SIZE,
     height: UNIT_CELL_SIZE - 12,
     borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: colors.surfaceMuted,
   },
 });
