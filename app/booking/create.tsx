@@ -20,6 +20,7 @@ import {
 } from "@/components/ui";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { formatVND, formatVNDShort, maskPhone } from "@/lib/format";
+import { buildBookingPayload } from "@/lib/bookingPayload";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
@@ -178,39 +179,8 @@ export default function CreateBookingScreen() {
       submitting.current = true;
       setCreatingBooking(true);
 
-      // Payload theo chuẩn BookingService.createBooking
-      const initDataBooking = {
-        MaSP: bookingData?.MaSP,
-        // normalizeProduct trả uuid sản phẩm ở "ID"
-        SanPhamId: bookingData?.ID ?? bookingData?.id ?? bookingData?.Id ?? null,
-        LockId: bookingData?.LockId ?? null,
-        KyHieu: bookingData?.KyHieu,
-        MaSan: selectedSan?.ID || selectedSan?.MaSan || null,
-        TenSan: selectedSan?.TenSan || null,
-        MaKhu: bookingData?.MaKhu || null,
-        TenKhu: bookingData?.TenKhu || null,
-        MaDA: bookingData?.MaDA,
-        TenDA: bookingData?.TenDA,
-        TongGiaGomPBT: bookingData?.TongGiaTriHDMB ?? bookingData?.TongGomPBT ?? 0,
-
-        DTThongThuy: bookingData?.DTThongThuy || bookingData?.DienTichThongThuy || 0,
-        DonGiaTT: bookingData?.DonGiaThongThuy || bookingData?.DonGia || 0,
-        TongGiaGomVAT: bookingData?.TongGiaGomVAT ?? bookingData?.TongGiaTriHDMB ?? 0,
-        PhiBaoTri: bookingData?.PhiBaoTri ?? bookingData?.TienPhiBaoTri ?? 0,
-
-        DienTichDat: bookingData?.DienTichDat || 0,
-        DonGiaDat: bookingData?.DonGiaDat || 0,
-        TongGiaDat: bookingData?.ThanhTienDat || bookingData?.TongGiaDat || 0,
-
-        DienTichXD: bookingData?.DienTichXD || 0,
-        DonGiaXD: bookingData?.DonGiaXD || 0,
-        ThanhTienXD: bookingData?.ThanhTienXD || 0,
-
-        MaKH: selectedCustomer.maKH,
-        TenKH: selectedCustomer.tenKH,
-        DiDong: selectedCustomer.diDong,
-        Email: selectedCustomer.email || "",
-      };
+      // Payload theo chuẩn BookingService.createBooking (trường giá như web)
+      const initDataBooking = buildBookingPayload(bookingData, selectedCustomer, selectedSan);
 
       const resultBooking = await BookingService.createBooking(initDataBooking);
 

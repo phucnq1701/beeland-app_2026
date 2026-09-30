@@ -7,7 +7,7 @@ import { getCompanyId, getValidSupabaseJwt } from "./cloudTenant";
  * Chuẩn hoá 1 row bds_products (snake_case) → shape UI cũ (PascalCase).
  * Giữ tương thích với các màn hình đang dùng MaSP, KyHieu, MaTT…
  */
-function normalizeProduct(r: any) {
+export function normalizeProduct(r: any) {
   const v = (col: any) => (col === "" ? null : col ?? null);
   // Tên khu/tầng/trạng thái/dự án lấy qua FK joins (cloud_catalogs + da_projects)
   const da = r?.da;
