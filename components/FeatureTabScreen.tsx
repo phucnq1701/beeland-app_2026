@@ -40,7 +40,7 @@ interface FeatureTabScreenProps {
 
 /**
  * Màn hình cho 2 tab menu động ở giữa tab bar.
- * Nội dung được quyết định bởi cấu hình "Cấu hình menu" trong "Tất cả quản lý"
+ * Nội dung được quyết định bởi cấu hình "Tab menu" trong "Tất cả quản lý"
  * (AsyncStorage: @menu_tabs_config). Mặc định: 2 mục đầu tiên (Dự án, Sản phẩm).
  */
 export default function FeatureTabScreen({ slot }: FeatureTabScreenProps) {
@@ -82,7 +82,7 @@ export default function FeatureTabScreen({ slot }: FeatureTabScreenProps) {
         <Puzzle color={Colors.textTertiary} size={44} strokeWidth={1.5} />
         <Text style={styles.emptyTitle}>Tính năng chưa khả dụng</Text>
         <Text style={styles.emptySubtitle}>
-          {'Chọn mục khác trong "Tất cả quản lý" → "Cấu hình menu"'}
+          {'Chọn mục khác trong "Tất cả quản lý" → "Tab menu"'}
         </Text>
       </View>
     );

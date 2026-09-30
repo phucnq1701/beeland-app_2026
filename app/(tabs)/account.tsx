@@ -171,7 +171,11 @@ export default function AccountScreen() {
 
       <Card
         onPress={data ? () => router.push("/profile") : undefined}
-        accessibilityLabel="Xem thông tin cá nhân"
+        accessibilityLabel={
+          data
+            ? `${data.HoTen || "Chưa cập nhật họ tên"}, ${data.Email || "chưa có email"}. Xem thông tin cá nhân`
+            : undefined
+        }
       >
         <View style={styles.profile}>
           <Avatar name={data?.HoTen || "?"} size={56} />

@@ -37,9 +37,10 @@ export const DEFAULT_MENU_TAB_IDS: string[] = features
  * (vd Hoa hồng) và mục ngoài quyền đại lý còn sót trong bộ nhớ cũ, rồi bù bằng mặc định.
  */
 export async function loadMenuTabIds(): Promise<string[]> {
+  // Chưa đọc được loại tài khoản → giới hạn như đại lý cho an toàn
   let allowed = visibleFeatureIds(
     features.map((f) => f.id),
-    { isAgency: false, menuOnly: true, menuEligible: MENU_TAB_FEATURE_IDS }
+    { isAgency: true, menuOnly: true, menuEligible: MENU_TAB_FEATURE_IDS }
   );
   try {
     const isAgency = (await AsyncStorage.getItem('@type_account')) === 'AGENCY';

@@ -19,7 +19,7 @@ import {
 import { getScopedKey } from "@/components/utils/accountScope";
 import { MENU_TAB_FEATURE_IDS } from "@/components/utils/menuTabs";
 import { formatDate, maskPhone } from "@/lib/format";
-import { AGENCY_FEATURE_IDS, normalizeSelection, routeForFeature, visibleFeatureIds } from "@/lib/featureConfig";
+import { resolveHomeFeatureIds, routeForFeature } from "@/lib/featureConfig";
 import { features, Feature } from "@/mocks/features";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { CustomerService as CustomerSupabaseService } from "@/sevicesSupabase/CustomerService";
@@ -170,37 +170,29 @@ export default function HomeScreen() {
     Promise.all([loadProjects(), loadBookings(), loadDeposits(), loadCustomers(), loadAppointments()]);
 
   const loadFeatureConfiguration = async () => {
-    const allIds = features.map((f) => f.id);
+    // Không đọc được loại tài khoản → null (resolveHomeFeatureIds coi như đại lý cho an toàn)
+    let agency: boolean | null = null;
     try {
-      const typeAccount = await AsyncStorage.getItem("@type_account");
-      const agency = typeAccount === "AGENCY";
-      const visible = visibleFeatureIds(allIds, { isAgency: agency, menuOnly: false, menuEligible: MENU_TAB_FEATURE_IDS });
-      const defaults = agency ? visible : visible.slice(0, MAX_HOME_FEATURES);
-
-      const stored = await AsyncStorage.getItem(await getScopedKey(STORAGE_KEY));
-      let raw: unknown = null;
-      try {
-        raw = stored ? JSON.parse(stored) : null;
-      } catch {
-        raw = null;
-      }
-      // Cấu hình hợp lệ (kể cả chọn 0 mục) được tôn trọng; hỏng/không có → mặc định.
-      const hasConfig = Array.isArray((raw as { selectedIds?: unknown } | null)?.selectedIds);
-      let selectedIds = hasConfig ? normalizeSelection(raw, visible, []) : defaults;
-      if (agency && selectedIds.length === 0) selectedIds = [...AGENCY_FEATURE_IDS];
-
-      setDisplayedFeatures(
-        selectedIds
-          .map((id) => features.find((f) => f.id === id))
-          .filter((f): f is Feature => !!f)
-          .slice(0, MAX_HOME_FEATURES)
-      );
+      agency = (await AsyncStorage.getItem("@type_account")) === "AGENCY";
+    } catch (error) {
+      console.log("[Home] Read account type error:", errText(error));
+    }
+    let stored: unknown = undefined;
+    try {
+      const raw = await AsyncStorage.getItem(await getScopedKey(STORAGE_KEY));
+      stored = raw ? JSON.parse(raw) : undefined;
     } catch (error) {
       console.log("[Home] Load feature config error:", errText(error));
-      setDisplayedFeatures(
-        features.filter((f) => routeForFeature(f.id) !== null).slice(0, MAX_HOME_FEATURES)
-      );
+      stored = null; // hỏng → dùng mặc định
     }
+    const ids = resolveHomeFeatureIds({
+      stored,
+      isAgency: agency,
+      allIds: features.map((f) => f.id),
+      menuEligible: MENU_TAB_FEATURE_IDS,
+      max: MAX_HOME_FEATURES,
+    });
+    setDisplayedFeatures(ids.map((id) => features.find((f) => f.id === id)).filter((f): f is Feature => !!f));
   };
 
   useEffect(() => {

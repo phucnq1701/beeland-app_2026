@@ -27,9 +27,8 @@ import {
   DEFAULT_MENU_TAB_IDS,
 } from '@/components/utils/menuTabs';
 import {
-  AGENCY_FEATURE_IDS,
   moveItem,
-  normalizeSelection,
+  resolveHomeFeatureIds,
   routeForFeature,
   toggleSelection,
   visibleFeatureIds,
@@ -61,31 +60,31 @@ export default function AllManagementScreen() {
   const [isAgency, setIsAgency] = useState<boolean>(false);
 
   const loadConfiguration = async () => {
-    let agency = false;
-    const homeVisible = () =>
-      visibleFeatureIds(ALL_IDS, { isAgency: agency, menuOnly: false, menuEligible: MENU_TAB_FEATURE_IDS });
-    const defaults = () => (agency ? [...AGENCY_FEATURE_IDS] : homeVisible().slice(0, MAX_HOME_FEATURES));
+    // Không đọc được loại tài khoản → null (coi như đại lý cho an toàn)
+    let agency: boolean | null = null;
     try {
-      const typeAccount = await AsyncStorage.getItem('@type_account');
-      agency = typeAccount === 'AGENCY';
-      setIsAgency(agency);
-
-      const stored = await AsyncStorage.getItem(await getScopedKey(STORAGE_KEY));
-      let ids = defaults();
-      if (stored) {
-        const config = JSON.parse(stored);
-        // Giữ cấu hình đã lưu (kể cả 0 mục); bỏ id không còn hiển thị (vd Hoa hồng – Q4)
-        ids = Array.isArray(config?.selectedIds) ? normalizeSelection(config, homeVisible(), []) : defaults();
-        if (agency && ids.length === 0) ids = [...AGENCY_FEATURE_IDS];
-      }
-      setSelectedIds(ids);
-      setOriginalSelectedIds(ids);
+      agency = (await AsyncStorage.getItem('@type_account')) === 'AGENCY';
+    } catch (error) {
+      console.log('[AllManagement] Read account type error:', error instanceof Error ? error.message : String(error));
+    }
+    setIsAgency(agency !== false);
+    let stored: unknown = undefined;
+    try {
+      const raw = await AsyncStorage.getItem(await getScopedKey(STORAGE_KEY));
+      stored = raw ? JSON.parse(raw) : undefined;
     } catch (error) {
       console.log('[AllManagement] Load config error:', error instanceof Error ? error.message : String(error));
-      const ids = defaults();
-      setSelectedIds(ids);
-      setOriginalSelectedIds(ids);
+      stored = null;
     }
+    const ids = resolveHomeFeatureIds({
+      stored,
+      isAgency: agency,
+      allIds: ALL_IDS,
+      menuEligible: MENU_TAB_FEATURE_IDS,
+      max: MAX_HOME_FEATURES,
+    });
+    setSelectedIds(ids);
+    setOriginalSelectedIds(ids);
 
     // Cấu hình tab menu
     try {

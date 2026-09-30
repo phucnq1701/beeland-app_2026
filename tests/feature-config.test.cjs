@@ -59,3 +59,28 @@ test("sanitizeMenuTabIds drops hidden/disallowed ids from old storage and pads w
   // Mặc định không hợp lệ với tài khoản → lấy tiếp từ danh sách được phép
   assert.deepEqual(plain(f.sanitizeMenuTabIds([], ["5", "13"], ["1", "2"], 2)), ["5", "13"]);
 });
+
+test("resolveHomeFeatureIds: agency or unknown account type never sees non-agency features", () => {
+  const allIds = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "13"];
+  const menuEligible = ["1", "2", "3", "4", "5", "6", "8", "9", "13"];
+  const base = { allIds, menuEligible, max: 6 };
+  // Không đọc được loại tài khoản (lỗi bộ nhớ) → coi như đại lý (an toàn)
+  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: undefined, isAgency: null })), ["1", "2", "5", "13"]);
+  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: undefined, isAgency: true })), ["1", "2", "5", "13"]);
+  assert.deepEqual(
+    plain(f.resolveHomeFeatureIds({ ...base, stored: { selectedIds: ["3", "6"] }, isAgency: true })),
+    ["1", "2", "5", "13"]
+  );
+  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: { selectedIds: ["13", "3"] }, isAgency: true })), ["13"]);
+});
+
+test("resolveHomeFeatureIds: normal accounts keep a deliberate empty selection but recover from invalid ids", () => {
+  const allIds = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "13"];
+  const base = { allIds, menuEligible: [], max: 6, isAgency: false };
+  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: undefined })), ["1", "2", "3", "4", "5", "6"]);
+  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: { selectedIds: [] } })), []);
+  // Chỉ còn mục đã ẩn/không tồn tại → không phải người dùng chủ ý chọn rỗng → mặc định
+  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: { selectedIds: ["7", "99"] } })), ["1", "2", "3", "4", "5", "6"]);
+  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: { selectedIds: ["9", "7", "2"] } })), ["9", "2"]);
+  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: "garbage" })), ["1", "2", "3", "4", "5", "6"]);
+});

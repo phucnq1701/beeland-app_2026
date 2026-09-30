@@ -102,3 +102,28 @@ export function sanitizeMenuTabIds(raw: unknown, allowed: string[], defaults: st
   allowed.forEach(push);
   return out;
 }
+
+/**
+ * Các tính năng hiển thị trên Trang chủ (và tab "Trang chủ" của Tất cả quản lý).
+ * - `stored`: cấu hình đã JSON.parse ({ selectedIds }), `undefined` nếu chưa lưu, rác nếu hỏng.
+ * - `isAgency`: `null` khi không đọc được loại tài khoản → coi như đại lý (an toàn hơn là
+ *   để lộ tính năng ngoài quyền).
+ * - Chủ ý lưu 0 mục (tài khoản thường) được giữ; còn nếu mọi id đã lưu đều không còn hợp lệ
+ *   (tính năng bị ẩn/xoá) thì dùng mặc định. Đại lý không bao giờ bị trống.
+ */
+export function resolveHomeFeatureIds(opts: {
+  stored: unknown;
+  isAgency: boolean | null;
+  allIds: string[];
+  menuEligible: string[];
+  max: number;
+}): string[] {
+  const agency = opts.isAgency !== false;
+  const visible = visibleFeatureIds(opts.allIds, { isAgency: agency, menuOnly: false, menuEligible: opts.menuEligible });
+  const defaults = agency ? visible : visible.slice(0, opts.max);
+  const saved = (opts.stored as { selectedIds?: unknown } | null | undefined)?.selectedIds;
+  if (!Array.isArray(saved)) return defaults;
+  if (saved.length === 0) return agency ? defaults : [];
+  const valid = normalizeSelection({ selectedIds: saved }, visible, []);
+  return valid.length ? valid.slice(0, opts.max) : defaults;
+}
