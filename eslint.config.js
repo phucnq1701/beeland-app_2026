@@ -19,6 +19,15 @@ const UI_STRICT_FILES = [
   'app/all-management.tsx',
   'app/profile.tsx',
   'components/home/**/*.{ts,tsx}',
+  // Giai đoạn 3 – sản phẩm & dự án
+  'app/projects.tsx',
+  'app/project/**/*.{ts,tsx}',
+  'app/products.tsx',
+  'app/product/**/*.{ts,tsx}',
+  'app/locked-units.tsx',
+  'app/locked/**/*.{ts,tsx}',
+  'app/diagram/**/*.{ts,tsx}',
+  'components/product/**/*.{ts,tsx}',
 ];
 
 module.exports = defineConfig([

@@ -1,53 +1,35 @@
-import React, {
-  useMemo,
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-} from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  FlatList,
-  Dimensions,
-  Share,
-  ActivityIndicator,
-  Platform,
-  Pressable,
-} from "react-native";
-import {
-  useLocalSearchParams,
-  Stack,
-  useRouter,
-  useFocusEffect,
-} from "expo-router";
-import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
-import Colors from "@/constants/colors";
-import { Button } from "@/components/ui";
-import { featuredProperties, Property, products } from "@/mocks/properties";
-import { overviewBlocks } from "@/mocks/overviewUnits";
-import {
-  MapPin,
-  DollarSign,
-  Share2,
-  Heart,
-  Lock,
-  CalendarPlus,
-  Calculator,
-  Home,
-} from "lucide-react-native";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { useLocalSearchParams, Stack, useRouter, useFocusEffect } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CalendarPlus, ChevronLeft, Lock, MapPin, PackageX } from "lucide-react-native";
+
+import { ImageCarousel } from "@/components/product/ImageCarousel";
+import { PriceBreakdown } from "@/components/product/PriceBreakdown";
+import {
+  BottomActionBar,
+  Button,
+  Card,
+  EmptyState,
+  IconButton,
+  KeyValueRow,
+  SectionHeader,
+  SkeletonDetail,
+  Text,
+  useToast,
+} from "@/components/ui";
+import { formatCountdown } from "@/lib/countdown";
+import { formatArea, formatVNDShort } from "@/lib/format";
+import { hapticError, hapticSuccess } from "@/lib/haptics";
+import { colors, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { ProductService } from "@/sevicesSupabase/ProductService";
-import {
-  PriceServices,
-  ActivePriceListItem,
-} from "@/sevicesSupabase/PriceServices";
-import ImageViewerModal from "@/components/ImageViewerModal";
+import { PriceServices, ActivePriceListItem } from "@/sevicesSupabase/PriceServices";
+
+/** Ảnh dùng khi sản phẩm chưa có ảnh (ảnh mặc định của dự án). */
+const DEFAULT_IMAGE =
+  "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/css461kotbkumrm0wjakm";
 
 export default function ProductDetailScreen() {
   const { id, lockMinutes } = useLocalSearchParams<{
@@ -56,28 +38,18 @@ export default function ProductDetailScreen() {
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [isFavorite, setIsFavorite] = useState<boolean>(false);
+  const toast = useToast();
   const [loading, setLoading] = useState<boolean>(false);
+  const [locking, setLocking] = useState<boolean>(false);
+  const lockInFlight = useRef(false);
 
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [data, setData] = useState<any>(null);
-  const [bannerProduct, setBannerProduct] = useState<
-    Array<{ HinhAnh?: string }>
-  >([]);
+  const [bannerProduct, setBannerProduct] = useState<{ HinhAnh?: string }[]>([]);
   // Bảng giá đang hiệu lực (price_list_items qua RPC get_active_price_for_product)
-  const [activePrice, setActivePrice] = useState<ActivePriceListItem | null>(
-    null
-  );
+  const [activePrice, setActivePrice] = useState<ActivePriceListItem | null>(null);
   const [priceLoading, setPriceLoading] = useState<boolean>(false);
-
-  // const loadData = async () => {
-  //   let res = await BookingService.getLockDetail({
-  //     ID: id2,
-  //   });
-  //   console.log(res.data,'data123');
-  //   setData(res?.data);
-  // };
 
   const getBannerProduct = async () => {
     const result = await ProductService.getBannerProduct({ maSP: id });
@@ -93,8 +65,6 @@ export default function ProductDetailScreen() {
         productId: product?.ID,
         maSP: product?.MaSP ?? id,
       });
-      console.log(result, "activePrice");
-
       setActivePrice(result.data);
     } finally {
       setPriceLoading(false);
@@ -123,6 +93,7 @@ export default function ProductDetailScreen() {
   useEffect(() => {
     getBannerProduct();
     getProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Khi quay lại màn (từ booking/lock/…): tải lại trạng thái mới nhất
@@ -149,41 +120,8 @@ export default function ProductDetailScreen() {
       }
     }
   }, [lockMinutes]);
-  const [currentImageIndex, setCurrentImageIndex] = useState<number>(0);
-  const [viewerVisible, setViewerVisible] = useState<boolean>(false);
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const flatListRef = useRef<FlatList<{ HinhAnh?: string }>>(null);
-  const screenWidth = Dimensions.get("window").width;
-
-  // Tiêu đề hiển thị lấy từ dữ liệu cloud (data), không dùng mocks.
-  const property: Property | undefined = useMemo(() => {
-    if (!data) return undefined;
-    return {
-      id: String(data?.MaSP ?? id ?? ""),
-      title: data?.TenDA || data?.KyHieu || "Sản phẩm",
-      location: data?.DiaChi || "",
-      price: "",
-      image: "",
-      images: [],
-      area: Number(data?.DienTich) || 0,
-      clearArea: Number(data?.DTThongThuy) || 0,
-      priceValue: Number(data?.TongGiaTriHDMB) || 0,
-      code: data?.KyHieu || "",
-    } as Property;
-  }, [data, id]);
-
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(value);
-  };
-
-  // const formatCountdown = (seconds: number): string => {
-  //   const mins = Math.floor(seconds / 60);
-  //   const secs = seconds % 60;
-  //   return `${mins}:${secs.toString().padStart(2, "0")}`;
-  // };
 
   useEffect(() => {
     if (!isLocked) return;
@@ -207,37 +145,40 @@ export default function ProductDetailScreen() {
         clearInterval(timerRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLocked, remainingSeconds]);
 
-  if (!loading && !data) {
+  const back = (
+    <View style={[styles.back, { top: insets.top + space.sm }]}>
+      <IconButton icon={ChevronLeft} variant="onDark" accessibilityLabel="Quay lại" onPress={() => router.back()} />
+    </View>
+  );
+
+  if (loading && !data) {
     return (
-      <View style={styles.missingContainer} testID="product-not-found">
-        <Text style={styles.missingTitle}>Không tìm thấy sản phẩm</Text>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          testID="go-back"
-        >
-          <Text style={styles.backBtnText}>Quay lại</Text>
-        </TouchableOpacity>
-      </View>
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.root, { paddingTop: insets.top + 56 }]}>
+          <SkeletonDetail />
+          {back}
+        </View>
+      </>
     );
   }
 
-  const formatCountdown = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-
-    return `${mins < 10 ? "0" + mins : mins}:${secs < 10 ? "0" + secs : secs}`;
-  };
+  if (!loading && !data) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.root, styles.center, { paddingTop: insets.top }]} testID="product-not-found">
+          <EmptyState icon={PackageX} title="Không tìm thấy sản phẩm" actionLabel="Quay lại" onAction={() => router.back()} />
+        </View>
+      </>
+    );
+  }
 
   const statusName = String(
-    data?.TenTT ||
-      data?.ten_tt ||
-      data?.TrangThai ||
-      data?.status ||
-      data?.tt?.item_name ||
-      ""
+    data?.TenTT || data?.ten_tt || data?.TrangThai || data?.status || data?.tt?.item_name || ""
   )
     .toLowerCase()
     .trim();
@@ -253,15 +194,11 @@ export default function ProductDetailScreen() {
     String(data?.MaTT) === "6" ||
     String(data?.ma_tt) === "5" ||
     String(data?.ma_tt) === "6";
-  const isUnavailableStatus =
-    isBookingStatus ||
-    statusName.includes("đã bán") ||
-    statusName.includes("đặt cọc") ||
-    statusName.includes("thanh lý") ||
-    statusName.includes("hợp đồng");
-  const handleLock = async () => {
-    if (isLocked || isBookingStatus) return;
 
+  const handleLock = async () => {
+    if (isLocked || isBookingStatus || lockInFlight.current) return;
+    lockInFlight.current = true;
+    setLocking(true);
     try {
       // Tạo lock cloud: RPC đổi SP (2→18) + insert phiếu LOCK
       const res = await BookingService.createLock({
@@ -275,667 +212,140 @@ export default function ProductDetailScreen() {
 
         setIsLocked(true);
         setRemainingSeconds(seconds);
+        hapticSuccess();
+        toast.show({ type: "success", message: `Đã lock căn ${data?.KyHieu ?? ""}`.trim() });
         // Tải lại để cập nhật trạng thái SP (Đã Lock)
         await getProducts();
+      } else {
+        hapticError();
+        toast.show({ type: "error", message: (res as any)?.message || "Không lock được căn này" });
       }
     } catch (err) {
       console.log("Lock error", err);
+      hapticError();
+      toast.show({ type: "error", message: "Không lock được căn này" });
+    } finally {
+      lockInFlight.current = false;
+      setLocking(false);
     }
   };
 
-  const displayImages =
-    property?.images && property.images.length > 0
-      ? property.images
-      : [property?.image].filter(Boolean);
-
-  const handleScroll = (event: any) => {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(offsetX / screenWidth);
-    setCurrentImageIndex(index);
-  };
-
-  console.log(data?.KyHieu);
+  const images = bannerProduct.map((b) => b?.HinhAnh).filter((u): u is string => !!u);
+  const price = Number(data?.TongGiaTriHDMB) > 0 ? formatVNDShort(data.TongGiaTriHDMB) : "Liên hệ";
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ title: property?.title || "Sản phẩm" }} />
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
-        </View>
-      ) : (
-        <>
-          <ScrollView
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingBottom: insets.bottom + 120 },
-            ]}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.heroCard} testID="product-hero">
-              <FlatList
-                ref={flatListRef}
-                data={bannerProduct}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                onScroll={handleScroll}
-                scrollEventThrottle={16}
-                keyExtractor={(item, index) => `image-${index}`}
-                getItemLayout={(_, index) => ({
-                  length: screenWidth,
-                  offset: screenWidth * index,
-                  index,
-                })}
-                renderItem={({ item, index }) => (
-                  <Pressable
-                    onPress={() => {
-                      setCurrentImageIndex(index);
-                      setViewerVisible(true);
-                    }}
-                  >
-                    <Image
-                      source={{ uri: item?.HinhAnh }}
-                      style={[styles.heroImage, { width: screenWidth }]}
-                      contentFit="cover"
-                    />
-                  </Pressable>
-                )}
-              />
-              <LinearGradient
-                colors={["transparent", "rgba(0,0,0,0.85)"]}
-                style={styles.heroOverlay}
-                pointerEvents="none"
-              />
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar style="light" />
+      <View style={styles.root}>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <View testID="product-hero">
+            <ImageCarousel images={images} fallback={DEFAULT_IMAGE} height={260 + insets.top} />
+          </View>
 
-              {/* <View style={[styles.heroActions, { top: insets.top - 50 }]}>
-              <TouchableOpacity
-                testID="action-favorite"
-                style={[styles.heroIconBtn]}
-                onPress={() => {
-                  setIsFavorite(!isFavorite);
-                  console.log("[Product] Favorite toggled", {
-                    id: property?.id,
-                    isFavorite: !isFavorite,
-                  });
-                }}
-              >
-                <Heart
-                  color={isFavorite ? "#8B5CF6" : Colors.white}
-                  size={22}
-                  fill={isFavorite ? "#8B5CF6" : "transparent"}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                testID="action-share"
-                style={[styles.heroIconBtn]}
-                onPress={async () => {
-                  console.log("[Product] Share pressed", { id: property?.id });
-                  try {
-                    const shareUrl = `https://app.com/product/${property?.id}`;
-                    const shareMessage = `${property?.title} - ${property?.price}\n${property?.location}\n${shareUrl}`;
-
-                    await Share.share({
-                      message: shareMessage,
-                      url: shareUrl,
-                      title: property?.title,
-                    });
-                  } catch (error) {
-                    console.error("[Product] Share error:", error);
-                  }
-                }}
-              >
-                <Share2 color={Colors.white} size={20} />
-              </TouchableOpacity>
-            </View> */}
-
-              {bannerProduct.length > 1 && (
-                <View style={styles.paginationDots} pointerEvents="none">
-                  {bannerProduct.map((_, index) => (
-                    <View
-                      key={`dot-${index}`}
-                      style={[
-                        styles.dot,
-                        index === currentImageIndex && styles.activeDot,
-                      ]}
-                    />
-                  ))}
-                </View>
-              )}
-
-              {/* pointerEvents none: không chặn vuốt/bấm ảnh phía dưới */}
-              <View style={styles.heroInfo} pointerEvents="none">
-                <Text style={styles.heroTitle}>{data?.TenDA}</Text>
-
-                <View style={styles.rowCenter}>
-                  <Home color={Colors.white} size={16} />
-                  <Text style={styles.heroSubtitle}> {data?.KyHieu}</Text>
-                </View>
-                <View style={styles.rowCenter}>
-                  <MapPin color={Colors.white} size={16} />
-                  <Text style={styles.heroSubtitle}>{data?.DiaChi}</Text>
-                </View>
-                <View style={styles.pricePill}>
-                  <DollarSign color={Colors.white} size={16} />
-                  <Text style={styles.priceText}>
-                    {Number(data?.TongGiaTriHDMB) > 0
-                      ? `${(Number(data.TongGiaTriHDMB) / 1000000000).toFixed(
-                          2
-                        )} tỷ`
-                      : "Liên hệ"}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Thông tin căn hộ</Text>
-              <Text style={styles.sectionText}>
-                Căn hộ tiêu chuẩn hiện đại, tiện ích nội khu đầy đủ, vị trí kết
-                nối thuận tiện.
-              </Text>
-            </View>
-
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Chi tiết giá</Text>
-                {/* <TouchableOpacity
-                testID="action-calculator"
-                style={styles.calculatorBtn}
-                onPress={() => {
-                  console.log("[Product] Calculator pressed", {
-                    id: property?.id,
-                  });
-                  router.push(`/price-calculator/${property?.id}`);
-                }}
-              >
-                <Calculator color={Colors.primary} size={20} />
-                <Text style={styles.calculatorBtnText}>Tính giá</Text>
-              </TouchableOpacity> */}
-              </View>
-              <View style={styles.priceDetails}>
-                {priceLoading ? (
-                  <View style={styles.priceLoadingRow}>
-                    <ActivityIndicator size="small" color={Colors.primary} />
-                    <Text style={styles.priceLoadingText}>
-                      Đang tải bảng giá...
-                    </Text>
-                  </View>
-                ) : activePrice ? (
-                  <>
-                    {/* Luôn hiển thị đủ các trường — null/sai giá trị → 0 */}
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>
-                        Diện tích thông thủy:
-                      </Text>
-                      <Text style={styles.detailValue}>
-                        {Number(activePrice?.area) || 0} m²
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Đơn giá chưa VAT:</Text>
-                      <Text style={styles.detailValue}>
-                        {formatCurrency(Number(activePrice?.unit_price) || 0)}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Tổng giá chưa VAT:</Text>
-                      <Text style={styles.detailValue}>
-                        {formatCurrency(
-                          Number(activePrice?.total_before_vat) || 0
-                        )}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Tiền VAT:</Text>
-                      <Text style={styles.detailValue}>
-                        {formatCurrency(Number(activePrice?.vat_amount) || 0)}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Tổng giá gồm VAT:</Text>
-                      <Text style={styles.detailValue}>
-                        {formatCurrency(
-                          Number(activePrice?.total_after_vat) || 0
-                        )}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Phí bảo trì:</Text>
-                      <Text style={styles.detailValue}>
-                        {formatCurrency(
-                          Number(activePrice?.maintenance_amount) || 0
-                        )}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Tổng giá gồm PBT:</Text>
-                      <Text style={styles.detailValue}>
-                        {formatCurrency(
-                          Number(activePrice?.total_payment) || 0
-                        )}
-                      </Text>
-                    </View>
-                    <View style={[styles.detailRow, styles.totalRow]}>
-                      <Text style={styles.totalLabel}>Tổng giá trị HĐMB:</Text>
-                      <Text style={styles.totalValue}>
-                        {formatCurrency(
-                          Number(activePrice?.contract_total_value) || 0
-                        )}
-                      </Text>
-                    </View>
-                    <View style={styles.noteRow}>
-                      <Text style={styles.noteLabel}>Ghi chú:</Text>
-                      <Text style={styles.noteText}>
-                        {activePrice?.note || "-"}
-                      </Text>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    {/* Trạng thái không có bảng giá áp dụng */}
-                    {/* <View style={styles.noPriceBanner}>
-                      <Text style={styles.noPriceText}>
-                        Chưa có bảng giá áp dụng
-                      </Text>
-                    </View> */}
-                    {/* Fallback: hiển thị giá từ dữ liệu sản phẩm (giữ tương thích) */}
-                    {Number(data?.DTThongThuy) > 0 && (
-                      <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>
-                          Diện tích thông thủy:
-                        </Text>
-                        <Text style={styles.detailValue}>
-                          {data?.DTThongThuy} m²
-                        </Text>
-                      </View>
-                    )}
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Tổng giá gồm VAT:</Text>
-                      <Text style={styles.detailValue}>
-                        {formatCurrency(data?.TongGiaGomVAT)}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Tiền VAT:</Text>
-                      <Text style={styles.detailValue}>
-                        {formatCurrency(data?.TienVAT)}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Phí bảo trì:</Text>
-                      <Text style={styles.detailValue}>
-                        {formatCurrency(data?.PhiBaoTri)}
-                      </Text>
-                    </View>
-                    <View style={[styles.detailRow, styles.totalRow]}>
-                      <Text style={styles.totalLabel}>Tổng giá trị HĐ:</Text>
-                      <Text style={styles.totalValue}>
-                        {formatCurrency(data?.TongGiaTriHDMB)}
-                      </Text>
-                    </View>
-                  </>
-                )}
-              </View>
-            </View>
-          </ScrollView>
-
-          <ImageViewerModal
-            visible={viewerVisible}
-            images={bannerProduct
-              .map((b) => b?.HinhAnh)
-              .filter((u): u is string => !!u)}
-            initialIndex={currentImageIndex}
-            onIndexChange={(i) => {
-              setCurrentImageIndex(i);
-              flatListRef.current?.scrollToIndex({ index: i, animated: false });
-            }}
-            onClose={() => setViewerVisible(false)}
-          />
-
-          {/* Thanh hành động cố định đáy màn hình — nền trắng che nội dung cuộn phía dưới */}
-          <View
-            style={[styles.bottomActions, { paddingBottom: insets.bottom }]}
-          >
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                styles.lockButton,
-                isLocked && styles.lockedButton,
-                isBookingStatus && styles.disabledButton,
-              ]}
-              activeOpacity={isBookingStatus ? 1 : 0.85}
-              onPress={handleLock}
-              disabled={isLocked || isBookingStatus}
-            >
-              <Lock
-                color={isBookingStatus ? "#9CA3AF" : Colors.white}
-                size={20}
-              />
-
-              {isBookingStatus ? (
-                <Text
-                  style={[styles.actionButtonText, styles.disabledButtonText]}
-                >
-                  Lock căn
+          {/* Khối trưng bày: tên dự án, ký hiệu căn, giá */}
+          <View style={styles.hero}>
+            <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
+              {data?.TenDA || "Dự án"}
+            </Text>
+            <Text variant="title" color={colors.showcase.text} accessibilityRole="header">
+              {data?.KyHieu ? `Căn ${data.KyHieu}` : "Sản phẩm"}
+            </Text>
+            <Text variant="display" color={colors.showcase.accent} numeric>
+              {price}
+            </Text>
+            {data?.DiaChi ? (
+              <View style={styles.place}>
+                <MapPin size={16} color={colors.showcase.textMuted} />
+                <Text variant="caption" color={colors.showcase.textMuted} style={styles.flex}>
+                  {data.DiaChi}
                 </Text>
-              ) : !isLocked ? (
-                <Text style={styles.actionButtonText}>Lock căn</Text>
-              ) : (
-                <Text style={styles.actionButtonText}>
-                  {formatCountdown(remainingSeconds)}
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            {data?.isHienThiBook ? (
-              <Button
-                testID="action-book"
-                size="lg"
-                icon={CalendarPlus}
-                title={isBookingStatus ? "Đã booking" : "Tạo booking"}
-                disabled={isBookingStatus}
-                style={{ flex: 1 }}
-                onPress={() => {
-                  if (isBookingStatus) return;
-                  router.push({
-                    pathname: "/booking/create",
-                    params: {
-                      dataBooking: JSON.stringify(data),
-                    },
-                  });
-                }}
-              />
+              </View>
             ) : null}
           </View>
-        </>
-      )}
-    </View>
+
+          <View style={styles.content}>
+            <SectionHeader title="Thông tin căn" />
+            <Card>
+              <KeyValueRow label="Ký hiệu" value={data?.KyHieu || "—"} />
+              <KeyValueRow label="Dự án" value={data?.TenDA || "—"} />
+              <KeyValueRow label="Diện tích thông thủy" value={formatArea(data?.DTThongThuy)} />
+              <KeyValueRow label="Diện tích tim tường" value={formatArea(data?.DienTich)} />
+              <KeyValueRow label="Trạng thái" value={data?.TenTT || data?.tt?.item_name || "—"} last />
+            </Card>
+
+            <SectionHeader title="Chi tiết giá" />
+            <Card>
+              <PriceBreakdown activePrice={activePrice} data={data} loading={priceLoading} />
+            </Card>
+          </View>
+        </ScrollView>
+        {back}
+
+        <BottomActionBar>
+          {isLocked ? (
+            <View style={styles.lockTimer} accessible accessibilityLabel={`Đang lock, còn ${formatCountdown(remainingSeconds)}`}>
+              <Lock size={18} color={colors.onWarningSubtle} />
+              <Text variant="subhead" numeric color="onWarningSubtle">
+                {formatCountdown(remainingSeconds)}
+              </Text>
+            </View>
+          ) : (
+            <Button
+              variant="secondary"
+              icon={Lock}
+              title="Lock căn"
+              loading={locking}
+              disabled={isBookingStatus}
+              onPress={() => void handleLock()}
+            />
+          )}
+          {data?.isHienThiBook ? (
+            <Button
+              testID="action-book"
+              size="lg"
+              icon={CalendarPlus}
+              title={isBookingStatus ? "Đã booking" : "Tạo booking"}
+              disabled={isBookingStatus}
+              style={styles.flex}
+              onPress={() => {
+                if (isBookingStatus) return;
+                router.push({
+                  pathname: "/booking/create",
+                  params: {
+                    dataBooking: JSON.stringify(data),
+                  },
+                });
+              }}
+            />
+          ) : null}
+        </BottomActionBar>
+      </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  scrollContent: { paddingBottom: 24 },
-  heroCard: {
-    height: 240,
-    backgroundColor: Colors.white,
+  root: { flex: 1, backgroundColor: colors.showcase.paper },
+  center: { justifyContent: "center" },
+  flex: { flex: 1 },
+  scroll: { paddingBottom: space.xxl },
+  back: { position: "absolute", left: space.md },
+  hero: {
+    gap: space.xs,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    backgroundColor: colors.showcase.bg,
   },
-  heroImage: { width: "100%", height: "100%" },
-  heroOverlay: {
-    position: "absolute" as const,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: "55%",
-  },
-  heroInfo: {
-    position: "absolute" as const,
-    left: 20,
-    right: 20,
-    bottom: 20,
-  },
-  rowCenter: {
+  place: { flexDirection: "row", alignItems: "flex-start", gap: space.xs, marginTop: space.xs },
+  content: { padding: space.lg, gap: space.md },
+  lockTimer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginTop: 6,
-  },
-  heroTitle: { fontSize: 26, fontWeight: "800" as const, color: Colors.white },
-  heroSubtitle: { color: Colors.white, opacity: 0.95 },
-  pricePill: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 10,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  priceText: { color: Colors.white, fontWeight: "700" as const },
-  section: { paddingHorizontal: 20, paddingTop: 20 },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700" as const,
-    color: Colors.text,
-  },
-  calculatorBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#F0F9FF",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  calculatorBtnText: {
-    fontSize: 14,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  sectionText: { fontSize: 15, color: Colors.textSecondary, lineHeight: 22 },
-  heroActions: {
-    position: "absolute" as const,
-    right: 16,
-    flexDirection: "row",
-    gap: 10,
-    zIndex: 10,
-  },
-  heroIconBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-  },
-  ctaBtn: {
-    flex: 1,
-    paddingVertical: 16,
+    gap: space.sm,
+    minHeight: 52,
+    paddingHorizontal: space.lg,
     borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ctaPrimary: { backgroundColor: Colors.primary },
-  ctaPrimaryText: {
-    color: Colors.white,
-    fontWeight: "700" as const,
-    fontSize: 16,
-  },
-  iconBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  missingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.background,
-  },
-  missingTitle: {
-    fontSize: 18,
-    color: Colors.text,
-    marginBottom: 12,
-    fontWeight: "600" as const,
-  },
-  backBtn: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  backBtnText: { color: Colors.white, fontWeight: "700" as const },
-  // Không nền/Border riêng — dùng chung nền màn hình như mục "Thông tin căn hộ"
-  priceDetails: {
-    marginTop: 4,
-  },
-  detailRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  detailLabel: {
-    fontSize: 15,
-    color: Colors.textSecondary,
-  },
-  detailValue: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  totalRow: {
-    marginTop: 8,
-    marginBottom: 4,
-    paddingTop: 4,
-  },
-  totalLabel: {
-    fontSize: 16,
-    fontWeight: "700" as const,
-    color: Colors.text,
-  },
-  totalValue: {
-    fontSize: 18,
-    fontWeight: "800" as const,
-    color: Colors.primary,
-  },
-  priceLoadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 16,
-  },
-  priceLoadingText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  noPriceBanner: {
-    backgroundColor: "#FFF7ED",
-    borderWidth: 1,
-    borderColor: "#FDBA74",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 8,
-  },
-  noPriceText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: "#C2410C",
-  },
-  noteRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    paddingTop: 10,
-  },
-  noteLabel: {
-    fontSize: 15,
-    color: Colors.textSecondary,
-  },
-  noteText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  bottomActions: {
-    position: "absolute" as const,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 20,
-    backgroundColor: Colors.white,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 13,
-    borderRadius: 12,
-  },
-  lockButton: {
-    backgroundColor: "#6B7280",
-  },
-  bookButton: {
-    backgroundColor: Colors.primary,
-  },
-  disabledButton: {
-    backgroundColor: "#E5E7EB",
-  },
-  actionButtonText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: "700" as const,
-  },
-  disabledButtonText: {
-    color: "#9CA3AF",
-  },
-  lockedButton: {
-    backgroundColor: "#8B5CF6",
-  },
-  countdownText: {
-    color: Colors.white,
-    fontSize: 20,
-    fontWeight: "800" as const,
-    letterSpacing: 1,
-  },
-  paginationDots: {
-    position: "absolute" as const,
-    bottom: 20,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-    zIndex: 5,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "rgba(255,255,255,0.5)",
-  },
-  activeDot: {
-    backgroundColor: Colors.white,
-    width: 24,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  loadingText: {
-    marginTop: 10,
-    color: Colors.textSecondary,
+    backgroundColor: colors.warningSubtle,
   },
 });
