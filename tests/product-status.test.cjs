@@ -5,22 +5,40 @@ const { loadTs } = require("./helpers/loadTs.cjs");
 const s = loadTs("lib/productStatus.ts");
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
-// Bảng mã trạng thái SẢN PHẨM theo web: beeland/src/services/ProductTransactionStatus.ts (PRODUCT_STATUS)
-test("every product status code maps to one of the 4 web display groups", () => {
-  const expected = {
-    0: "blocked", 1: "blocked", 2: "available", 3: "hold", 5: "hold", 6: "sold", 7: "hold",
-    8: "sold", 9: "sold", 10: "sold", 11: "hold", 12: "hold", 13: "sold", 14: "sold",
-    15: "sold", 16: "blocked", 17: "hold", 18: "blocked",
-  };
-  for (const [code, group] of Object.entries(expected)) {
-    assert.equal(s.groupFromCode(code), group, `code ${code}`);
-  }
+// Lấy sơ đồ web làm chuẩn: beeland/src/pages/Products/FloorPlanOverview.tsx (mapStatus)
+test("webUnitStatus replicates the web floor plan mapStatus name rules", () => {
+  const g = (TenTT, MaTT) => s.webUnitStatus({ TenTT, MaTT });
+  assert.equal(g("Đã bán"), "sold");
+  assert.equal(g("Đã ký HĐ"), "sold");
+  assert.equal(g("Hợp đồng mua bán"), "sold");
+  assert.equal(g("Giữ chỗ ưu tiên"), "hold");
+  assert.equal(g("Booking chờ duyệt"), "hold");
+  assert.equal(g("Đã đặt cọc"), "hold");
+  assert.equal(g("Tạm khóa"), "blocked");
+  assert.equal(g("Ngừng bán"), "blocked");
+  assert.equal(g("Mở bán"), "available");
+  assert.equal(g("Còn trống"), "available");
+  // Thứ tự luật như web: "hợp đồng" đứng trước "cọc"
+  assert.equal(g("Đặt cọc – chờ ký hợp đồng"), "sold");
 });
 
-test("unknown or missing codes are never shown as available", () => {
-  for (const code of ["4", "19", "22", "99", "", null, undefined]) {
-    assert.equal(s.groupFromCode(code), null, String(code));
-  }
+test("names the web rules do not match fall back to the MaTT switch (HĐMB → Khóa like web)", () => {
+  const g = (TenTT, MaTT) => s.webUnitStatus({ TenTT, MaTT });
+  assert.equal(g("HĐMB", "6"), "blocked");
+  assert.equal(g("HĐMB chờ duyệt", "14"), "blocked");
+  assert.equal(g("ĐC chờ duyệt", "12"), "blocked");
+  assert.equal(g("Bàn giao", "8"), "blocked");
+  assert.equal(g("Đã Lock", "18"), "blocked");
+  assert.equal(g("Chưa bán", "1"), "blocked");
+  assert.equal(g("", "2"), "available");
+  assert.equal(g("", 3), "hold");
+  assert.equal(g("", "4"), "sold");
+  assert.equal(g("", "5"), "sold");
+  // MaTT là uuid / thiếu → Khóa, không bao giờ Mở bán
+  assert.equal(g("", "5f1c-uuid"), "blocked");
+  assert.equal(g(undefined, undefined), "blocked");
+  assert.equal(s.groupFromName("Giữ chỗ"), "hold");
+  assert.equal(s.groupFromName(""), "blocked");
 });
 
 test("group labels match the web floor plan wording", () => {
@@ -30,28 +48,6 @@ test("group labels match the web floor plan wording", () => {
     sold: { label: "Đã bán", tone: "danger" },
     blocked: { label: "Khóa", tone: "neutral" },
   });
-});
-
-test("groupFromName follows the web mapStatus rules (with diacritics or not)", () => {
-  assert.equal(s.groupFromName("Mở bán"), "available");
-  assert.equal(s.groupFromName("Còn trống"), "available");
-  assert.equal(s.groupFromName("Booking chờ duyệt"), "hold");
-  assert.equal(s.groupFromName("Đã đặt cọc"), "hold");
-  assert.equal(s.groupFromName("ĐC chờ duyệt"), "hold");
-  assert.equal(s.groupFromName("Giữ chỗ ưu tiên"), "hold");
-  assert.equal(s.groupFromName("Đã bán"), "sold");
-  assert.equal(s.groupFromName("HĐMB"), "sold");
-  assert.equal(s.groupFromName("hdmb cho duyet"), "sold");
-  assert.equal(s.groupFromName("Hợp đồng mua bán"), "sold");
-  assert.equal(s.groupFromName("Đặt cọc – chờ ký HĐMB"), "hold");
-  assert.equal(s.groupFromName("Hủy HĐMB"), "blocked");
-  assert.equal(s.groupFromName("Tạm khóa"), "blocked");
-  assert.equal(s.groupFromName("Đã Lock"), "blocked");
-  // Không nhận ra → Khóa (web: maintenance), không bao giờ là Trống
-  assert.equal(s.groupFromName("Khác"), "blocked");
-  assert.equal(s.groupFromName("Chưa bán"), "blocked");
-  assert.equal(s.groupFromName(""), "blocked");
-  assert.equal(s.groupFromName(undefined), "blocked");
 });
 
 test("isOpenForSale: only code 2 or the name Mở bán (web productSaleStatus)", () => {

@@ -3,7 +3,7 @@
  * Bảng mã → nhóm lấy theo đặc tả nghiệp vụ web (src/services/ProductTransactionStatus.ts).
  * Chỉ import hàm thuần để test nạp được.
  */
-import { groupFromCode, groupFromName, WebGroup } from './productStatus';
+import { webUnitStatus, WebGroup } from './productStatus';
 
 /** Một dòng danh mục như FilterService.getStatusSP trả về. */
 export type CatalogStatus = { MaTT: string; TenTT: string; ColorWeb?: string | null; _raw?: { item_code?: string } };
@@ -20,12 +20,13 @@ export function resolveCatalogStatus(value: unknown, catalog: CatalogStatus[]): 
 }
 
 /**
- * Nhóm trạng thái của một căn: ưu tiên theo MÃ danh mục (bảng nghiệp vụ web), không có mã
- * thì theo tên; không rõ → "Khóa" (không bao giờ mặc định "Mở bán").
+ * Nhóm trạng thái của một căn – giống hệt sơ đồ web (webUnitStatus); không rõ → "Khóa"
+ * (không bao giờ mặc định "Mở bán").
  */
 export function unitStatusOf(item: { MaTT?: unknown; TenTT?: unknown }, catalog: CatalogStatus[]): WebGroup {
   const entry = resolveCatalogStatus(item?.MaTT, catalog);
-  return groupFromCode(entry?._raw?.item_code) ?? groupFromName(entry?.TenTT ?? item?.TenTT);
+  // Như sơ đồ web: tên trên căn trước, không có thì tên danh mục; MaTT giữ nguyên giá trị gốc
+  return webUnitStatus({ TenTT: item?.TenTT || entry?.TenTT, MaTT: item?.MaTT });
 }
 
 /**

@@ -1,7 +1,7 @@
 /**
  * Trạng thái căn/dự án – làm theo WEB (chuẩn nghiệp vụ):
  *  - Mã trạng thái sản phẩm: beeland/src/services/ProductTransactionStatus.ts (PRODUCT_STATUS)
- *  - 4 nhóm hiển thị sơ đồ: beeland/src/pages/Products/FloorPlanOverview.tsx (mapStatus)
+ *  - 4 nhóm hiển thị sơ đồ: beeland/src/pages/Products/FloorPlanOverview.tsx (mapStatus) – lấy sơ đồ web làm chuẩn
  *  - Điều kiện Lock/Booking: beeland/src/utils/productSaleStatus.ts (isOpenForSale)
  * Nhãn hiển thị luôn là TÊN trong danh mục (item_name), màu là color_code – như web.
  * Không import gì để test nạp trực tiếp được.
@@ -19,38 +19,7 @@ export const GROUP_META: Record<WebGroup, { label: string; tone: StatusTone }> =
   blocked: { label: 'Khóa', tone: 'neutral' },
 };
 
-/**
- * Mã trạng thái SẢN PHẨM (item_code) → nhóm. Theo đặc tả nghiệp vụ web (tên mã ở chú thích).
- * Mã 4 không có trong đặc tả (web khai 0..18, bỏ 4) → coi là mã lạ.
- */
-const CODE_GROUP: Record<string, WebGroup> = {
-  '0': 'blocked', // Thanh lý chờ duyệt (web sơ đồ: Khóa)
-  '1': 'blocked', // Chưa bán – chưa mở bán, không được Lock/Booking
-  '2': 'available', // Mở bán – trạng thái duy nhất được Lock/Booking/Cọc
-  '3': 'hold', // Booking
-  '5': 'hold', // Đã đặt cọc
-  '6': 'sold', // HĐMB
-  '7': 'hold', // Giữ chỗ
-  '8': 'sold', // Bàn giao
-  '9': 'sold', // Cấp sổ đỏ
-  '10': 'sold', // Góp vốn
-  '11': 'hold', // Booking chờ duyệt
-  '12': 'hold', // ĐC (đặt cọc) chờ duyệt
-  '13': 'sold', // Góp vốn chờ duyệt
-  '14': 'sold', // HĐMB chờ duyệt
-  '15': 'sold', // Bàn giao chờ duyệt
-  '16': 'blocked', // Khác
-  '17': 'hold', // Giữ chỗ ưu tiên
-  '18': 'blocked', // Đã Lock
-};
-
-/** Nhóm theo mã; mã lạ/thiếu → null (người gọi xử lý tiếp, không bao giờ mặc định "Mở bán"). */
-export function groupFromCode(code: unknown): WebGroup | null {
-  if (code === null || code === undefined) return null;
-  return CODE_GROUP[String(code).trim()] ?? null;
-}
-
-/** Bỏ dấu + chữ thường (giống norm() của web). */
+/** Bỏ dấu + chữ thường (giống norm() của web) – dùng cho isOpenForSale. */
 function fold(v: unknown): string {
   return String(v ?? '')
     .normalize('NFD')
@@ -62,28 +31,33 @@ function fold(v: unknown): string {
 }
 
 /**
- * Nhóm theo TÊN – dùng khi không có mã. Theo thứ tự luật mapStatus của web, bổ sung các tên
- * hợp đồng/bàn giao mà đặc tả nghiệp vụ coi là đã bán; không nhận ra → "Khóa".
+ * Nhóm hiển thị của một căn – LẤY SƠ ĐỒ WEB LÀM CHUẨN: chép nguyên mapStatus trong
+ * beeland/src/pages/Products/FloorPlanOverview.tsx (luật tên trên TenTT chữ thường, rồi switch MaTT).
+ * Hệ quả giống web: tên không khớp luật (vd "HĐMB", "ĐC chờ duyệt", "Bàn giao") và MaTT là uuid → "Khóa".
+ * Không tự "sửa" cho hợp lý hơn web; muốn đổi thì đổi ở web trước.
  */
+export function webUnitStatus(detail: { TenTT?: unknown; MaTT?: unknown }): WebGroup {
+  const ten = String(detail?.TenTT || '').toLowerCase();
+  if (ten.includes('đã bán') || ten.includes('đã ký') || ten.includes('hợp đồng')) return 'sold';
+  if (ten.includes('giữ chỗ') || ten.includes('booking') || ten.includes('đặt cọc') || ten.includes('cọc')) return 'hold';
+  if (ten.includes('khóa') || ten.includes('ngừng') || ten.includes('bảo trì')) return 'blocked';
+  if (ten.includes('mở bán') || ten.includes('sẵn') || ten.includes('trống')) return 'available';
+  switch (Number(detail?.MaTT)) {
+    case 2:
+      return 'available';
+    case 3:
+      return 'hold';
+    case 4:
+    case 5:
+      return 'sold';
+    default:
+      return 'blocked';
+  }
+}
+
+/** Nhóm chỉ theo tên (không có MaTT) – cùng luật webUnitStatus. */
 export function groupFromName(name: unknown): WebGroup {
-  const raw = String(name ?? '').toLowerCase();
-  const t = fold(name);
-  if (!t) return 'blocked';
-  // Huỷ (vd "Hủy HĐMB") không phải căn đã bán (web: không khớp luật nào → Khóa)
-  if (/\bhuy\b/.test(t)) return 'blocked';
-  // Web: "đã bán", "đã ký", "hợp đồng" → Đã bán
-  if (/\bda ban\b/.test(t) || /\bda ky\b/.test(t) || /\bhop dong\b/.test(t)) return 'sold';
-  // Web: "giữ chỗ", "booking", "đặt cọc", "cọc" → Giữ chỗ (+ viết tắt "ĐC")
-  if (/\bgiu cho\b/.test(t) || t.includes('booking') || /\bdat coc\b/.test(t) || /\bcoc\b/.test(t) || /\bdc\b/.test(t))
-    return 'hold';
-  // Đặc tả nghiệp vụ: HĐMB / bàn giao / sổ đỏ / góp vốn là đã bán
-  if (/hdmb/.test(t) || /\bhd\s*(mb|mua ban)\b/.test(t) || /\bban giao\b/.test(t) || /\bso do\b/.test(t) || /\bgop von\b/.test(t))
-    return 'sold';
-  // Web: "khóa", "ngừng", "bảo trì" → Khóa (+ "lock")
-  if (/\bkhoa\b/.test(t) || /\bngung\b/.test(t) || /\bbao tri\b/.test(t) || /\block\b/.test(t)) return 'blocked';
-  // Web: "mở bán", "sẵn", "trống" → Mở bán (so trên chữ có dấu để "sẵn" không trùng "sàn")
-  if (/\bmo ban\b/.test(t) || raw.includes('sẵn') || raw.includes('trống')) return 'available';
-  return 'blocked';
+  return webUnitStatus({ TenTT: name });
 }
 
 const OPEN_FOR_SALE_CODE = '2';

@@ -22,30 +22,40 @@ Nguồn: `beeland/src/services/ProductTransactionStatus.ts` (mã), `src/pages/Pr
 
 - **Nhãn** = tên trong danh mục `cloud_catalogs` (`bds_trang_thai.item_name`). **Màu** = màu của sản phẩm
   (`MauNen`) → màu danh mục (`color_code`) → xám.
-- **Nhóm** (tóm tắt sơ đồ): Mở bán · Giữ chỗ · Đã bán · Khóa. Mã lạ/không rõ → **Khóa** (không bao giờ "Mở bán").
-- **Lock căn / Booking / Đặt cọc**: chỉ khi căn ở **mã 2 – Mở bán**. Booking từ căn **mã 18 – Đã Lock**
-  chỉ qua phiếu lock còn hiệu lực (web: `fn_booking_create_from_lock`).
+- **Nhóm** (tóm tắt sơ đồ): Mở bán · Giữ chỗ · Đã bán · Khóa. **Lấy sơ đồ web làm chuẩn**: app chép nguyên
+  `mapStatus` của `FloorPlanOverview.tsx` (`lib/productStatus.ts` → `webUnitStatus`), không tự "sửa cho hợp lý":
+  1. Theo tên (chữ thường, có dấu): "đã bán" / "đã ký" / "hợp đồng" → Đã bán; "giữ chỗ" / "booking" / "đặt cọc" /
+     "cọc" → Giữ chỗ; "khóa" / "ngừng" / "bảo trì" → Khóa; "mở bán" / "sẵn" / "trống" → Mở bán.
+  2. Không khớp tên → theo `MaTT`: 2 → Mở bán, 3 → Giữ chỗ, 4/5 → Đã bán, còn lại (kể cả uuid, rỗng) → Khóa.
+  3. Tên dùng để xét = tên trên căn, không có thì tên danh mục.
+  Hệ quả (giống web): HĐMB, Bàn giao, Cấp sổ đỏ, Góp vốn, "ĐC chờ duyệt"… → **Khóa**. Muốn đổi thì đổi web trước.
+- **Lock căn**: chỉ khi căn ở **mã 2 – Mở bán**; hệ thống từ chối (`fn_product_transaction` lỗi) → **dừng, không
+  tạo phiếu lock** (web: `CloudWriteService.lockProductCloudFirst`).
+- **Booking**: gọi `fn_booking_create` như web (`src/services/Product.js` → `addBookingAPI`). Máy chủ chỉ nhận
+  **mã 2**, hoặc **mã 18 kèm phiếu lock còn hạn**; từ chối → dừng, không tạo gì, báo lỗi của máy chủ.
 
-| Mã | Tên (danh mục) | Nhóm | Lock | Booking |
+Bảng dưới: cột Nhóm tính theo tên danh mục chuẩn; nếu tên thực tế trong `bds_trang_thai` khác thì nhóm theo tên thực tế.
+
+| Mã | Tên (danh mục) | Nhóm (như sơ đồ web) | Lock | Booking |
 |---|---|---|---|---|
 | 0 | Thanh lý chờ duyệt | Khóa | – | – |
 | 1 | Chưa bán | Khóa | – | – |
 | 2 | Mở bán | Mở bán | ✓ | ✓ |
 | 3 | Booking | Giữ chỗ | – | – |
 | 5 | Đã đặt cọc | Giữ chỗ | – | – |
-| 6 | HĐMB | Đã bán | – | – |
+| 6 | HĐMB | Khóa | – | – |
 | 7 | Giữ chỗ | Giữ chỗ | – | – |
-| 8 | Bàn giao | Đã bán | – | – |
-| 9 | Cấp sổ đỏ | Đã bán | – | – |
-| 10 | Góp vốn | Đã bán | – | – |
-| 11 | Booking chờ duyệt | Giữ chỗ | – | (web: booking ưu tiên – xem mục mâu thuẫn) |
-| 12 | ĐC (đặt cọc) chờ duyệt | Giữ chỗ | – | – |
-| 13 | Góp vốn chờ duyệt | Đã bán | – | – |
-| 14 | HĐMB chờ duyệt | Đã bán | – | – |
-| 15 | Bàn giao chờ duyệt | Đã bán | – | – |
+| 8 | Bàn giao | Khóa | – | – |
+| 9 | Cấp sổ đỏ | Khóa | – | – |
+| 10 | Góp vốn | Khóa | – | – |
+| 11 | Booking chờ duyệt | Giữ chỗ | – | web: nút bật nhưng máy chủ từ chối – **mâu thuẫn trong web, app chưa bật** |
+| 12 | ĐC (đặt cọc) chờ duyệt | Khóa nếu tên là "ĐC…", Giữ chỗ nếu tên có "cọc" | – | – |
+| 13 | Góp vốn chờ duyệt | Khóa | – | – |
+| 14 | HĐMB chờ duyệt | Khóa | – | – |
+| 15 | Bàn giao chờ duyệt | Khóa | – | – |
 | 16 | Khác | Khóa | – | – |
 | 17 | Giữ chỗ ưu tiên | Giữ chỗ | – | – |
-| 18 | Đã Lock | Khóa | – | chỉ qua phiếu lock còn hạn |
+| 18 | Đã Lock | Khóa | – | chỉ khi có phiếu lock còn hạn (từ màn Lock căn) |
 | khác | (mã lạ, gồm 4, 19–22) | Khóa | – | – |
 
 ## 1. Mục tiêu và bối cảnh

@@ -25,12 +25,14 @@ test("resolveCatalogStatus accepts a uuid or a legacy numeric code", () => {
   assert.equal(r.resolveCatalogStatus(undefined, catalog), null);
 });
 
-test("unitStatusOf prefers the catalog code and falls back to the name", () => {
-  assert.equal(r.unitStatusOf({ MaTT: "u12", TenTT: "" }, catalog), "hold");
-  assert.equal(r.unitStatusOf({ MaTT: "u6", TenTT: "" }, catalog), "sold");
-  assert.equal(r.unitStatusOf({ MaTT: "u18", TenTT: "" }, catalog), "blocked");
-  assert.equal(r.unitStatusOf({ MaTT: "unknown", TenTT: "Đã bán" }, catalog), "sold");
-  // Không rõ gì cả → Khóa, KHÔNG phải Mở bán
+test("unitStatusOf uses the unit name, else the catalog name, like the web floor plan", () => {
+  assert.equal(r.unitStatusOf({ MaTT: "u5", TenTT: "" }, catalog), "hold");
+  assert.equal(r.unitStatusOf({ MaTT: "u2" }, catalog), "available");
+  // Web: HĐMB / ĐC chờ duyệt không khớp luật tên, MaTT là uuid → Khóa
+  assert.equal(r.unitStatusOf({ MaTT: "u6", TenTT: "" }, catalog), "blocked");
+  assert.equal(r.unitStatusOf({ MaTT: "u12" }, catalog), "blocked");
+  // Tên trên căn được ưu tiên hơn tên danh mục (web: d.TenTT || cat.TenTT)
+  assert.equal(r.unitStatusOf({ MaTT: "u2", TenTT: "Đã bán" }, catalog), "sold");
   assert.equal(r.unitStatusOf({}, catalog), "blocked");
 });
 
