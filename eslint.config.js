@@ -1,9 +1,27 @@
 const { defineConfig } = require('eslint/config');
 const expoConfig = require('eslint-config-expo/flat');
 
+// File đã theo design system: màu chỉ được lấy từ @/theme (spec 4.1).
+// Mỗi giai đoạn migrate thêm màn vào danh sách này.
+const UI_STRICT_FILES = [
+  'components/ui/**/*.{ts,tsx}',
+  'lib/**/*.{ts,tsx}',
+  'app/dev/**/*.{ts,tsx}',
+];
+
 module.exports = defineConfig([
   expoConfig,
   {
     ignores: ["dist/*"],
-  }
+  },
+  {
+    files: UI_STRICT_FILES,
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        { selector: 'Literal[value=/^#[0-9a-fA-F]{3,8}$/]', message: 'Dùng token trong @/theme thay vì mã hex.' },
+        { selector: 'Literal[value=/^rgba?\\(/]', message: 'Dùng token trong @/theme thay vì rgba().' },
+      ],
+    },
+  },
 ]);

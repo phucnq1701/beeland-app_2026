@@ -372,6 +372,17 @@ export default function AccountScreen() {
           <LogOut color={Colors.error} size={20} />
           <Text style={styles.logoutText}>Đăng xuất</Text>
         </TouchableOpacity>
+
+        {/* Chỉ có ở bản dev: xem toàn bộ component của design system */}
+        {__DEV__ ? (
+          <TouchableOpacity
+            style={[styles.menuItem, styles.menuItemLast]}
+            onPress={() => router.push("/dev/ui-gallery" as never)}
+          >
+            <Text style={styles.menuItemText}>UI Gallery (dev)</Text>
+            <ChevronRight color={Colors.textTertiary} size={20} />
+          </TouchableOpacity>
+        ) : null}
       </ScrollView>
       <Modal visible={deleting} transparent animationType="fade" onRequestClose={() => {}}>
         <View style={styles.deletingOverlay}>

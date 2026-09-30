@@ -1,7 +1,15 @@
+/**
+ * SHIM TẠM THỜI – giữ tên màu cũ cho các màn chưa migrate sang design system.
+ * Các khoá chữ/viền/trạng thái/màu chính trỏ sang token mới trong theme/colors.ts,
+ * các khoá khác giữ nguyên giá trị cũ. Màn mới import từ `@/theme`.
+ * Xoá file này ở Giai đoạn 6 (spec 4.1).
+ */
+import { colors } from '../theme/colors';
+
 const Colors = {
-  primary: '#E86F25',
-  primaryDark: '#D35F1A',
-  primaryLight: '#FF8A4C',
+  primary: colors.primary,
+  primaryDark: colors.primaryPressed,
+  primaryLight: colors.brand,
   
   background: '#FFFFFF',
   backgroundSecondary: '#FFFFFF',
@@ -19,10 +27,10 @@ const Colors = {
   },
   
   white: '#FFFFFF',
-  text: '#2D1B0E',
-  textSecondary: 'rgba(45, 27, 14, 0.65)',
-  textTertiary: 'rgba(45, 27, 14, 0.45)',
-  textLight: 'rgba(45, 27, 14, 0.35)',
+  text: colors.text,
+  textSecondary: colors.textSecondary,
+  textTertiary: colors.textTertiary,
+  textLight: colors.textTertiary,
   
   accent: {
     purple: '#8B5CF6',
@@ -50,12 +58,12 @@ const Colors = {
   iconPurple: '#8B5CF6',
   iconCyan: '#06B6D4',
   
-  success: '#10B981',
-  warning: '#F59E0B',
-  error: '#EF4444',
-  info: '#3B82F6',
+  success: colors.success,
+  warning: colors.warning,
+  error: colors.danger,
+  info: colors.info,
   
-  border: 'rgba(200, 200, 200, 0.2)',
+  border: colors.border,
   
   glow: {
     primary: 'rgba(232, 111, 37, 0.3)',
