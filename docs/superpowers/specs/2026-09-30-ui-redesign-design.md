@@ -14,6 +14,9 @@
 - Gặp nghiệp vụ chưa rõ: **đọc code web và làm theo**, không tự đoán. Chỉ hỏi người dùng khi web và app
   mâu thuẫn, hoặc web cũng không có quy định.
 - Khi làm theo web, ghi rõ nguồn (file web) trong chú thích code của app.
+- **BẮT BUỘC – không sửa phía server** trong toàn bộ redesign: không đụng hàm SQL, migration, edge function,
+  bảng, trigger, RLS hay dữ liệu Supabase. **Chỉ sửa code app (client).** Lỗi nằm ở server → ghi vào mục 0.2
+  và báo người dùng, không tự sửa.
 
 ### 0.1 Trạng thái căn (theo web)
 
