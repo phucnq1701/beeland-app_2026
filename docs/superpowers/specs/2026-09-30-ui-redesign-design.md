@@ -48,7 +48,7 @@ Bảng dưới: cột Nhóm tính theo tên danh mục chuẩn; nếu tên thự
 | 8 | Bàn giao | Khóa | – | – |
 | 9 | Cấp sổ đỏ | Khóa | – | – |
 | 10 | Góp vốn | Khóa | – | – |
-| 11 | Booking chờ duyệt | Giữ chỗ | – | web: nút bật nhưng máy chủ từ chối – **mâu thuẫn trong web, app chưa bật** |
+| 11 | Booking chờ duyệt | Giữ chỗ | – | **App giữ tắt** – xem 0.2 |
 | 12 | ĐC (đặt cọc) chờ duyệt | Khóa nếu tên là "ĐC…", Giữ chỗ nếu tên có "cọc" | – | – |
 | 13 | Góp vốn chờ duyệt | Khóa | – | – |
 | 14 | HĐMB chờ duyệt | Khóa | – | – |
@@ -57,6 +57,22 @@ Bảng dưới: cột Nhóm tính theo tên danh mục chuẩn; nếu tên thự
 | 17 | Giữ chỗ ưu tiên | Giữ chỗ | – | – |
 | 18 | Đã Lock | Khóa | – | chỉ khi có phiếu lock còn hạn (từ màn Lock căn) |
 | khác | (mã lạ, gồm 4, 19–22) | Khóa | – | – |
+
+### 0.2 Lỗi / mâu thuẫn phía web cần báo đội web
+
+App giữ đúng như web ở các điểm dưới đây cho tới khi đội web / nghiệp vụ quyết định; không tự sửa riêng ở app.
+
+1. **Booking căn "Booking chờ duyệt" (mã 11) – chờ nghiệp vụ quyết.** Giao diện web bật nút Booking
+   (`src/hooks/useProductTransactionGuard.ts` → `isBookingPending`, `components/project-viewer/TransactionActions.tsx`,
+   `pages/Products/FloorPlanOverview.tsx`), nhưng máy chủ `fn_booking_create`
+   (`supabase/migrations/20260921120000_fn_booking_create_unique_code.sql`) chỉ nhận mã 2 hoặc mã 18 có lock
+   còn hạn → luôn báo "Sản phẩm đang ở trạng thái … nên không lập được phiếu giữ chỗ". **App giữ tắt nút này.**
+   Khi nghiệp vụ chốt cho phép booking ưu tiên: sửa máy chủ trước, rồi bật ở app (`app/product/[id].tsx`).
+2. **Sơ đồ web: nhóm "Đã bán" gần như luôn bằng 0.** `mapStatus` trong `FloorPlanOverview.tsx` chỉ xếp "Đã bán"
+   khi tên có "đã bán" / "đã ký" / "hợp đồng", hoặc `MaTT` là số 4/5. Tên danh mục chuẩn (HĐMB, HĐMB chờ duyệt,
+   Bàn giao, Cấp sổ đỏ, Góp vốn…) không khớp và `MaTT` trên Cloud là uuid → rơi vào "Khóa". Thêm nữa, nhánh số
+   coi mã 5 (Đã đặt cọc) là "Đã bán" và mã 4 không tồn tại – lệch với bảng mã `ProductTransactionStatus.ts`.
+   **App giữ như web** (spec 0.1); đề xuất đội web xếp nhóm theo `item_code` của danh mục.
 
 ## 1. Mục tiêu và bối cảnh
 
