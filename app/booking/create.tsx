@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Building2, UserPlus, UserX } from "lucide-react-native";
@@ -120,6 +120,8 @@ export default function CreateBookingScreen() {
   const [loadingSan, setLoadingSan] = useState(false);
   const [creatingBooking, setCreatingBooking] = useState(false);
   const [customerError, setCustomerError] = useState<string | null>(null);
+  // Chặn gửi trùng ngay cả khi người dùng bấm 2 lần trước khi màn kịp vẽ lại
+  const submitting = useRef(false);
 
   // Lấy danh sách sàn giao dịch từ dm_companies (is_san=true)
   const loadSanList = async () => {
@@ -159,6 +161,8 @@ export default function CreateBookingScreen() {
   };
 
   const handleContinue = async () => {
+    // Sàn của sản phẩm được tự chọn khi danh sách sàn tải xong → chờ để không gửi MaSan rỗng
+    if (submitting.current || loadingSan) return;
     if (!selectedCustomer) {
       setCustomerError("Vui lòng chọn khách hàng");
       hapticError();
@@ -171,6 +175,7 @@ export default function CreateBookingScreen() {
     }
 
     try {
+      submitting.current = true;
       setCreatingBooking(true);
 
       // Payload theo chuẩn BookingService.createBooking
@@ -231,6 +236,7 @@ export default function CreateBookingScreen() {
       hapticError();
       toast.show({ type: "error", message: error?.message || "Không thể tạo booking" });
     } finally {
+      submitting.current = false;
       setCreatingBooking(false);
     }
   };
@@ -341,8 +347,9 @@ export default function CreateBookingScreen() {
               <Button
                 size="lg"
                 fullWidth
-                title="Tạo booking"
+                title={loadingSan ? "Đang tải sàn giao dịch…" : "Tạo booking"}
                 loading={creatingBooking}
+                disabled={loadingSan}
                 onPress={handleContinue}
               />
             </View>

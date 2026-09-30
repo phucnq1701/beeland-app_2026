@@ -77,6 +77,14 @@ export function BottomSheet({ visible, onClose, title, children, maxHeightRatio 
   );
 }
 
+/**
+ * Đợi sheet đóng hẳn rồi mới mở Alert / ImagePicker. Trên iOS, trình bày một view
+ * controller mới trong lúc Modal đang đóng có thể bị huỷ âm thầm.
+ */
+export function afterSheetClose(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, motion.exit + 150));
+}
+
 export type SheetOptionProps = {
   icon?: LucideIcon;
   label: string;

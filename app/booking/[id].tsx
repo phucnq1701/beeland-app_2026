@@ -25,6 +25,7 @@ import {
   Text,
   useToast,
 } from "@/components/ui";
+import { afterSheetClose } from "@/components/ui/BottomSheet";
 import { BookingDocuments } from "@/components/booking/BookingDocuments";
 import { BookingGifts, BookingPrice } from "@/components/booking/BookingPriceAndGifts";
 import { CollapsibleSection } from "@/components/booking/CollapsibleSection";
@@ -159,6 +160,7 @@ export default function BookingDetailScreen() {
 
   const pickFromCamera = async () => {
     setUploadSheet(false);
+    await afterSheetClose();
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
       // Lỗi chặn → giữ Alert
@@ -174,6 +176,7 @@ export default function BookingDetailScreen() {
 
   const pickFromLibrary = async () => {
     setUploadSheet(false);
+    await afterSheetClose();
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       // Lỗi chặn → giữ Alert

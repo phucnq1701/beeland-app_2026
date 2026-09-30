@@ -36,10 +36,11 @@ import {
   Text,
   useToast,
 } from "@/components/ui";
+import { afterSheetClose } from "@/components/ui/BottomSheet";
 import { QrExpired, QrNoDeadline, QrPaid } from "@/components/booking/QrResult";
 import { formatVND } from "@/lib/format";
 import { hapticSuccess } from "@/lib/haptics";
-import { getQrScreenState } from "@/lib/qrPaymentState";
+import { getQrScreenState, showsQrImage } from "@/lib/qrPaymentState";
 import { colors, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import {
@@ -78,6 +79,8 @@ export default function QRPaymentScreen() {
   const [now, setNow] = useState(Date.now());
   const expiredHandled = useRef(false);
   const wasPaid = useRef(false);
+  // Chặn tạo VA trùng khi bấm 2 lần trước khi màn kịp vẽ lại
+  const createInFlight = useRef(false);
 
   // Cùng khoá với web: Key = id phiếu giữ chỗ (cloud_pgc_phieu_giucho.id)
   const pgcId = String(booking?.maPGC || "");
@@ -230,6 +233,16 @@ export default function QRPaymentScreen() {
 
   // ── Tạo mã QR (chỉ khi người dùng bấm) ─────────────────────────────────────
   const handleCreate = async () => {
+    if (createInFlight.current) return;
+    createInFlight.current = true;
+    try {
+      await createQr();
+    } finally {
+      createInFlight.current = false;
+    }
+  };
+
+  const createQr = async () => {
     if (!acc || !booking || creating) return;
     // Các điều kiện dưới đã được chặn bằng trạng thái nút; giữ lại để phòng thủ.
     if (!expiresAtMs || remain <= 0) {
@@ -292,8 +305,10 @@ export default function QRPaymentScreen() {
   };
 
   const handleCancelVA = async () => {
+    const fromMenu = menuOpen;
     setMenuOpen(false);
     if (!va || cancelling) return;
+    if (fromMenu) await afterSheetClose();
     const ok = await confirm({
       title: "Huỷ mã QR",
       message: `Huỷ tài khoản ${va.account_number} (${formatVND(va.amount)})? Người chuyển tiền vào tài khoản này sẽ không được ghi nhận.`,
@@ -465,15 +480,17 @@ export default function QRPaymentScreen() {
                 ? `Không kiểm tra được số tiền booking${amountError ? `: ${amountError}` : ""}. Mã QR tạm ẩn để tránh chuyển sai tiền.`
                 : `Số tiền trên mã QR (${formatVND(va?.amount)}) khác số tiền booking (${formatVND(expectedAmount)}). Vui lòng huỷ mã này để tạo lại.`}
             </Banner>
-            {va ? (
-              <View style={[styles.qrBox, styles.qrDim]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                <Image source={{ uri: vietQrUrl(va) }} style={styles.qrImage} resizeMode="contain" />
-              </View>
-            ) : null}
+            {/* Không vẽ ảnh QR sai số tiền (kể cả làm mờ, app ngân hàng vẫn quét được). */}
+            <View style={styles.qrPlaceholder}>
+              <QrCode size={56} color={colors.textTertiary} />
+              <Text variant="caption" color="textSecondary" align="center">
+                Mã QR đang tạm ẩn.
+              </Text>
+            </View>
           </>
         );
       case "active":
-        return va ? (
+        return va && showsQrImage(screenState) ? (
           <>
             <CountdownPill expiresAt={expiresAtMs} />
             <Card>
@@ -616,7 +633,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  qrDim: { opacity: 0.3 },
   qrImage: { width: QR_SIZE, height: QR_SIZE },
   qrPlaceholder: {
     alignItems: "center",

@@ -31,10 +31,20 @@ export function getQrScreenState(i: QrScreenInput): QrScreenState {
   if (i.loading) return 'loading';
   if (i.loadError) return 'error';
   if (i.paid) return 'paid';
-  if (i.remainingSec === null) return 'noDeadline';
-  if (i.remainingSec <= 0) return 'expired';
+  if (i.remainingSec !== null && i.remainingSec <= 0) return 'expired';
   if (i.hasActiveVa && i.amountMismatch) return 'mismatch';
+  // Mã QR đang mở (vd tạo từ web) vẫn hiển thị kể cả khi booking chưa có hạn giữ chỗ.
   if (i.hasActiveVa) return 'active';
+  // Không có hạn giữ chỗ thì không tạo được mã mới.
+  if (i.remainingSec === null) return 'noDeadline';
   if (i.hadPreviousQr) return 'needsNewQr';
   return 'needsQr';
+}
+
+/**
+ * Chỉ trạng thái 'active' mới được vẽ ảnh QR. Mã sai số tiền (mismatch) tuyệt đối
+ * không hiển thị – kể cả làm mờ, app ngân hàng vẫn quét được.
+ */
+export function showsQrImage(state: QrScreenState): boolean {
+  return state === 'active';
 }
