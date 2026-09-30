@@ -22,6 +22,7 @@ import {
 import { formatCountdown } from "@/lib/countdown";
 import { formatArea, formatVNDShort } from "@/lib/format";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
+import { isOpenForSale, OPEN_FOR_SALE_MESSAGE } from "@/lib/productStatus";
 import { colors, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { ProductService } from "@/sevicesSupabase/ProductService";
@@ -182,24 +183,14 @@ export default function ProductDetailScreen() {
 
   const statusName = String(
     data?.TenTT || data?.ten_tt || data?.TrangThai || data?.status || data?.tt?.item_name || ""
-  )
-    .toLowerCase()
-    .trim();
-  const isBookingStatus =
-    statusName.includes("booking") ||
-    statusName.includes("chờ duyệt") ||
-    statusName.includes("cho duyet") ||
-    statusName.includes("đã book") ||
-    statusName.includes("da book") ||
-    statusName.includes("giữ chỗ") ||
-    statusName.includes("giu cho") ||
-    String(data?.MaTT) === "5" ||
-    String(data?.MaTT) === "6" ||
-    String(data?.ma_tt) === "5" ||
-    String(data?.ma_tt) === "6";
+  ).trim();
+  // Như web (isOpenForSale): chỉ căn "Mở bán" (mã 2) mới được Lock / Booking.
+  // Mã số cũ (nếu có) được ưu tiên, không thì theo tên trạng thái.
+  const legacyCode = String(data?.ma_tt ?? data?.MaTT ?? "").trim();
+  const canTransact = /^\d+$/.test(legacyCode) ? isOpenForSale(legacyCode) : isOpenForSale(statusName);
 
   const handleLock = async () => {
-    if (isLocked || isBookingStatus || lockInFlight.current) return;
+    if (isLocked || !canTransact || lockInFlight.current) return;
     lockInFlight.current = true;
     setLocking(true);
     try {
@@ -274,8 +265,15 @@ export default function ProductDetailScreen() {
               <KeyValueRow label="Dự án" value={data?.TenDA || "—"} />
               <KeyValueRow label="Diện tích thông thủy" value={formatArea(data?.DTThongThuy)} />
               <KeyValueRow label="Diện tích tim tường" value={formatArea(data?.DienTich)} />
-              <KeyValueRow label="Trạng thái" value={data?.TenTT || data?.tt?.item_name || "—"} last />
+              <KeyValueRow label="Trạng thái" value={statusName || "—"} last />
             </Card>
+            {!canTransact ? (
+              <Text variant="caption" color="textSecondary">
+                {isLocked
+                  ? "Căn đang được lock. Tạo booking từ mục Lock căn (như trên web)."
+                  : `${OPEN_FOR_SALE_MESSAGE} – căn đang ở trạng thái “${statusName || "không xác định"}”.`}
+              </Text>
+            ) : null}
 
             <SectionHeader title="Chi tiết giá" />
             <Card>
@@ -299,7 +297,7 @@ export default function ProductDetailScreen() {
               icon={Lock}
               title="Lock căn"
               loading={locking}
-              disabled={isBookingStatus}
+              disabled={!canTransact}
               onPress={() => void handleLock()}
             />
           )}
@@ -308,11 +306,11 @@ export default function ProductDetailScreen() {
               testID="action-book"
               size="lg"
               icon={CalendarPlus}
-              title={isBookingStatus ? "Đã booking" : "Tạo booking"}
-              disabled={isBookingStatus}
+              title="Tạo booking"
+              disabled={!canTransact}
               style={styles.flex}
               onPress={() => {
-                if (isBookingStatus || navigating.current) return;
+                if (!canTransact || navigating.current) return;
                 navigating.current = true;
                 router.push({
                   pathname: "/booking/create",

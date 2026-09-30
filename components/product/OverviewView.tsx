@@ -4,12 +4,12 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import { Card, Chip, EmptyState, Text } from "@/components/ui";
 import { buildOverviewFloors, overviewSummary, SummaryKey } from "@/lib/productOverview";
 import { CatalogStatus, unitStatusOf } from "@/lib/productRealtime";
-import { unitStatusMeta } from "@/lib/productStatus";
+import { GROUP_META } from "@/lib/productStatus";
 import { colors, space } from "@/theme";
 
 import { UnitCell } from "./UnitCell";
 
-/** Tone trạng thái → cặp màu nền/chữ đạt tương phản (thay nền đậm + chữ trắng cũ). */
+/** Màu dự phòng theo nhóm khi dữ liệu không có màu trạng thái. */
 const TONE_COLORS: Record<string, { bg: string; fg: string }> = {
   success: { bg: colors.successSubtle, fg: colors.onSuccessSubtle },
   info: { bg: colors.infoSubtle, fg: colors.onInfoSubtle },
@@ -28,7 +28,10 @@ type Props = {
   onPressUnit: (id: string) => void;
 };
 
-/** Chế độ "Tổng quan": tóm tắt số căn theo trạng thái + từng tầng dạng lưới ô. */
+/**
+ * Chế độ "Tổng quan": tóm tắt số căn theo 4 nhóm của sơ đồ web + từng tầng dạng lưới ô.
+ * Màu ô như web: màu trạng thái trong dữ liệu (MauNen → màu danh mục), chữ tự chọn cho đủ tương phản.
+ */
 export function OverviewView({ dataGrid, catalog, selected, onSelect, onPressUnit }: Props) {
   const floors = useMemo(
     () => buildOverviewFloors(dataGrid, (item) => unitStatusOf(item, catalog)),
@@ -62,17 +65,17 @@ export function OverviewView({ dataGrid, catalog, selected, onSelect, onPressUni
           </View>
           <View style={styles.grid}>
             {floor.shown.map((unit, index) => {
-              const meta = unitStatusMeta(unit.status);
-              const c = TONE_COLORS[meta.tone];
+              const meta = GROUP_META[unit.status];
+              const fallback = TONE_COLORS[meta.tone];
               return (
                 <UnitCell
                   key={unit.id ?? `${floor.id}-${index}`}
                   id={unit.id}
                   code={unit.code}
                   sub={unit.price || undefined}
-                  bg={c.bg}
-                  fg={c.fg}
-                  accessibilityLabel={`Căn ${unit.code || "không rõ mã"}, ${meta.label}`}
+                  bg={unit.color ?? fallback.bg}
+                  fg={unit.color ? undefined : fallback.fg}
+                  accessibilityLabel={`Căn ${unit.code || "không rõ mã"}, ${unit.statusName || meta.label}`}
                   onPress={onPressUnit}
                 />
               );

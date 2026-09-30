@@ -248,7 +248,7 @@ export default function ProductsScreen({
           stats: {
             total: units.length,
             available: units.filter((u) => u.status === "available").length,
-            deposit: units.filter((u) => u.status === "deposit").length,
+            hold: units.filter((u) => u.status === "hold").length,
           },
         };
       });

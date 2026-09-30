@@ -2,31 +2,8 @@
  * Dữ liệu chế độ "Tổng quan" của màn Sản phẩm (tách từ app/products.tsx, giữ nguyên logic).
  * Chỉ import hàm thuần để test nạp được.
  */
-import { foldVietnamese, formatNumberVN } from './format';
-import type { UnitStatus } from './productStatus';
-
-/**
- * MaTT là uuid → nhận diện trạng thái theo TÊN (TenTT) từ danh mục.
- * So khớp sau khi bỏ dấu (foldVietnamese) để "HĐMB", "hđmb", "HDMB", "da ban"… đều nhận đúng.
- * Thứ tự quan trọng:
- *  1. Tên có "huỷ" không bao giờ là đã bán (vd "Hủy HĐMB").
- *  2. Từ khoá bán rõ ràng (đã bán, bàn giao, sổ đỏ, góp vốn, thanh lý) → đã bán.
- *  3. "đặt cọc"/"cọc" → đã cọc (kể cả "Đặt cọc – chờ ký HĐMB").
- *  4. HĐMB / hợp đồng mua bán / HĐ MB → đã bán.
- */
-const SOLD_WORDS = [/\bda ban\b/, /\bban giao\b/, /\bso do\b/, /\bgop von\b/, /\bthanh ly\b/];
-const CONTRACT_WORDS = [/hdmb/, /\bhop dong mua ban\b/, /\bhd\s*(mb|mua ban)\b/];
-
-export function unitStatusFromName(name: unknown): UnitStatus {
-  const t = foldVietnamese(String(name || ''));
-  const cancelled = /\bhuy\b/.test(t);
-  if (!cancelled && SOLD_WORDS.some((re) => re.test(t))) return 'sold';
-  if (t.includes('dat coc') || /\bcoc\b/.test(t)) return 'deposit';
-  if (!cancelled && CONTRACT_WORDS.some((re) => re.test(t))) return 'sold';
-  if (t.includes('booking')) return 'booking';
-  if (t.includes('giu cho') || t.includes('lock')) return 'locked';
-  return 'available';
-}
+import { formatNumberVN } from './format';
+import { GROUP_META, groupFromName, WebGroup } from './productStatus';
 
 /** So sánh mã căn tự nhiên: tách số và chữ, "A-2" < "A-10", "A-2" < "A-02-a". */
 export function compareUnitCode(a: unknown, b: unknown): number {
@@ -47,7 +24,30 @@ export function compareUnitCode(a: unknown, b: unknown): number {
   return pa.length - pb.length;
 }
 
-export type OverviewUnit = { id: string; code: string; price: string; status: UnitStatus; column: string };
+/**
+ * Màu trạng thái lưu trong dữ liệu: chuỗi hex ("#22C55E") hoặc số nguyên ARGB (hệ thống cũ).
+ * Không đọc được → null.
+ */
+export function colorFromData(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  if (s.startsWith('#')) return s;
+  if (/^-?\d+$/.test(s)) return `#${(Number(s) >>> 0).toString(16).padStart(6, '0').slice(-6)}`;
+  return null;
+}
+
+export type OverviewUnit = {
+  id: string;
+  code: string;
+  price: string;
+  status: WebGroup;
+  column: string;
+  /** Màu trạng thái như web: MauNen (sản phẩm) → màu danh mục. */
+  color: string | null;
+  /** Tên trạng thái trong danh mục (nhãn hiển thị như web). */
+  statusName: string;
+};
 export type OverviewFloor = { id: string; name: string; floorNumber: number; units: OverviewUnit[]; totalUnits: number };
 
 /**
@@ -57,7 +57,7 @@ export type OverviewFloor = { id: string; name: string; floorNumber: number; uni
  */
 export function buildOverviewFloors(
   dataGrid: unknown[],
-  statusOf: (item: any) => UnitStatus = (item) => unitStatusFromName(item?.TenTT)
+  statusOf: (item: any) => WebGroup = (item) => groupFromName(item?.TenTT)
 ): OverviewFloor[] {
   const floorsMap: Record<string, OverviewFloor> = {};
   (Array.isArray(dataGrid) ? dataGrid : []).forEach((block: any) => {
@@ -73,6 +73,8 @@ export function buildOverviewFloors(
         price: item.GiaBan ? formatNumberVN(item.GiaBan) : '',
         status: statusOf(item),
         column: String(item.MaVT),
+        color: colorFromData(item.MauNen) ?? colorFromData(item.ColorTT),
+        statusName: String(item.TenTT || ''),
       }));
       floorsMap[key].units.push(...units);
     });
@@ -84,18 +86,15 @@ export function buildOverviewFloors(
   });
 }
 
-export type SummaryKey = 'all' | 'available' | 'deposit' | 'locked' | 'sold' | 'booking';
+export type SummaryKey = 'all' | WebGroup;
 
-/** Số căn theo trạng thái (thứ tự như bản cũ). */
+/** Số căn theo 4 nhóm của sơ đồ web (+ tổng). */
 export function overviewSummary(floors: OverviewFloor[]): { key: SummaryKey; label: string; count: number }[] {
   const all = floors.flatMap((f) => f.units);
-  const count = (s: UnitStatus) => all.filter((u) => u.status === s).length;
+  const count = (g: WebGroup) => all.filter((u) => u.status === g).length;
+  const groups: WebGroup[] = ['available', 'hold', 'sold', 'blocked'];
   return [
     { key: 'all', label: 'Tổng', count: all.length },
-    { key: 'available', label: 'Trống', count: count('available') },
-    { key: 'deposit', label: 'Đã cọc', count: count('deposit') },
-    { key: 'locked', label: 'Khoá', count: count('locked') },
-    { key: 'sold', label: 'Đã bán', count: count('sold') },
-    { key: 'booking', label: 'Booking', count: count('booking') },
+    ...groups.map((g) => ({ key: g, label: GROUP_META[g].label, count: count(g) })),
   ];
 }

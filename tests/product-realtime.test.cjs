@@ -5,7 +5,7 @@ const { loadTs } = require("./helpers/loadTs.cjs");
 const format = loadTs("lib/format.ts");
 const status = loadTs("lib/productStatus.ts");
 const overview = loadTs("lib/productOverview.ts", { modules: { "./format": format, "./productStatus": status } });
-const r = loadTs("lib/productRealtime.ts", { modules: { "./productOverview": overview } });
+const r = loadTs("lib/productRealtime.ts", { modules: { "./productOverview": overview, "./productStatus": status } });
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
 // Danh mục như FilterService.getStatusSP trả về (MaTT = uuid, _raw.item_code = mã số)
@@ -17,19 +17,6 @@ const catalog = [
   { MaTT: "u18", TenTT: "Đã Lock", ColorWeb: "#6B7280", _raw: { item_code: "18" } },
 ];
 
-test("status group by product status code (bảng nghiệp vụ bds_trang_thai)", () => {
-  const expected = {
-    0: "sold", 1: "available", 2: "available", 3: "booking", 5: "deposit", 6: "sold", 7: "locked",
-    8: "sold", 9: "sold", 10: "sold", 11: "booking", 12: "deposit", 13: "sold", 14: "sold",
-    15: "sold", 16: "available", 17: "locked", 18: "locked",
-  };
-  for (const [code, group] of Object.entries(expected)) {
-    assert.equal(r.statusGroupFromCode(code), group, `code ${code}`);
-  }
-  assert.equal(r.statusGroupFromCode("99"), null);
-  assert.equal(r.statusGroupFromCode(null), null);
-});
-
 test("resolveCatalogStatus accepts a uuid or a legacy numeric code", () => {
   assert.equal(r.resolveCatalogStatus("u5", catalog).TenTT, "Đã đặt cọc");
   assert.equal(r.resolveCatalogStatus(12, catalog).TenTT, "ĐC chờ duyệt");
@@ -39,11 +26,12 @@ test("resolveCatalogStatus accepts a uuid or a legacy numeric code", () => {
 });
 
 test("unitStatusOf prefers the catalog code and falls back to the name", () => {
-  // "ĐC chờ duyệt" theo tên không có chữ "đặt cọc" – theo mã 12 thì đúng là Đã cọc
-  assert.equal(r.unitStatusOf({ MaTT: "u12", TenTT: "ĐC chờ duyệt" }, catalog), "deposit");
+  assert.equal(r.unitStatusOf({ MaTT: "u12", TenTT: "" }, catalog), "hold");
   assert.equal(r.unitStatusOf({ MaTT: "u6", TenTT: "" }, catalog), "sold");
+  assert.equal(r.unitStatusOf({ MaTT: "u18", TenTT: "" }, catalog), "blocked");
   assert.equal(r.unitStatusOf({ MaTT: "unknown", TenTT: "Đã bán" }, catalog), "sold");
-  assert.equal(r.unitStatusOf({}, catalog), "available");
+  // Không rõ gì cả → Khóa, KHÔNG phải Mở bán
+  assert.equal(r.unitStatusOf({}, catalog), "blocked");
 });
 
 const grid = () => [
@@ -73,6 +61,9 @@ test("applyRealtimeChange updates code, name and colour of exactly one unit", ()
   assert.deepEqual(plain({ MaTT: unit.MaTT, TenTT: unit.TenTT, ColorTT: unit.ColorTT, MauNen: unit.MauNen }), {
     MaTT: "u5", TenTT: "Đã đặt cọc", ColorTT: "#3B82F6", MauNen: "#3B82F6",
   });
+  // Màu ô = màu danh mục của trạng thái mới (web ưu tiên MauNen → phải là màu mới, không phải màu cũ)
+  const legacy = r.applyRealtimeChange(before, { data: { MaKhu: "K1", MaTang: "T1", MaVT: "V1" }, maTT: "u6", mauNen: 123 }, catalog);
+  assert.equal(legacy.grid[0].rawBlock.floor[0].detailFloor[0].MauNen, "#EF4444");
   // Không đụng căn khác / khu khác (giữ nguyên tham chiếu để memo có tác dụng)
   assert.equal(after[0].rawBlock.floor[0].detailFloor[0], before[0].rawBlock.floor[0].detailFloor[0]);
   assert.equal(after[1], before[1]);

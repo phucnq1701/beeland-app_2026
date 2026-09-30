@@ -7,18 +7,6 @@ const o = loadTs("lib/productOverview.ts", {
 });
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
-test("unitStatusFromName maps catalog names like the old screen", () => {
-  assert.equal(o.unitStatusFromName("Đã bán"), "sold");
-  assert.equal(o.unitStatusFromName("hdmb chờ duyệt"), "sold");
-  assert.equal(o.unitStatusFromName("Đã bàn giao"), "sold");
-  assert.equal(o.unitStatusFromName("Đặt cọc chờ duyệt"), "deposit");
-  assert.equal(o.unitStatusFromName("Booking chờ duyệt"), "booking");
-  assert.equal(o.unitStatusFromName("Giữ chỗ"), "locked");
-  assert.equal(o.unitStatusFromName("Lock căn"), "locked");
-  assert.equal(o.unitStatusFromName(""), "available");
-  assert.equal(o.unitStatusFromName(undefined), "available");
-});
-
 const grid = [
   {
     rawBlock: {
@@ -46,47 +34,36 @@ test("buildOverviewFloors groups by block+floor, sorts by column and formats pri
   assert.equal(floors[0].units[0].price, "");
   assert.equal(floors[0].units[1].price, "2.500.000.000");
   assert.equal(floors[0].units[1].status, "sold");
-  assert.equal(floors[1].units[0].status, "booking");
+  assert.equal(floors[1].units[0].status, "hold");
 });
 
 test("buildOverviewFloors tolerates missing blocks/floors", () => {
   assert.deepEqual(plain(o.buildOverviewFloors([{}, { rawBlock: {} }, null])), []);
 });
 
-test("overviewSummary counts each status plus total, in the old order", () => {
+test("overviewSummary counts the 4 web groups plus total", () => {
   const summary = plain(o.overviewSummary(o.buildOverviewFloors(grid)));
-  assert.deepEqual(summary.map((s) => s.key), ["all", "available", "deposit", "locked", "sold", "booking"]);
-  assert.deepEqual(summary.map((s) => s.count), [3, 1, 0, 0, 1, 1]);
-  assert.equal(summary[0].label, "Tổng");
+  assert.deepEqual(summary.map((s) => s.key), ["all", "available", "hold", "sold", "blocked"]);
+  assert.deepEqual(summary.map((s) => s.label), ["Tổng", "Mở bán", "Giữ chỗ", "Đã bán", "Khóa"]);
+  // "Mở bán" → Mở bán, "Đã bán" → Đã bán, "Booking" → Giữ chỗ
+  assert.deepEqual(summary.map((s) => s.count), [3, 1, 1, 1, 0]);
 });
 
-test("HĐMB and other sold names match with or without Vietnamese diacritics", () => {
-  for (const name of ["HĐMB đã duyệt", "HĐMB chờ duyệt", "Hợp đồng mua bán", "da ban", "DA BAN GIAO", "So do", "Sổ đỏ", "Góp vốn đã duyệt", "Thanh ly tat toan"]) {
-    assert.equal(o.unitStatusFromName(name), "sold", name);
-  }
-  assert.equal(o.unitStatusFromName("Dat coc cho duyet"), "deposit");
-  assert.equal(o.unitStatusFromName("Giu cho"), "locked");
-  // Không bắt nhầm: "Đang bán" / "Mở bán" vẫn là căn trống
-  assert.equal(o.unitStatusFromName("Đang bán"), "available");
-  assert.equal(o.unitStatusFromName("Mở bán"), "available");
-});
 
-test("status matching avoids false positives from accent folding", () => {
-  // Đang ở giai đoạn cọc, chưa ký HĐMB → vẫn là Đã cọc (như bản cũ)
-  assert.equal(o.unitStatusFromName("Đặt cọc – chờ ký HĐMB"), "deposit");
-  assert.equal(o.unitStatusFromName("Chuyển cọc sang HĐMB"), "deposit");
-  // HĐMB đã huỷ không phải căn đã bán (bản cũ: Trống)
-  assert.equal(o.unitStatusFromName("Hủy HĐMB"), "available");
-  assert.equal(o.unitStatusFromName("HĐMB đã huỷ"), "available");
-  // "so do" chỉ khớp nguyên cụm "sổ đỏ", không khớp "hồ sơ đợi duyệt"
-  assert.equal(o.unitStatusFromName("Hồ sơ đợi duyệt"), "available");
-  assert.equal(o.unitStatusFromName("Đã cấp sổ đỏ"), "sold");
-  // Hủy booking vẫn giữ như bản cũ (khớp "booking")
-  assert.equal(o.unitStatusFromName("Hủy booking"), "booking");
-});
 
-test("abbreviated contract names are recognised as sold", () => {
-  for (const name of ["HĐ mua bán", "HĐ MB đã duyệt", "HD mua ban"]) {
-    assert.equal(o.unitStatusFromName(name), "sold", name);
-  }
+
+test("colorFromData reads hex strings and integer ARGB colours like the web", () => {
+  assert.equal(o.colorFromData("#22C55E"), "#22C55E");
+  assert.equal(o.colorFromData(16711680), "#ff0000");
+  assert.equal(o.colorFromData("16711680"), "#ff0000");
+  assert.equal(o.colorFromData(""), null);
+  assert.equal(o.colorFromData(null), null);
+  assert.equal(o.colorFromData("hsl(1 2% 3%)"), null);
+  const floors = o.buildOverviewFloors([{ rawBlock: { maKhu: "A", floor: [{ maTang: "1", detailFloor: [
+    { MaSP: "x", KyHieu: "A-1", MaVT: "a", TenTT: "Mở bán", MauNen: 16711680, ColorTT: "#00ff00" },
+    { MaSP: "y", KyHieu: "A-2", MaVT: "b", TenTT: "Khác", ColorTT: "#00ff00" },
+  ] }] } }]);
+  assert.equal(floors[0].units[0].color, "#ff0000"); // MauNen trước (như web)
+  assert.equal(floors[0].units[1].color, "#00ff00");
+  assert.equal(floors[0].units[1].statusName, "Khác");
 });

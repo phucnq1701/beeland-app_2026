@@ -5,6 +5,49 @@
 - Phạm vi: chỉ app mobile Expo `beeland-app_2026`. Web CRM `beeland` nằm ngoài phạm vi.
 - Trạng thái: đã duyệt từng phần trong buổi brainstorming.
 
+## 0. Nguyên tắc: Web là chuẩn nghiệp vụ (bổ sung 2026-09-30)
+
+- Web `beeland` (cùng workspace) đã hoàn thiện và là **CHUẨN về nghiệp vụ và luồng**.
+- App phải cho **kết quả đúng và đồng bộ với web**: cùng trạng thái, cùng số tiền, cùng điều kiện
+  được phép thao tác (lock, booking, cọc…).
+- **Giao diện và cách thao tác** được tối ưu cho mobile, không cần giống web.
+- Gặp nghiệp vụ chưa rõ: **đọc code web và làm theo**, không tự đoán. Chỉ hỏi người dùng khi web và app
+  mâu thuẫn, hoặc web cũng không có quy định.
+- Khi làm theo web, ghi rõ nguồn (file web) trong chú thích code của app.
+
+### 0.1 Trạng thái căn (theo web)
+
+Nguồn: `beeland/src/services/ProductTransactionStatus.ts` (mã), `src/pages/Products/FloorPlanOverview.tsx`
+(4 nhóm sơ đồ), `src/utils/productSaleStatus.ts` (điều kiện thao tác), `src/utils/productStatusColor.ts` (màu).
+
+- **Nhãn** = tên trong danh mục `cloud_catalogs` (`bds_trang_thai.item_name`). **Màu** = màu của sản phẩm
+  (`MauNen`) → màu danh mục (`color_code`) → xám.
+- **Nhóm** (tóm tắt sơ đồ): Mở bán · Giữ chỗ · Đã bán · Khóa. Mã lạ/không rõ → **Khóa** (không bao giờ "Mở bán").
+- **Lock căn / Booking / Đặt cọc**: chỉ khi căn ở **mã 2 – Mở bán**. Booking từ căn **mã 18 – Đã Lock**
+  chỉ qua phiếu lock còn hiệu lực (web: `fn_booking_create_from_lock`).
+
+| Mã | Tên (danh mục) | Nhóm | Lock | Booking |
+|---|---|---|---|---|
+| 0 | Thanh lý chờ duyệt | Khóa | – | – |
+| 1 | Chưa bán | Khóa | – | – |
+| 2 | Mở bán | Mở bán | ✓ | ✓ |
+| 3 | Booking | Giữ chỗ | – | – |
+| 5 | Đã đặt cọc | Giữ chỗ | – | – |
+| 6 | HĐMB | Đã bán | – | – |
+| 7 | Giữ chỗ | Giữ chỗ | – | – |
+| 8 | Bàn giao | Đã bán | – | – |
+| 9 | Cấp sổ đỏ | Đã bán | – | – |
+| 10 | Góp vốn | Đã bán | – | – |
+| 11 | Booking chờ duyệt | Giữ chỗ | – | (web: booking ưu tiên – xem mục mâu thuẫn) |
+| 12 | ĐC (đặt cọc) chờ duyệt | Giữ chỗ | – | – |
+| 13 | Góp vốn chờ duyệt | Đã bán | – | – |
+| 14 | HĐMB chờ duyệt | Đã bán | – | – |
+| 15 | Bàn giao chờ duyệt | Đã bán | – | – |
+| 16 | Khác | Khóa | – | – |
+| 17 | Giữ chỗ ưu tiên | Giữ chỗ | – | – |
+| 18 | Đã Lock | Khóa | – | chỉ qua phiếu lock còn hạn |
+| khác | (mã lạ, gồm 4, 19–22) | Khóa | – | – |
+
 ## 1. Mục tiêu và bối cảnh
 
 **Người dùng:** nhân viên kinh doanh / đại lý bất động sản, dùng app hằng ngày trên điện thoại, thường khi đang

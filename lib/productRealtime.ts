@@ -3,35 +3,7 @@
  * Bảng mã → nhóm lấy theo đặc tả nghiệp vụ web (src/services/ProductTransactionStatus.ts).
  * Chỉ import hàm thuần để test nạp được.
  */
-import { unitStatusFromName } from './productOverview';
-import type { UnitStatus } from './productStatus';
-
-/** Mã trạng thái SẢN PHẨM (item_code) → nhóm hiển thị ở màn Sản phẩm. Chờ người dùng duyệt. */
-const CODE_GROUP: Record<string, UnitStatus> = {
-  '0': 'sold', // Thanh lý chờ duyệt
-  '1': 'available', // Chưa bán
-  '2': 'available', // Mở bán
-  '3': 'booking', // Booking
-  '5': 'deposit', // Đã đặt cọc
-  '6': 'sold', // HĐMB
-  '7': 'locked', // Giữ chỗ
-  '8': 'sold', // Bàn giao
-  '9': 'sold', // Cấp sổ đỏ
-  '10': 'sold', // Góp vốn
-  '11': 'booking', // Booking chờ duyệt
-  '12': 'deposit', // ĐC (đặt cọc) chờ duyệt
-  '13': 'sold', // Góp vốn chờ duyệt
-  '14': 'sold', // HĐMB chờ duyệt
-  '15': 'sold', // Bàn giao chờ duyệt
-  '16': 'available', // Khác
-  '17': 'locked', // Giữ chỗ ưu tiên
-  '18': 'locked', // Đã Lock
-};
-
-export function statusGroupFromCode(code: unknown): UnitStatus | null {
-  if (code === null || code === undefined) return null;
-  return CODE_GROUP[String(code).trim()] ?? null;
-}
+import { groupFromCode, groupFromName, WebGroup } from './productStatus';
 
 /** Một dòng danh mục như FilterService.getStatusSP trả về. */
 export type CatalogStatus = { MaTT: string; TenTT: string; ColorWeb?: string | null; _raw?: { item_code?: string } };
@@ -47,11 +19,13 @@ export function resolveCatalogStatus(value: unknown, catalog: CatalogStatus[]): 
   );
 }
 
-/** Nhóm trạng thái của một căn: ưu tiên theo mã danh mục, không có thì theo tên (TenTT). */
-export function unitStatusOf(item: { MaTT?: unknown; TenTT?: unknown }, catalog: CatalogStatus[]): UnitStatus {
+/**
+ * Nhóm trạng thái của một căn: ưu tiên theo MÃ danh mục (bảng nghiệp vụ web), không có mã
+ * thì theo tên; không rõ → "Khóa" (không bao giờ mặc định "Mở bán").
+ */
+export function unitStatusOf(item: { MaTT?: unknown; TenTT?: unknown }, catalog: CatalogStatus[]): WebGroup {
   const entry = resolveCatalogStatus(item?.MaTT, catalog);
-  const byCode = statusGroupFromCode(entry?._raw?.item_code);
-  return byCode ?? unitStatusFromName(entry?.TenTT ?? item?.TenTT);
+  return groupFromCode(entry?._raw?.item_code) ?? groupFromName(entry?.TenTT ?? item?.TenTT);
 }
 
 /**
@@ -81,7 +55,8 @@ export function applyRealtimeChange(
         return {
           ...item,
           MaTT: entry?.MaTT ?? response?.maTT,
-          MauNen: response?.mauNen ?? item.MauNen,
+          // Web tô ô theo MauNen trước → gán màu danh mục của trạng thái MỚI (không còn màu cũ)
+          MauNen: color ?? response?.mauNen ?? item.MauNen,
           TenTT: entry?.TenTT ?? item.TenTT,
           // Màu danh mục của trạng thái mới; không có thì bỏ ColorTT để ô dùng MauNen mới
           ColorTT: color ?? '',
