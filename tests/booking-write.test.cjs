@@ -28,9 +28,11 @@ const pgError = (message) => Object.assign(new Error("Request failed with status
 
 function load({ reject = {}, rpcResult } = {}) {
   const posts = [];
+  const gets = [];
   const http = {
     get: async (url, { params }) => {
       const table = url.replace("rest/v1/", "");
+      gets.push({ table, params });
       let data = rows[table] ?? [];
       for (const [key, value] of Object.entries(params)) {
         if (typeof value === "string" && value.startsWith("eq.")) {
@@ -68,8 +70,10 @@ function load({ reject = {}, rpcResult } = {}) {
       return { default: {} };
     },
   });
-  return { service: exports.BookingService, posts };
+  return { service: exports.BookingService, posts, gets, exports };
 }
+const loadExports = () => load().exports;
+const loadWithGets = () => load();
 
 const bookingInput = {
   MaSP: "SP01", SanPhamId: uid(3), KyHieu: "B2-608", MaDA: uid(4), MaSan: uid(5),
@@ -140,4 +144,25 @@ test("createBooking passes the lock id when booking from a lock", async () => {
   });
   await service.createBooking({ ...bookingInput, LockId: uid(77) });
   assert.equal(posts[0].body.p_payload.lock_id, uid(77));
+});
+
+// Số phiếu lock KyHieu/YYYY/MM/STT: tháng tính theo giờ Việt Nam (web: new Date(yyyy, m, 1) giờ máy VN).
+// Trước đây app đếm từ 00:00 UTC ngày 1 (= 07:00 VN) → 7 giờ đầu tháng số phiếu bị trùng.
+test("lock voucher month starts at 00:00 Vietnam time", () => {
+  const { lockVoucherMonth } = loadExports();
+  // 02:00 ngày 1/10 giờ VN = 19:00 UTC ngày 30/9
+  const m = lockVoucherMonth(new Date("2026-09-30T19:00:00.000Z"));
+  assert.deepEqual({ ...m }, { yyyy: 2026, mm: "10", fromIso: "2026-09-30T17:00:00.000Z" });
+  // 23:30 ngày 31/12 giờ VN vẫn là tháng 12
+  const d = lockVoucherMonth(new Date("2026-12-31T16:30:00.000Z"));
+  assert.deepEqual({ ...d }, { yyyy: 2026, mm: "12", fromIso: "2026-11-30T17:00:00.000Z" });
+});
+
+test("createLock counts this month's locks from 00:00 Vietnam time", async () => {
+  const { service, gets } = loadWithGets();
+  const res = await service.createLock({ maSP: "SP01", kyHieu: "B2-608", maDA: uid(4), minutes: 15 });
+  assert.equal(res.status, 2000);
+  const count = gets.find((g) => g.table === "cloud_bookings" && g.params.loai_ct === "eq.LOCK");
+  const { lockVoucherMonth } = loadExports();
+  assert.equal(count.params.created_at, `gte.${lockVoucherMonth(new Date()).fromIso}`);
 });

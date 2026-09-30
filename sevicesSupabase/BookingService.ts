@@ -31,6 +31,23 @@ export const pickSalesSetting = (rows: any[], projectId: string | null | undefin
 };
 
 /** Lock căn — theo web ProductLockService.ts */
+/**
+ * Tháng dùng cho số phiếu lock KyHieu/YYYY/MM/STT, tính theo giờ Việt Nam (UTC+7) như web
+ * (ProductLockService.nextLockVoucherNo: new Date(yyyy, m, 1) theo giờ máy VN).
+ * fromIso = 00:00 ngày 1 giờ VN dưới dạng UTC – mốc đếm STT trong tháng.
+ */
+export const lockVoucherMonth = (now: Date = new Date()) => {
+  const VN_OFFSET_MS = 7 * 3600 * 1000;
+  const vn = new Date(now.getTime() + VN_OFFSET_MS);
+  const yyyy = vn.getUTCFullYear();
+  const month = vn.getUTCMonth();
+  return {
+    yyyy,
+    mm: String(month + 1).padStart(2, "0"),
+    fromIso: new Date(Date.UTC(yyyy, month, 1) - VN_OFFSET_MS).toISOString(),
+  };
+};
+
 const LOCK_DOC_TYPE = "LOCK";
 const LOCK_STATE = {
   ACTIVE: "LOCKED",
@@ -1138,10 +1155,8 @@ export const BookingService = {
       const hetHan = new Date(now.getTime() + lockMinutes * 60000);
       const staff = await getStaffName();
 
-      // Số phiếu: KyHieu/YYYY/MM/STT (đếm lock trong tháng)
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, "0");
-      const from = `${yyyy}-${mm}-01T00:00:00.000Z`;
+      // Số phiếu: KyHieu/YYYY/MM/STT (đếm lock trong tháng, tháng theo giờ VN như web)
+      const { yyyy, mm, fromIso: from } = lockVoucherMonth(now);
       let soPhieu = `${kyHieu || maSP}/${yyyy}/${mm}/1`;
       try {
         const c = await axiosApiSupabase.get("rest/v1/cloud_bookings", {
