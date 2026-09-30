@@ -25,7 +25,6 @@ import {
   Text,
   useToast,
 } from "@/components/ui";
-import { afterSheetClose } from "@/components/ui/BottomSheet";
 import { BookingDocuments } from "@/components/booking/BookingDocuments";
 import { BookingGifts, BookingPrice } from "@/components/booking/BookingPriceAndGifts";
 import { CollapsibleSection } from "@/components/booking/CollapsibleSection";
@@ -63,6 +62,9 @@ export default function BookingDetailScreen() {
   // Giá đang hiệu lực theo bảng giá (RPC get_active_price_for_product);
   // null → fallback về data.price như cũ
   const [activePrice, setActivePrice] = useState<ActivePriceListItem | null>(null);
+  // Tiền booking chuẩn = "Tiền booking" trong Cài đặt bán hàng – cùng nguồn với màn QR.
+  const [standardAmount, setStandardAmount] = useState<number | null>(null);
+  const [amountMissing, setAmountMissing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -75,6 +77,8 @@ export default function BookingDetailScreen() {
     docs: false,
   });
   const [uploadSheet, setUploadSheet] = useState(false);
+  // Nguồn ảnh đã chọn trong sheet; chỉ mở camera/thư viện sau khi sheet đóng hẳn (onClosed).
+  const pendingPick = useRef<"camera" | "library" | null>(null);
   const [images, setImages] = useState<any[]>([]);
   const [imagesFetched, setImagesFetched] = useState(false);
   const [loadingImages, setLoadingImages] = useState(false);
@@ -86,11 +90,22 @@ export default function BookingDetailScreen() {
     const version = ++requestVersion.current;
     setLoading(true);
     setLoadError(null);
-    setData(null);
-    setActivePrice(null);
+    // Giữ dữ liệu cũ trong lúc tải lại (kéo làm mới, quay về từ QR) để màn không chớp trắng.
     try {
       const res = await BookingService.getBookingEditDetail(String(id ?? ""));
       if (version === requestVersion.current) setData(res?.data ?? null);
+      const projectId = res?.data?.project?.id;
+      if (projectId) {
+        void BookingService.resolveBookingAmount(projectId, res?.data?.ngayGiuCho ?? res?.data?.ngayNhap ?? null)
+          .then((r) => {
+            if (version !== requestVersion.current) return;
+            setStandardAmount(r?.amount ?? null);
+            setAmountMissing(r?.amount == null);
+          })
+          .catch(() => {
+            if (version === requestVersion.current) setAmountMissing(false);
+          });
+      }
       const product = res?.data?.product;
       if (product) {
         // Không chặn UI chính: giá bảng giá về sau thì thay thế giá sản phẩm
@@ -113,6 +128,11 @@ export default function BookingDetailScreen() {
   }, [id]);
 
   useEffect(() => {
+    // Đổi sang booking khác → xoá dữ liệu cũ
+    setData(null);
+    setActivePrice(null);
+    setStandardAmount(null);
+    setAmountMissing(false);
     setImages([]);
     setImagesFetched(false);
     void loadData();
@@ -159,8 +179,6 @@ export default function BookingDetailScreen() {
   };
 
   const pickFromCamera = async () => {
-    setUploadSheet(false);
-    await afterSheetClose();
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
       // Lỗi chặn → giữ Alert
@@ -175,8 +193,6 @@ export default function BookingDetailScreen() {
   };
 
   const pickFromLibrary = async () => {
-    setUploadSheet(false);
-    await afterSheetClose();
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       // Lỗi chặn → giữ Alert
@@ -275,7 +291,7 @@ export default function BookingDetailScreen() {
     {
       giaiDoan: data.giaiDoan,
       daThu: data.daThu,
-      tienGiuCho: data.tienGiuCho,
+      tienGiuCho: standardAmount ?? data.tienGiuCho,
       state: data.state,
       hetHanLuc: data.hetHanLuc,
     },
@@ -348,7 +364,18 @@ export default function BookingDetailScreen() {
           <Text variant="caption" color={colors.showcase.textMuted}>
             {progress.paid ? "Tiền booking đã thu" : "Tiền booking cần thu"}
           </Text>
-          <MoneyText value={data.tienGiuCho} variant="display" color="onInverse" />
+          {standardAmount != null ? (
+            <MoneyText value={standardAmount} variant="display" color="onInverse" />
+          ) : (
+            <Text variant="display" color="onInverse">
+              —
+            </Text>
+          )}
+          {amountMissing ? (
+            <Text variant="caption" color={colors.showcase.accent}>
+              Dự án chưa cài “Tiền booking” trong Cài đặt bán hàng.
+            </Text>
+          ) : null}
           <View style={styles.heroMeta}>
             <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1} style={styles.flex}>
               {[productCode, data?.project?.ten_da].filter(Boolean).join(" · ") || "—"}
@@ -422,9 +449,33 @@ export default function BookingDetailScreen() {
         </CollapsibleSection>
       </Screen>
 
-      <BottomSheet visible={uploadSheet} onClose={() => setUploadSheet(false)} title="Tải chứng từ">
-        <SheetOption icon={Camera} label="Chụp ảnh" onPress={() => void pickFromCamera()} />
-        <SheetOption icon={ImageIcon} label="Chọn từ thư viện" onPress={() => void pickFromLibrary()} />
+      <BottomSheet
+        visible={uploadSheet}
+        onClose={() => setUploadSheet(false)}
+        onClosed={() => {
+          const pick = pendingPick.current;
+          pendingPick.current = null;
+          if (pick === "camera") void pickFromCamera();
+          else if (pick === "library") void pickFromLibrary();
+        }}
+        title="Tải chứng từ"
+      >
+        <SheetOption
+          icon={Camera}
+          label="Chụp ảnh"
+          onPress={() => {
+            pendingPick.current = "camera";
+            setUploadSheet(false);
+          }}
+        />
+        <SheetOption
+          icon={ImageIcon}
+          label="Chọn từ thư viện"
+          onPress={() => {
+            pendingPick.current = "library";
+            setUploadSheet(false);
+          }}
+        />
       </BottomSheet>
     </>
   );

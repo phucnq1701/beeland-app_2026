@@ -1,8 +1,9 @@
 /**
  * Suy ra tiến độ 4 bước của booking từ dữ liệu đã có trong
  * BookingService.getBookingEditDetail (spec 5.3) – không gọi thêm API.
- * Không import gì để test nạp trực tiếp được.
+ * Hạn giữ chỗ đọc bằng cùng hàm với đồng hồ đếm ngược (lib/countdown.toMs).
  */
+import { toMs } from './countdown';
 
 export const BOOKING_STEPS = ['Giữ chỗ', 'Đã thu tiền', 'Đặt cọc', 'Hợp đồng'] as const;
 
@@ -13,7 +14,7 @@ export type BookingProgressInput = {
   tienGiuCho?: number | string | null;
   /** PENDING | APPROVED | CANCELLED */
   state?: string | null;
-  hetHanLuc?: string | null;
+  hetHanLuc?: string | number | Date | null;
 };
 
 export type BookingProgress = {
@@ -35,11 +36,11 @@ export function getBookingProgress(b: BookingProgressInput, nowMs: number): Book
   const paid = (tienGiuCho > 0 && num(b.daThu) >= tienGiuCho) || beyondHold;
   const cancelled = b.state === 'CANCELLED';
 
-  const deadline = b.hetHanLuc ? Date.parse(b.hetHanLuc) : NaN;
+  const deadline = toMs(b.hetHanLuc);
   const expired =
     !paid &&
     !cancelled &&
-    Number.isFinite(deadline) &&
+    deadline !== null &&
     deadline <= nowMs &&
     (stage === '' || stage === 'GIUCHO');
 

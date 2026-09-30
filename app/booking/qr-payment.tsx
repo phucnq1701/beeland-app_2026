@@ -36,7 +36,6 @@ import {
   Text,
   useToast,
 } from "@/components/ui";
-import { afterSheetClose } from "@/components/ui/BottomSheet";
 import { QrExpired, QrNoDeadline, QrPaid } from "@/components/booking/QrResult";
 import { formatVND } from "@/lib/format";
 import { hapticSuccess } from "@/lib/haptics";
@@ -75,7 +74,10 @@ export default function QRPaymentScreen() {
   const [expectedAmount, setExpectedAmount] = useState<number | null>(null);
   const [amountError, setAmountError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Thao tác chọn trong menu ⋯; chạy sau khi sheet đóng hẳn để hộp thoại iOS không bị huỷ.
+  const pendingMenuAction = useRef<"cancel" | null>(null);
   const [now, setNow] = useState(Date.now());
   const expiredHandled = useRef(false);
   const wasPaid = useRef(false);
@@ -165,14 +167,16 @@ export default function QRPaymentScreen() {
   }, []);
 
   // ── Kiểm tra thanh toán ────────────────────────────────────────────────────
-  const checkPaid = useCallback(async () => {
-    if (!va || paid || !pgcId) return;
+  /** Trả về true khi đã thấy tiền về. */
+  const checkPaid = useCallback(async (): Promise<boolean> => {
+    if (!va || paid || !pgcId) return paid;
     try {
       const list = await PaymentGatewayService.listByContract(pgcId);
       const cur = list.accounts.find((a) => a.id === va.id);
       if (cur && Number(cur.paid_amount) > 0) {
         setPaid(true);
         setVa(cur);
+        return true;
       } else if (cur && cur.status === "DELETED") {
         setVa(null);
         setHadPreviousQr(true);
@@ -180,7 +184,19 @@ export default function QRPaymentScreen() {
     } catch {
       /* thử lại lần sau */
     }
+    return false;
   }, [va, paid, pgcId]);
+
+  // Người dùng bấm "Kiểm tra ngay" (không chờ vòng 5 giây)
+  const checkNow = async () => {
+    if (checking) return;
+    setChecking(true);
+    const found = await checkPaid();
+    setChecking(false);
+    if (!found) {
+      toast.show({ type: "info", message: "Chưa thấy tiền về. Ứng dụng vẫn tự kiểm tra mỗi 5 giây." });
+    }
+  };
 
   // Mỗi 5s giống web
   useEffect(() => {
@@ -305,10 +321,7 @@ export default function QRPaymentScreen() {
   };
 
   const handleCancelVA = async () => {
-    const fromMenu = menuOpen;
-    setMenuOpen(false);
     if (!va || cancelling) return;
-    if (fromMenu) await afterSheetClose();
     const ok = await confirm({
       title: "Huỷ mã QR",
       message: `Huỷ tài khoản ${va.account_number} (${formatVND(va.amount)})? Người chuyển tiền vào tài khoản này sẽ không được ghi nhận.`,
@@ -471,7 +484,7 @@ export default function QRPaymentScreen() {
       case "noDeadline":
         return <QrNoDeadline />;
       case "expired":
-        return <QrExpired />;
+        return <QrExpired hadQr={hadPreviousQr || !!va} />;
       case "mismatch":
         return (
           <>
@@ -514,6 +527,17 @@ export default function QRPaymentScreen() {
                   Đang chờ tiền về · tự cập nhật
                 </Text>
               </View>
+              {/* Tiền được ghi nhận khi ngân hàng gửi thông báo về máy chủ (webhook), thường mất 10–30 giây. */}
+              <Text variant="caption" color="textTertiary" align="center">
+                Ngân hàng thường báo về sau 10–30 giây kể từ khi chuyển.
+              </Text>
+              <Button
+                variant="ghost"
+                title="Kiểm tra ngay"
+                loading={checking}
+                onPress={() => void checkNow()}
+                style={styles.checkNow}
+              />
             </Card>
             <Card>
               <KeyValueRow label="Ngân hàng" value={va.bank_code || va.provider || "—"} />
@@ -597,9 +621,26 @@ export default function QRPaymentScreen() {
         {renderBody()}
       </Screen>
 
-      <BottomSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title="Tuỳ chọn mã QR">
+      <BottomSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onClosed={() => {
+          const action = pendingMenuAction.current;
+          pendingMenuAction.current = null;
+          if (action === "cancel") void handleCancelVA();
+        }}
+        title="Tuỳ chọn mã QR"
+      >
         <SheetOption icon={Copy} label="Sao chép toàn bộ thông tin" onPress={() => void handleCopyAll()} />
-        <SheetOption icon={Trash2} label="Huỷ mã QR này để tạo lại" destructive onPress={() => void handleCancelVA()} />
+        <SheetOption
+          icon={Trash2}
+          label="Huỷ mã QR này để tạo lại"
+          destructive
+          onPress={() => {
+            pendingMenuAction.current = "cancel";
+            setMenuOpen(false);
+          }}
+        />
       </BottomSheet>
     </>
   );
@@ -652,6 +693,7 @@ const styles = StyleSheet.create({
     marginTop: space.md,
   },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.warning },
+  checkNow: { alignSelf: "center" },
   banner: {
     flexDirection: "row",
     gap: space.sm,

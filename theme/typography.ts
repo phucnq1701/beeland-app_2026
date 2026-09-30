@@ -22,22 +22,41 @@ export type TextVariant =
   | 'label';
 
 export type TypeStyle = {
-  fontFamily: string;
+  weight: FontWeightName;
   fontSize: number;
   lineHeight: number;
   letterSpacing?: number;
 };
 
 export const typography: Record<TextVariant, TypeStyle> = {
-  display: { fontFamily: fonts.bold, fontSize: 28, lineHeight: 36 },
-  title: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 28 },
-  heading: { fontFamily: fonts.semibold, fontSize: 17, lineHeight: 24 },
-  subhead: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 22 },
-  body: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22 },
-  caption: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18 },
+  display: { weight: 'bold', fontSize: 28, lineHeight: 36 },
+  title: { weight: 'bold', fontSize: 22, lineHeight: 28 },
+  heading: { weight: 'semibold', fontSize: 17, lineHeight: 24 },
+  subhead: { weight: 'semibold', fontSize: 15, lineHeight: 22 },
+  body: { weight: 'regular', fontSize: 15, lineHeight: 22 },
+  // 14/20 theo phản hồi thử nghiệm (13 hơi nhỏ khi đọc ngoài trời).
+  caption: { weight: 'regular', fontSize: 14, lineHeight: 20 },
   // Cỡ nhỏ nhất được phép dùng trong app.
-  label: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, letterSpacing: 0.4 },
+  label: { weight: 'semibold', fontSize: 12, lineHeight: 16, letterSpacing: 0.4 },
 };
+
+const FONT_WEIGHT_VALUE: Record<FontWeightName, '400' | '500' | '600' | '700'> = {
+  regular: '400',
+  medium: '500',
+  semibold: '600',
+  bold: '700',
+};
+
+/**
+ * Font đã nạp → dùng file font của weight đó. Chưa nạp được (lỗi asset, hết 3 giây chờ)
+ * → dùng font hệ thống với fontWeight để tiêu đề/nút vẫn giữ độ đậm.
+ */
+export function fontStyleFor(
+  weight: FontWeightName,
+  fontsLoaded: boolean
+): { fontFamily: string } | { fontWeight: '400' | '500' | '600' | '700' } {
+  return fontsLoaded ? { fontFamily: fonts[weight] } : { fontWeight: FONT_WEIGHT_VALUE[weight] };
+}
 
 /** Giới hạn phóng chữ theo cài đặt hệ thống để không vỡ bố cục. */
 export const MAX_FONT_SCALE = 1.3;

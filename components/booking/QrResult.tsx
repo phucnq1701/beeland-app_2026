@@ -43,13 +43,18 @@ export function QrPaid({ amount, paidAt, bookingCode }: { amount: unknown; paidA
   return <ResultCard icon={CheckCircle2} tone="success" title={`Đã nhận ${formatVND(amount)}`} lines={lines} />;
 }
 
-export function QrExpired() {
+/** hadQr: booking từng có mã QR (đã bị huỷ khi hết hạn). */
+export function QrExpired({ hadQr }: { hadQr: boolean }) {
   return (
     <ResultCard
       icon={AlertTriangle}
       tone="danger"
       title="Hết thời gian giữ chỗ"
-      lines={["Mã QR đã bị huỷ. Căn có thể đã được mở bán lại."]}
+      lines={[
+        hadQr
+          ? "Mã QR đã bị huỷ. Căn có thể đã được mở bán lại."
+          : "Không thể thu tiền cho booking này nữa. Căn có thể đã được mở bán lại.",
+      ]}
     />
   );
 }

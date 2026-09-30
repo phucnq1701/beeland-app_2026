@@ -5,7 +5,8 @@
 /** Dưới ngưỡng này (giây) đồng hồ chuyển màu đỏ. */
 export const URGENT_THRESHOLD_SEC = 180;
 
-function toMs(value: unknown): number | null {
+/** Đọc hạn (ISO string, epoch ms, Date) thành ms; không đọc được → null. Dùng chung với lib/bookingProgress. */
+export function toMs(value: unknown): number | null {
   let t = NaN;
   if (value instanceof Date) t = value.getTime();
   else if (typeof value === 'number') t = value;

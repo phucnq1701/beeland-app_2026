@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import UpdateManager from "@/components/UpdateManager";
+import { FontStatusProvider } from "@/components/ui/FontStatus";
 import { ToastProvider } from "@/components/ui/Toast";
 import { applyWebFont } from "@/constants/webFont";
 import { fonts } from "@/theme";
@@ -87,10 +88,12 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={styles.container}>
-        <ToastProvider>
-          <StatusBar style="dark" />
-          <RootLayoutNav />
-        </ToastProvider>
+        <FontStatusProvider loaded={fontsLoaded}>
+          <ToastProvider>
+            <StatusBar style="dark" />
+            <RootLayoutNav />
+          </ToastProvider>
+        </FontStatusProvider>
       </GestureHandlerRootView>
       <UpdateManager />
     </QueryClientProvider>

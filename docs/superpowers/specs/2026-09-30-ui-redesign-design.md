@@ -76,7 +76,7 @@ Component dùng chung hiện có (6, đều là component nghiệp vụ): `Filte
 | D3 | **Một màu nút chính cho toàn app: `#C9501A`** (kể cả trên màn trưng bày). `#E86F25` chỉ dùng trang trí, không làm nền cho chữ. |
 | D4 | Không làm dark mode đợt này. `userInterfaceStyle` → `"light"` (cần build store); token tổ chức sẵn để thêm dark sau. |
 | D5 | Be Vietnam Pro trên mọi nền tảng, file TTF trong `assets/fonts/`, nạp bằng `expo-font` `useFonts` (OTA được). |
-| D6 | Body 15/22, cỡ chữ nhỏ nhất 12. |
+| D6 | Body 15/22, caption 14/20, cỡ chữ nhỏ nhất 12. |
 | D7 | Toast cho thông báo thường; Alert/`confirm()` chỉ cho thao tác phá huỷ (xoá, huỷ) và lỗi chặn. Lỗi form hiện dưới ô nhập. |
 | D8 | Tạo booking xong → vào thẳng chi tiết booking. |
 | D9 | Xoá `booking/payment-method` và `payment/[id]`. `receipts`, `receipt/[id]` nằm ngoài đợt này. |
@@ -139,7 +139,7 @@ Màu trạng thái nghiệp vụ lấy từ `color_code` của dữ liệu. `Sta
 | `heading` | 17/24 · 600 | Tiêu đề header |
 | `subhead` | 15/22 · 600 | Tiêu đề dòng/card |
 | `body` | 15/22 · 400 | Nội dung mặc định |
-| `caption` | 13/18 · 400 | Thông tin phụ |
+| `caption` | 14/20 · 400 | Thông tin phụ (tăng từ 13/18 sau thử nghiệm 2026-09-30) |
 | `label` | 12/16 · 600 | Nhãn section (in hoa, letterSpacing 0.4), label tab bar |
 
 - React Native không chọn weight theo `fontWeight` với font tuỳ chỉnh → `typography.ts` ánh xạ weight sang tên font
@@ -170,7 +170,7 @@ Màu trạng thái nghiệp vụ lấy từ `color_code` của dữ liệu. `Sta
 | Lỗi chặn (hết phiên đăng nhập, thiếu quyền camera/ảnh, booking hết hạn giữ chỗ) | Alert, hoặc trạng thái ngay trên màn |
 | Tải dữ liệu màn | Skeleton; lỗi → `ErrorState` + "Thử lại"; rỗng → `EmptyState` + CTA |
 
-Toast hiện phía trên, dưới header (tính safe-area), tối đa 1 toast cùng lúc (toast mới thay toast cũ).
+Toast hiện ở phía dưới, ngay trên `BottomActionBar` của màn đang xem (không có thanh thì trên safe-area đáy) – đổi sau thử nghiệm 2026-09-30 vì toast phía trên che tiêu đề header. Tối đa 1 toast cùng lúc (toast mới thay toast cũ).
 
 ### 4.6 Component chuẩn (`components/ui/`)
 

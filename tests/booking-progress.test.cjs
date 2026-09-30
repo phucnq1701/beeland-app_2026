@@ -2,7 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { loadTs } = require("./helpers/loadTs.cjs");
 
-const p = loadTs("lib/bookingProgress.ts");
+const p = loadTs("lib/bookingProgress.ts", { modules: { "./countdown": loadTs("lib/countdown.ts") } });
 // Object tạo trong vm context khác → so qua JSON.
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
@@ -48,4 +48,10 @@ test("cancelled", () => {
 
 test("steps copy", () => {
   assert.deepEqual(plain(p.BOOKING_STEPS), ["Giữ chỗ", "Đã thu tiền", "Đặt cọc", "Hợp đồng"]);
+});
+
+test("hetHanLuc as epoch ms or Date is read the same way as the countdown", () => {
+  assert.equal(p.getBookingProgress({ giaiDoan: "GIUCHO", tienGiuCho: 1, hetHanLuc: NOW - 1000 }, NOW).expired, true);
+  assert.equal(p.getBookingProgress({ giaiDoan: "GIUCHO", tienGiuCho: 1, hetHanLuc: new Date(NOW - 1000) }, NOW).expired, true);
+  assert.equal(p.getBookingProgress({ giaiDoan: "GIUCHO", tienGiuCho: 1, hetHanLuc: NOW + 60000 }, NOW).expired, false);
 });

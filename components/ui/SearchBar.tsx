@@ -2,7 +2,9 @@ import { Search, X } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
-import { colors, fonts, MAX_FONT_SCALE, radius, space } from '@/theme';
+import { colors, fontStyleFor, MAX_FONT_SCALE, radius, space } from '@/theme';
+
+import { useFontsLoaded } from './FontStatus';
 
 import { IconButton } from './IconButton';
 
@@ -15,6 +17,7 @@ export type SearchBarProps = {
 
 /** Ô tìm kiếm. Màn tự debounce bằng useDebouncedValue. */
 export function SearchBar({ value, onChangeText, placeholder = 'Tìm kiếm', autoFocus }: SearchBarProps) {
+  const fontsLoaded = useFontsLoaded();
   return (
     <View style={styles.box}>
       <Search size={18} color={colors.textTertiary} />
@@ -28,7 +31,7 @@ export function SearchBar({ value, onChangeText, placeholder = 'Tìm kiếm', au
         returnKeyType="search"
         accessibilityLabel={placeholder}
         maxFontSizeMultiplier={MAX_FONT_SCALE}
-        style={styles.input}
+        style={[styles.input, fontStyleFor('regular', fontsLoaded)]}
       />
       {value ? <IconButton icon={X} accessibilityLabel="Xoá tìm kiếm" onPress={() => onChangeText('')} /> : null}
     </View>
@@ -50,7 +53,6 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     minHeight: 42,
-    fontFamily: fonts.regular,
     fontSize: 15,
     color: colors.text,
     paddingVertical: 0,

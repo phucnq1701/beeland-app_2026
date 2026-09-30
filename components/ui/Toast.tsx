@@ -20,16 +20,31 @@ export type ToastOptions = {
 type ToastApi = { show: (opts: ToastOptions) => void; hide: () => void };
 
 const ToastContext = createContext<ToastApi | null>(null);
+type OffsetApi = { set: (owner: number, height: number) => void; clear: (owner: number) => void };
+/** BottomActionBar của màn đang hiển thị báo chiều cao để toast nằm ngay trên nó. */
+const ToastOffsetContext = createContext<OffsetApi>({ set: () => {}, clear: () => {} });
+let nextOwner = 1;
 
 const DEFAULT_DURATION = 3000;
 const ACTION_DURATION = 5000;
-/** Chiều cao header chuẩn – toast hiện ngay dưới header. */
-const HEADER_HEIGHT = 56;
+/** Khoảng cách giữa toast và mép dưới (hoặc thanh hành động). */
+const GAP = 12;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
   const [toast, setToast] = useState<(ToastOptions & { id: number }) | null>(null);
+  // Chủ sở hữu = thanh của màn được focus gần nhất. Màn cũ dọn dẹp muộn (vd sau router.replace)
+  // không được xoá chiều cao mà màn mới đã báo.
+  const [bar, setBar] = useState<{ owner: number; height: number } | null>(null);
+  const offsetApi = useMemo<OffsetApi>(
+    () => ({
+      set: (owner, height) => setBar({ owner, height }),
+      clear: (owner) => setBar((cur) => (cur && cur.owner === owner ? null : cur)),
+    }),
+    []
+  );
+  const barHeight = bar?.height ?? null;
   const anim = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seq = useRef(0);
@@ -46,9 +61,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       setToast(null);
       return;
     }
-    Animated.timing(anim, { toValue: 0, duration: motion.exit, useNativeDriver: true }).start(() =>
-      setToast(null)
-    );
+    // Chỉ xoá khi animation chạy hết: nếu toast mới chen vào giữa chừng (animation bị ngắt)
+    // thì không được xoá toast mới.
+    Animated.timing(anim, { toValue: 0, duration: motion.exit, useNativeDriver: true }).start(({ finished }) => {
+      if (finished) setToast(null);
+    });
   }, [anim, reduceMotion]);
 
   const show = useCallback(
@@ -74,21 +91,27 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ToastContext.Provider value={api}>
-      {children}
-      {toast ? (
-        <View pointerEvents="box-none" style={[styles.host, { top: insets.top + HEADER_HEIGHT }]}>
-          <Animated.View
-            key={toast.id}
-            accessibilityLiveRegion="polite"
-            style={{
-              opacity: anim,
-              transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }],
-            }}
+      <ToastOffsetContext.Provider value={offsetApi}>
+        {children}
+        {toast ? (
+          // Toast nằm dưới (trên thanh hành động nếu có) để không bao giờ che tiêu đề header.
+          <View
+            pointerEvents="box-none"
+            style={[styles.host, { bottom: (barHeight ?? insets.bottom) + GAP }]}
           >
-            <ToastView toast={toast} onDismiss={hide} />
-          </Animated.View>
-        </View>
-      ) : null}
+            <Animated.View
+              key={toast.id}
+              accessibilityLiveRegion="polite"
+              style={{
+                opacity: anim,
+                transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+              }}
+            >
+              <ToastView toast={toast} onDismiss={hide} />
+            </Animated.View>
+          </View>
+        ) : null}
+      </ToastOffsetContext.Provider>
     </ToastContext.Provider>
   );
 }
@@ -127,6 +150,12 @@ function ToastView({ toast, onDismiss }: { toast: ToastOptions; onDismiss: () =>
       ) : null}
     </Pressable>
   );
+}
+
+/** Dùng trong BottomActionBar: báo chiều cao thanh; mỗi thanh có một mã chủ sở hữu riêng. */
+export function useToastBottomOffset(): OffsetApi & { newOwner: () => number } {
+  const api = useContext(ToastOffsetContext);
+  return useMemo(() => ({ ...api, newOwner: () => nextOwner++ }), [api]);
 }
 
 /** Hiện toast: `const toast = useToast(); toast.show({ type: 'success', message: '…' })`. */

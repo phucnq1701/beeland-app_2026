@@ -1,6 +1,6 @@
 import { Check, ChevronDown } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { foldVietnamese as fold } from '@/lib/format';
 import { colors, radius, space } from '@/theme';
@@ -82,15 +82,14 @@ export function SelectField<T extends string | number>({
             <SearchBar value={query} onChangeText={setQuery} />
           </View>
         ) : null}
-        <FlatList
-          data={filtered}
-          keyExtractor={(o) => String(o.value)}
-          keyboardShouldPersistTaps="handled"
-          ListEmptyComponent={<EmptyState title="Không có kết quả" />}
-          renderItem={({ item }) => {
+        {/* ScrollView + map (danh sách ngắn): FlatList lồng trong ScrollView của Screen gây cảnh báo VirtualizedList. */}
+        <ScrollView keyboardShouldPersistTaps="handled">
+          {filtered.length === 0 ? <EmptyState title="Không có kết quả" /> : null}
+          {filtered.map((item) => {
             const isSelected = item.value === value;
             return (
               <Pressable
+                key={String(item.value)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isSelected }}
                 onPress={() => {
@@ -112,8 +111,8 @@ export function SelectField<T extends string | number>({
                 {isSelected ? <Check size={20} color={colors.primary} /> : null}
               </Pressable>
             );
-          }}
-        />
+          })}
+        </ScrollView>
       </BottomSheet>
     </View>
   );

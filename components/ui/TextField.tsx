@@ -1,7 +1,9 @@
 import React, { forwardRef, useState } from 'react';
 import { StyleProp, StyleSheet, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
 
-import { colors, fonts, MAX_FONT_SCALE, radius, space } from '@/theme';
+import { colors, fontStyleFor, MAX_FONT_SCALE, radius, space } from '@/theme';
+
+import { useFontsLoaded } from './FontStatus';
 
 import { Text } from './Text';
 
@@ -21,6 +23,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
   ref
 ) {
   const [focused, setFocused] = useState(false);
+  const fontsLoaded = useFontsLoaded();
   const borderStyle = error ? styles.error : focused ? styles.focused : null;
 
   return (
@@ -46,7 +49,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
             setFocused(false);
             onBlur?.(e);
           }}
-          style={[styles.input, style]}
+          style={[styles.input, fontStyleFor('regular', fontsLoaded), style]}
         />
         {suffix}
       </View>
@@ -81,7 +84,6 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     minHeight: 44,
-    fontFamily: fonts.regular,
     fontSize: 15,
     color: colors.text,
     paddingVertical: 0,

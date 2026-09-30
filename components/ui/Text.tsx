@@ -4,12 +4,14 @@ import { Text as RNText, TextProps as RNTextProps, TextStyle } from 'react-nativ
 import {
   colors,
   ColorToken,
-  fonts,
+  fontStyleFor,
   FontWeightName,
   MAX_FONT_SCALE,
   TextVariant,
   typography,
 } from '@/theme';
+
+import { useFontsLoaded } from './FontStatus';
 
 export type TextProps = RNTextProps & {
   variant?: TextVariant;
@@ -37,15 +39,16 @@ export function Text({
   style,
   ...rest
 }: TextProps) {
-  const base = typography[variant];
+  const fontsLoaded = useFontsLoaded();
+  const { weight: variantWeight, ...metrics } = typography[variant];
   return (
     <RNText
       maxFontSizeMultiplier={MAX_FONT_SCALE}
       {...rest}
       style={[
-        base,
+        metrics,
+        fontStyleFor(weight ?? variantWeight, fontsLoaded),
         { color: resolveColor(color) },
-        weight ? { fontFamily: fonts[weight] } : null,
         numeric ? { fontVariant: ['tabular-nums'] } : null,
         align ? { textAlign: align } : null,
         style,
