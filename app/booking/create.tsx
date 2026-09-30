@@ -181,7 +181,9 @@ export default function CreateBookingScreen() {
       // Payload theo chuẩn BookingService.createBooking
       const initDataBooking = {
         MaSP: bookingData?.MaSP,
-        SanPhamId: bookingData?.id ?? bookingData?.Id ?? null,
+        // normalizeProduct trả uuid sản phẩm ở "ID"
+        SanPhamId: bookingData?.ID ?? bookingData?.id ?? bookingData?.Id ?? null,
+        LockId: bookingData?.LockId ?? null,
         KyHieu: bookingData?.KyHieu,
         MaSan: selectedSan?.ID || selectedSan?.MaSan || null,
         TenSan: selectedSan?.TenSan || null,

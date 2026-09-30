@@ -225,7 +225,8 @@ export default function LockDetailScreen() {
                 router.push({
                   pathname: "/booking/create",
                   params: {
-                    dataBooking: JSON.stringify(dataProduct || data),
+                    // Kèm id phiếu lock như web (LockList → LockId) để máy chủ giải phóng đúng phiếu này
+                    dataBooking: JSON.stringify({ ...(dataProduct || data), LockId: id }),
                   },
                 });
               }}
