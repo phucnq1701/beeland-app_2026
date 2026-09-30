@@ -2,7 +2,7 @@
   "expo": {
     "name": "BeeLand App",
     "slug": "beeland-app",
-    "version": "10.3",
+    "version": "10.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
@@ -109,7 +109,8 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/d1c32165-b49c-4573-b60e-c683ae7d1b0d"
+      "url": "https://u.expo.dev/d1c32165-b49c-4573-b60e-c683ae7d1b0d",
+      "checkAutomatically": "ON_LOAD"
     }
   }
 }
