@@ -9,7 +9,6 @@ const plain = (v) => JSON.parse(JSON.stringify(v));
 
 test("unitStatusFromName maps catalog names like the old screen", () => {
   assert.equal(o.unitStatusFromName("Đã bán"), "sold");
-  assert.equal(o.unitStatusFromName("HĐMB đã duyệt"), "available"); // chữ hoa có dấu: giữ đúng như cũ (so khớp "hdmb")
   assert.equal(o.unitStatusFromName("hdmb chờ duyệt"), "sold");
   assert.equal(o.unitStatusFromName("Đã bàn giao"), "sold");
   assert.equal(o.unitStatusFromName("Đặt cọc chờ duyệt"), "deposit");
@@ -59,4 +58,15 @@ test("overviewSummary counts each status plus total, in the old order", () => {
   assert.deepEqual(summary.map((s) => s.key), ["all", "available", "deposit", "locked", "sold", "booking"]);
   assert.deepEqual(summary.map((s) => s.count), [3, 1, 0, 0, 1, 1]);
   assert.equal(summary[0].label, "Tổng");
+});
+
+test("HĐMB and other sold names match with or without Vietnamese diacritics", () => {
+  for (const name of ["HĐMB đã duyệt", "HĐMB chờ duyệt", "Hợp đồng mua bán", "da ban", "DA BAN GIAO", "So do", "Sổ đỏ", "Góp vốn đã duyệt", "Thanh ly tat toan"]) {
+    assert.equal(o.unitStatusFromName(name), "sold", name);
+  }
+  assert.equal(o.unitStatusFromName("Dat coc cho duyet"), "deposit");
+  assert.equal(o.unitStatusFromName("Giu cho"), "locked");
+  // Không bắt nhầm: "Đang bán" / "Mở bán" vẫn là căn trống
+  assert.equal(o.unitStatusFromName("Đang bán"), "available");
+  assert.equal(o.unitStatusFromName("Mở bán"), "available");
 });

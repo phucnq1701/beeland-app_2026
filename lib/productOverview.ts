@@ -2,27 +2,28 @@
  * Dữ liệu chế độ "Tổng quan" của màn Sản phẩm (tách từ app/products.tsx, giữ nguyên logic).
  * Chỉ import hàm thuần để test nạp được.
  */
-import { formatNumberVN } from './format';
+import { foldVietnamese, formatNumberVN } from './format';
 import type { UnitStatus } from './productStatus';
 
 /**
  * MaTT là uuid → nhận diện trạng thái theo TÊN (TenTT) từ danh mục.
- * LƯU Ý: so khớp "hdmb" không dấu như bản cũ nên "HĐMB …" (có Đ) rơi vào "available".
+ * So khớp sau khi bỏ dấu (foldVietnamese) để "HĐMB", "hđmb", "HDMB", "da ban"… đều nhận đúng.
  */
 export function unitStatusFromName(name: unknown): UnitStatus {
-  const t = String(name || '').toLowerCase();
+  const t = foldVietnamese(String(name || ''));
   if (
-    t.includes('đã bán') ||
+    t.includes('da ban') ||
     t.includes('hdmb') ||
-    t.includes('bàn giao') ||
-    t.includes('sổ đỏ') ||
-    t.includes('góp vốn') ||
-    t.includes('thanh lý')
+    t.includes('hop dong mua ban') ||
+    t.includes('ban giao') ||
+    t.includes('so do') ||
+    t.includes('gop von') ||
+    t.includes('thanh ly')
   )
     return 'sold';
-  if (t.includes('đặt cọc')) return 'deposit';
+  if (t.includes('dat coc')) return 'deposit';
   if (t.includes('booking')) return 'booking';
-  if (t.includes('giữ chỗ') || t.includes('lock')) return 'locked';
+  if (t.includes('giu cho') || t.includes('lock')) return 'locked';
   return 'available';
 }
 
