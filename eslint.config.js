@@ -7,6 +7,11 @@ const UI_STRICT_FILES = [
   'components/ui/**/*.{ts,tsx}',
   'lib/**/*.{ts,tsx}',
   'app/dev/**/*.{ts,tsx}',
+  // Giai đoạn 1 – booking & thanh toán
+  'app/bookings.tsx',
+  'app/booking/**/*.{ts,tsx}',
+  'components/booking/**/*.{ts,tsx}',
+  'components/FilterPanel.tsx',
 ];
 
 module.exports = defineConfig([

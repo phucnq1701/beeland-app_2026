@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import {
   Check,
   ChevronDown,
@@ -7,14 +7,15 @@ import {
   RotateCcw,
   SlidersHorizontal,
 } from "lucide-react-native";
-import Colors from "@/constants/colors";
+
+import { Text } from "@/components/ui/Text";
+import { colors, radius, space } from "@/theme";
 
 /**
  * Bộ lọc dùng chung cho các màn danh sách (Sản phẩm, Booking, Đặt cọc,
  * Hợp đồng, Căn đã lock) — đảm bảo giao diện đồng bộ trong toàn app.
+ * Giữ nguyên tên export và props; giao diện theo design system.
  */
-
-const PRIMARY_TINT = "rgba(232, 111, 37, 0.1)";
 
 type FilterToggleButtonProps = {
   open: boolean;
@@ -29,26 +30,34 @@ export function FilterToggleButton({
 }: FilterToggleButtonProps) {
   const highlighted = open || activeCount > 0;
   return (
-    <TouchableOpacity
-      style={[styles.toggle, highlighted && styles.toggleActive]}
+    <Pressable
+      style={({ pressed }) => [
+        styles.toggle,
+        highlighted && styles.toggleActive,
+        pressed && styles.pressed,
+      ]}
       onPress={onPress}
-      activeOpacity={0.7}
+      hitSlop={4}
       accessibilityRole="button"
-      accessibilityLabel="Bộ lọc"
+      accessibilityLabel={activeCount > 0 ? `Bộ lọc, ${activeCount} đang áp dụng` : "Bộ lọc"}
       accessibilityState={{ expanded: open }}
     >
-      <SlidersHorizontal color={Colors.primary} size={18} />
-      <Text style={styles.toggleText}>Bộ lọc</Text>
+      <SlidersHorizontal color={highlighted ? colors.primary : colors.inverse} size={18} />
+      <Text variant="caption" weight="semibold" color={highlighted ? "primary" : "inverse"}>
+        Bộ lọc
+      </Text>
       {activeCount > 0 ? (
         <View style={styles.toggleBadge}>
-          <Text style={styles.toggleBadgeText}>{activeCount}</Text>
+          <Text variant="label" color="onPrimary" style={styles.badgeText}>
+            {activeCount}
+          </Text>
         </View>
       ) : open ? (
-        <ChevronUp color={Colors.primary} size={16} />
+        <ChevronUp color={colors.primary} size={16} />
       ) : (
-        <ChevronDown color={Colors.primary} size={16} />
+        <ChevronDown color={colors.inverse} size={16} />
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -68,28 +77,26 @@ export function FilterPanel({
   return (
     <View style={styles.panel}>
       <View style={styles.panelHeader}>
-        <Text style={styles.panelTitle}>Bộ lọc</Text>
+        <Text variant="subhead">Bộ lọc</Text>
         {activeCount > 0 && (
-          <Text style={styles.panelSubtitle}>{activeCount} đang áp dụng</Text>
+          <Text variant="caption" color="primary">
+            {activeCount} đang áp dụng
+          </Text>
         )}
         {onReset && (
-          <TouchableOpacity
+          <Pressable
             style={[styles.resetButton, !canReset && styles.resetButtonDisabled]}
             onPress={onReset}
             disabled={!canReset}
-            activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canReset }}
           >
-            <RotateCcw
-              size={14}
-              color={canReset ? Colors.primary : Colors.textLight}
-            />
-            <Text
-              style={[styles.resetText, !canReset && styles.resetTextDisabled]}
-            >
+            <RotateCcw size={14} color={canReset ? colors.primary : colors.textTertiary} />
+            <Text variant="caption" weight="semibold" color={canReset ? "primary" : "textTertiary"}>
               Đặt lại
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
       {sections.map((section, i) => (
@@ -137,47 +144,59 @@ export function FilterSection({
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {hint ? <Text style={styles.sectionHint}>{hint}</Text> : null}
+        <Text variant="label" color="textSecondary" style={styles.sectionTitle}>
+          {title}
+        </Text>
+        {hint ? (
+          <Text variant="label" weight="regular" color="textTertiary">
+            {hint}
+          </Text>
+        ) : null}
       </View>
       <View style={styles.chips}>
         {visible.map((opt) => (
-          <TouchableOpacity
+          <Pressable
             key={String(opt.key)}
-            style={[styles.chip, opt.selected && styles.chipActive]}
+            style={({ pressed }) => [
+              styles.chip,
+              opt.selected && styles.chipActive,
+              pressed && !opt.selected && styles.pressed,
+            ]}
             onPress={opt.onPress}
-            activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityState={{ selected: opt.selected }}
           >
             {opt.selected ? (
-              <Check size={14} color={Colors.primary} strokeWidth={3} />
+              <Check size={14} color={colors.onPrimarySubtle} strokeWidth={3} />
             ) : opt.color ? (
               <View style={[styles.chipDot, { backgroundColor: opt.color }]} />
             ) : null}
             <Text
-              style={[styles.chipText, opt.selected && styles.chipTextActive]}
+              variant="caption"
+              weight={opt.selected ? "semibold" : "medium"}
+              color={opt.selected ? "onPrimarySubtle" : "text"}
               numberOfLines={1}
+              style={styles.chipText}
             >
               {opt.label}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         ))}
         {collapsible && (
-          <TouchableOpacity
+          <Pressable
             style={styles.moreChip}
             onPress={() => setExpanded((v) => !v)}
-            activeOpacity={0.7}
+            accessibilityRole="button"
           >
-            <Text style={styles.moreChipText}>
+            <Text variant="caption" weight="semibold" color="primary">
               {expanded ? "Thu gọn" : `+${hiddenCount} Xem thêm`}
             </Text>
             {expanded ? (
-              <ChevronUp size={14} color={Colors.primary} />
+              <ChevronUp size={14} color={colors.primary} />
             ) : (
-              <ChevronDown size={14} color={Colors.primary} />
+              <ChevronDown size={14} color={colors.primary} />
             )}
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>
@@ -188,128 +207,94 @@ const styles = StyleSheet.create({
   toggle: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
+    gap: space.xs + 2,
+    minHeight: 40,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
   },
   toggleActive: {
-    borderColor: Colors.primary,
-    backgroundColor: PRIMARY_TINT,
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySubtle,
   },
-  toggleText: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
+  pressed: { backgroundColor: colors.surfaceMuted },
   toggleBadge: {
     minWidth: 18,
     height: 18,
     paddingHorizontal: 5,
     borderRadius: 9,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
-  toggleBadgeText: {
-    fontSize: 11,
-    fontWeight: "700" as const,
-    color: Colors.white,
-  },
+  badgeText: { lineHeight: 16, letterSpacing: 0 },
   panel: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md + 2,
+    marginBottom: space.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   panelHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
-  },
-  panelTitle: {
-    fontSize: 16,
-    fontWeight: "700" as const,
-    color: Colors.text,
-  },
-  panelSubtitle: {
-    fontSize: 12,
-    fontWeight: "500" as const,
-    color: Colors.primary,
+    gap: space.sm,
+    marginBottom: space.md,
   },
   resetButton: {
     marginLeft: "auto",
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.xs,
     paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: PRIMARY_TINT,
+    paddingHorizontal: space.md,
+    borderRadius: radius.full,
+    backgroundColor: colors.primarySubtle,
   },
   resetButtonDisabled: {
-    backgroundColor: Colors.backgroundTertiary,
-  },
-  resetText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  resetTextDisabled: {
-    color: Colors.textLight,
+    backgroundColor: colors.surfaceMuted,
   },
   sectionDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border,
-    marginTop: 14,
-    paddingTop: 14,
+    borderTopColor: colors.border,
+    marginTop: space.md + 2,
+    paddingTop: space.md + 2,
   },
   section: {
-    gap: 10,
+    gap: space.sm + 2,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: 6,
+    gap: space.xs + 2,
   },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  sectionHint: {
-    fontSize: 12,
-    color: Colors.textTertiary,
   },
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: space.sm,
   },
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: space.xs + 2,
     maxWidth: "100%",
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
+    minHeight: 36,
+    paddingHorizontal: space.md + 2,
+    borderRadius: radius.full,
     borderWidth: 1,
-    borderColor: "transparent",
-    backgroundColor: Colors.backgroundTertiary,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
   },
   chipActive: {
-    backgroundColor: PRIMARY_TINT,
-    borderColor: Colors.primary,
+    backgroundColor: colors.primarySubtle,
+    borderColor: colors.primary,
   },
   chipDot: {
     width: 8,
@@ -318,29 +303,17 @@ const styles = StyleSheet.create({
   },
   chipText: {
     flexShrink: 1,
-    fontSize: 14,
-    fontWeight: "500" as const,
-    color: Colors.text,
-  },
-  chipTextActive: {
-    color: Colors.primary,
-    fontWeight: "600" as const,
   },
   moreChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
+    gap: space.xs,
+    minHeight: 36,
+    paddingHorizontal: space.md,
+    borderRadius: radius.full,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: Colors.primary,
-  },
-  moreChipText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.primary,
+    borderColor: colors.primary,
   },
 });
 

@@ -1,34 +1,37 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Platform,
-  ActivityIndicator,
-} from "react-native";
+import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
-import {
-  Search,
-  X,
-  ChevronRight,
-  ChevronLeft,
-  Calendar,
-} from "lucide-react-native";
+import { CalendarX2, SearchX } from "lucide-react-native";
 import {
   FilterPanel,
   FilterSection,
   FilterToggleButton,
   multiSelectOptions,
 } from "@/components/FilterPanel";
-import Colors from "@/constants/colors";
+import {
+  AppHeader,
+  Avatar,
+  Chip,
+  EmptyState,
+  ErrorState,
+  ListItem,
+  MoneyText,
+  Screen,
+  SearchBar,
+  SkeletonList,
+  StatusBadge,
+} from "@/components/ui";
+import { formatDate } from "@/lib/format";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { colors, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
 
 /** Số booking mỗi lần gọi fn_booking_list; cuộn tới cuối thì tải thêm */
 const PAGE_SIZE = 20;
+
+/** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
+const TAB_BAR_SPACE = 100;
 
 /** Loại bỏ bản ghi trùng theo id ổn định (maPGC -> id -> soPhieu), giữ bản đầu tiên */
 const dedupeBookings = (list: any[]): any[] => {
@@ -47,46 +50,22 @@ const dedupeBookings = (list: any[]): any[] => {
   return out;
 };
 
-/** Chuẩn hoá màu hex (#RGB hoặc #RRGGBB) -> "RRGGBB" */
-const normalizeHex = (color?: string): string | null => {
-  if (!color || typeof color !== "string") return null;
-  const c = color.trim();
-  if (!c.startsWith("#")) return null;
-  let hex = c.slice(1);
-  if (hex.length === 3)
-    hex = hex
-      .split("")
-      .map((ch) => ch + ch)
-      .join("");
-  if (hex.length !== 6) return null;
-  return hex;
-};
-
-/** Tự chọn màu chữ (đen/trắng) tương phản với màu nền để dễ đọc */
-const getContrastTextColor = (bg?: string): string => {
-  const hex = normalizeHex(bg);
-  if (!hex) return "#FFFFFF";
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.6 ? "#1F2937" : "#FFFFFF";
-};
-
 export default function BookingsScreen({
   embedded,
 }: { embedded?: boolean } = {}) {
   const router = useRouter();
 
-  const searchTimeout = useRef<any>(null);
   const firstLoad = useRef(true);
 
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const debouncedQuery = useDebouncedValue(searchQuery, 300);
 
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
 
   const [showFilters, setShowFilters] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<boolean>(false);
 
   const [statusList, setStatusList] = useState<any[]>([]);
   const [duAn, setDuAn] = useState<any[]>([]);
@@ -167,32 +146,23 @@ export default function BookingsScreen({
     }
   };
 
-  const handleScroll = (e: any) => {
-    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-    if (
-      layoutMeasurement.height + contentOffset.y >=
-      contentSize.height - 300
-    ) {
-      void loadMore();
-    }
-  };
-
   /* ---------------- LOAD DATA ---------------- */
 
   const loadData = async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       // Trạng thái booking — cloud pgc_trang_thai
       const resTT = await BookingService.getBookingStatus();
 
       let arr: any[] = [];
-      arr.push({ id: 0, title: "Tất cả", ColorWeb: "#8B5CF6" });
+      arr.push({ id: 0, title: "Tất cả", ColorWeb: null });
 
       (resTT?.data ?? []).forEach((item: any) => {
         arr.push({
           id: item.id,
           title: item.item_name,
-          ColorWeb: item.color_code || "#8B5CF6",
+          ColorWeb: item.color_code || null,
         });
       });
 
@@ -205,6 +175,7 @@ export default function BookingsScreen({
       await fetchBookings(filterCondition, 1, false);
     } catch (err) {
       console.log("loadData error", err);
+      setLoadError(true);
     }
 
     setLoading(false);
@@ -212,18 +183,33 @@ export default function BookingsScreen({
 
   const loadData2 = async (_filter: any) => {
     setLoading(true);
+    setLoadError(false);
     try {
       await fetchBookings(_filter, 1, false);
     } catch (err) {
       console.log("loadData2 error", err);
+      setLoadError(true);
     }
     setLoading(false);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setLoadError(false);
+    try {
+      await fetchBookings(filterRef.current ?? filterCondition, 1, false);
+    } catch (err) {
+      console.log("refresh error", err);
+      setLoadError(true);
+    }
+    setRefreshing(false);
   };
 
   /* ---------------- INIT ---------------- */
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Quay lại danh sách (sau thanh toán / duyệt / huỷ ở màn chi tiết) → nạp lại trang đầu
@@ -244,23 +230,16 @@ export default function BookingsScreen({
   /* ---------------- SEARCH DEBOUNCE ---------------- */
 
   useEffect(() => {
-    if (searchTimeout.current) {
-      clearTimeout(searchTimeout.current);
-    }
+    const newFilter = {
+      ...filterCondition,
+      inputSearch: debouncedQuery,
+      Offset: 1,
+    };
 
-    searchTimeout.current = setTimeout(() => {
-      const newFilter = {
-        ...filterCondition,
-        inputSearch: searchQuery,
-        Offset: 1,
-      };
-
-      setFilterCondition(newFilter);
-      loadData2(newFilter);
-    }, 500);
-
-    return () => clearTimeout(searchTimeout.current);
-  }, [searchQuery]);
+    setFilterCondition(newFilter);
+    loadData2(newFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQuery]);
 
   /* ---------------- PROJECT FILTER ---------------- */
 
@@ -281,6 +260,7 @@ export default function BookingsScreen({
     setFilterCondition(newFilter);
 
     loadData2(newFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjects]);
 
   /* ---------------- STATUS FILTER ---------------- */
@@ -296,12 +276,6 @@ export default function BookingsScreen({
     setFilterCondition(newFilter);
 
     loadData2(newFilter);
-  };
-
-  /* ---------------- STATUS CLICK LOCAL ---------------- */
-
-  const handleTT = (trangThai: string) => {
-    setSelectTT(trangThai);
   };
 
   /* ---------------- CLEAR FILTER ---------------- */
@@ -332,471 +306,195 @@ export default function BookingsScreen({
   const activeFilterCount =
     (selectedProjects.length > 0 ? 1 : 0) +
     (Number(filterCondition.MaTT) !== 0 ? 1 : 0);
+  const isFiltering = activeFilterCount > 0 || !!searchQuery || (!!selectTT && selectTT !== "Tất cả");
 
-  // Map tên trạng thái -> màu trả về từ data (pgc_trang_thai.color_code)
+  // Map tên trạng thái -> màu trả về từ data (pgc_trang_thai.color_code), dự phòng khi dòng thiếu colorCode
   const statusColorMap = useMemo(() => {
-    const map: Record<string, string> = {};
+    const map: Record<string, string | null> = {};
     statusList.forEach((s: any) => {
-      if (s?.title) map[s.title] = s.ColorWeb || Colors.primary;
+      if (s?.title) map[s.title] = s.ColorWeb ?? null;
     });
     return map;
   }, [statusList]);
 
-  const getStatusColor = (tenTT?: string): string =>
-    (tenTT && statusColorMap[tenTT]) || Colors.primary;
+  const renderItem = useCallback(
+    ({ item: booking }: { item: any }) => (
+      <ListItem
+        leading={<Avatar name={booking.khachHang || "?"} />}
+        title={booking.khachHang || "—"}
+        subtitle={[booking.maSanPham || booking.soPhieu, booking.tenDA].filter(Boolean).join(" · ")}
+        meta={[booking.soPhieu, formatDate(booking.ngayGiuCho)].filter(Boolean).join(" · ")}
+        trailing={
+          <>
+            <MoneyText value={booking.tongGiaGomVAT} short />
+            {booking?.tenTT ? (
+              <StatusBadge
+                label={booking.tenTT}
+                color={booking.colorCode ?? statusColorMap[booking.tenTT]}
+              />
+            ) : null}
+          </>
+        }
+        onPress={() =>
+          router.push({
+            pathname: "/booking/[id]",
+            // id phiếu booking là duy nhất; 1 phiếu giữ chỗ (maPGC) có thể
+            // có nhiều booking (vd. booking cũ đã huỷ + booking mới)
+            params: { id: booking.id ?? booking.maPGC },
+          })
+        }
+      />
+    ),
+    [router, statusColorMap]
+  );
 
-  return (
-    <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: "Booking",
-          headerStyle: {
-            backgroundColor: Colors.background,
-          },
-          headerTintColor: Colors.text,
-          headerTitleStyle: {
-            fontWeight: "700",
-            fontSize: 18,
-          },
-          headerShadowVisible: false,
-          // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
-          headerLeft: embedded
-            ? undefined
-            : () => (
-                <TouchableOpacity
-                  onPress={() => router.back()}
-                  style={styles.headerBackButton}
-                >
-                  <ChevronLeft color={Colors.text} size={24} />
-                </TouchableOpacity>
-              ),
-        }}
+  const listHeader = (
+    <View style={styles.stickyHeader}>
+      <SearchBar
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Mã booking, khách hàng, căn"
       />
 
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        onScroll={handleScroll}
-        scrollEventThrottle={100}
-        // Tìm kiếm + bộ lọc + tab trạng thái bám dính phía trên khi cuộn
-        stickyHeaderIndices={[0]}
-      >
-        <View style={styles.stickyHeader}>
-          {/* Search & Filter */}
-          <View style={styles.searchAndFilterRow}>
-            <View style={styles.searchContainer}>
-              <Search color={Colors.textSecondary} size={20} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Tìm kiếm booking, khách hàng..."
-                placeholderTextColor={Colors.textSecondary}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {searchQuery !== "" && (
-                <TouchableOpacity onPress={() => setSearchQuery("")}>
-                  <X color={Colors.textSecondary} size={20} />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <FilterToggleButton
-              open={showFilters}
-              activeCount={activeFilterCount}
-              onPress={() => setShowFilters(!showFilters)}
-            />
-          </View>
-
-          {/* Filters Panel */}
-          {showFilters && (
-            <FilterPanel activeCount={activeFilterCount} onReset={clearFilters}>
-              <FilterSection
-                title="Dự án"
-                hint="Chọn nhiều"
-                options={multiSelectOptions(
-                  duAn,
-                  (p: any) => p.MaDA,
-                  (p: any) => p.TenDA,
-                  selectedProjects,
-                  setSelectedProjects,
-                )}
-              />
-              <FilterSection
-                title="Trạng thái"
-                options={statusList.map((status: any) => ({
-                  key: status?.id,
-                  label: status?.title,
-                  selected: filterCondition?.MaTT === status?.id,
-                  color: status?.id === 0 ? null : status?.ColorWeb,
-                  onPress: () => applyChangeFilter("TrangThai", status?.id),
-                }))}
-              />
-            </FilterPanel>
-          )}
-
-          {/* Stats Row - Clickable Status Tabs */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.statsScrollContent}
-            style={styles.statsScroll}
-          >
-            {statusList.map((status) => {
-              const active = selectTT === status.title;
-              const count =
-                status.id === 0
-                  ? dataAll?.length
-                  : dataAll?.filter((item) => item?.tenTT === status.title)
-                      ?.length;
-
-              return (
-                <TouchableOpacity
-                  key={status.id}
-                  activeOpacity={0.8}
-                  style={[
-                    styles.statCard,
-                    { backgroundColor: status.ColorWeb },
-                    active && styles.statCardSelected,
-                  ]}
-                  onPress={() => handleTT(status?.title)}
-                >
-                  <Text style={styles.statValue}>{count}</Text>
-                  <Text style={styles.statLabel} numberOfLines={1}>
-                    {status.title}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Booking List */}
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
-          </View>
-        ) : (
-          <View style={styles.listContainer}>
-            {data.length === 0 ? (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIconContainer}>
-                  <Calendar color={Colors.textSecondary} size={48} />
-                </View>
-                <Text style={styles.emptyText}>Không tìm thấy booking nào</Text>
-                <Text style={styles.emptySubtext}>
-                  Thử thay đổi bộ lọc hoặc tìm kiếm khác
-                </Text>
-              </View>
-            ) : (
-              <>
-                {data.map((booking, index) => (
-                  <TouchableOpacity
-                    key={`${booking?.maPGC ?? booking?.id ?? booking?.soPhieu ?? "row"}-${index}`}
-                    style={styles.bookingCard}
-                    activeOpacity={0.8}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/booking/[id]",
-                        // id phiếu booking là duy nhất; 1 phiếu giữ chỗ (maPGC) có thể
-                        // có nhiều booking (vd. booking cũ đã huỷ + booking mới)
-                        params: { id: booking.id ?? booking.maPGC },
-                      })
-                    }
-                  >
-                    <View style={styles.cardLeft}>
-                      <View style={styles.cardHeader}>
-                        <View
-                          style={[
-                            styles.statusDot,
-                            { backgroundColor: getStatusColor(booking.tenTT) },
-                          ]}
-                        />
-                        <Text style={styles.bookingId} numberOfLines={1}>
-                          #{booking.maSanPham || booking.soPhieu || "—"}
-                        </Text>
-                        {booking?.tenTT ? (
-                          <View
-                            style={[
-                              styles.priorityBadge,
-                              {
-                                backgroundColor: getStatusColor(booking.tenTT),
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.priorityText,
-                                {
-                                  color: getContrastTextColor(
-                                    getStatusColor(booking.tenTT),
-                                  ),
-                                },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {booking.tenTT}
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-
-                      <Text style={styles.customerName} numberOfLines={1}>
-                        {booking.khachHang}
-                      </Text>
-                      <Text style={styles.productCode} numberOfLines={1}>
-                        {booking.soPhieu}
-                      </Text>
-
-                      <View style={styles.dateRow}>
-                        <Text style={styles.dateText}>
-                          {booking.ngayGiuCho
-                            ? new Date(booking.ngayGiuCho).toLocaleDateString(
-                                "vi-VN",
-                                {
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                  year: "numeric",
-                                },
-                              )
-                            : "--"}
-                        </Text>
-                        <Text style={styles.dateSeparator}>•</Text>
-                        <Text style={styles.projectName} numberOfLines={1}>
-                          {booking.tenDA}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.cardRight}>
-                      <Text style={styles.amount} numberOfLines={1}>
-                        {new Intl.NumberFormat("vi-VN").format(
-                          Math.round(Number(booking.tongGiaGomVAT) || 0),
-                        )}{" "}
-                        đ
-                      </Text>
-                      <ChevronRight color={Colors.textTertiary} size={20} />
-                    </View>
-                  </TouchableOpacity>
-                ))}
-                {loadingMore && (
-                  <ActivityIndicator
-                    style={{ paddingVertical: 16 }}
-                    color={Colors.primary}
-                  />
-                )}
-              </>
+      {showFilters && (
+        <FilterPanel activeCount={activeFilterCount} onReset={clearFilters}>
+          <FilterSection
+            title="Dự án"
+            hint="Chọn nhiều"
+            options={multiSelectOptions(
+              duAn,
+              (p: any) => p.MaDA,
+              (p: any) => p.TenDA,
+              selectedProjects,
+              setSelectedProjects,
             )}
-          </View>
-        )}
+          />
+          <FilterSection
+            title="Trạng thái"
+            options={statusList.map((status: any) => ({
+              key: status?.id,
+              label: status?.title,
+              selected: filterCondition?.MaTT === status?.id,
+              color: status?.id === 0 ? null : status?.ColorWeb,
+              onPress: () => applyChangeFilter("TrangThai", status?.id),
+            }))}
+          />
+        </FilterPanel>
+      )}
+
+      {/* Lọc nhanh theo trạng thái trên dữ liệu đã tải */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        {statusList.map((status) => {
+          const active = status.id === 0 ? !selectTT || selectTT === "Tất cả" : selectTT === status.title;
+          const count =
+            status.id === 0
+              ? dataAll?.length
+              : dataAll?.filter((item) => item?.tenTT === status.title)?.length;
+          return (
+            <Chip
+              key={status.id}
+              label={status.title}
+              count={count}
+              selected={active}
+              onPress={() => setSelectTT(status?.title)}
+            />
+          );
+        })}
       </ScrollView>
     </View>
   );
+
+  const renderBody = () => {
+    if (loading && dataAll.length === 0) return <SkeletonList />;
+    if (loadError && dataAll.length === 0) return <ErrorState onRetry={loadData} />;
+    if (data.length === 0) {
+      return isFiltering ? (
+        <EmptyState
+          icon={SearchX}
+          title="Không có booking phù hợp"
+          description="Thử đổi từ khoá hoặc bỏ bớt bộ lọc."
+          actionLabel="Xoá bộ lọc"
+          onAction={clearFilters}
+        />
+      ) : (
+        <EmptyState
+          icon={CalendarX2}
+          title="Chưa có booking nào"
+          description="Tạo booking từ màn Sản phẩm hoặc Lock căn."
+          actionLabel="Đến Sản phẩm"
+          onAction={() => router.push("/products")}
+        />
+      );
+    }
+    return null;
+  };
+
+  return (
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <Screen
+        scroll={false}
+        padded={false}
+        header={
+          <AppHeader
+            title="Booking"
+            // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
+            hideBack={embedded}
+            actions={
+              <View style={styles.headerAction}>
+                <FilterToggleButton
+                  open={showFilters}
+                  activeCount={activeFilterCount}
+                  onPress={() => setShowFilters(!showFilters)}
+                />
+              </View>
+            }
+          />
+        }
+      >
+        <FlatList
+          data={loading && dataAll.length === 0 ? [] : data}
+          keyExtractor={(item, index) => `${item?.id ?? item?.maPGC ?? item?.soPhieu ?? "row"}-${index}`}
+          renderItem={renderItem}
+          ItemSeparatorComponent={Separator}
+          ListHeaderComponent={listHeader}
+          stickyHeaderIndices={[0]}
+          ListEmptyComponent={renderBody()}
+          ListFooterComponent={
+            loadingMore ? <ActivityIndicator style={styles.footerSpinner} color={colors.primary} /> : null
+          }
+          onEndReached={() => void loadMore()}
+          onEndReachedThreshold={0.5}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: embedded ? TAB_BAR_SPACE : space.xxl }}
+        />
+      </Screen>
+    </>
+  );
+}
+
+function Separator() {
+  return <View style={styles.separator} />;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
+  headerAction: { paddingRight: space.sm },
   stickyHeader: {
-    backgroundColor: Colors.background,
-    // Phủ kín padding ngang của scrollContent để thẻ booking không lộ ra 2 bên
-    marginHorizontal: -15,
-    paddingHorizontal: 15,
-    paddingBottom: 12,
+    backgroundColor: colors.bg,
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
+    gap: space.md,
   },
-  headerBackButton: {
-    marginLeft: 8,
-  },
-  content: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 15,
-    paddingBottom: 40,
-  },
-  searchAndFilterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.text,
-  },
-  statsScroll: {},
-  statsScrollContent: {
-    gap: 8,
-    paddingVertical: 2,
-  },
-  statCard: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center" as const,
-    minWidth: 72,
-  },
-  statCardSelected: {
-    borderWidth: 2.5,
-    borderColor: Colors.white,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "800" as const,
-    color: Colors.white,
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 10,
-    fontWeight: "700" as const,
-    color: Colors.white,
-    letterSpacing: 0.3,
-  },
-  listContainer: {
-    gap: 10,
-  },
-  bookingCard: {
-    flexDirection: "row",
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-  cardLeft: {
-    flex: 1,
-    gap: 6,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-    overflow: "hidden",
-    flexShrink: 1,
-  },
-  priorityText: {
-    fontSize: 10,
-    fontWeight: "700" as const,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  bookingId: {
-    fontSize: 13,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    flexShrink: 1,
-  },
-  customerName: {
-    fontSize: 15,
-    fontWeight: "700" as const,
-    color: Colors.text,
-  },
-  productCode: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: "500" as const,
-  },
-  dateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  dateText: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-  },
-  dateSeparator: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-  },
-  projectName: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-    flex: 1,
-  },
-  cardRight: {
-    alignItems: "flex-end",
-    gap: 6,
-    marginLeft: 12,
-  },
-  amount: {
-    fontSize: 16,
-    fontWeight: "800" as const,
-    color: Colors.primary,
-  },
-  loadingContainer: {
-    alignItems: "center",
-    paddingVertical: 40,
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 40,
-    gap: 12,
-  },
-  emptyIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: Colors.backgroundTertiary,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: Colors.textTertiary,
-  },
+  chips: { gap: space.sm, paddingRight: space.lg },
+  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: 68 },
+  footerSpinner: { paddingVertical: space.lg },
 });

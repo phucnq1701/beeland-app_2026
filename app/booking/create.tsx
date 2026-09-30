@@ -1,29 +1,27 @@
-import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-} from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Building2, UserPlus, UserX } from "lucide-react-native";
+
 import {
-  Search,
-  User,
-  ChevronRight,
-  Plus,
-  Check,
-  Building2,
-  Phone,
-  Mail,
-  FileText,
-  MapPin,
-} from "lucide-react-native";
-import Colors from "@/constants/colors";
+  AppHeader,
+  Avatar,
+  BottomActionBar,
+  Button,
+  Card,
+  EmptyState,
+  Screen,
+  SearchBar,
+  SectionHeader,
+  SelectField,
+  SkeletonList,
+  Text,
+  useToast,
+} from "@/components/ui";
+import { hapticError, hapticSuccess } from "@/lib/haptics";
+import { formatVND, formatVNDShort, maskPhone } from "@/lib/format";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { colors, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { CustomerService as CustomerSupabaseService } from "@/sevicesSupabase/CustomerService";
 import { ProductService } from "@/sevicesSupabase/ProductService";
@@ -52,6 +50,9 @@ type SanGiaoDich = {
   DienThoai?: string;
   Email?: string;
 };
+
+/** Giá trị "không qua sàn" trong SelectField (sàn là tuỳ chọn). */
+const NO_SAN = "__none__";
 
 function parseJsonParam(value: unknown) {
   if (!value || Array.isArray(value)) return null;
@@ -95,8 +96,11 @@ function normalizeCustomer(item: any): BookingCustomer {
   };
 }
 
+const customerKey = (c: BookingCustomer) => c.maKH || c.id || c.tenKH;
+
 export default function CreateBookingScreen() {
   const router = useRouter();
+  const toast = useToast();
   const { dataBooking, newCustomer } = useLocalSearchParams();
 
   const bookingData = parseJsonParam(dataBooking);
@@ -109,11 +113,13 @@ export default function CreateBookingScreen() {
     useState<BookingCustomer | null>(initialNewCustomer);
   const [selectedSan, setSelectedSan] = useState<SanGiaoDich | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const debouncedQuery = useDebouncedValue(searchQuery, 300);
   const [dataKH, setDataKH] = useState<BookingCustomer[]>([]);
   const [sanList, setSanList] = useState<SanGiaoDich[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingSan, setLoadingSan] = useState(false);
   const [creatingBooking, setCreatingBooking] = useState(false);
+  const [customerError, setCustomerError] = useState<string | null>(null);
 
   // Lấy danh sách sàn giao dịch từ dm_companies (is_san=true)
   const loadSanList = async () => {
@@ -145,19 +151,22 @@ export default function CreateBookingScreen() {
 
   const handleSelectCustomer = (customer: BookingCustomer) => {
     setSelectedCustomer(customer);
+    setCustomerError(null);
   };
 
-  const handleSelectSan = (san: SanGiaoDich) => {
+  const handleSelectSan = (san: SanGiaoDich | null) => {
     setSelectedSan(san);
   };
 
   const handleContinue = async () => {
     if (!selectedCustomer) {
-      Alert.alert("Lỗi", "Vui lòng chọn khách hàng");
+      setCustomerError("Vui lòng chọn khách hàng");
+      hapticError();
       return;
     }
     if (!selectedCustomer.maKH) {
-      Alert.alert("Lỗi", "Khách hàng chưa có mã để ghép vào booking");
+      setCustomerError("Khách hàng chưa có mã để ghép vào booking");
+      hapticError();
       return;
     }
 
@@ -199,13 +208,28 @@ export default function CreateBookingScreen() {
       const resultBooking = await BookingService.createBooking(initDataBooking);
 
       if (resultBooking?.status === 2000) {
-        router.replace("/bookings");
+        hapticSuccess();
+        toast.show({
+          type: "success",
+          message: `Đã tạo booking cho ${selectedCustomer.tenKH || "khách hàng"}`,
+        });
+        // Vào thẳng chi tiết booking vừa tạo để thu tiền luôn (spec D8)
+        if (resultBooking?.id) {
+          router.replace({
+            pathname: "/booking/[id]",
+            params: { id: String(resultBooking.id) },
+          });
+        } else {
+          router.replace("/bookings");
+        }
       } else {
-        Alert.alert("Lỗi", resultBooking?.message || "Không thể tạo booking");
+        hapticError();
+        toast.show({ type: "error", message: resultBooking?.message || "Không thể tạo booking" });
       }
     } catch (error: any) {
       console.log("createBooking error:", error);
-      Alert.alert("Lỗi", error?.message || "Không thể tạo booking");
+      hapticError();
+      toast.show({ type: "error", message: error?.message || "Không thể tạo booking" });
     } finally {
       setCreatingBooking(false);
     }
@@ -247,6 +271,7 @@ export default function CreateBookingScreen() {
         String(bookingData?.MaTT) === "5" ||
         String(bookingData?.MaTT) === "6";
 
+      // Lỗi chặn → giữ Alert (spec 4.5)
       if (isBooking) {
         Alert.alert(
           "Thông báo",
@@ -261,704 +286,216 @@ export default function CreateBookingScreen() {
       }
     }
 
-    loadData("");
     loadSanList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Tải danh sách KH lúc mở màn và mỗi khi từ khoá đứng yên 300ms
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadData(searchQuery);
-    }, 500);
+    loadData(debouncedQuery);
+  }, [debouncedQuery]);
 
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+  // KH vừa tạo mới (quay về từ customer/new) có thể chưa nằm trong kết quả tìm kiếm → ghim lên đầu
+  const customers = useMemo(() => {
+    if (!selectedCustomer) return dataKH;
+    const inList = dataKH.some((c) => customerKey(c) === customerKey(selectedCustomer));
+    return inList ? dataKH : [selectedCustomer, ...dataKH];
+  }, [dataKH, selectedCustomer]);
+
+  const sanOptions = useMemo(
+    () => [
+      { value: NO_SAN, label: "Không qua sàn" },
+      ...sanList.map((s) => ({ value: s.ID || s.MaSan, label: s.TenSan, description: s.DiaChi || undefined })),
+    ],
+    [sanList]
+  );
+
+  const unitPrice = bookingData?.TongGiaTriHDMB ?? bookingData?.TongGomPBT ?? bookingData?.TongGiaGomVAT;
+  const holdAmount = bookingData?.TienGiuCho ?? bookingData?.TienBooking ?? null;
+
+  const openNewCustomer = () => {
+    const params: Record<string, string> = { returnToBooking: "1" };
+    if (bookingParam) params.dataBooking = bookingParam;
+    router.push({ pathname: "/customer/new", params });
+  };
 
   return (
     <>
-      {loading || creatingBooking || loadingSan ? (
-        <View
-          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
-        >
-          <ActivityIndicator size="large" color="#f5ca1c" />
-          <Text style={{ marginTop: 10, color: Colors.textSecondary }}>
-            {creatingBooking
-              ? "Đang lưu booking..."
-              : loadingSan
-              ? "Đang tải danh sách sàn..."
-              : "Đang tải dữ liệu..."}
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.container}>
-          <Stack.Screen
-            options={{
-              title: "Tạo Booking",
-              headerStyle: {
-                backgroundColor: Colors.white,
-              },
-              headerTintColor: Colors.text,
-              headerShadowVisible: false,
-            }}
-          />
-
-          <ScrollView
-            style={styles.content}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* 1. Chọn khách hàng */}
-            {!selectedCustomer ? (
-              <>
-                <View style={styles.headerSection}>
-                  <Text style={styles.headerTitle}>Chọn khách hàng</Text>
-                  <Text style={styles.headerSubtitle}>
-                    Tìm kiếm và chọn khách hàng hoặc tạo mới
+      <Stack.Screen options={{ headerShown: false }} />
+      <Screen
+        keyboardAware
+        header={<AppHeader title="Tạo booking" />}
+        footer={
+          <BottomActionBar>
+            <View style={styles.footer}>
+              {holdAmount ? (
+                <View style={styles.footerRow}>
+                  <Text variant="caption" color="textSecondary">
+                    Tiền giữ chỗ
+                  </Text>
+                  <Text variant="subhead" numeric>
+                    {formatVND(holdAmount)}
                   </Text>
                 </View>
-
-                <View style={styles.searchContainer}>
-                  <Search color={Colors.textSecondary} size={20} />
-                  <TextInput
-                    style={styles.searchInput}
-                    placeholder="Tìm theo tên, SĐT, CCCD..."
-                    placeholderTextColor={Colors.textSecondary}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                  />
-                </View>
-
-                <TouchableOpacity
-                  style={styles.createNewButton}
-                  activeOpacity={0.7}
-                  onPress={() => {
-                    const params: Record<string, string> = {
-                      returnToBooking: "1",
-                    };
-                    if (bookingParam) {
-                      params.dataBooking = bookingParam;
-                    }
-                    router.push({
-                      pathname: "/customer/new",
-                      params,
-                    });
-                  }}
-                >
-                  <View style={styles.createNewIcon}>
-                    <Plus color={Colors.white} size={24} />
-                  </View>
-                  <View style={styles.createNewTextContainer}>
-                    <Text style={styles.createNewTitle}>
-                      Tạo khách hàng mới
-                    </Text>
-                    <Text style={styles.createNewSubtitle}>
-                      Thêm thông tin khách hàng mới vào hệ thống
-                    </Text>
-                  </View>
-                  <ChevronRight color={Colors.textSecondary} size={20} />
-                </TouchableOpacity>
-
-                <View style={styles.divider} />
-
-                <Text style={styles.sectionTitle}>Danh sách khách hàng</Text>
-
-                <View style={styles.customerList}>
-                  {dataKH.length === 0 ? (
-                    <Text style={styles.emptyText}>
-                      Không tìm thấy khách hàng nào
-                    </Text>
-                  ) : (
-                    dataKH.map((customer) => (
-                      <TouchableOpacity
-                        key={customer.maKH || customer.id}
-                        style={styles.customerCard}
-                        activeOpacity={0.7}
-                        onPress={() => handleSelectCustomer(customer)}
-                      >
-                        <View style={styles.customerHeader}>
-                          <View style={styles.customerNameRow}>
-                            <View
-                              style={[
-                                styles.customerAvatar,
-                                {
-                                  backgroundColor:
-                                    customer.type === "personal"
-                                      ? "#EFF6FF"
-                                      : "#FDF2F8",
-                                },
-                              ]}
-                            >
-                              <User color={Colors.primary} size={20} />
-                            </View>
-                            <View style={styles.customerNameContainer}>
-                              <Text style={styles.customerName}>
-                                {customer.tenKH}
-                              </Text>
-                              {customer.company && (
-                                <Text style={styles.customerCompany}>
-                                  {customer.company}
-                                </Text>
-                              )}
-                            </View>
-                          </View>
-                        </View>
-
-                        <View style={styles.customerInfo}>
-                          {customer.diDong ? (
-                            <View style={styles.infoLine}>
-                              <Phone size={14} color={Colors.textSecondary} />
-                              <Text style={styles.customerInfoText}>
-                                {customer.diDong}
-                              </Text>
-                            </View>
-                          ) : null}
-                          {customer.email ? (
-                            <View style={styles.infoLine}>
-                              <Mail size={14} color={Colors.textSecondary} />
-                              <Text style={styles.customerInfoText}>
-                                {customer.email}
-                              </Text>
-                            </View>
-                          ) : null}
-                          {customer.cccd ? (
-                            <View style={styles.infoLine}>
-                              <FileText size={14} color={Colors.textSecondary} />
-                              <Text style={styles.customerInfoText}>
-                                CCCD: {customer.cccd}
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
-                      </TouchableOpacity>
-                    ))
-                  )}
-                </View>
-              </>
-            ) : (
-              <>
-                {/* Khách hàng đã chọn */}
-                <View style={styles.headerSection}>
-                  <Text style={styles.headerTitle}>Thông tin đặt chỗ</Text>
-                  <Text style={styles.headerSubtitle}>
-                    Kiểm tra khách hàng và chọn sàn giao dịch
-                  </Text>
-                </View>
-
-                <View style={styles.selectedCustomerCard}>
-                  <View style={styles.selectedHeader}>
-                    <View style={styles.checkIconContainer}>
-                      <Check color={Colors.white} size={20} />
-                    </View>
-                    <Text style={styles.selectedTitle}>Khách hàng đã chọn</Text>
-                  </View>
-
-                  <View style={styles.selectedContent}>
-                    <View style={styles.selectedRow}>
-                      <View
-                        style={[
-                          styles.selectedAvatar,
-                          {
-                            backgroundColor:
-                              selectedCustomer.type === "personal"
-                                ? "#EFF6FF"
-                                : "#FDF2F8",
-                          },
-                        ]}
-                      >
-                        <User color={Colors.primary} size={28} />
-                      </View>
-                      <View style={styles.selectedInfo}>
-                        <Text style={styles.selectedName}>
-                          {selectedCustomer.tenKH}
-                        </Text>
-                        {selectedCustomer.company && (
-                          <Text style={styles.selectedCompany}>
-                            {selectedCustomer.company}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-
-                    <View style={styles.selectedDivider} />
-
-                    <View style={styles.infoSection}>
-                      <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Số điện thoại:</Text>
-                        <Text style={styles.infoValue}>
-                          {selectedCustomer.diDong || "---"}
-                        </Text>
-                      </View>
-                      <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Email:</Text>
-                        <Text style={styles.infoValue}>
-                          {selectedCustomer.email || "---"}
-                        </Text>
-                      </View>
-                      {selectedCustomer.cccd ? (
-                        <View style={styles.infoRow}>
-                          <Text style={styles.infoLabel}>CCCD/CMND:</Text>
-                          <Text style={styles.infoValue}>
-                            {selectedCustomer.cccd}
-                          </Text>
-                        </View>
-                      ) : null}
-                      {selectedCustomer.diaChi ? (
-                        <View style={styles.infoRow}>
-                          <Text style={styles.infoLabel}>Địa chỉ:</Text>
-                          <Text style={styles.infoValue} numberOfLines={2}>
-                            {selectedCustomer.diaChi}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  <TouchableOpacity
-                    style={styles.changeButton}
-                    activeOpacity={0.7}
-                    onPress={() => setSelectedCustomer(null)}
-                  >
-                    <Text style={styles.changeButtonText}>
-                      Đổi khách hàng khác
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Chọn sàn giao dịch */}
-                {sanList.length > 0 && (
-                  <>
-                    <View style={styles.divider} />
-                    <View style={styles.headerSection}>
-                      <Text style={styles.sectionTitle}>
-                        Sàn giao dịch (Đại lý)
-                      </Text>
-                      <Text style={styles.headerSubtitle}>
-                        Chọn sàn liên kết nếu có
-                      </Text>
-                    </View>
-
-                    <View style={styles.sanPhongList}>
-                      {sanList.map((san) => {
-                        const isSelected =
-                          selectedSan?.ID === san.ID ||
-                          selectedSan?.MaSan === san.MaSan;
-                        return (
-                          <TouchableOpacity
-                            key={san.ID || san.MaSan}
-                            style={[
-                              styles.sanPhongCard,
-                              isSelected && styles.sanPhongCardSelected,
-                            ]}
-                            activeOpacity={0.7}
-                            onPress={() =>
-                              handleSelectSan(isSelected ? (null as any) : san)
-                            }
-                          >
-                            <View style={styles.sanPhongIcon}>
-                              <Building2 color={Colors.primary} size={22} />
-                            </View>
-                            <View style={styles.sanPhongInfo}>
-                              <Text style={styles.sanPhongName}>
-                                {san.TenSan}
-                              </Text>
-                              {san.DiaChi ? (
-                                <Text
-                                  style={styles.sanPhongKhu}
-                                  numberOfLines={1}
-                                >
-                                  {san.DiaChi}
-                                </Text>
-                              ) : null}
-                            </View>
-                            {isSelected ? (
-                              <View style={styles.checkContainer}>
-                                <Check color={Colors.white} size={18} />
-                              </View>
-                            ) : (
-                              <ChevronRight
-                                color={Colors.textSecondary}
-                                size={18}
-                              />
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </>
-                )}
-              </>
-            )}
-          </ScrollView>
-
-          {/* Nút lưu booking */}
-          {selectedCustomer && (
-            <View style={styles.bottomContainer}>
-              <TouchableOpacity
-                style={styles.continueButton}
-                activeOpacity={0.8}
+              ) : null}
+              <Button
+                size="lg"
+                fullWidth
+                title="Tạo booking"
+                loading={creatingBooking}
                 onPress={handleContinue}
-              >
-                <Text style={styles.continueButtonText}>Xác nhận & Lưu Booking</Text>
-              </TouchableOpacity>
+              />
             </View>
+          </BottomActionBar>
+        }
+      >
+        {/* Căn đang booking – ghim trên cùng để không mất ngữ cảnh */}
+        <Card>
+          <View style={styles.unit}>
+            <View style={styles.unitIcon}>
+              <Building2 size={22} color={colors.showcase.accent} />
+            </View>
+            <View style={styles.flex}>
+              <Text variant="subhead" numberOfLines={1}>
+                {bookingData?.KyHieu || "Sản phẩm"}
+              </Text>
+              <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                {bookingData?.TenDA || "—"}
+              </Text>
+            </View>
+            {unitPrice ? (
+              <Text variant="subhead" numeric>
+                {formatVNDShort(unitPrice)}
+              </Text>
+            ) : null}
+          </View>
+        </Card>
+
+        <SectionHeader title="Khách hàng *" />
+        {customerError ? (
+          <Text variant="caption" color="danger" accessibilityLiveRegion="polite">
+            {customerError}
+          </Text>
+        ) : null}
+        <SearchBar value={searchQuery} onChangeText={setSearchQuery} placeholder="Tên, SĐT hoặc mã KH" />
+
+        <View style={styles.customerList}>
+          {loading && customers.length === 0 ? (
+            <Card padding={0}>
+              <SkeletonList count={4} />
+            </Card>
+          ) : customers.length === 0 ? (
+            <EmptyState icon={UserX} title="Không tìm thấy khách hàng" description="Thử từ khoá khác hoặc thêm khách hàng mới." />
+          ) : (
+            customers.map((customer) => {
+              const selected = !!selectedCustomer && customerKey(selectedCustomer) === customerKey(customer);
+              return (
+                <CustomerOption
+                  key={customerKey(customer)}
+                  customer={customer}
+                  selected={selected}
+                  onPress={() => handleSelectCustomer(customer)}
+                />
+              );
+            })
           )}
         </View>
-      )}
+
+        <Button variant="ghost" icon={UserPlus} title="Thêm khách hàng mới" onPress={openNewCustomer} style={styles.addButton} />
+
+        <SelectField
+          label="Sàn giao dịch"
+          sheetTitle="Chọn sàn giao dịch"
+          value={selectedSan ? selectedSan.ID || selectedSan.MaSan : NO_SAN}
+          options={sanOptions}
+          loading={loadingSan}
+          onChange={(v) =>
+            handleSelectSan(v === NO_SAN ? null : sanList.find((s) => (s.ID || s.MaSan) === v) ?? null)
+          }
+        />
+      </Screen>
     </>
   );
 }
 
+function CustomerOption({
+  customer,
+  selected,
+  onPress,
+}: {
+  customer: BookingCustomer;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const sub = [maskPhone(customer.diDong), customer.company].filter(Boolean).join(" · ");
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected, checked: selected }}
+      accessibilityLabel={`${customer.tenKH}${sub ? ", " + sub : ""}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.option,
+        selected ? styles.optionSelected : null,
+        pressed && !selected ? styles.optionPressed : null,
+      ]}
+    >
+      <Avatar name={customer.tenKH || "?"} />
+      <View style={styles.flex}>
+        <Text variant="subhead" numberOfLines={1}>
+          {customer.tenKH || "—"}
+        </Text>
+        {sub ? (
+          <Text variant="caption" color="textSecondary" numberOfLines={1}>
+            {sub}
+          </Text>
+        ) : null}
+      </View>
+      <View style={[styles.radio, selected ? styles.radioOn : null]} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  flex: { flex: 1 },
+  unit: { flexDirection: "row", alignItems: "center", gap: space.md },
+  unitIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.showcase.bg,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  content: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 110,
-  },
-  headerSection: {
-    marginBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    marginBottom: 6,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    lineHeight: 20,
-  },
-  searchContainer: {
+  customerList: { gap: space.sm },
+  option: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 10,
+    gap: space.md,
+    minHeight: 64,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 14,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: Colors.text,
+  optionSelected: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySubtle,
+    paddingHorizontal: space.md - 1,
   },
-  createNewButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    padding: 14,
-    gap: 14,
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    marginBottom: 20,
+  optionPressed: { backgroundColor: colors.surfaceMuted },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
   },
-  createNewIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  createNewTextContainer: {
-    flex: 1,
-    gap: 3,
-  },
-  createNewTitle: {
-    fontSize: 15,
-    fontWeight: "700" as const,
-    color: Colors.text,
-  },
-  createNewSubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: 18,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    marginBottom: 12,
-  },
-  customerList: {
-    gap: 10,
-  },
-  emptyText: {
-    textAlign: "center",
-    color: Colors.textSecondary,
-    fontSize: 14,
-    marginVertical: 20,
-  },
-  customerCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 2,
-      },
-      web: {
-        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.04)",
-      },
-    }),
-  },
-  customerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 10,
-  },
-  customerNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  customerAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  customerNameContainer: {
-    flex: 1,
-  },
-  customerName: {
-    fontSize: 15,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  customerCompany: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    fontWeight: "500" as const,
-  },
-  customerInfo: {
-    gap: 6,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
-  },
-  infoLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  customerInfoText: {
-    fontSize: 13,
-    color: Colors.text,
-  },
-  selectedCustomerCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: "0 3px 8px rgba(0, 0, 0, 0.08)",
-      },
-    }),
-  },
-  selectedHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 16,
-  },
-  checkIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  selectedTitle: {
-    fontSize: 15,
-    fontWeight: "700" as const,
-    color: Colors.primary,
-  },
-  selectedContent: {
-    gap: 14,
-  },
-  selectedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  selectedAvatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  selectedInfo: {
-    flex: 1,
-  },
-  selectedName: {
-    fontSize: 18,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  selectedCompany: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    fontWeight: "500" as const,
-  },
-  selectedDivider: {
-    height: 1,
-    backgroundColor: Colors.border,
-  },
-  infoSection: {
-    gap: 10,
-  },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  infoLabel: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: "500" as const,
-  },
-  infoValue: {
-    fontSize: 13,
-    color: Colors.text,
-    fontWeight: "600" as const,
-    flexShrink: 1,
-    textAlign: "right",
-  },
-  changeButton: {
-    marginTop: 18,
-    paddingVertical: 10,
-    alignItems: "center",
-    borderRadius: 8,
-    backgroundColor: Colors.background,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  changeButtonText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  sanPhongList: {
-    gap: 10,
-  },
-  sanPhongCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    gap: 12,
-  },
-  sanPhongCardSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: "#F0F9FF",
-  },
-  sanPhongIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#F0F9FF",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  sanPhongInfo: {
-    flex: 1,
-    gap: 3,
-  },
-  sanPhongName: {
-    fontSize: 15,
-    fontWeight: "700" as const,
-    color: Colors.text,
-  },
-  sanPhongKhu: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  checkContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  bottomContainer: {
-    position: "absolute" as const,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.white,
-    padding: 18,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 6,
-      },
-      web: {
-        boxShadow: "0 -2px 6px rgba(0, 0, 0, 0.08)",
-      },
-    }),
-  },
-  continueButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  continueButtonText: {
-    fontSize: 15,
-    fontWeight: "700" as const,
-    color: Colors.white,
-  },
+  radioOn: { borderWidth: 6, borderColor: colors.primary },
+  addButton: { alignSelf: "flex-start" },
+  footer: { flex: 1, gap: space.sm },
+  footerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
 });

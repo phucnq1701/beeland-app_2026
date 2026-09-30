@@ -27,6 +27,7 @@ import {
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
+import { Button } from "@/components/ui";
 import { featuredProperties, Property, products } from "@/mocks/properties";
 import { overviewBlocks } from "@/mocks/overviewUnits";
 import {
@@ -35,7 +36,7 @@ import {
   Share2,
   Heart,
   Lock,
-  Calendar,
+  CalendarPlus,
   Calculator,
   Home,
 } from "lucide-react-native";
@@ -630,15 +631,13 @@ export default function ProductDetailScreen() {
             </TouchableOpacity>
 
             {data?.isHienThiBook ? (
-              <TouchableOpacity
+              <Button
                 testID="action-book"
-                style={[
-                  styles.actionButton,
-                  styles.bookButton,
-                  isBookingStatus && styles.disabledButton,
-                ]}
-                activeOpacity={isBookingStatus ? 1 : 0.85}
+                size="lg"
+                icon={CalendarPlus}
+                title={isBookingStatus ? "Đã booking" : "Tạo booking"}
                 disabled={isBookingStatus}
+                style={{ flex: 1 }}
                 onPress={() => {
                   if (isBookingStatus) return;
                   router.push({
@@ -648,20 +647,7 @@ export default function ProductDetailScreen() {
                     },
                   });
                 }}
-              >
-                <Calendar
-                  color={isBookingStatus ? "#9CA3AF" : Colors.white}
-                  size={20}
-                />
-                <Text
-                  style={[
-                    styles.actionButtonText,
-                    isBookingStatus && styles.disabledButtonText,
-                  ]}
-                >
-                  {isBookingStatus ? "Đã booking" : "Book ngay"}
-                </Text>
-              </TouchableOpacity>
+              />
             ) : null}
           </View>
         </>

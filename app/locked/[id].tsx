@@ -12,10 +12,11 @@ import {
 import { useLocalSearchParams, Stack, useRouter } from "expo-router";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Calendar, ChevronLeft } from "lucide-react-native";
+import { CalendarPlus, ChevronLeft } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { Button } from "@/components/ui";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { ProductService } from "@/sevicesSupabase/ProductService";
 import { Format_Date } from "@/components/utils/common";
@@ -289,8 +290,11 @@ export default function LockDetailScreen() {
           )} */}
 
             {remainingSeconds > 0 && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.bookButton]}
+              <Button
+                size="lg"
+                icon={CalendarPlus}
+                title="Tạo booking"
+                style={{ flex: 1 }}
                 onPress={() =>
                   router.push({
                     pathname: "/booking/create",
@@ -299,10 +303,7 @@ export default function LockDetailScreen() {
                     },
                   })
                 }
-              >
-                <Calendar color={Colors.white} size={20} />
-                <Text style={styles.actionButtonText}>Book ngay</Text>
-              </TouchableOpacity>
+              />
             )}
           </View>
         </ScrollView>
