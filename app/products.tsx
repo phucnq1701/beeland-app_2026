@@ -48,7 +48,7 @@ import { FilterService } from "@/sevicesSupabase/FilterService";
 import { PriceServices } from "@/sevicesSupabase/PriceServices";
 
 import * as signalR from "@microsoft/signalr";
-import BlockGrid from "./product/BlockGrid";
+import BlockGrid from "@/components/product/BlockGrid";
 
 type ViewMode = "list" | "grid" | "overview";
 

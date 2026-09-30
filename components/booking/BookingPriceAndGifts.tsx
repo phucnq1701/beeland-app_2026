@@ -3,7 +3,7 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 
 import { EmptyState, KeyValueRow, MoneyText, Text } from "@/components/ui";
-import { formatNumberVN, formatVND } from "@/lib/format";
+import { formatArea, formatNumberVN, formatVND } from "@/lib/format";
 import { colors, radius, space } from "@/theme";
 
 const PRICE_ROWS: { key: string; label: string; unit?: string }[] = [
@@ -21,13 +21,9 @@ const LOW_RISE_ROWS: { key: string; label: string; unit?: string }[] = [
   { key: "total_after_vat", label: "Tổng giá sau VAT" },
 ];
 
-/** Diện tích giữ tối đa 2 số lẻ ("73,9 m²"); tiền dùng formatVND. */
+/** Diện tích qua formatArea ("73,9 m²"); tiền dùng formatVND. */
 function formatValue(value: unknown, unit?: string): string {
-  if (!unit) return formatVND(value);
-  const n = Number(value);
-  if (value == null || value === "" || !Number.isFinite(n)) return "—";
-  const text = Number.isInteger(n) ? formatNumberVN(n) : String(Math.round(n * 100) / 100).replace(".", ",");
-  return `${text} ${unit}`;
+  return unit ? formatArea(value) : formatVND(value);
 }
 
 export function BookingPrice({

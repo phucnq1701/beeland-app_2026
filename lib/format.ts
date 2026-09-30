@@ -110,3 +110,12 @@ export function foldVietnamese(text: string): string {
     .replace(/[đĐ]/g, 'd')
     .toLowerCase();
 }
+
+/** Diện tích: số nguyên "1.250 m²", số lẻ tối đa `digits` chữ số "73,9 m²"; không hợp lệ → "—". */
+export function formatArea(value: unknown, digits = 2): string {
+  const n = toNumber(value);
+  if (n === null) return EMPTY;
+  if (Number.isInteger(n)) return `${formatNumberVN(n)} m²`;
+  const factor = 10 ** digits;
+  return `${String(Math.round(n * factor) / factor).replace('.', ',')} m²`;
+}

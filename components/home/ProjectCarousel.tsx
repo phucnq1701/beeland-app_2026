@@ -3,7 +3,8 @@ import { MapPin } from "lucide-react-native";
 import React, { useState } from "react";
 import { FlatList, NativeScrollEvent, NativeSyntheticEvent, Pressable, StyleSheet, View } from "react-native";
 
-import { Badge, BadgeTone, Skeleton, Text } from "@/components/ui";
+import { Badge, Skeleton, Text } from "@/components/ui";
+import { projectStatus } from "@/lib/productStatus";
 import { colors, radius, space } from "@/theme";
 
 const CARD_W = 280;
@@ -13,15 +14,6 @@ const GAP = space.md;
 /** Ảnh mặc định khi dự án chưa có ảnh (giữ như trang chủ cũ). */
 export const DEFAULT_PROJECT_IMAGE =
   "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/bigwmih05tf7or57crm12";
-
-/** Trạng thái dự án → badge (giữ cách nhận diện cũ theo TenTT/MaTT). */
-function projectStatus(p: any): { label: string; tone: BadgeTone } {
-  const tt = String(p?.TenTT || p?.ten_tt || "").trim();
-  const ma = String(p?.MaTT ?? p?.ma_tt ?? "");
-  if (tt === "Đã bán" || ma === "2") return { label: tt || "Đã bán", tone: "danger" };
-  if (tt === "Đầu tư" || ma === "3") return { label: tt || "Đầu tư", tone: "brand" };
-  return { label: tt || "Đang bán", tone: "success" };
-}
 
 type Props = {
   projects: any[];

@@ -74,3 +74,11 @@ test("foldVietnamese strips diacritics and đ for accent-insensitive search", ()
   assert.equal(f.foldVietnamese("NGUYỄN"), "nguyen");
   assert.equal(f.foldVietnamese(""), "");
 });
+
+test("formatArea keeps up to 2 decimals with a Vietnamese comma", () => {
+  assert.equal(f.formatArea(73.9), "73,9 m²");
+  assert.equal(f.formatArea(70), "70 m²");
+  assert.equal(f.formatArea("1250"), "1.250 m²");
+  assert.equal(f.formatArea(73.456), "73,46 m²");
+  for (const bad of [null, undefined, "", "abc"]) assert.equal(f.formatArea(bad), "—");
+});
