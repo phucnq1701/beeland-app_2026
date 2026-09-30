@@ -19,18 +19,17 @@ type Props<T> = {
 export function RecentSection<T>({ title, items, loading, error, onRetry, onSeeAll, renderItem, emptyText }: Props<T>) {
   const body = (() => {
     if (loading && items.length === 0) return <SkeletonList count={3} />;
-    if (error && items.length === 0) {
-      return (
-        <Pressable accessibilityRole="button" onPress={onRetry} style={styles.message}>
-          <Text variant="caption" color="danger">
-            Không tải được ·{" "}
-          </Text>
-          <Text variant="caption" weight="semibold" color="primary">
-            Thử lại
-          </Text>
-        </Pressable>
-      );
-    }
+    const retryRow = (
+      <Pressable accessibilityRole="button" onPress={onRetry} style={styles.message}>
+        <Text variant="caption" color="danger">
+          {items.length ? "Không cập nhật được ·" : "Không tải được ·"}{" "}
+        </Text>
+        <Text variant="caption" weight="semibold" color="primary">
+          Thử lại
+        </Text>
+      </Pressable>
+    );
+    if (error && items.length === 0) return retryRow;
     if (items.length === 0) {
       return (
         <View style={styles.message}>
@@ -40,11 +39,17 @@ export function RecentSection<T>({ title, items, loading, error, onRetry, onSeeA
         </View>
       );
     }
-    return items.map((item, i) => (
-      <View key={i} style={i > 0 ? styles.divider : null}>
-        {renderItem(item, i)}
-      </View>
-    ));
+    // Làm mới lỗi nhưng còn dữ liệu cũ → vẫn hiện dữ liệu cũ, kèm dòng báo lỗi + Thử lại ở trên
+    return (
+      <>
+        {error ? retryRow : null}
+        {items.map((item, i) => (
+          <View key={i} style={i > 0 || error ? styles.divider : null}>
+            {renderItem(item, i)}
+          </View>
+        ))}
+      </>
+    );
   })();
 
   return (
@@ -60,6 +65,6 @@ export function RecentSection<T>({ title, items, loading, error, onRetry, onSeeA
 const styles = StyleSheet.create({
   section: { gap: space.sm, paddingHorizontal: space.lg },
   card: { overflow: "hidden" },
-  message: { flexDirection: "row", padding: space.lg },
+  message: { flexDirection: "row", alignItems: "center", minHeight: 44, paddingHorizontal: space.lg, paddingVertical: space.md },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
 });

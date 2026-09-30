@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { sanitizeMenuTabIds, visibleFeatureIds } from '@/lib/featureConfig';
 import { features } from '@/mocks/features';
 import { getScopedKey } from './accountScope';
 
@@ -32,24 +33,24 @@ export const DEFAULT_MENU_TAB_IDS: string[] = features
 
 /**
  * Đọc cấu hình tab menu từ AsyncStorage.
- * Luôn trả về đúng MAX_MENU_TABS id hợp lệ (tự pad bằng mặc định nếu thiếu/rỗng/lỗi).
+ * Luôn trả về đúng MAX_MENU_TABS id được phép với tài khoản hiện tại: bỏ tính năng đang ẩn
+ * (vd Hoa hồng) và mục ngoài quyền đại lý còn sót trong bộ nhớ cũ, rồi bù bằng mặc định.
  */
 export async function loadMenuTabIds(): Promise<string[]> {
+  let allowed = visibleFeatureIds(
+    features.map((f) => f.id),
+    { isAgency: false, menuOnly: true, menuEligible: MENU_TAB_FEATURE_IDS }
+  );
   try {
+    const isAgency = (await AsyncStorage.getItem('@type_account')) === 'AGENCY';
+    allowed = visibleFeatureIds(
+      features.map((f) => f.id),
+      { isAgency, menuOnly: true, menuEligible: MENU_TAB_FEATURE_IDS }
+    );
     const stored = await AsyncStorage.getItem(await getScopedKey(MENU_TABS_STORAGE_KEY));
     if (stored) {
       const config = JSON.parse(stored);
-      const ids = Array.isArray(config?.selectedIds) ? config.selectedIds : [];
-      const valid = ids.filter(
-        (id: unknown) =>
-          typeof id === 'string' && features.some((f) => f.id === id)
-      );
-      const padded = [...valid];
-      for (const defaultId of DEFAULT_MENU_TAB_IDS) {
-        if (padded.length >= MAX_MENU_TABS) break;
-        if (!padded.includes(defaultId)) padded.push(defaultId);
-      }
-      return padded.slice(0, MAX_MENU_TABS);
+      return sanitizeMenuTabIds(config?.selectedIds, allowed, DEFAULT_MENU_TAB_IDS, MAX_MENU_TABS);
     }
   } catch (error) {
     console.log(
@@ -57,7 +58,7 @@ export async function loadMenuTabIds(): Promise<string[]> {
       error instanceof Error ? error.message : String(error)
     );
   }
-  return [...DEFAULT_MENU_TAB_IDS];
+  return sanitizeMenuTabIds([], allowed, DEFAULT_MENU_TAB_IDS, MAX_MENU_TABS);
 }
 
 /** Lưu cấu hình tab menu (tối đa MAX_MENU_TABS mục, bỏ trùng lặp). */

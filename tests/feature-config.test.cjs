@@ -48,3 +48,14 @@ test("normalizeSelection survives stale or corrupted storage", () => {
   assert.deepEqual(plain(f.normalizeSelection(null, all, ["1"])), ["1"]);
   assert.deepEqual(plain(f.normalizeSelection("garbage", all, ["2"])), ["2"]);
 });
+
+test("sanitizeMenuTabIds drops hidden/disallowed ids from old storage and pads with allowed defaults", () => {
+  const allowed = ["1", "2", "3", "4", "5", "6", "8", "9", "13"];
+  const agencyAllowed = ["1", "2", "5", "13"];
+  assert.deepEqual(plain(f.sanitizeMenuTabIds(["7", "3"], allowed, ["1", "2"], 2)), ["3", "1"]);
+  assert.deepEqual(plain(f.sanitizeMenuTabIds(["3", "6"], agencyAllowed, ["1", "2"], 2)), ["1", "2"]);
+  assert.deepEqual(plain(f.sanitizeMenuTabIds(["5", "5", 42, null], agencyAllowed, ["1", "2"], 2)), ["5", "1"]);
+  assert.deepEqual(plain(f.sanitizeMenuTabIds("garbage", allowed, ["1", "2"], 2)), ["1", "2"]);
+  // Mặc định không hợp lệ với tài khoản → lấy tiếp từ danh sách được phép
+  assert.deepEqual(plain(f.sanitizeMenuTabIds([], ["5", "13"], ["1", "2"], 2)), ["5", "13"]);
+});

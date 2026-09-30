@@ -43,18 +43,17 @@ export function ProjectCarousel({ projects, loading, error, onRetry, onPress }: 
       </View>
     );
   }
-  if (error && projects.length === 0) {
-    return (
-      <Pressable accessibilityRole="button" onPress={onRetry} style={styles.inline}>
-        <Text variant="caption" color="danger">
-          Không tải được dự án ·{" "}
-        </Text>
-        <Text variant="caption" weight="semibold" color="primary">
-          Thử lại
-        </Text>
-      </Pressable>
-    );
-  }
+  const retryRow = (
+    <Pressable accessibilityRole="button" onPress={onRetry} style={styles.retry}>
+      <Text variant="caption" color="danger">
+        {projects.length ? "Không cập nhật được dự án ·" : "Không tải được dự án ·"}{" "}
+      </Text>
+      <Text variant="caption" weight="semibold" color="primary">
+        Thử lại
+      </Text>
+    </Pressable>
+  );
+  if (error && projects.length === 0) return retryRow;
   if (projects.length === 0) {
     return (
       <Text variant="caption" color="textSecondary" style={styles.inline}>
@@ -69,6 +68,7 @@ export function ProjectCarousel({ projects, loading, error, onRetry, onPress }: 
 
   return (
     <View>
+      {error ? retryRow : null}
       <FlatList
         horizontal
         data={projects}
@@ -132,6 +132,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: GAP, paddingHorizontal: space.lg },
   list: { paddingHorizontal: space.lg },
   inline: { flexDirection: "row", paddingHorizontal: space.lg },
+  retry: { flexDirection: "row", alignItems: "center", minHeight: 44, paddingHorizontal: space.lg },
   card: {
     width: CARD_W,
     height: CARD_H,

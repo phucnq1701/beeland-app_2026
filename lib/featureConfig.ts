@@ -86,3 +86,19 @@ export function normalizeSelection(raw: unknown, allIds: string[], fallback: str
   }
   return out.length ? out : fallback;
 }
+
+/**
+ * Làm sạch cấu hình tab menu đọc từ bộ nhớ: bỏ id không được phép (tính năng ẩn như Hoa hồng,
+ * hoặc ngoài quyền đại lý), bỏ trùng, rồi bù bằng mặc định (và tiếp theo là các id được phép)
+ * cho đủ `max` tab.
+ */
+export function sanitizeMenuTabIds(raw: unknown, allowed: string[], defaults: string[], max: number): string[] {
+  const out: string[] = [];
+  const push = (id: unknown) => {
+    if (out.length < max && typeof id === 'string' && allowed.includes(id) && !out.includes(id)) out.push(id);
+  };
+  if (Array.isArray(raw)) raw.forEach(push);
+  defaults.forEach(push);
+  allowed.forEach(push);
+  return out;
+}

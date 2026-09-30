@@ -46,18 +46,22 @@ export default function AccountScreen() {
   const deleteBusy = useRef(false);
   const confirmationOpen = useRef(false);
   const deletedSession = useRef<DeletedEmployeeSession | null>(null);
+  // Chặn bấm "Đăng xuất" 2 lần làm mở 2 màn đăng nhập chồng nhau
+  const loggingOut = useRef(false);
 
   const handleLogout = () => {
-    if (deleteBusy.current) return;
+    if (deleteBusy.current || loggingOut.current) return;
     if (deletedSession.current) {
       void performDeleteAccount();
       return;
     }
+    loggingOut.current = true;
     router.push("/login");
   };
 
   useFocusEffect(useCallback(() => {
     let active = true;
+    loggingOut.current = false;
     setData(null);
     setLoadingProfile(true);
     setProfileError(null);
@@ -134,12 +138,12 @@ export default function AccountScreen() {
         {profileError}
       </Text>
       <View style={styles.links}>
-        <Pressable accessibilityRole="button" hitSlop={10} onPress={() => setRetry((v) => v + 1)}>
+        <Pressable accessibilityRole="button" hitSlop={12} style={styles.link} onPress={() => setRetry((v) => v + 1)}>
           <Text variant="caption" weight="semibold" color="primary">
             Thử lại
           </Text>
         </Pressable>
-        <Pressable accessibilityRole="button" hitSlop={10} onPress={() => router.push("/login")}>
+        <Pressable accessibilityRole="button" hitSlop={12} style={styles.link} onPress={() => router.push("/login")}>
           <Text variant="caption" weight="semibold" color="primary">
             Đăng nhập lại
           </Text>
@@ -271,6 +275,8 @@ const styles = StyleSheet.create({
   profile: { flexDirection: "row", alignItems: "center", gap: space.md },
   profileTexts: { flex: 1, gap: 2 },
   links: { flexDirection: "row", gap: space.lg, marginTop: space.xs },
+  // 20 (dòng chữ) + 2×12 hitSlop = 44
+  link: { minHeight: 20, justifyContent: "center" },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   disabled: { opacity: 0.5 },
   rowIcon: {
