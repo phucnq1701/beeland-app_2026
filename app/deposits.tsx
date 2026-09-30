@@ -14,15 +14,11 @@ import {
   TextInput,
   Platform,
   ActivityIndicator,
-  ScrollView,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import {
   ChevronLeft,
-  ChevronUp,
-  ChevronDown,
   Search,
-  Filter,
   Landmark,
   Calendar,
   X,
@@ -30,10 +26,19 @@ import {
   Building2,
   Hash,
 } from "lucide-react-native";
+import {
+  FilterPanel,
+  FilterSection,
+  FilterToggleButton,
+  multiSelectOptions,
+} from "@/components/FilterPanel";
+import { normalizeHexColor, statusTextColorOf } from "@/components/utils/statusColor";
 import Colors from "@/constants/colors";
 import { Deposit } from "@/mocks/deposits";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
 import { DatCocService } from "@/sevicesSupabase/DatCocService";
+
+const PAGE_SIZE = 20;
 
 function formatCurrency(value: number): string {
   if (!value && value !== 0) return "0";
@@ -72,40 +77,8 @@ function getStatusColor(status: string, colorWeb?: string): string {
   return statusColorMap[status] || Colors.accent.blue;
 }
 
-/** Làm tối màu chữ theo màu nền để dễ đọc (nền lấy chuẩn từ data) */
-function darkenColor(color: string, factor = 0.62): string {
-  try {
-    let hex = String(color || "").trim();
-    if (!hex.startsWith("#")) return color;
-    hex = hex.slice(1);
-    if (hex.length === 3) {
-      hex = hex
-        .split("")
-        .map((c) => c + c)
-        .join("");
-    }
-    if (hex.length !== 6) return color;
-    const toHex = (v: number) =>
-      Math.max(0, Math.min(255, Math.round(v)))
-        .toString(16)
-        .padStart(2, "0");
-    const r = parseInt(hex.slice(0, 2), 16) * factor;
-    const g = parseInt(hex.slice(2, 4), 16) * factor;
-    const b = parseInt(hex.slice(4, 6), 16) * factor;
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-  } catch {
-    return color;
-  }
-}
-
 function normalizeColor(color?: string) {
-  if (!color) return "#FACC15";
-
-  const c = color.toUpperCase();
-
-  if (c === "#FFFF00") return "#FACC15";
-
-  return color;
+  return normalizeHexColor(color) ?? "";
 }
 
 /** Bỏ dấu tiếng Việt + lower-case để so khớp tên trạng thái ổn định */
@@ -135,7 +108,7 @@ function isVisibleDepositStatus(name: string): boolean {
 const DepositCard = React.memo(
   ({ item, onPress }: { item: Deposit; onPress: () => void }) => {
     const sColor = getStatusColor(item.trangThai, item.colorTT);
-    const sText = darkenColor(sColor);
+    const sText = statusTextColorOf(sColor);
 
     return (
       <TouchableOpacity
@@ -158,10 +131,9 @@ const DepositCard = React.memo(
               <View
                 style={[
                   styles.statusChip,
-                  { backgroundColor: `${sColor}18` },
+                  { backgroundColor: sColor },
                 ]}
               >
-                <View style={[styles.statusDot, { backgroundColor: sColor }]} />
                 <Text style={[styles.statusLabel, { color: sText }]}>
                   {item.trangThai}
                 </Text>
@@ -231,8 +203,8 @@ export default function DepositsScreen({
   const [selectedStatus, setSelectedStatus] = useState<any>(0);
 
   const [filterCondition, setFilterCondition] = useState({
-    TuNgay: "2000-01-01",
-    DenNgay: "2100-01-01",
+    TuNgay: "2000-01-01T00:00:00.000+07:00",
+    DenNgay: "2100-12-31T23:59:59.999+07:00",
     DuAn: "",
     MaTT: 0,
     inputSearch: "",
@@ -276,7 +248,8 @@ export default function DepositsScreen({
         colorTT: normalizeColor(item.MauNen),
       }));
 
-      setData((prev) => (isLoadMore ? [...prev, ...mapped] : mapped));
+      // Load more tăng p_limit + offset 0 -> response đã chứa toàn bộ, thay thế list
+      setData(mapped);
     } catch (err) {
       console.log("loadData error", err);
     } finally {
@@ -291,12 +264,14 @@ export default function DepositsScreen({
     // đủ data rồi thì dừng
     if (data.length >= totalRows) return;
 
+    // Cuộn tới cuối: tăng p_limit thêm 1 trang, luôn lấy lại từ đầu (offset 0)
     const nextPage = page + 1;
     setPage(nextPage);
 
     const newFilter = {
       ...filterCondition,
-      Offset: nextPage,
+      Offset: 1,
+      Limit: nextPage * PAGE_SIZE,
     };
 
     setFilterCondition(newFilter);
@@ -321,6 +296,7 @@ export default function DepositsScreen({
         ...filterCondition,
         inputSearch: searchQuery,
         Offset: 1,
+        Limit: PAGE_SIZE,
       };
 
       setFilterCondition(newFilter);
@@ -334,8 +310,8 @@ export default function DepositsScreen({
     setSearchQuery("");
   }, []);
 
-  const hasActiveFilters =
-    selectedProjects.length > 0 || selectedStatus !== 0;
+  const activeFilterCount =
+    (selectedProjects.length > 0 ? 1 : 0) + (selectedStatus !== 0 ? 1 : 0);
 
   const clearFilters = () => {
     setSelectedProjects([]);
@@ -345,8 +321,8 @@ export default function DepositsScreen({
     setData([]);
     setShowFilters(false);
     const newFilter = {
-      TuNgay: "2000-01-01",
-      DenNgay: "2100-01-01",
+      TuNgay: "2000-01-01T00:00:00.000+07:00",
+      DenNgay: "2100-12-31T23:59:59.999+07:00",
       DuAn: "",
       MaTT: 0,
       inputSearch: "",
@@ -421,6 +397,8 @@ export default function DepositsScreen({
       return;
     }
 
+    setPage(1);
+
     setFilterCondition((prev) => {
       const newFilter = {
         ...prev,
@@ -428,6 +406,7 @@ export default function DepositsScreen({
           ? "," + selectedProjects.join(",") + ","
           : "",
         Offset: 1,
+        Limit: PAGE_SIZE,
       };
       void loadData(newFilter);
       return newFilter;
@@ -440,12 +419,14 @@ export default function DepositsScreen({
       return;
     }
 
+    setPage(1);
 
     setFilterCondition((prev) => {
       const newFilter = {
         ...prev,
         MaTT: selectedStatus,
         Offset: 1,
+        Limit: PAGE_SIZE,
       };
       void loadData(newFilter);
       return newFilter;
@@ -500,146 +481,45 @@ export default function DepositsScreen({
             ) : null}
           </View>
 
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              hasActiveFilters && styles.filterButtonActive,
-            ]}
+          <FilterToggleButton
+            open={showFilters}
+            activeCount={activeFilterCount}
             onPress={() => setShowFilters(!showFilters)}
-            activeOpacity={0.7}
-          >
-            <Filter color={Colors.primary} size={18} />
-            <Text style={styles.filterText}>Bộ lọc</Text>
-            {showFilters ? (
-              <ChevronUp color={Colors.primary} size={18} />
-            ) : (
-              <ChevronDown color={Colors.primary} size={18} />
-            )}
-          </TouchableOpacity>
+          />
         </View>
 
         {showFilters && (
-          <ScrollView
-            style={[styles.filterPanel, styles.filterPanelScroll]}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.filterSection}>
-              <View style={styles.filterSectionHeader}>
-                <Text style={styles.filterSectionTitle}>Dự án</Text>
-                {hasActiveFilters && (
-                  <TouchableOpacity
-                    style={styles.resetFilterButton}
-                    onPress={clearFilters}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.resetFilterText}>Đặt lại</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              <View style={styles.filterOptionsGrid}>
-                  <TouchableOpacity
-                    style={[
-                      styles.filterOption,
-                      selectedProjects.length === 0 &&
-                        styles.filterOptionActive,
-                    ]}
-                    onPress={() => setSelectedProjects([])}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        selectedProjects.length === 0 &&
-                          styles.filterOptionTextActive,
-                      ]}
-                    >
-                      Tất cả
-                    </Text>
-                  </TouchableOpacity>
-                  {duAn.map((project: any) => {
-                    const active = selectedProjects.includes(project.MaDA);
-                    return (
-                      <TouchableOpacity
-                        key={project.MaDA}
-                        style={[
-                          styles.filterOption,
-                          active && styles.filterOptionActive,
-                        ]}
-                        onPress={() => {
-                          if (active) {
-                            setSelectedProjects((prev) =>
-                              prev.filter((id) => id !== project.MaDA)
-                            );
-                          } else {
-                            setSelectedProjects((prev) => [
-                              ...prev,
-                              project.MaDA,
-                            ]);
-                          }
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <Text
-                          style={[
-                            styles.filterOptionText,
-                            active && styles.filterOptionTextActive,
-                          ]}
-                        >
-                          {project.TenDA}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-            </View>
-
-            <View style={[styles.filterSection, { marginBottom: 0 }]}>
-              <Text style={styles.filterSectionTitle}>Trạng thái</Text>
-              <View style={styles.filterOptionsGrid}>
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    selectedStatus === 0 && styles.filterOptionActive,
-                  ]}
-                  onPress={() => setSelectedStatus(0)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.filterOptionText,
-                      selectedStatus === 0 && styles.filterOptionTextActive,
-                    ]}
-                  >
-                    Tất cả
-                  </Text>
-                </TouchableOpacity>
-                {statusOptions.map((status: any) => {
-                  const active = selectedStatus === status.MaTT;
-                  return (
-                    <TouchableOpacity
-                      key={status.MaTT}
-                      style={[
-                        styles.filterOption,
-                        active && styles.filterOptionActive,
-                      ]}
-                      onPress={() => setSelectedStatus(status.MaTT)}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.filterOptionText,
-                          active && styles.filterOptionTextActive,
-                        ]}
-                      >
-                        {status.TenTT}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          </ScrollView>
+          <FilterPanel activeCount={activeFilterCount} onReset={clearFilters}>
+            <FilterSection
+              title="Dự án"
+              hint="Chọn nhiều"
+              options={multiSelectOptions(
+                duAn,
+                (p: any) => p.MaDA,
+                (p: any) => p.TenDA,
+                selectedProjects,
+                setSelectedProjects
+              )}
+            />
+            <FilterSection
+              title="Trạng thái"
+              options={[
+                {
+                  key: "__all__",
+                  label: "Tất cả",
+                  selected: selectedStatus === 0,
+                  onPress: () => setSelectedStatus(0),
+                },
+                ...statusOptions.map((status: any) => ({
+                  key: status.MaTT,
+                  label: status.TenTT,
+                  selected: selectedStatus === status.MaTT,
+                  color: status.ColorWeb,
+                  onPress: () => setSelectedStatus(status.MaTT),
+                })),
+              ]}
+            />
+          </FilterPanel>
         )}
       </View>
 
@@ -709,89 +589,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text,
   },
-  filterButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  filterButtonActive: {
-    borderColor: Colors.primary,
-  },
-  filterText: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  filterPanel: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  filterPanelScroll: {
-    maxHeight: 380,
-  },
-  filterSection: {
-    marginBottom: 20,
-  },
-  filterSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  filterSectionTitle: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-    marginBottom: 12,
-  },
-  resetFilterButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: Colors.primary,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  resetFilterText: {
-    fontSize: 12,
-    fontWeight: "500" as const,
-    color: Colors.white,
-  },
-  filterOptionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  filterOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  filterOptionActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  filterOptionText: {
-    fontSize: 14,
-    fontWeight: "500" as const,
-    color: Colors.text,
-  },
-  filterOptionTextActive: {
-    color: Colors.white,
-  },
   loadingContainer: {
     alignItems: "center",
     paddingVertical: 40,
@@ -856,11 +653,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-  },
-  statusDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
   },
   statusLabel: {
     fontSize: 10,

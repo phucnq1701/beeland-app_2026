@@ -26,6 +26,7 @@ import {
   MessageSquare,
   UserCheck,
 } from "lucide-react-native";
+import { normalizeHexColor, statusTextColorOf } from "@/components/utils/statusColor";
 import Colors from "@/constants/colors";
 import {
   DEMO_DEPOSIT_DETAILS,
@@ -63,32 +64,6 @@ function formatDate(dateStr: string): string {
     return `${dd}/${mm}/${yyyy}`;
   } catch {
     return dateStr;
-  }
-}
-
-/** Làm tối màu chữ theo màu nền để dễ đọc (nền lấy chuẩn từ data) */
-function darkenColor(color: string, factor = 0.62): string {
-  try {
-    let hex = String(color || "").trim();
-    if (!hex.startsWith("#")) return color;
-    hex = hex.slice(1);
-    if (hex.length === 3) {
-      hex = hex
-        .split("")
-        .map((c) => c + c)
-        .join("");
-    }
-    if (hex.length !== 6) return color;
-    const toHex = (v: number) =>
-      Math.max(0, Math.min(255, Math.round(v)))
-        .toString(16)
-        .padStart(2, "0");
-    const r = parseInt(hex.slice(0, 2), 16) * factor;
-    const g = parseInt(hex.slice(2, 4), 16) * factor;
-    const b = parseInt(hex.slice(4, 6), 16) * factor;
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-  } catch {
-    return color;
   }
 }
 
@@ -233,8 +208,8 @@ export default function DepositDetailScreen() {
   if (!detail) return null;
 
   // Màu trạng thái lấy chuẩn từ data (MauNen/color_code), chữ tự làm tối theo nền
-  const statusColor = detail?.colorTT || Colors.primary;
-  const statusTextColor = darkenColor(statusColor);
+  const statusColor = normalizeHexColor(detail?.colorTT) ?? Colors.primary;
+  const statusTextColor = statusTextColorOf(statusColor);
 
   const tienCoc = Number(detail?.TienCoc ?? detail?.soTienCoc ?? 0);
   const tongGia = Number(detail?.TongGiaTriHDMB ?? 0);
@@ -276,7 +251,7 @@ export default function DepositDetailScreen() {
               <View
                 style={[
                   styles.iconWrap,
-                  { backgroundColor: `${statusColor}15` },
+                  { backgroundColor: statusColor },
                 ]}
               >
                 <Landmark color={statusTextColor} size={22} />
@@ -288,15 +263,9 @@ export default function DepositDetailScreen() {
               <View
                 style={[
                   styles.statusBadge,
-                  { backgroundColor: `${statusColor}18` },
+                  { backgroundColor: statusColor },
                 ]}
               >
-                <View
-                  style={[
-                    styles.statusDot,
-                    { backgroundColor: statusColor },
-                  ]}
-                />
                 <Text style={[styles.statusText, { color: statusTextColor }]}>
                   {detail.trangThai}
                 </Text>
@@ -702,11 +671,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
   statusText: {
     fontSize: 11,

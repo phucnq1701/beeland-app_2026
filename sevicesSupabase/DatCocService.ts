@@ -1,5 +1,9 @@
 import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyId, getValidSupabaseJwt } from "./cloudTenant";
+import { getCompanyId, getValidSupabaseJwt, getTypeAccount } from "./cloudTenant";
+import { ProjectService } from "./ProjectService";
+
+const DEFAULT_TU_NGAY = "2000-01-01T00:00:00.000+07:00";
+const DEFAULT_DEN_NGAY = "2100-12-31T23:59:59.999+07:00";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -159,9 +163,24 @@ export const DatCocService = {
       const offset = (page - 1) * limit;
 
       // Dự án: resolve ma_da_code -> uuid, nối dấu phẩy (null = tất cả)
-      const projectIds = parseProjectIds(
+      let projectIds = parseProjectIds(
         filter?.DuAn ?? filter?.duAn ?? filter?.projectId
       );
+
+      // Nếu là đại lý, lọc theo scope dự án được gán
+      const typeAccount = await getTypeAccount();
+      if (typeAccount === "AGENCY") {
+        const scope = await ProjectService.getProjects({});
+        const allowedIds = scope.data.map((p: any) => p.id);
+        const allowedCodes = scope.data.map((p: any) => p.ma_da_code);
+        
+        if (projectIds.length === 0) {
+          projectIds = allowedIds;
+        } else {
+          projectIds = projectIds.filter(id => allowedIds.includes(id) || allowedCodes.includes(id));
+        }
+      }
+
       const projectUuids =
         projectIds.length > 0 ? await resolveProjectUuids(projectIds) : [];
       const pProjectId = projectUuids.length > 0 ? projectUuids.join(",") : null;
@@ -177,8 +196,8 @@ export const DatCocService = {
       const body = {
         p_ma_ctdk_uid: tenantId || null,
         p_project_id: pProjectId,
-        p_tu_ngay: toIsoDate(filter?.TuNgay ?? filter?.tuNgay),
-        p_den_ngay: toIsoDate(filter?.DenNgay ?? filter?.denNgay),
+        p_tu_ngay: toIsoDate(filter?.TuNgay ?? filter?.tuNgay ?? DEFAULT_TU_NGAY),
+        p_den_ngay: toIsoDate(filter?.DenNgay ?? filter?.denNgay ?? DEFAULT_DEN_NGAY),
         p_input_search: search || null,
         p_ma_tt: pMaTT,
         p_offset: offset,
@@ -190,19 +209,11 @@ export const DatCocService = {
         body
       );
       
-      // PostgREST có thể trả về object trực tiếp, hoặc bọc trong mảng 1 phần tử
-      // (tuỳ khai báo hàm returns jsonb / setof jsonb) -> chuẩn hoá cả 2 trường hợp
-      let payload: any = res.data;
-      if (Array.isArray(payload)) payload = payload[0];
-      // Trường hợp hàm trả về jsonb bị stringify
-      if (typeof payload === "string") {
-        try { payload = JSON.parse(payload); } catch { payload = null; }
-      }
-      
-      const rows: any[] = Array.isArray(payload?.rows) ? payload.rows : [];
+      // fn_deposit_list RETURNS TABLE -> mảng dòng, mỗi dòng kèm total_count
+      const rows: any[] = Array.isArray(res.data) ? res.data : [];
       const mapped = rows.map(mapDepositRow);
-      const total = Number(payload?.total_count);
-      
+      const total = Number(rows[0]?.total_count);
+
       return {
         data: mapped,
         totalRows: Number.isFinite(total) && total > 0 ? total : mapped.length,

@@ -6,6 +6,11 @@ export const AuthSupabaseService = {
       .post("functions/v1/cloud-auth", payload)
       .then((res) => res.data);
   },
+  loginAgency: async (payload: any) => {
+    return await axiosApiSupabase
+      .post("functions/v1/cloud-auth", payload)
+      .then((res) => res.data);
+  },
   forgotPassword: async (payload: any) => {
     return await axiosApiSupabase
       .post("api/FogotPassword", payload)

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,20 +9,26 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   Search,
-  Filter,
   X,
   ChevronRight,
   ChevronLeft,
-  ChevronUp,
-  ChevronDown,
   Calendar,
 } from "lucide-react-native";
+import {
+  FilterPanel,
+  FilterSection,
+  FilterToggleButton,
+  multiSelectOptions,
+} from "@/components/FilterPanel";
 import Colors from "@/constants/colors";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
+
+/** Số booking mỗi lần gọi fn_booking_list; cuộn tới cuối thì tải thêm */
+const PAGE_SIZE = 20;
 
 /** Loại bỏ bản ghi trùng theo id ổn định (maPGC -> id -> soPhieu), giữ bản đầu tiên */
 const dedupeBookings = (list: any[]): any[] => {
@@ -85,10 +91,25 @@ export default function BookingsScreen({
   const [statusList, setStatusList] = useState<any[]>([]);
   const [duAn, setDuAn] = useState<any[]>([]);
 
-  const [data, setData] = useState<any[]>([]);
   const [dataAll, setDataAll] = useState<any[]>([]);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  // Phân trang: trang đã tải, còn dữ liệu không, bộ lọc hiện tại, chống race
+  const pageRef = useRef(1);
+  const hasMoreRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  const filterRef = useRef<any>(null);
+  const requestVersion = useRef(0);
 
   const [selectTT, setSelectTT] = useState<any>("");
+
+  // Lọc nhanh theo tab trạng thái trên dữ liệu đã tải
+  const data = useMemo(
+    () =>
+      !selectTT || selectTT === "Tất cả"
+        ? dataAll
+        : dataAll.filter((item) => item?.tenTT === selectTT),
+    [dataAll, selectTT],
+  );
 
   const [filterCondition, setFilterCondition] = useState({
     TuNgay: "2000-01-01",
@@ -98,8 +119,63 @@ export default function BookingsScreen({
     MaKhu: 0,
     inputSearch: "",
     Offset: 1,
-    Limit: 50,
+    Limit: PAGE_SIZE,
   });
+
+  /**
+   * Gọi 1 trang fn_booking_list. append=false: tải lại từ đầu (đổi bộ lọc);
+   * append=true: nối thêm trang tiếp theo khi cuộn tới cuối.
+   */
+  const fetchBookings = async (_filter: any, page: number, append: boolean) => {
+    const version = append ? requestVersion.current : ++requestVersion.current;
+    const res = await BookingService.listBookings({
+      maDA: _filter?.DuAn
+        ? String(_filter.DuAn)
+            .split(",")
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+        : [],
+      maTT: _filter?.MaTT,
+      keyword: _filter?.inputSearch ?? "",
+      tuNgay: _filter?.TuNgay,
+      denNgay: _filter?.DenNgay,
+      pageSize: PAGE_SIZE,
+      pageIndex: page,
+    });
+    // Bộ lọc đã đổi trong lúc chờ → bỏ kết quả cũ
+    if (version !== requestVersion.current) return;
+
+    const rows = res?.data ?? [];
+    const total = Number(res?.total) || 0;
+    pageRef.current = page;
+    filterRef.current = _filter;
+    hasMoreRef.current = rows.length >= PAGE_SIZE && page * PAGE_SIZE < total;
+    setDataAll((prev) => dedupeBookings(append ? [...prev, ...rows] : rows));
+  };
+
+  const loadMore = async () => {
+    if (loading || loadingMoreRef.current || !hasMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      await fetchBookings(filterRef.current, pageRef.current + 1, true);
+    } catch (err) {
+      console.log("loadMore error", err);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  };
+
+  const handleScroll = (e: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    if (
+      layoutMeasurement.height + contentOffset.y >=
+      contentSize.height - 300
+    ) {
+      void loadMore();
+    }
+  };
 
   /* ---------------- LOAD DATA ---------------- */
 
@@ -125,16 +201,8 @@ export default function BookingsScreen({
       const resDA = await ProjectService.getProjects({});
       setDuAn(resDA?.data ?? []);
 
-      // Danh sách booking — cloud
-      const res = await BookingService.listBookings({
-        maDA: [],
-        keyword: "",
-        pageSize: 50,
-        pageIndex: 1,
-      });
-      const clean = dedupeBookings(res?.data ?? []);
-      setData(clean);
-      setDataAll(clean);
+      // Danh sách booking — fn_booking_list, trang đầu
+      await fetchBookings(filterCondition, 1, false);
     } catch (err) {
       console.log("loadData error", err);
     }
@@ -145,24 +213,7 @@ export default function BookingsScreen({
   const loadData2 = async (_filter: any) => {
     setLoading(true);
     try {
-      const res = await BookingService.listBookings({
-        maDA: _filter?.DuAn
-          ? String(_filter.DuAn)
-              .split(",")
-              .map((s: string) => s.trim())
-              .filter(Boolean)
-          : [],
-        maTT: _filter?.MaTT,
-        keyword: _filter?.inputSearch ?? "",
-        tuNgay: _filter?.TuNgay,
-        denNgay: _filter?.DenNgay,
-        pageSize: _filter?.Limit ?? 50,
-        pageIndex: _filter?.Offset ?? 1,
-      });
-
-      const clean = dedupeBookings(res?.data ?? []);
-      setData(clean);
-      setDataAll(clean);
+      await fetchBookings(_filter, 1, false);
     } catch (err) {
       console.log("loadData2 error", err);
     }
@@ -174,6 +225,21 @@ export default function BookingsScreen({
   useEffect(() => {
     loadData();
   }, []);
+
+  // Quay lại danh sách (sau thanh toán / duyệt / huỷ ở màn chi tiết) → nạp lại trang đầu
+  // theo bộ lọc hiện tại, không hiện spinner. Lần focus đầu bỏ qua vì đã tải khi mount.
+  const hasFocusedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (hasFocusedOnce.current) {
+        fetchBookings(filterRef.current ?? filterCondition, 1, false).catch((err) =>
+          console.log("focus refresh error", err)
+        );
+      }
+      hasFocusedOnce.current = true;
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+  );
 
   /* ---------------- SEARCH DEBOUNCE ---------------- */
 
@@ -236,13 +302,6 @@ export default function BookingsScreen({
 
   const handleTT = (trangThai: string) => {
     setSelectTT(trangThai);
-
-    if (trangThai === "Tất cả") {
-      setData(dataAll);
-    } else {
-      const filtered = dataAll?.filter((item) => item?.tenTT === trangThai);
-      setData(filtered);
-    }
   };
 
   /* ---------------- CLEAR FILTER ---------------- */
@@ -270,8 +329,9 @@ export default function BookingsScreen({
   };
 
   // Có bộ lọc đang hoạt động: chọn dự án hoặc chọn trạng thái khác "Tất cả" (id 0)
-  const hasActiveFilters =
-    selectedProjects.length > 0 || Number(filterCondition.MaTT) !== 0;
+  const activeFilterCount =
+    (selectedProjects.length > 0 ? 1 : 0) +
+    (Number(filterCondition.MaTT) !== 0 ? 1 : 0);
 
   // Map tên trạng thái -> màu trả về từ data (pgc_trang_thai.color_code)
   const statusColorMap = useMemo(() => {
@@ -318,192 +378,101 @@ export default function BookingsScreen({
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        onScroll={handleScroll}
+        scrollEventThrottle={100}
+        // Tìm kiếm + bộ lọc + tab trạng thái bám dính phía trên khi cuộn
+        stickyHeaderIndices={[0]}
       >
-        {/* Search & Filter */}
-        <View style={styles.searchAndFilterRow}>
-          <View style={styles.searchContainer}>
-            <Search color={Colors.textSecondary} size={20} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Tìm kiếm booking, khách hàng..."
-              placeholderTextColor={Colors.textSecondary}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCapitalize="none"
-              autoCorrect={false}
+        <View style={styles.stickyHeader}>
+          {/* Search & Filter */}
+          <View style={styles.searchAndFilterRow}>
+            <View style={styles.searchContainer}>
+              <Search color={Colors.textSecondary} size={20} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Tìm kiếm booking, khách hàng..."
+                placeholderTextColor={Colors.textSecondary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {searchQuery !== "" && (
+                <TouchableOpacity onPress={() => setSearchQuery("")}>
+                  <X color={Colors.textSecondary} size={20} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <FilterToggleButton
+              open={showFilters}
+              activeCount={activeFilterCount}
+              onPress={() => setShowFilters(!showFilters)}
             />
-            {searchQuery !== "" && (
-              <TouchableOpacity onPress={() => setSearchQuery("")}>
-                <X color={Colors.textSecondary} size={20} />
-              </TouchableOpacity>
-            )}
           </View>
 
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              hasActiveFilters && styles.filterButtonActive,
-            ]}
-            activeOpacity={0.7}
-            onPress={() => setShowFilters(!showFilters)}
-          >
-            <Filter color={Colors.primary} size={18} />
-            <Text style={styles.filterText}>Bộ lọc</Text>
-            {showFilters ? (
-              <ChevronUp color={Colors.primary} size={18} />
-            ) : (
-              <ChevronDown color={Colors.primary} size={18} />
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Filters Panel */}
-        {showFilters && (
-          <View style={styles.filterPanel}>
-            <View style={styles.filterSection}>
-              <View style={styles.filterSectionHeader}>
-                <Text style={styles.filterSectionTitle}>Dự án</Text>
-                {hasActiveFilters && (
-                  <TouchableOpacity
-                    style={styles.resetFilterButton}
-                    onPress={clearFilters}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.resetFilterText}>Đặt lại</Text>
-                  </TouchableOpacity>
+          {/* Filters Panel */}
+          {showFilters && (
+            <FilterPanel activeCount={activeFilterCount} onReset={clearFilters}>
+              <FilterSection
+                title="Dự án"
+                hint="Chọn nhiều"
+                options={multiSelectOptions(
+                  duAn,
+                  (p: any) => p.MaDA,
+                  (p: any) => p.TenDA,
+                  selectedProjects,
+                  setSelectedProjects,
                 )}
-              </View>
+              />
+              <FilterSection
+                title="Trạng thái"
+                options={statusList.map((status: any) => ({
+                  key: status?.id,
+                  label: status?.title,
+                  selected: filterCondition?.MaTT === status?.id,
+                  color: status?.id === 0 ? null : status?.ColorWeb,
+                  onPress: () => applyChangeFilter("TrangThai", status?.id),
+                }))}
+              />
+            </FilterPanel>
+          )}
 
-              <ScrollView style={{ maxHeight: 200 }}>
-                <View style={styles.filterOptionsGrid}>
-                  <TouchableOpacity
-                    style={[
-                      styles.filterOption,
-                      selectedProjects.length === 0 &&
-                        styles.filterOptionActive,
-                    ]}
-                    onPress={() => {
-                      setSelectedProjects([]);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        selectedProjects.length === 0 &&
-                          styles.filterOptionTextActive,
-                      ]}
-                    >
-                      Tất cả
-                    </Text>
-                  </TouchableOpacity>
+          {/* Stats Row - Clickable Status Tabs */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.statsScrollContent}
+            style={styles.statsScroll}
+          >
+            {statusList.map((status) => {
+              const active = selectTT === status.title;
+              const count =
+                status.id === 0
+                  ? dataAll?.length
+                  : dataAll?.filter((item) => item?.tenTT === status.title)
+                      ?.length;
 
-                  {duAn.map((project) => {
-                    const active = selectedProjects.includes(project.MaDA);
-
-                    return (
-                      <TouchableOpacity
-                        key={project.MaDA}
-                        style={[
-                          styles.filterOption,
-                          active && styles.filterOptionActive,
-                        ]}
-                        onPress={() => {
-                          if (active) {
-                            setSelectedProjects((prev) =>
-                              prev.filter((id) => id !== project.MaDA)
-                            );
-                          } else {
-                            setSelectedProjects((prev) => [
-                              ...prev,
-                              project.MaDA,
-                            ]);
-                          }
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <Text
-                          style={[
-                            styles.filterOptionText,
-                            active && styles.filterOptionTextActive,
-                          ]}
-                        >
-                          {project.TenDA}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </ScrollView>
-            </View>
-
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Trạng thái</Text>
-
-              <View style={styles.filterOptionsGrid}>
-                {statusList.map((status) => (
-                  <TouchableOpacity
-                    key={status?.id}
-                    style={[
-                      styles.filterOption,
-                      filterCondition?.MaTT === status?.id &&
-                        styles.filterOptionActive,
-                    ]}
-                    onPress={() => {
-                      applyChangeFilter("TrangThai", status?.id);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        filterCondition?.MaTT === status?.id &&
-                          styles.filterOptionTextActive,
-                      ]}
-                    >
-                      {status?.title}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Stats Row - Clickable Status Tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.statsScrollContent}
-          style={styles.statsScroll}
-        >
-          {statusList.map((status) => {
-            const active = selectTT === status.title;
-            const count =
-              status.id === 0
-                ? dataAll?.length
-                : dataAll?.filter((item) => item?.tenTT === status.title)
-                    ?.length;
-
-            return (
-              <TouchableOpacity
-                key={status.id}
-                activeOpacity={0.8}
-                style={[
-                  styles.statCard,
-                  { backgroundColor: status.ColorWeb },
-                  active && styles.statCardSelected,
-                ]}
-                onPress={() => handleTT(status?.title)}
-              >
-                <Text style={styles.statValue}>{count}</Text>
-                <Text style={styles.statLabel} numberOfLines={1}>
-                  {status.title}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+              return (
+                <TouchableOpacity
+                  key={status.id}
+                  activeOpacity={0.8}
+                  style={[
+                    styles.statCard,
+                    { backgroundColor: status.ColorWeb },
+                    active && styles.statCardSelected,
+                  ]}
+                  onPress={() => handleTT(status?.title)}
+                >
+                  <Text style={styles.statValue}>{count}</Text>
+                  <Text style={styles.statLabel} numberOfLines={1}>
+                    {status.title}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
 
         {/* Booking List */}
         {loading ? (
@@ -533,7 +502,9 @@ export default function BookingsScreen({
                     onPress={() =>
                       router.push({
                         pathname: "/booking/[id]",
-                        params: { id: booking.maPGC },
+                        // id phiếu booking là duy nhất; 1 phiếu giữ chỗ (maPGC) có thể
+                        // có nhiều booking (vd. booking cũ đã huỷ + booking mới)
+                        params: { id: booking.id ?? booking.maPGC },
                       })
                     }
                   >
@@ -562,7 +533,7 @@ export default function BookingsScreen({
                                 styles.priorityText,
                                 {
                                   color: getContrastTextColor(
-                                    getStatusColor(booking.tenTT)
+                                    getStatusColor(booking.tenTT),
                                   ),
                                 },
                               ]}
@@ -590,7 +561,7 @@ export default function BookingsScreen({
                                   day: "2-digit",
                                   month: "2-digit",
                                   year: "numeric",
-                                }
+                                },
                               )
                             : "--"}
                         </Text>
@@ -604,7 +575,7 @@ export default function BookingsScreen({
                     <View style={styles.cardRight}>
                       <Text style={styles.amount} numberOfLines={1}>
                         {new Intl.NumberFormat("vi-VN").format(
-                          Math.round(Number(booking.tongGiaGomVAT) || 0)
+                          Math.round(Number(booking.tongGiaGomVAT) || 0),
                         )}{" "}
                         đ
                       </Text>
@@ -612,6 +583,12 @@ export default function BookingsScreen({
                     </View>
                   </TouchableOpacity>
                 ))}
+                {loadingMore && (
+                  <ActivityIndicator
+                    style={{ paddingVertical: 16 }}
+                    color={Colors.primary}
+                  />
+                )}
               </>
             )}
           </View>
@@ -625,6 +602,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  stickyHeader: {
+    backgroundColor: Colors.background,
+    // Phủ kín padding ngang của scrollContent để thẻ booking không lộ ra 2 bên
+    marginHorizontal: -15,
+    paddingHorizontal: 15,
+    paddingBottom: 12,
   },
   headerBackButton: {
     marginLeft: 8,
@@ -659,89 +643,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text,
   },
-  filterButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  filterButtonActive: {
-    borderColor: Colors.primary,
-  },
-  filterText: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  filterPanel: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  filterSection: {
-    marginBottom: 20,
-  },
-  filterSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  filterSectionTitle: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-    marginBottom: 12,
-  },
-  resetFilterButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: Colors.primary,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  resetFilterText: {
-    fontSize: 12,
-    fontWeight: "500" as const,
-    color: Colors.white,
-  },
-  filterOptionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  filterOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  filterOptionActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  filterOptionText: {
-    fontSize: 14,
-    fontWeight: "500" as const,
-    color: Colors.text,
-  },
-  filterOptionTextActive: {
-    color: Colors.white,
-  },
-  statsScroll: {
-    marginBottom: 16,
-  },
+  statsScroll: {},
   statsScrollContent: {
     gap: 8,
     paddingVertical: 2,

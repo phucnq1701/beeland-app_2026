@@ -14,6 +14,7 @@ import Colors from '@/constants/colors';
 import { features } from '@/mocks/features';
 import { Settings, ChevronUp, ChevronDown, House, LayoutGrid } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getScopedKey } from '@/components/utils/accountScope';
 import {
   loadMenuTabIds,
   saveMenuTabIds,
@@ -43,6 +44,8 @@ export default function AllManagementScreen() {
   const [menuOriginalIds, setMenuOriginalIds] =
     useState<string[]>(DEFAULT_MENU_TAB_IDS);
 
+  const [isAgency, setIsAgency] = useState<boolean>(false);
+
   useEffect(() => {
     loadConfiguration();
   }, []);
@@ -54,21 +57,36 @@ export default function AllManagementScreen() {
   );
 
   const loadConfiguration = async () => {
+    let agency = false;
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      const typeAccount = await AsyncStorage.getItem('@type_account');
+      agency = typeAccount === 'AGENCY';
+      setIsAgency(agency);
+
+      const stored = await AsyncStorage.getItem(await getScopedKey(STORAGE_KEY));
       if (stored) {
         const config = JSON.parse(stored);
-        const ids = config.selectedIds || [];
+        let ids = config.selectedIds || [];
+        if (agency) {
+          ids = ids.filter((id: string) => ['1', '2', '5', '13'].includes(id));
+          if (ids.length === 0) ids = ['1', '2', '5', '13'];
+        }
         setSelectedIds(ids);
         setOriginalSelectedIds(ids);
       } else {
-        const defaultIds = features.slice(0, MAX_HOME_FEATURES).map(f => f.id);
+        let defaultIds = features.slice(0, MAX_HOME_FEATURES).map(f => f.id);
+        if (agency) {
+          defaultIds = ['1', '2', '5', '13'];
+        }
         setSelectedIds(defaultIds);
         setOriginalSelectedIds(defaultIds);
       }
     } catch (error) {
       console.log('[AllManagement] Load config error:', error instanceof Error ? error.message : String(error));
-      const defaultIds = features.slice(0, MAX_HOME_FEATURES).map(f => f.id);
+      let defaultIds = features.slice(0, MAX_HOME_FEATURES).map(f => f.id);
+      if (agency) {
+        defaultIds = ['1', '2', '5', '13'];
+      }
       setSelectedIds(defaultIds);
       setOriginalSelectedIds(defaultIds);
     }
@@ -86,13 +104,25 @@ export default function AllManagementScreen() {
   };
 
   // Danh sách đang cấu hình theo tab hiện tại
-  const activeSelectedIds = activeTab === 'home' ? selectedIds : menuSelectedIds;
+  let activeSelectedIds = activeTab === 'home' ? selectedIds : menuSelectedIds;
+  if (isAgency && activeTab === 'home') {
+    activeSelectedIds = activeSelectedIds.filter(id => ['1', '2', '5', '13'].includes(id));
+  }
 
   // Tab menu chỉ cho chọn các mục có màn hình tương ứng
-  const selectableFeatures =
-    activeTab === 'menu'
-      ? features.filter(f => MENU_TAB_FEATURE_IDS.includes(f.id))
-      : features;
+  const selectableFeatures = features.filter(f => {
+    if (isAgency) {
+      if (activeTab === 'menu') {
+        const isTabFeature = MENU_TAB_FEATURE_IDS.includes(f.id);
+        return isTabFeature && ['1', '2', '5', '13'].includes(f.id);
+      }
+      return ['1', '2', '5', '13'].includes(f.id);
+    }
+    if (activeTab === 'menu') {
+      return MENU_TAB_FEATURE_IDS.includes(f.id);
+    }
+    return true;
+  });
 
   const handleTabSwitch = (tab: ConfigTab) => {
     if (tab === activeTab) return;
@@ -115,7 +145,7 @@ export default function AllManagementScreen() {
     try {
       if (activeTab === 'home') {
         const config = { selectedIds };
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+        await AsyncStorage.setItem(await getScopedKey(STORAGE_KEY), JSON.stringify(config));
         setOriginalSelectedIds(selectedIds);
         console.log('[AllManagement] Home configuration saved', { selectedIds });
       } else {

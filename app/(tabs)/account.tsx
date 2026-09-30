@@ -24,6 +24,7 @@ import {
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { features } from "@/mocks/features";
 import { CloudProfileService, CloudProfile } from "@/sevicesSupabase/CloudProfileService";
 import {
@@ -84,6 +85,7 @@ export default function AccountScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [showAllManagement, setShowAllManagement] = React.useState(false);
+  const [isAgency, setIsAgency] = useState<boolean>(false);
   const [data, setData] = useState<CloudProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -117,6 +119,9 @@ export default function AccountScreen() {
     setData(null);
     setLoadingProfile(true);
     setProfileError(null);
+    void AsyncStorage.getItem('@type_account').then((type: string | null) => {
+      if (active) setIsAgency(type === 'AGENCY');
+    });
     void CloudProfileService.userInfo().then((res) => {
       if (active && !deleteBusy.current && !deletedSession.current) setData(res.data);
     }).catch((error: unknown) => {
@@ -275,24 +280,31 @@ export default function AccountScreen() {
 
           {showAllManagement && (
             <View style={styles.managementGrid}>
-              {managementItems.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.managementCard}
-                  onPress={() => handleManagementItemPress(item.route)}
-                  activeOpacity={0.8}
-                >
-                  <View
-                    style={[
-                      styles.managementIconContainer,
-                      { backgroundColor: `${item.color}18` },
-                    ]}
+              {managementItems
+                .filter((item) => {
+                  if (isAgency) {
+                    return ['1', '2', '5', '13'].includes(item.id);
+                  }
+                  return true;
+                })
+                .map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.managementCard}
+                    onPress={() => handleManagementItemPress(item.route)}
+                    activeOpacity={0.8}
                   >
-                    <item.icon color={item.color} size={24} />
-                  </View>
-                  <Text style={styles.managementCardTitle}>{item.title}</Text>
-                </TouchableOpacity>
-              ))}
+                    <View
+                      style={[
+                        styles.managementIconContainer,
+                        { backgroundColor: `${item.color}18` },
+                      ]}
+                    >
+                      <item.icon color={item.color} size={24} />
+                    </View>
+                    <Text style={styles.managementCardTitle}>{item.title}</Text>
+                  </TouchableOpacity>
+                ))}
             </View>
           )}
         </View>

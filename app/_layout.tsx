@@ -6,7 +6,9 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import UpdateManager from "@/components/UpdateManager";
+import { applyWebFont } from "@/constants/webFont";
 SplashScreen.preventAutoHideAsync();
+applyWebFont();
 
 const queryClient = new QueryClient();
 

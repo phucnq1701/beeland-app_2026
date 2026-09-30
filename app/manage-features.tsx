@@ -12,6 +12,7 @@ import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, GripVertical, Check } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getScopedKey } from '@/components/utils/accountScope';
 import Colors from '@/constants/colors';
 import { features, Feature } from '@/mocks/features';
 
@@ -31,7 +32,7 @@ export default function ManageFeaturesScreen() {
 
   const loadConfiguration = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      const stored = await AsyncStorage.getItem(await getScopedKey(STORAGE_KEY));
       if (stored) {
         const config = JSON.parse(stored);
         setSelectedFeatures(config.selectedIds || features.slice(0, MAX_HOME_FEATURES).map(f => f.id));
@@ -96,7 +97,7 @@ export default function ManageFeaturesScreen() {
         selectedIds: selectedFeatures,
         updatedAt: new Date().toISOString(),
       };
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+      await AsyncStorage.setItem(await getScopedKey(STORAGE_KEY), JSON.stringify(config));
       
       if (Platform.OS === 'web') {
         alert('Đã lưu cấu hình');

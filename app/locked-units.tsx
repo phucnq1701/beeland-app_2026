@@ -14,7 +14,6 @@ import { Stack, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Search,
-  Filter,
   X,
   MapPin,
   Lock,
@@ -22,11 +21,15 @@ import {
   Timer,
   ChevronRight,
   ChevronLeft,
-  ChevronUp,
-  ChevronDown,
   AlertTriangle,
 } from "lucide-react-native";
 
+import {
+  FilterPanel,
+  FilterSection,
+  FilterToggleButton,
+  multiSelectOptions,
+} from "@/components/FilterPanel";
 import Colors from "@/constants/colors";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
 import { BookingService } from "@/sevicesSupabase/BookingService";
@@ -302,73 +305,31 @@ export default function LockedUnitsScreen({
             )}
           </View>
 
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              selectedProjects.length > 0 && styles.filterButtonActive,
-            ]}
+          <FilterToggleButton
+            open={showFilter}
+            activeCount={selectedProjects.length > 0 ? 1 : 0}
             onPress={() => setShowFilter(!showFilter)}
-            activeOpacity={0.7}
-          >
-            <Filter color={Colors.primary} size={18} />
-            <Text style={styles.filterText}>Bộ lọc</Text>
-            {showFilter ? (
-              <ChevronUp color={Colors.primary} size={18} />
-            ) : (
-              <ChevronDown color={Colors.primary} size={18} />
-            )}
-          </TouchableOpacity>
+          />
         </View>
 
         {/* Filters Panel */}
         {showFilter && (
-          <View style={styles.filterPanel}>
-            <View style={styles.filterSectionHeader}>
-              <Text style={styles.filterSectionTitle}>Lọc theo dự án</Text>
-              {selectedProjects.length > 0 && (
-                <TouchableOpacity
-                  style={styles.resetFilterButton}
-                  onPress={() => setSelectedProjects([])}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.resetFilterText}>Đặt lại</Text>
-                </TouchableOpacity>
+          <FilterPanel
+            activeCount={selectedProjects.length > 0 ? 1 : 0}
+            onReset={() => setSelectedProjects([])}
+          >
+            <FilterSection
+              title="Dự án"
+              hint="Chọn nhiều"
+              options={multiSelectOptions(
+                duAn,
+                (p: any) => p.MaDA,
+                (p: any) => p.TenDA,
+                selectedProjects,
+                setSelectedProjects
               )}
-            </View>
-            <View style={styles.filterOptionsGrid}>
-              {duAn.map((project) => {
-                const active = selectedProjects.includes(project.MaDA);
-                return (
-                  <TouchableOpacity
-                    key={project.MaDA}
-                    style={[
-                      styles.filterOption,
-                      active && styles.filterOptionActive,
-                    ]}
-                    onPress={() => {
-                      if (active) {
-                        setSelectedProjects((prev) =>
-                          prev.filter((pid) => pid !== project.MaDA)
-                        );
-                      } else {
-                        setSelectedProjects((prev) => [...prev, project.MaDA]);
-                      }
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        active && styles.filterOptionTextActive,
-                      ]}
-                    >
-                      {project.TenDA}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+            />
+          </FilterPanel>
         )}
 
         {/* Status Tabs */}
@@ -569,83 +530,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     padding: 0,
     ...Platform.select({ web: { outlineStyle: "none" as any } }),
-  },
-  filterButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  filterButtonActive: {
-    borderColor: Colors.primary,
-  },
-  filterText: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  filterPanel: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  filterSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  filterSectionTitle: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-    marginBottom: 12,
-  },
-  resetFilterButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: Colors.primary,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  resetFilterText: {
-    fontSize: 12,
-    fontWeight: "500" as const,
-    color: Colors.white,
-  },
-  filterOptionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  filterOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  filterOptionActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  filterOptionText: {
-    fontSize: 14,
-    fontWeight: "500" as const,
-    color: Colors.text,
-  },
-  filterOptionTextActive: {
-    color: Colors.white,
   },
   statsScroll: {
     marginBottom: 16,

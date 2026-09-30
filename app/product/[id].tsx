@@ -16,6 +16,7 @@ import {
   Share,
   ActivityIndicator,
   Platform,
+  Pressable,
 } from "react-native";
 import {
   useLocalSearchParams,
@@ -45,6 +46,7 @@ import {
   PriceServices,
   ActivePriceListItem,
 } from "@/sevicesSupabase/PriceServices";
+import ImageViewerModal from "@/components/ImageViewerModal";
 
 export default function ProductDetailScreen() {
   const { id, lockMinutes } = useLocalSearchParams<{
@@ -147,6 +149,7 @@ export default function ProductDetailScreen() {
     }
   }, [lockMinutes]);
   const [currentImageIndex, setCurrentImageIndex] = useState<number>(0);
+  const [viewerVisible, setViewerVisible] = useState<boolean>(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const flatListRef = useRef<FlatList<{ HinhAnh?: string }>>(null);
   const screenWidth = Dimensions.get("window").width;
@@ -256,7 +259,7 @@ export default function ProductDetailScreen() {
     statusName.includes("thanh lý") ||
     statusName.includes("hợp đồng");
   const handleLock = async () => {
-    if (isLocked) return;
+    if (isLocked || isBookingStatus) return;
 
     try {
       // Tạo lock cloud: RPC đổi SP (2→18) + insert phiếu LOCK
@@ -319,12 +322,24 @@ export default function ProductDetailScreen() {
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
                 keyExtractor={(item, index) => `image-${index}`}
-                renderItem={({ item }) => (
-                  <Image
-                    source={{ uri: item?.HinhAnh }}
-                    style={[styles.heroImage, { width: screenWidth }]}
-                    contentFit="cover"
-                  />
+                getItemLayout={(_, index) => ({
+                  length: screenWidth,
+                  offset: screenWidth * index,
+                  index,
+                })}
+                renderItem={({ item, index }) => (
+                  <Pressable
+                    onPress={() => {
+                      setCurrentImageIndex(index);
+                      setViewerVisible(true);
+                    }}
+                  >
+                    <Image
+                      source={{ uri: item?.HinhAnh }}
+                      style={[styles.heroImage, { width: screenWidth }]}
+                      contentFit="cover"
+                    />
+                  </Pressable>
                 )}
               />
               <LinearGradient
@@ -376,7 +391,7 @@ export default function ProductDetailScreen() {
             </View> */}
 
               {bannerProduct.length > 1 && (
-                <View style={styles.paginationDots}>
+                <View style={styles.paginationDots} pointerEvents="none">
                   {bannerProduct.map((_, index) => (
                     <View
                       key={`dot-${index}`}
@@ -389,7 +404,8 @@ export default function ProductDetailScreen() {
                 </View>
               )}
 
-              <View style={styles.heroInfo}>
+              {/* pointerEvents none: không chặn vuốt/bấm ảnh phía dưới */}
+              <View style={styles.heroInfo} pointerEvents="none">
                 <Text style={styles.heroTitle}>{data?.TenDA}</Text>
 
                 <View style={styles.rowCenter}>
@@ -565,6 +581,19 @@ export default function ProductDetailScreen() {
             </View>
           </ScrollView>
 
+          <ImageViewerModal
+            visible={viewerVisible}
+            images={bannerProduct
+              .map((b) => b?.HinhAnh)
+              .filter((u): u is string => !!u)}
+            initialIndex={currentImageIndex}
+            onIndexChange={(i) => {
+              setCurrentImageIndex(i);
+              flatListRef.current?.scrollToIndex({ index: i, animated: false });
+            }}
+            onClose={() => setViewerVisible(false)}
+          />
+
           {/* Thanh hành động cố định đáy màn hình — nền trắng che nội dung cuộn phía dưới */}
           <View
             style={[styles.bottomActions, { paddingBottom: insets.bottom }]}
@@ -574,13 +603,24 @@ export default function ProductDetailScreen() {
                 styles.actionButton,
                 styles.lockButton,
                 isLocked && styles.lockedButton,
+                isBookingStatus && styles.disabledButton,
               ]}
+              activeOpacity={isBookingStatus ? 1 : 0.85}
               onPress={handleLock}
-              disabled={isLocked}
+              disabled={isLocked || isBookingStatus}
             >
-              <Lock color={Colors.white} size={20} />
+              <Lock
+                color={isBookingStatus ? "#9CA3AF" : Colors.white}
+                size={20}
+              />
 
-              {!isLocked ? (
+              {isBookingStatus ? (
+                <Text
+                  style={[styles.actionButtonText, styles.disabledButtonText]}
+                >
+                  Lock căn
+                </Text>
+              ) : !isLocked ? (
                 <Text style={styles.actionButtonText}>Lock căn</Text>
               ) : (
                 <Text style={styles.actionButtonText}>

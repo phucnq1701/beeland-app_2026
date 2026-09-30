@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { features } from '@/mocks/features';
+import { getScopedKey } from './accountScope';
 
 /**
  * Cấu hình 2 tab menu ở giữa tab bar (giữa Home và Tài khoản).
@@ -35,7 +36,7 @@ export const DEFAULT_MENU_TAB_IDS: string[] = features
  */
 export async function loadMenuTabIds(): Promise<string[]> {
   try {
-    const stored = await AsyncStorage.getItem(MENU_TABS_STORAGE_KEY);
+    const stored = await AsyncStorage.getItem(await getScopedKey(MENU_TABS_STORAGE_KEY));
     if (stored) {
       const config = JSON.parse(stored);
       const ids = Array.isArray(config?.selectedIds) ? config.selectedIds : [];
@@ -65,7 +66,7 @@ export async function saveMenuTabIds(ids: string[]): Promise<void> {
     .filter((id, index) => ids.indexOf(id) === index)
     .slice(0, MAX_MENU_TABS);
   await AsyncStorage.setItem(
-    MENU_TABS_STORAGE_KEY,
+    await getScopedKey(MENU_TABS_STORAGE_KEY),
     JSON.stringify({ selectedIds: unique })
   );
 }

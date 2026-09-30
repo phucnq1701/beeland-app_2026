@@ -24,16 +24,20 @@ import {
   ClipboardList,
   Phone,
   Clock,
+  Landmark,
 } from "lucide-react-native";
 
 import Colors from "@/constants/colors";
 import { features, Feature } from "@/mocks/features";
 import { notifications } from "@/mocks/notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getScopedKey } from "@/components/utils/accountScope";
+import { statusTextColorOf } from "@/components/utils/statusColor";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useFocusEffect } from "expo-router";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
 import { BookingService } from "@/sevicesSupabase/BookingService";
+import { DatCocService } from "@/sevicesSupabase/DatCocService";
 import { Format_Date } from "@/components/utils/common";
 import { CustomerService as CustomerSupabaseService } from "@/sevicesSupabase/CustomerService";
 import { LichHenService } from "@/sevicesSupabase/LichHenService";
@@ -44,6 +48,7 @@ const { width } = Dimensions.get("window");
 const CARD_WIDTH = width - 48;
 const STORAGE_KEY = "@home_features_config";
 const MAX_HOME_FEATURES = 6;
+const AGENCY_FEATURE_IDS = ["1", "2", "5", "13"];
 
 export default function HomeScreen() {
   const [activeIndex, setActiveIndex] = useState<number>(0);
@@ -61,17 +66,23 @@ export default function HomeScreen() {
 
   const [duAn, setDuAn] = useState<any[]>([]);
   const [booking, setBooking] = useState<any[]>([]);
+  const [deposits, setDeposits] = useState<any[]>([]);
   const [khachHang, setKhachHang] = useState<any[]>([]);
   const [lichHen, setLichHen] = useState<any[]>([]);
+  const [isAgency, setIsAgency] = useState<boolean>(false);
 
   useEffect(() => {
+    const checkAgency = async () => {
+      const typeAccount = await AsyncStorage.getItem('@type_account');
+      setIsAgency(typeAccount === 'AGENCY');
+    };
+    checkAgency();
     const checkToken = async () => {
       const token = await AsyncStorage.getItem("@token");
       if (!token) {
         router.replace("/login");
         return;
       }
-      // Anon đã bị khóa SELECT (42501) nên JWT hết hạn bắt buộc về login lấy JWT 7-day mới
       try {
         const supabaseJwt = await AsyncStorage.getItem("@supabase_jwt");
         if (!supabaseJwt) {
@@ -79,11 +90,9 @@ export default function HomeScreen() {
           router.replace("/login");
           return;
         }
-        const { isJwtExpired, decodeJwtPayload } = await import(
-          "@/sevicesSupabase/cloudTenant"
-        );
-        if (isJwtExpired(supabaseJwt)) {
-          const p = decodeJwtPayload(supabaseJwt);
+        const cloudTenant = require("@/sevicesSupabase/cloudTenant");
+        if (cloudTenant.isJwtExpired(supabaseJwt)) {
+          const p = cloudTenant.decodeJwtPayload(supabaseJwt);
           console.log(
             `[Home] cloud_jwt expired (exp=${p?.exp}, now=${Math.floor(Date.now() / 1000)}) -> về login lấy JWT mới`
           );
@@ -97,7 +106,6 @@ export default function HomeScreen() {
   }, [router]);
 
   function normalizeCustomer(item: any) {
-    // CustomerService Supabase đã normalize sẵn, giữ tương thích API cũ
     const raw = item?.raw || {};
     return {
       maKH: item?.maKH ?? item?.ma_kh ?? item?.id ?? raw?.MaKH ?? "",
@@ -145,6 +153,21 @@ export default function HomeScreen() {
     }
 
     try {
+      const typeAccount = await AsyncStorage.getItem("@type_account");
+      if (typeAccount === "AGENCY") {
+        const resDC = await DatCocService.get({ Offset: 1, Limit: 5 });
+        setDeposits((resDC?.data || []).slice(0, 5));
+      } else {
+        setDeposits([]);
+      }
+    } catch (error) {
+      console.log(
+        "[Home] Error loading deposits:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+
+    try {
       const resKH = await CustomerSupabaseService.getCustomers({
         limit: 5,
         offset: 0,
@@ -175,13 +198,29 @@ export default function HomeScreen() {
     startAnimations();
     startShimmer();
     void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Quay lại màn Home (sau thanh toán / duyệt / huỷ booking...) → nạp lại booking gần đây
+  // để trạng thái khớp chi tiết. Lần focus đầu bỏ qua vì useEffect mount đã tải.
+  const hasFocusedOnce = useRef(false);
+  const refreshRecentBookings = useCallback(async () => {
+    try {
+      const resBooking = await BookingService.listBookingsFromCloud({ limit: 5, offset: 0 });
+      setBooking((resBooking?.data || []).slice(0, 5));
+    } catch (error) {
+      console.log(
+        "[Home] Error refreshing bookings:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       void loadFeatureConfiguration();
-    }, [])
+      if (hasFocusedOnce.current) void refreshRecentBookings();
+      hasFocusedOnce.current = true;
+    }, [refreshRecentBookings])
   );
 
   const startShimmer = () => {
@@ -233,21 +272,32 @@ export default function HomeScreen() {
 
   const loadFeatureConfiguration = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      const typeAccount = await AsyncStorage.getItem("@type_account");
+      const isAgency = typeAccount === "AGENCY";
+
+      const stored = await AsyncStorage.getItem(await getScopedKey(STORAGE_KEY));
+      let selectedIds: string[] = [];
       if (stored) {
         const config = JSON.parse(stored);
-        const selectedIds = config.selectedIds || [];
-        const orderedFeatures = selectedIds
-          .map((id: string) => features.find((f) => f.id === id))
-          .filter(Boolean) as Feature[];
-        const slicedFeatures = orderedFeatures.slice(0, MAX_HOME_FEATURES);
-        setDisplayedFeatures(slicedFeatures);
-        initializeFeatureAnimations(slicedFeatures.length);
+        selectedIds = config.selectedIds || [];
       } else {
-        const defaultFeatures = features.slice(0, MAX_HOME_FEATURES);
-        setDisplayedFeatures(defaultFeatures);
-        initializeFeatureAnimations(defaultFeatures.length);
+        selectedIds = isAgency
+          ? AGENCY_FEATURE_IDS
+          : features.slice(0, MAX_HOME_FEATURES).map((f) => f.id);
       }
+
+      if (isAgency) {
+        selectedIds = selectedIds.filter((id) => AGENCY_FEATURE_IDS.includes(id));
+        if (selectedIds.length === 0) selectedIds = AGENCY_FEATURE_IDS;
+      }
+
+      const filteredFeatures = selectedIds
+        .map((id: string) => features.find((f) => f.id === id))
+        .filter(Boolean) as Feature[];
+
+      const slicedFeatures = filteredFeatures.slice(0, MAX_HOME_FEATURES);
+      setDisplayedFeatures(slicedFeatures);
+      initializeFeatureAnimations(slicedFeatures.length);
     } catch (error) {
       console.log(
         "[Home] Load feature config error:",
@@ -306,8 +356,6 @@ export default function HomeScreen() {
     setActiveIndex(index);
   };
 
-  // Chuẩn hoá key trạng thái: DB có thể trả "Hủy booking" (y) hoặc "Huỷ booking" (u),
-  // kèm khoảng trắng/hoa-thường khác nhau. Tra màu theo key chuẩn + màu mặc định.
   const normalizeStatusKey = (s: any) =>
     String(s ?? "")
       .trim()
@@ -316,24 +364,23 @@ export default function HomeScreen() {
       .replace(/\s+/g, " ");
 
   const STATUS_BG: Record<string, string> = {
-    "chờ duyệt": "#F59E0B", // amber
-    "đã duyệt": "#10B981", // green
-    "hủy booking": "#EF4444", // red
+    "chờ duyệt": "#F59E0B",
+    "đã duyệt": "#10B981",
+    "hủy booking": "#EF4444",
     "đặt cọc chờ duyệt": "#F59E0B",
     "đặt cọc đã duyệt": "#10B981",
     "đã thanh lý": "#6B7280",
   };
 
   const STATUS_FG: Record<string, string> = {
-    "chờ duyệt": "#FEF3C7", // vàng nhạt
-    "đã duyệt": "#D1FAE5", // xanh nhạt
-    "hủy booking": "#FEE2E2", // đỏ nhạt
+    "chờ duyệt": "#FEF3C7",
+    "đã duyệt": "#D1FAE5",
+    "hủy booking": "#FEE2E2",
     "đặt cọc chờ duyệt": "#FEF3C7",
     "đặt cọc đã duyệt": "#D1FAE5",
     "đã thanh lý": "#F3F4F6",
   };
 
-  // Chuẩn hoá mã màu từ cloud (color_code): có/không dấu #, #RGB → #RRGGBB
   const normalizeStatusColor = (color: any): string | null => {
     let c = String(color ?? "").trim();
     if (!c) return null;
@@ -350,7 +397,6 @@ export default function HomeScreen() {
     return /^#[0-9A-Fa-f]{6}$/.test(c) ? c : null;
   };
 
-  // Chọn màu chữ/icon tương phản với màu nền trạng thái (đen/trắng)
   const contrastTextColorOf = (bg: string): string => {
     try {
       const hex = bg.replace("#", "");
@@ -364,24 +410,19 @@ export default function HomeScreen() {
     }
   };
 
-  // Màu nền trạng thái: ưu tiên colorCode từ data (cloud_catalogs.color_code),
-  // fallback về bảng màu tĩnh theo tên trạng thái.
   const bookingStatusBgOf = (booking: any): string =>
     normalizeStatusColor(booking?.colorCode) ??
     STATUS_BG[normalizeStatusKey(booking?.tenTT)] ??
     "#64748B";
 
-  // Màu chữ/icon trên nền trạng thái: nếu nền lấy từ data → tự chọn đen/trắng
-  // theo độ sáng; nếu nền từ bảng tĩnh → giữ màu chữ nhạt đã thiết kế.
   const bookingStatusFgOf = (booking: any): string => {
+    const dataColor = normalizeStatusColor(booking?.colorCode);
+    if (dataColor) return statusTextColorOf(dataColor);
     const key = normalizeStatusKey(booking?.tenTT);
-    if (!normalizeStatusColor(booking?.colorCode) && STATUS_FG[key]) {
-      return STATUS_FG[key];
-    }
+    if (STATUS_FG[key]) return STATUS_FG[key];
     return contrastTextColorOf(bookingStatusBgOf(booking));
   };
 
-  /** Hiển thị tiền: nhận number/string/null — null thì hiện "—" thay vì "đ" trơ trọi */
   const formatMoney = (v: any) => {
     const n =
       typeof v === "string" ? Number(String(v).replace(/[^\d.-]/g, "")) : Number(v);
@@ -392,8 +433,6 @@ export default function HomeScreen() {
     (property: any) => {
       animatePress(`property-${property.MaDA}`, () => {
         try {
-          console.log("[Home] Navigate to project options", property);
-
           router.push({
             pathname: "/project/[id]" as const,
             params: {
@@ -406,13 +445,11 @@ export default function HomeScreen() {
         }
       });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [router]
   );
 
   const handleFeaturePress = useCallback(
     (featureId: string) => {
-      console.log("[Home] Feature pressed", { featureId });
       const scale = getCardScale(`feature-${featureId}`);
       Animated.sequence([
         Animated.timing(scale, {
@@ -441,40 +478,30 @@ export default function HomeScreen() {
         } else if (featureId === "6") {
           router.push("/customers");
         } else if (featureId === "8") {
-          console.log("[Home] Navigating to contracts");
           router.push("/contracts");
         } else if (featureId === "9") {
-          console.log("[Home] Navigating to reports");
           router.push("/reports");
         } else if (featureId === "13") {
-          console.log("[Home] Navigating to deposits");
           router.push("/deposits");
-        } else {
-          console.log("[Home] No route defined for feature", { featureId });
         }
       }, 200);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [router]
   );
 
   const handleSearchPress = useCallback(() => {
-    console.log("[Home] Search pressed");
     router.push("/products");
   }, [router]);
 
   const handleNotificationPress = useCallback(() => {
-    console.log("[Home] Notification pressed");
     router.push("/notifications");
   }, [router]);
 
   const handleViewAllProjects = useCallback(() => {
-    console.log("[Home] View all projects pressed");
     router.push("/projects");
   }, [router]);
 
   const handleManageFeaturesPress = useCallback(() => {
-    console.log("[Home] View all management pressed");
     router.push("/all-management");
   }, [router]);
 
@@ -660,12 +687,6 @@ export default function HomeScreen() {
                         {property.district}
                       </Text>
                     </View>
-                    {/* <View style={styles.propertyFooter}>
-                      <Text style={styles.propertyPrice}>{property.price}</Text>
-                      <View style={styles.arrowButton}>
-                        <ChevronRight color={Colors.white} size={18} />
-                      </View>
-                    </View> */}
                   </View>
                 </LinearGradient>
               </TouchableOpacity>
@@ -773,7 +794,9 @@ export default function HomeScreen() {
               onPress={() =>
                 router.push({
                   pathname: "/booking/[id]",
-                  params: { id: booking.maPGC },
+                  // id phiếu booking là duy nhất; 1 phiếu giữ chỗ (maPGC) có thể
+                  // có nhiều booking (vd. booking cũ đã huỷ + booking mới)
+                  params: { id: booking.id ?? booking.maPGC },
                 })
               }
             >
@@ -826,230 +849,185 @@ export default function HomeScreen() {
           ))}
         </View>
 
-        <View style={styles.recentSection}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleContainer}>
-              <LinearGradient
-                colors={Colors.gradients.blue}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.sectionIndicator}
-              />
-              <Text style={styles.sectionTitle}>Khách hàng gần đây</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.seeAllButton}
-              onPress={() => router.push("/customers")}
-            >
-              <Text style={styles.seeAllText}>Xem tất cả</Text>
-              <ChevronRight color={Colors.primary} size={18} />
-            </TouchableOpacity>
-          </View>
-          {khachHang.map((customer, index) => (
-            <TouchableOpacity
-              key={`${customer._raw?.id || customer.maKH}-${index}`}
-              style={styles.recentCard}
-              activeOpacity={0.7}
-              onPress={() =>
-                router.push({
-                  pathname: "/customer/[id]",
-                  // Ưu tiên UUID; mã KH vẫn được màn chi tiết chấp nhận
-                  params: { id: customer._raw?.id || customer.maKH },
-                })
-              }
-            >
-              <View
-                style={[
-                  styles.recentIconBox,
-                  { backgroundColor: "rgba(59,130,246,0.1)" },
-                ]}
+        {isAgency && (
+          <View style={styles.recentSection}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <LinearGradient
+                  colors={Colors.gradients.primary}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.sectionIndicator}
+                />
+                <Text style={styles.sectionTitle}>Đặt cọc gần đây</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.seeAllButton}
+                onPress={() => router.push("/deposits")}
               >
-                <Users size={20} color={Colors.accent.blue} />
-              </View>
-              <View style={styles.recentCardContent}>
-                <Text style={styles.recentCardTitle} numberOfLines={1}>
-                  {customer.tenKH}
-                </Text>
-                <View style={styles.recentCardRow}>
-                  <Phone size={12} color={Colors.textTertiary} />
-                  <Text style={styles.recentCardSub} numberOfLines={1}>
-                    {customer.diDong}
-                  </Text>
-                </View>
-                <View style={styles.recentCardRow}>
-                  <Clock size={12} color={Colors.textTertiary} />
-                  <Text style={styles.recentCardSub} numberOfLines={1}>
-                    Tạo: {Format_Date(customer.ngayDangKy)}
-                  </Text>
-                </View>
-              </View>
-              {/* Badge trạng thái — chỉ hiện khi khách đã có trạng thái */}
-              {customer.status ? (
-                <View
-                  style={[
-                    styles.customerStatusBadge,
-                    { backgroundColor: `${customer.statusColor}18` },
-                  ]}
+                <Text style={styles.seeAllText}>Xem tất cả</Text>
+                <ChevronRight color={Colors.primary} size={18} />
+              </TouchableOpacity>
+            </View>
+            {deposits.map((deposit, index) => {
+              const status = { colorCode: deposit.MauNen, tenTT: deposit.TenTT };
+              return (
+                <TouchableOpacity
+                  key={`${deposit.MaPDC}-${index}`}
+                  style={styles.recentCard}
+                  activeOpacity={0.7}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/deposit/[id]",
+                      params: {
+                        id: String(deposit.MaPDC ?? ""),
+                        data: JSON.stringify({
+                          ...deposit,
+                          maDC: String(deposit.MaPDC ?? ""),
+                          soPhieu: deposit.SoPhieu || "",
+                          tenKH: deposit.KhachHang || "",
+                          maSP: deposit.MaSanPham || "",
+                          soTienCoc: deposit.TienCoc || 0,
+                          trangThai: deposit.TenTT || "",
+                          tenDA: deposit.TenDA || "",
+                        }),
+                      },
+                    })
+                  }
                 >
                   <View
                     style={[
-                      styles.badgeDot,
-                      { backgroundColor: customer.statusColor },
+                      styles.recentIconBox,
+                      { backgroundColor: bookingStatusBgOf(status) },
                     ]}
-                  />
-                  <Text
-                    style={[
-                      styles.statusBadgeText,
-                      { color: customer.statusColor },
-                    ]}
-                    numberOfLines={1}
                   >
-                    {customer.status}
-                  </Text>
-                </View>
-              ) : null}
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* <View style={styles.recentSection}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleContainer}>
-              <LinearGradient
-                colors={["#10B981", "#06B6D4"] as const}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.sectionIndicator}
-              />
-              <Text style={styles.sectionTitle}>Lịch hẹn gần đây</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.seeAllButton}
-              onPress={() => router.push("/appointments")}
-            >
-              <Text style={styles.seeAllText}>Xem tất cả</Text>
-              <ChevronRight color={Colors.primary} size={18} />
-            </TouchableOpacity>
+                    <Landmark size={20} color={bookingStatusFgOf(status)} />
+                  </View>
+                  <View style={styles.recentCardContent}>
+                    <Text style={styles.recentCardTitle} numberOfLines={1}>
+                      {deposit.KhachHang}
+                    </Text>
+                    <Text style={styles.recentCardSub} numberOfLines={1}>
+                      {deposit.MaSanPham} • {deposit.TenDA}
+                    </Text>
+                    <View style={styles.recentCardRow}>
+                      <Calendar size={12} color={Colors.textTertiary} />
+                      <Text style={styles.recentCardSub} numberOfLines={1}>
+                        {Format_Date(deposit.NgayDatCoc)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.recentCardRight}>
+                    <Text style={styles.recentCardAmount}>
+                      {formatMoney(deposit.TienCoc)}
+                    </Text>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        { backgroundColor: bookingStatusBgOf(status) },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusBadgeText,
+                          { color: bookingStatusFgOf(status) },
+                        ]}
+                      >
+                        {deposit.TenTT}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-          {lichHen.map((apt, index) => (
-            <TouchableOpacity
-              key={`${apt.maLH}-${index}`}
-              style={styles.recentCard}
-              activeOpacity={0.7}
-              onPress={() =>
-                router.push({
-                  pathname: "/appointments",
-                  params: { id: apt.maLH, dataFromHome: JSON.stringify(apt) },
-                })
-              }
-            >
-              <View
-                style={[
-                  styles.recentIconBox,
-                  { backgroundColor: "rgba(16,185,129,0.1)" },
-                ]}
-              >
-                <Calendar size={20} color={Colors.success} />
-              </View>
-              <View style={styles.recentCardContent}>
-                <Text style={styles.recentCardTitle} numberOfLines={1}>
-                  {apt.tieuDe}
-                </Text>
-                <View style={styles.recentCardRow}>
-                  <Clock size={12} color={Colors.textTertiary} />
-                  <Text style={styles.recentCardSub} numberOfLines={1}>
-                    {Format_Date(apt.ngayHen)}
-                  </Text>
-                </View>
-              </View>
-             
-            </TouchableOpacity>
-          ))}
-        </View> */}
+        )}
 
-        {/* <View style={styles.recentSection}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleContainer}>
-              <LinearGradient
-                colors={["#EC4899", "#F97316"] as const}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.sectionIndicator}
-              />
-              <Text style={styles.sectionTitle}>Sản phẩm yêu thích</Text>
+        {!isAgency && (
+          <View style={styles.recentSection}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <LinearGradient
+                  colors={Colors.gradients.blue}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.sectionIndicator}
+                />
+                <Text style={styles.sectionTitle}>Khách hàng gần đây</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.seeAllButton}
+                onPress={() => router.push("/customers")}
+              >
+                <Text style={styles.seeAllText}>Xem tất cả</Text>
+                <ChevronRight color={Colors.primary} size={18} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.seeAllButton}
-              onPress={() => router.push("/products")}
-            >
-              <Text style={styles.seeAllText}>Xem tất cả</Text>
-              <ChevronRight color={Colors.primary} size={18} />
-            </TouchableOpacity>
-          </View>
-          {products.slice(0, 5).map((product) => (
-            <TouchableOpacity
-              key={product.id}
-              style={styles.recentCard}
-              activeOpacity={0.7}
-              onPress={() =>
-                router.push({
-                  pathname: "/product/[id]",
-                  params: { id: product.id },
-                })
-              }
-            >
-              <View
-                style={[
-                  styles.recentIconBox,
-                  { backgroundColor: "rgba(236,72,153,0.1)" },
-                ]}
+            {khachHang.map((customer, index) => (
+              <TouchableOpacity
+                key={`${customer._raw?.id || customer.maKH}-${index}`}
+                style={styles.recentCard}
+                activeOpacity={0.7}
+                onPress={() =>
+                  router.push({
+                    pathname: "/customer/[id]",
+                    params: { id: customer._raw?.id || customer.maKH },
+                  })
+                }
               >
-                <Heart size={20} color={Colors.accent.pink} />
-              </View>
-              <View style={styles.recentCardContent}>
-                <Text style={styles.recentCardTitle} numberOfLines={1}>
-                  {product.code}
-                </Text>
-                <Text style={styles.recentCardSub} numberOfLines={1}>
-                  {product.price}đ
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.statusBadge,
-                  {
-                    backgroundColor:
-                      product.status === "available"
-                        ? "rgba(16,185,129,0.1)"
-                        : product.status === "pending"
-                        ? "rgba(245,158,11,0.1)"
-                        : "rgba(239,68,68,0.1)",
-                  },
-                ]}
-              >
-                <Text
+                <View
                   style={[
-                    styles.statusBadgeText,
-                    {
-                      color:
-                        product.status === "available"
-                          ? Colors.success
-                          : product.status === "pending"
-                          ? Colors.warning
-                          : Colors.error,
-                    },
+                    styles.recentIconBox,
+                    { backgroundColor: "rgba(59,130,246,0.1)" },
                   ]}
                 >
-                  {product.status === "available"
-                    ? "Còn hàng"
-                    : product.status === "pending"
-                    ? "Đang giữ"
-                    : "Đã hủy"}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View> */}
+                  <Users size={20} color={Colors.accent.blue} />
+                </View>
+                <View style={styles.recentCardContent}>
+                  <Text style={styles.recentCardTitle} numberOfLines={1}>
+                    {customer.tenKH}
+                  </Text>
+                  <View style={styles.recentCardRow}>
+                    <Phone size={12} color={Colors.textTertiary} />
+                    <Text style={styles.recentCardSub} numberOfLines={1}>
+                      {customer.diDong}
+                    </Text>
+                  </View>
+                  <View style={styles.recentCardRow}>
+                    <Clock size={12} color={Colors.textTertiary} />
+                    <Text style={styles.recentCardSub} numberOfLines={1}>
+                      Tạo: {Format_Date(customer.ngayDangKy)}
+                    </Text>
+                  </View>
+                </View>
+                {customer.status ? (
+                  <View
+                    style={[
+                      styles.customerStatusBadge,
+                      { backgroundColor: `${customer.statusColor}18` },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.badgeDot,
+                        { backgroundColor: customer.statusColor },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.statusBadgeText,
+                        { color: customer.statusColor },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {customer.status}
+                    </Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <View style={{ height: insets.bottom + 100 }} />
       </ScrollView>
@@ -1314,25 +1292,6 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.7)",
     fontWeight: "500",
     flex: 1,
-  },
-  propertyFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 8,
-  },
-  propertyPrice: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: Colors.white,
-  },
-  arrowButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.2)",
   },
   pagination: {
     flexDirection: "row",

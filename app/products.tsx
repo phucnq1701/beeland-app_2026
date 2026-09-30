@@ -24,7 +24,6 @@ import {
   Search,
   List,
   Grid3x3,
-  Filter,
   ChevronLeft,
   ChevronDown,
   ChevronUp,
@@ -36,6 +35,11 @@ import {
   getOverviewStats,
   UnitStatus,
 } from "@/mocks/overviewUnits";
+import {
+  FilterPanel,
+  FilterSection,
+  FilterToggleButton,
+} from "@/components/FilterPanel";
 import Colors from "@/constants/colors";
 import { Product } from "@/mocks/properties";
 import { ProductService } from "@/sevicesSupabase/ProductService";
@@ -58,6 +62,7 @@ export default function ProductsScreen({
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [filterExpanded, setFilterExpanded] = useState<boolean>(false);
+  const [legendExpanded, setLegendExpanded] = useState<boolean>(false);
   const [_selectedStatus, _setSelectedStatus] = useState<
     Product["status"] | "all"
   >("all");
@@ -66,7 +71,7 @@ export default function ProductsScreen({
     UnitStatus | "all"
   >("all");
   const [_onlyShowFavorites, _setOnlyShowFavorites] = useState<boolean>(
-    showFavorites === "true"
+    showFavorites === "true",
   );
   const router = useRouter();
   const { MaDA } = useLocalSearchParams();
@@ -319,7 +324,7 @@ export default function ProductsScreen({
       const finalMa = isNaN(ma) ? resDA?.data?.[0]?.MaDA : ma;
 
       // Cập nhật defaultFilterRef để khớp với trạng thái ban đầu thực tế
-      // (tránh isFilterChanged = true ngay khi load trang)
+      // (bộ đếm bộ lọc không tính dự án ban đầu)
       defaultFilterRef.current = {
         MaDA: finalMa ?? -1,
         MaKhu: null,
@@ -549,7 +554,7 @@ export default function ProductsScreen({
       }
       void loadProducts2(filterConditionRef.current);
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, []),
   );
 
   useEffect(() => {
@@ -611,25 +616,39 @@ export default function ProductsScreen({
     return "#" + (Number(number) >>> 0).toString(16).slice(-6);
   };
 
-  // Check if filter has changed from default (for "Đặt lại" button highlight)
-  const isFilterChanged = useMemo(() => {
-    const defaultFilter = defaultFilterRef.current;
-    const currentFilter = filterCondition;
-    const isEqual = (a: any, b: any) => {
-      if (a === b) return true;
-      if (Number.isNaN(a) && Number.isNaN(b)) return true;
-      if (a == null && b == null) return true;
-      return false;
+  // Số nhóm lọc đang khác mặc định (hiện badge trên nút Bộ lọc)
+  const getDefaultMaDA = () => {
+    const initial = defaultFilterRef.current.MaDA;
+    return initial != null && initial !== -1
+      ? initial
+      : (duAn?.[0]?.MaDA ?? (Number(MaDA) || null));
+  };
+
+  const activeFilterCount = useMemo(() => {
+    const defaultMaDA = getDefaultMaDA();
+    return [
+      filterCondition?.MaDA != null && filterCondition.MaDA !== defaultMaDA,
+      filterCondition?.MaKhu != null,
+      filterCondition?.FormCode != null,
+      filterCondition?.MaTT != null,
+    ].filter(Boolean).length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterCondition, duAn, MaDA]);
+
+  // Reset toàn bộ bộ lọc về mặc định
+  const resetFilters = () => {
+    const resetFilter = {
+      MaDA: getDefaultMaDA(),
+      MaKhu: null,
+      MaPK: null,
+      MaTT: null,
+      FormCode: null,
+      KyHieu: "",
     };
-    return (
-      !isEqual(currentFilter.MaDA, defaultFilter.MaDA) ||
-      !isEqual(currentFilter.MaKhu, defaultFilter.MaKhu) ||
-      !isEqual(currentFilter.MaPK, defaultFilter.MaPK) ||
-      !isEqual(currentFilter.MaTT, defaultFilter.MaTT) ||
-      !isEqual(currentFilter.FormCode, defaultFilter.FormCode) ||
-      !isEqual(currentFilter.KyHieu, defaultFilter.KyHieu)
-    );
-  }, [filterCondition]);
+    setFilterCondition(resetFilter);
+    setSearchQuery("");
+    void loadProducts2(resetFilter);
+  };
 
   const currentOverviewBlock = overviewBlocks[0];
   const overviewStats = getOverviewStats(currentOverviewBlock);
@@ -705,7 +724,7 @@ export default function ProductsScreen({
     Object.values(floorsMap).forEach((floor: any) => {
       // column là uuid (vi_tri) → sắp theo chuỗi
       floor.units.sort((a: any, b: any) =>
-        String(a.column).localeCompare(String(b.column))
+        String(a.column).localeCompare(String(b.column)),
       );
       floor.totalUnits = floor.units.length;
     });
@@ -794,7 +813,7 @@ export default function ProductsScreen({
             selectedOverviewStatus === "all"
               ? floor.units
               : floor.units.filter(
-                  (u: any) => u.status === selectedOverviewStatus
+                  (u: any) => u.status === selectedOverviewStatus,
                 );
 
           if (filteredUnits.length === 0) return null;
@@ -917,19 +936,65 @@ export default function ProductsScreen({
       <View style={styles.gridContainer}>
         {TrangThai?.length > 0 && (
           <View style={styles.statusLegend}>
-            <View style={styles.legendItems}>
-              {TrangThai.map((item) => (
-                <View key={item.MaTT} style={styles.legendItem}>
-                  <View
-                    style={[
-                      styles.legendDot,
-                      { backgroundColor: item.ColorWeb || "#ccc" },
-                    ]}
-                  />
-                  <Text style={styles.legendText}>{item.TenTT}</Text>
-                </View>
-              ))}
-            </View>
+            <TouchableOpacity
+              style={styles.legendHeader}
+              onPress={() => setLegendExpanded((v) => !v)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: legendExpanded }}
+            >
+              <Text style={styles.legendTitle}>Chú thích trạng thái</Text>
+              <View style={styles.legendCountBadge}>
+                <Text style={styles.legendCountText}>{TrangThai.length}</Text>
+              </View>
+              <View style={styles.legendToggle}>
+                <Text style={styles.legendToggleText}>
+                  {legendExpanded ? "Thu gọn" : "Xem tất cả"}
+                </Text>
+                {legendExpanded ? (
+                  <ChevronUp size={16} color={Colors.primary} />
+                ) : (
+                  <ChevronDown size={16} color={Colors.primary} />
+                )}
+              </View>
+            </TouchableOpacity>
+            {legendExpanded ? (
+              <View style={styles.legendItems}>
+                {TrangThai.map((item) => (
+                  <View key={item.MaTT} style={styles.legendItem}>
+                    <View
+                      style={[
+                        styles.legendDot,
+                        { backgroundColor: item.ColorWeb || "#ccc" },
+                      ]}
+                    />
+                    <Text style={styles.legendText} numberOfLines={1}>
+                      {item.TenTT}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.legendScroll}
+              >
+                {TrangThai.map((item) => (
+                  <View key={item.MaTT} style={styles.legendItem}>
+                    <View
+                      style={[
+                        styles.legendDot,
+                        { backgroundColor: item.ColorWeb || "#ccc" },
+                      ]}
+                    />
+                    <Text style={styles.legendText} numberOfLines={1}>
+                      {item.TenTT}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
           </View>
         )}
         {dataGrid.map((block) => (
@@ -1041,232 +1106,121 @@ export default function ProductsScreen({
         contentContainerStyle={styles.scrollContent}
         onScroll={handleScroll}
         scrollEventThrottle={300}
+        // Tìm kiếm + bộ lọc + tiêu đề bảng bám dính phía trên khi cuộn
+        stickyHeaderIndices={[0]}
       >
-        <View style={styles.searchAndFilterRow}>
-          <View style={styles.searchContainer}>
-            <Search color={Colors.textSecondary} size={20} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Tìm kiếm theo mã sản phẩm, số căn hộ..."
-              placeholderTextColor={Colors.textSecondary}
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-              autoCapitalize="none"
-              autoCorrect={false}
+        <View style={styles.stickyHeader}>
+          <View style={styles.searchAndFilterRow}>
+            <View style={styles.searchContainer}>
+              <Search color={Colors.textSecondary} size={20} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Tìm kiếm theo mã sản phẩm, số căn hộ..."
+                placeholderTextColor={Colors.textSecondary}
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <FilterToggleButton
+              open={filterExpanded}
+              activeCount={activeFilterCount}
+              onPress={() => setFilterExpanded(!filterExpanded)}
             />
           </View>
 
-          <TouchableOpacity
-            style={styles.filterButton}
-            activeOpacity={0.7}
-            onPress={() => setFilterExpanded(!filterExpanded)}
-          >
-            <Filter color={Colors.primary} size={18} />
-            <Text style={styles.filterText}>Bộ lọc</Text>
-            {filterExpanded ? (
-              <ChevronUp color={Colors.primary} size={18} />
-            ) : (
-              <ChevronDown color={Colors.primary} size={18} />
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {filterExpanded && (
-          <View style={styles.filterPanel}>
-            <View style={styles.filterSection}>
-              <View style={styles.filterSectionHeader}>
-                <Text style={styles.filterSectionTitle}>Dự án</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.resetFilterButton,
-                    isFilterChanged && styles.resetFilterButtonHighlight,
+          {filterExpanded && (
+            <FilterPanel activeCount={activeFilterCount} onReset={resetFilters}>
+              <FilterSection
+                title="Dự án"
+                options={duAn.map((project: any) => ({
+                  key: project?.MaDA,
+                  label: project?.TenDA,
+                  selected: filterCondition?.MaDA === project?.MaDA,
+                  onPress: () => applyChangeFilter("MaDA", project?.MaDA),
+                }))}
+              />
+              {khuVuc?.length > 0 && (
+                <FilterSection
+                  title="Khu vực"
+                  options={[
+                    {
+                      key: "__all__",
+                      label: "Tất cả",
+                      selected: filterCondition?.MaKhu == null,
+                      onPress: () => applyChangeFilter("MaKhu", null),
+                    },
+                    ...khuVuc.map((kv: any) => ({
+                      key: kv?.MaKhu,
+                      label: kv?.TenKhu,
+                      selected: filterCondition?.MaKhu === kv?.MaKhu,
+                      onPress: () => applyChangeFilter("MaKhu", kv?.MaKhu),
+                    })),
                   ]}
-                  disabled={!isFilterChanged}
-                  onPress={() => {
-                    // Reset toàn bộ bộ lọc về mặc định
-                    const firstProject = duAn?.[0];
-                    const defaultMaDA =
-                      firstProject?.MaDA ?? (Number(MaDA) || null);
-                    const resetFilter = {
-                      MaDA: defaultMaDA,
-                      MaKhu: null,
-                      MaPK: null,
-                      MaTT: null,
-                      FormCode: null,
-                      KyHieu: "",
-                    };
-                    setFilterCondition(resetFilter);
-                    setSearchQuery("");
-                    void loadProducts2(resetFilter);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.resetFilterText,
-                      isFilterChanged && styles.resetFilterTextHighlight,
-                    ]}
-                  >
-                    Đặt lại
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={{ maxHeight: 200 }}>
-                <View style={styles.filterOptionsGrid}>
-                  {duAn.map((project) => (
-                    <TouchableOpacity
-                      key={project?.MaDA}
-                      style={[
-                        styles.filterOption,
-                        filterCondition?.MaDA === project?.MaDA &&
-                          styles.filterOptionActive,
-                      ]}
-                      onPress={() => {
-                        applyChangeFilter("MaDA", project?.MaDA);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.filterOptionText,
-                          filterCondition?.MaDA === project?.MaDA &&
-                            styles.filterOptionTextActive,
-                        ]}
-                      >
-                        {project?.TenDA}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-            </View>
-
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Khu Vực</Text>
-              <ScrollView style={{ maxHeight: 200 }}>
-                <View style={styles.filterOptionsGrid}>
-                  {khuVuc.map((project) => (
-                    <TouchableOpacity
-                      key={project?.MaKhu}
-                      style={[
-                        styles.filterOption,
-                        filterCondition?.MaKhu === project?.MaKhu &&
-                          styles.filterOptionActive,
-                      ]}
-                      onPress={() => {
-                        applyChangeFilter("MaKhu", project?.MaKhu);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.filterOptionText,
-                          filterCondition?.MaKhu === project?.MaKhu &&
-                            styles.filterOptionTextActive,
-                        ]}
-                      >
-                        {project?.TenKhu}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-            </View>
-
-            {/* Cao tầng / Thấp tầng — form_code: CAOTANG | THAPTANG | null */}
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Loại sản phẩm</Text>
-              <View style={styles.filterOptionsGrid}>
-                {[
+                />
+              )}
+              {/* Cao tầng / Thấp tầng — form_code: CAOTANG | THAPTANG | null */}
+              <FilterSection
+                title="Loại sản phẩm"
+                options={[
                   { key: null, label: "Tất cả" },
                   { key: "CAOTANG", label: "Cao tầng" },
                   { key: "THAPTANG", label: "Thấp tầng" },
-                ].map((opt) => (
-                  <TouchableOpacity
-                    key={String(opt.key)}
-                    style={[
-                      styles.filterOption,
-                      filterCondition?.FormCode === opt.key &&
-                        styles.filterOptionActive,
-                    ]}
-                    onPress={() => {
-                      setFilterCondition((prev) => ({
-                        ...prev,
-                        FormCode: opt.key,
-                      }));
-                      void loadProducts2({
-                        ...filterCondition,
-                        FormCode: opt.key,
-                      });
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        filterCondition?.FormCode === opt.key &&
-                          styles.filterOptionTextActive,
-                      ]}
-                    >
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
+                ].map((opt) => ({
+                  key: String(opt.key),
+                  label: opt.label,
+                  selected: filterCondition?.FormCode === opt.key,
+                  onPress: () => {
+                    setFilterCondition((prev) => ({
+                      ...prev,
+                      FormCode: opt.key,
+                    }));
+                    void loadProducts2({
+                      ...filterCondition,
+                      FormCode: opt.key,
+                    });
+                  },
+                }))}
+              />
+              <FilterSection
+                title="Trạng thái"
+                options={[
+                  {
+                    key: "__all__",
+                    label: "Tất cả",
+                    selected: filterCondition?.MaTT == null,
+                    onPress: () => applyChangeFilter("TrangThai", null),
+                  },
+                  ...TrangThai.map((status: any) => ({
+                    key: status.MaTT,
+                    label: status.TenTT,
+                    selected: filterCondition?.MaTT === status.MaTT,
+                    color: status.ColorWeb,
+                    onPress: () => applyChangeFilter("TrangThai", status.MaTT),
+                  })),
+                ]}
+              />
+            </FilterPanel>
+          )}
 
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Trạng thái</Text>
-              <View style={styles.filterOptionsGrid}>
-                <TouchableOpacity
-                  key={null}
-                  style={[
-                    styles.filterOption,
-                    filterCondition?.MaTT === null && styles.filterOptionActive,
-                  ]}
-                  onPress={() => {
-                    applyChangeFilter("TrangThai", null);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.filterOptionText,
-                      filterCondition?.MaTT === null &&
-                        styles.filterOptionTextActive,
-                    ]}
-                  >
-                    Tất cả
-                  </Text>
-                </TouchableOpacity>
-                {TrangThai.map((status) => (
-                  <TouchableOpacity
-                    key={status.MaTT}
-                    style={[
-                      styles.filterOption,
-                      filterCondition?.MaTT === status.MaTT &&
-                        styles.filterOptionActive,
-                    ]}
-                    onPress={() => {
-                      applyChangeFilter("TrangThai", status.MaTT);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        filterCondition?.MaTT === status.MaTT &&
-                          styles.filterOptionTextActive,
-                      ]}
-                    >
-                      {status.TenTT}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+          {viewMode === "list" && !loading && (
+            <View style={[styles.tableHeader, styles.tableHeaderSticky]}>
+              <View style={[styles.colStatus]}>
+                <Text>Trạng thái</Text>
+              </View>
+              <View style={[styles.colCode]}>
+                <Text>Mã sản phẩm</Text>
+              </View>
+              <View style={[styles.colPrice]}>
+                <Text style={[styles.priceHeaderText]}>
+                  Tổng giá trị gồm PBT
+                </Text>
               </View>
             </View>
-          </View>
-        )}
+          )}
+        </View>
 
         {viewMode === "list" ? (
           <>
@@ -1276,21 +1230,7 @@ export default function ProductsScreen({
                 <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
               </View>
             ) : (
-              <View style={styles.productTable}>
-                <View style={styles.tableHeader}>
-                  <View style={[styles.colStatus]}>
-                    <Text>Trạng thái</Text>
-                  </View>
-                  <View style={[styles.colCode]}>
-                    <Text>Mã sản phẩm</Text>
-                  </View>
-                  <View style={[styles.colPrice]}>
-                    <Text style={[styles.priceHeaderText]}>
-                      Tổng giá trị gồm PBT
-                    </Text>
-                  </View>
-                </View>
-
+              <View style={[styles.productTable, styles.productTableBody]}>
                 {products2.map((product, index) => (
                   <TouchableOpacity
                     key={`${product.MaSP}-${index}`}
@@ -1315,7 +1255,7 @@ export default function ProductsScreen({
                             styles.statusBadgeText,
                             {
                               color: getStatusTextColor(
-                                getStatusColor(product.MaTT)
+                                getStatusColor(product.MaTT),
                               ),
                             },
                           ]}
@@ -1478,22 +1418,6 @@ const styles = StyleSheet.create({
   viewModeTextActive: {
     color: Colors.white,
   },
-  filterButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  filterText: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
   productCount: {
     fontSize: 15,
     color: Colors.textSecondary,
@@ -1510,6 +1434,25 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  stickyHeader: {
+    backgroundColor: Colors.background,
+    // Phủ kín padding ngang của scrollContent để nội dung không lộ ra 2 bên
+    marginHorizontal: -15,
+    paddingHorizontal: 15,
+  },
+  // Tiêu đề bảng nằm trong khối bám dính → tự bo góc trên + viền như bảng
+  tableHeaderSticky: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+  },
+  // Thân bảng nối liền dưới tiêu đề: bỏ viền + bo góc trên
+  productTableBody: {
+    borderTopWidth: 0,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
   },
   tableHeader: {
     flexDirection: "row",
@@ -1583,109 +1526,81 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
   },
-  filterPanel: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  filterSection: {
-    marginBottom: 20,
-  },
-  filterSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  filterSectionTitle: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-    marginBottom: 12,
-  },
-  resetFilterButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: "#E5E7EB",
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    opacity: 0.6,
-  },
-  resetFilterButtonHighlight: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-    opacity: 1,
-  },
-  resetFilterText: {
-    fontSize: 12,
-    fontWeight: "500" as const,
-    color: "#9CA3AF",
-  },
-  resetFilterTextHighlight: {
-    color: Colors.white,
-  },
-  filterOptionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  filterOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  filterOptionActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  filterOptionText: {
-    fontSize: 14,
-    fontWeight: "500" as const,
-    color: Colors.text,
-  },
-  filterOptionTextActive: {
-    color: Colors.white,
-  },
   gridContainer: {
     gap: 20,
   },
   statusLegend: {
     backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: Colors.border,
+    gap: 10,
   },
-  legendTitle: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-    marginBottom: 12,
-  },
-  legendItems: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 16,
-  },
-  legendItem: {
+  legendHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
+  legendTitle: {
+    fontSize: 14,
+    fontWeight: "600" as const,
+    color: Colors.text,
+  },
+  legendCountBadge: {
+    minWidth: 22,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    backgroundColor: Colors.featureOrange,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  legendCountText: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    color: Colors.primary,
+  },
+  legendToggle: {
+    marginLeft: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  legendToggleText: {
+    fontSize: 13,
+    fontWeight: "500" as const,
+    color: Colors.primary,
+  },
+  legendScroll: {
+    gap: 8,
+    paddingRight: 4,
+  },
+  legendItems: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: Colors.backgroundTertiary,
+  },
   legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
   },
   legendText: {
-    fontSize: 14,
+    fontSize: 12,
+    fontWeight: "500" as const,
     color: Colors.text,
   },
   blockCard: {
