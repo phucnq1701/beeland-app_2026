@@ -24,6 +24,7 @@ import {
   Screen,
   SearchBar,
   SectionHeader,
+  SegmentedControl,
   SelectField,
   SheetOption,
   Skeleton,
@@ -54,6 +55,7 @@ export default function UiGalleryScreen() {
   const [san, setSan] = useState<string | null>(null);
   const [phone, setPhone] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [segment, setSegment] = useState<'home' | 'menu'>('home');
   const expiresNormal = useMemo(() => Date.now() + 200_000, []);
   const expiresUrgent = useMemo(() => Date.now() + 90_000, []);
   const expiredAt = useMemo(() => Date.now() - 1_000, []);
@@ -207,6 +209,16 @@ export default function UiGalleryScreen() {
             <SelectField label="Sàn giao dịch" required value={san} options={SAN_OPTIONS} onChange={setSan} />
           </View>
         </Card>
+
+        <SectionHeader title="Phân đoạn" />
+        <SegmentedControl
+          value={segment}
+          onChange={setSegment}
+          options={[
+            { value: 'home', label: 'Trang chủ' },
+            { value: 'menu', label: 'Tab menu' },
+          ]}
+        />
 
         <SectionHeader title="Tiến độ · Đếm ngược" />
         <Card>

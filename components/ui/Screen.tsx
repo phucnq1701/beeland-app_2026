@@ -17,6 +17,8 @@ export type ScreenProps = {
   tone?: 'work' | 'showcase';
   padded?: boolean;
   keyboardAware?: boolean;
+  /** Chừa thêm khoảng trống cuối nội dung (vd 100 khi có tab bar nổi). */
+  bottomInset?: number;
 };
 
 /**
@@ -33,13 +35,14 @@ export function Screen({
   tone = 'work',
   padded = true,
   keyboardAware,
+  bottomInset = 0,
 }: ScreenProps) {
   const bg = tone === 'showcase' ? colors.showcase.paper : colors.bg;
 
   const body = scroll ? (
     <ScrollView
       style={styles.flex}
-      contentContainerStyle={[styles.content, padded && styles.padded]}
+      contentContainerStyle={[styles.content, padded && styles.padded, bottomInset ? { paddingBottom: bottomInset } : null]}
       keyboardShouldPersistTaps="handled"
       refreshControl={
         onRefresh ? (

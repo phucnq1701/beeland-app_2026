@@ -12,6 +12,13 @@ const UI_STRICT_FILES = [
   'app/booking/**/*.{ts,tsx}',
   'components/booking/**/*.{ts,tsx}',
   'components/FilterPanel.tsx',
+  // Giai đoạn 2 – điều hướng & trang chủ
+  'app/(tabs)/_layout.tsx',
+  'app/(tabs)/home.tsx',
+  'app/(tabs)/account.tsx',
+  'app/all-management.tsx',
+  'app/profile.tsx',
+  'components/home/**/*.{ts,tsx}',
 ];
 
 module.exports = defineConfig([

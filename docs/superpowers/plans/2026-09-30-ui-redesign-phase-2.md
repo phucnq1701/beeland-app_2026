@@ -31,7 +31,7 @@ Plan đã chọn mặc định (ghi **[MĐ]**); đổi thì sửa task tương �
 | Q1 | `app/notifications.tsx` gọi `NotificationService.getNotifications` nhưng **chỉ `console.log`**, màn vẫn hiển thị `mocks/notifications`. Badge chuông ở Home cũng đếm từ mock → số chưa đọc là **số giả**. | **[MĐ]** Theo D11 (màn mock không tái cấu trúc): **không sửa màn Thông báo** ở GĐ2; ở Home **bỏ số trên badge** (chuông vẫn mở màn Thông báo). Nối dữ liệu thật để một đợt riêng khi có API rõ trường "đã đọc". |
 | Q2 | `app/manage-features.tsx` **không có màn nào điều hướng tới**, trùng chức năng tab "Trang chủ" của `all-management`. | **[MĐ]** Xoá (như `booking/payment-method` ở GĐ1). |
 | Q3 | Mục "Cài đặt" ở tab Tài khoản bấm **không làm gì**. | **[MĐ]** Đổi thành "Cấu hình trang chủ & menu" → mở `/all-management`. |
-| Q4 | Tính năng "Hoa hồng" (id 7) chưa có màn; bấm hiện không phản hồi. | **[MĐ]** Toast info "Tính năng Hoa hồng đang được phát triển". |
+| Q4 | Tính năng "Hoa hồng" (id 7) chưa có màn; bấm hiện không phản hồi. | **Đã chốt:** ẩn mọi tính năng chưa có màn (`routeForFeature` = null) khỏi Home, Tất cả quản lý, tab menu, Tài khoản cho đến khi có màn thật. |
 
 ## Review Focus
 
@@ -73,7 +73,7 @@ eslint.config.js                     mở rộng UI_STRICT_FILES                
 - `FEATURE_ROUTES: Record<string, string>` = `{ '1': '/projects', '2': '/products', '3': '/appointments', '4': '/locked-units', '5': '/bookings', '6': '/customers', '8': '/contracts', '9': '/reports', '13': '/deposits' }` (đúng như `all-management.tsx` hiện tại; id 7 không có).
 - `routeForFeature(id: string): string | null`
 - `AGENCY_FEATURE_IDS = ['1', '2', '5', '13'] as const`
-- `visibleFeatureIds(allIds: string[], opts: { isAgency: boolean; menuOnly: boolean; menuEligible: string[] }): string[]` – thứ tự giữ theo `allIds`.
+- `visibleFeatureIds(allIds: string[], opts: { isAgency: boolean; menuOnly: boolean; menuEligible: string[] }): string[]` – thứ tự giữ theo `allIds`; **luôn loại id không có route** (Q4).
 - `type ToggleResult = { next: string[]; error: string | null }`
 - `toggleSelection(selected: string[], id: string, opts: { min: number; max: number; tooManyMessage: string; tooFewMessage: string }): ToggleResult` – bỏ chọn khi `selected.length <= min` → giữ nguyên + `tooFewMessage`; chọn thêm khi `>= max` → giữ nguyên + `tooManyMessage`.
 - `moveItem(list: string[], id: string, dir: -1 | 1): string[]` – ngoài biên hoặc không có id → trả mảng mới giống cũ.
@@ -92,7 +92,7 @@ test("agency accounts only see projects, products, bookings, deposits", () => {
   const menuEligible = ["1","2","3","4","5","6","8","9","13"];
   assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: true, menuOnly: false, menuEligible })), ["1","2","5","13"]);
   assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: true, menuEligible })), menuEligible);
-  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: false, menuEligible })), all);
+  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: false, menuEligible })), all.filter((id) => id !== "7"));
 });
 test("toggleSelection enforces min and max with the given messages", () => {
   const o = { min: 1, max: 2, tooManyMessage: "max", tooFewMessage: "min" };
@@ -154,14 +154,14 @@ test("normalizeSelection survives stale or corrupted storage", () => {
 - `normalizeSelection` (Task 1) thay đoạn đọc cấu hình tự viết; đại lý lọc bằng `visibleFeatureIds`.
 - Bố cục (`Screen` scroll, `onRefresh` gọi lại tất cả loader song song): `HomeHeader` → lưới `FeatureTile` 3 cột (tối đa 6 mục + ô "Tất cả" (icon `LayoutGrid`) → `/all-management`) → `ProjectCarousel` → `RecentSection` Booking (ListItem như danh sách booking GĐ1: Avatar, tên KH, mã căn · dự án, MoneyText short + StatusBadge) → Đặt cọc (nếu không phải đại lý) → Khách hàng (Avatar, tên, `maskPhone`).
 - Bỏ: `LinearGradient` nền, các animation `headerOpacity/headerTranslateY/featuresAnimations/badgePulse/cardsScale/shimmerAnim`, `Dimensions.get` (dùng `useWindowDimensions` nếu cần), `mocks/notifications`.
-- Bấm tính năng: `routeForFeature(id)`; `null` → toast info "Tính năng Hoa hồng đang được phát triển" (Q4) hoặc "Tính năng đang được phát triển".
+- Bấm tính năng: `routeForFeature(id)` (mục không có route đã bị ẩn – Q4; nếu vẫn gặp `null` thì bỏ qua).
 - Tab bar nổi → `Screen` cần chừa đáy: thêm `contentContainerStyle` padding đáy 100 (như `bookings` khi `embedded`) – dùng prop mới `bottomInset?: number` của `Screen` (sửa `components/ui/Screen.tsx`, mặc định 0).
 
 - [ ] **Step 1: Thêm prop `bottomInset` vào `Screen`.** Check chuẩn.
 - [ ] **Step 2: Viết 4 component `components/home/*`.** Check chuẩn.
 - [ ] **Step 3: Viết lại JSX `home.tsx`** theo bố cục; màn < 400 dòng.
 - [ ] **Step 4: Check chuẩn** + `grep -c "mocks/notifications" "app/(tabs)/home.tsx"` → 0.
-- [ ] **Step 5: Kiểm tay (người dùng):** kéo làm mới; bật máy bay rồi kéo → từng khối báo "Không tải được · Thử lại", header + lưới tính năng vẫn dùng được; tài khoản đại lý không thấy khối Đặt cọc và chỉ thấy 4 tính năng; bấm "Hoa hồng" → toast.
+- [ ] **Step 5: Kiểm tay (người dùng):** kéo làm mới; bật máy bay rồi kéo → từng khối báo "Không tải được · Thử lại", header + lưới tính năng vẫn dùng được; tài khoản đại lý không thấy khối Đặt cọc và chỉ thấy 4 tính năng; không còn thấy mục "Hoa hồng".
 
 ---
 

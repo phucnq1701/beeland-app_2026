@@ -23,3 +23,4 @@ export * from './SearchBar';
 export * from './SelectField';
 export * from './ProgressSteps';
 export * from './CountdownPill';
+export * from './SegmentedControl';

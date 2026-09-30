@@ -1,19 +1,23 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Dimensions,
-  Platform,
-  Alert,
-} from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
-import Colors from '@/constants/colors';
-import { features } from '@/mocks/features';
-import { Settings, ChevronUp, ChevronDown, House, LayoutGrid } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Settings2 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { FeatureGrid } from '@/components/home/FeatureGrid';
+import {
+  AppHeader,
+  BottomActionBar,
+  Button,
+  Card,
+  IconButton,
+  ListItem,
+  Screen,
+  SectionHeader,
+  SegmentedControl,
+  Text,
+  useToast,
+} from '@/components/ui';
 import { getScopedKey } from '@/components/utils/accountScope';
 import {
   loadMenuTabIds,
@@ -22,73 +26,65 @@ import {
   MENU_TAB_FEATURE_IDS,
   DEFAULT_MENU_TAB_IDS,
 } from '@/components/utils/menuTabs';
+import {
+  AGENCY_FEATURE_IDS,
+  moveItem,
+  normalizeSelection,
+  routeForFeature,
+  toggleSelection,
+  visibleFeatureIds,
+} from '@/lib/featureConfig';
+import { features } from '@/mocks/features';
+import { colors, radius, space } from '@/theme';
 
-const { width } = Dimensions.get('window');
 const STORAGE_KEY = '@home_features_config';
 const MAX_HOME_FEATURES = 6;
+const ALL_IDS = features.map((f) => f.id);
 
 type ConfigTab = 'home' | 'menu';
 
 export default function AllManagementScreen() {
   const router = useRouter();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<ConfigTab>('home');
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
+  const [saving, setSaving] = useState(false);
 
   // Cấu hình các mục trên trang chủ (tối đa 6)
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [originalSelectedIds, setOriginalSelectedIds] = useState<string[]>([]);
 
   // Cấu hình 2 tab menu ở giữa tab bar (mặc định: 2 mục đầu tiên)
-  const [menuSelectedIds, setMenuSelectedIds] =
-    useState<string[]>(DEFAULT_MENU_TAB_IDS);
-  const [menuOriginalIds, setMenuOriginalIds] =
-    useState<string[]>(DEFAULT_MENU_TAB_IDS);
+  const [menuSelectedIds, setMenuSelectedIds] = useState<string[]>(DEFAULT_MENU_TAB_IDS);
+  const [menuOriginalIds, setMenuOriginalIds] = useState<string[]>(DEFAULT_MENU_TAB_IDS);
 
   const [isAgency, setIsAgency] = useState<boolean>(false);
 
-  useEffect(() => {
-    loadConfiguration();
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadConfiguration();
-    }, [])
-  );
-
   const loadConfiguration = async () => {
     let agency = false;
+    const homeVisible = () =>
+      visibleFeatureIds(ALL_IDS, { isAgency: agency, menuOnly: false, menuEligible: MENU_TAB_FEATURE_IDS });
+    const defaults = () => (agency ? [...AGENCY_FEATURE_IDS] : homeVisible().slice(0, MAX_HOME_FEATURES));
     try {
       const typeAccount = await AsyncStorage.getItem('@type_account');
       agency = typeAccount === 'AGENCY';
       setIsAgency(agency);
 
       const stored = await AsyncStorage.getItem(await getScopedKey(STORAGE_KEY));
+      let ids = defaults();
       if (stored) {
         const config = JSON.parse(stored);
-        let ids = config.selectedIds || [];
-        if (agency) {
-          ids = ids.filter((id: string) => ['1', '2', '5', '13'].includes(id));
-          if (ids.length === 0) ids = ['1', '2', '5', '13'];
-        }
-        setSelectedIds(ids);
-        setOriginalSelectedIds(ids);
-      } else {
-        let defaultIds = features.slice(0, MAX_HOME_FEATURES).map(f => f.id);
-        if (agency) {
-          defaultIds = ['1', '2', '5', '13'];
-        }
-        setSelectedIds(defaultIds);
-        setOriginalSelectedIds(defaultIds);
+        // Giữ cấu hình đã lưu (kể cả 0 mục); bỏ id không còn hiển thị (vd Hoa hồng – Q4)
+        ids = Array.isArray(config?.selectedIds) ? normalizeSelection(config, homeVisible(), []) : defaults();
+        if (agency && ids.length === 0) ids = [...AGENCY_FEATURE_IDS];
       }
+      setSelectedIds(ids);
+      setOriginalSelectedIds(ids);
     } catch (error) {
       console.log('[AllManagement] Load config error:', error instanceof Error ? error.message : String(error));
-      let defaultIds = features.slice(0, MAX_HOME_FEATURES).map(f => f.id);
-      if (agency) {
-        defaultIds = ['1', '2', '5', '13'];
-      }
-      setSelectedIds(defaultIds);
-      setOriginalSelectedIds(defaultIds);
+      const ids = defaults();
+      setSelectedIds(ids);
+      setOriginalSelectedIds(ids);
     }
 
     // Cấu hình tab menu
@@ -103,26 +99,26 @@ export default function AllManagementScreen() {
     }
   };
 
-  // Danh sách đang cấu hình theo tab hiện tại
-  let activeSelectedIds = activeTab === 'home' ? selectedIds : menuSelectedIds;
-  if (isAgency && activeTab === 'home') {
-    activeSelectedIds = activeSelectedIds.filter(id => ['1', '2', '5', '13'].includes(id));
-  }
+  useEffect(() => {
+    loadConfiguration();
+  }, []);
 
-  // Tab menu chỉ cho chọn các mục có màn hình tương ứng
-  const selectableFeatures = features.filter(f => {
-    if (isAgency) {
-      if (activeTab === 'menu') {
-        const isTabFeature = MENU_TAB_FEATURE_IDS.includes(f.id);
-        return isTabFeature && ['1', '2', '5', '13'].includes(f.id);
-      }
-      return ['1', '2', '5', '13'].includes(f.id);
-    }
-    if (activeTab === 'menu') {
-      return MENU_TAB_FEATURE_IDS.includes(f.id);
-    }
-    return true;
+  useFocusEffect(
+    useCallback(() => {
+      loadConfiguration();
+    }, [])
+  );
+
+  // Các mục được phép theo tab đang cấu hình (đại lý, tab menu, ẩn mục chưa có màn)
+  const selectableIds = visibleFeatureIds(ALL_IDS, {
+    isAgency,
+    menuOnly: activeTab === 'menu',
+    menuEligible: MENU_TAB_FEATURE_IDS,
   });
+  const activeSelectedIds = (activeTab === 'home' ? selectedIds : menuSelectedIds).filter((id) =>
+    selectableIds.includes(id)
+  );
+  const setActiveSelected = activeTab === 'home' ? setSelectedIds : setMenuSelectedIds;
 
   const handleTabSwitch = (tab: ConfigTab) => {
     if (tab === activeTab) return;
@@ -142,99 +138,53 @@ export default function AllManagementScreen() {
   };
 
   const handleSavePress = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       if (activeTab === 'home') {
         const config = { selectedIds };
         await AsyncStorage.setItem(await getScopedKey(STORAGE_KEY), JSON.stringify(config));
         setOriginalSelectedIds(selectedIds);
-        console.log('[AllManagement] Home configuration saved', { selectedIds });
       } else {
         await saveMenuTabIds(menuSelectedIds);
         setMenuOriginalIds(menuSelectedIds);
-        console.log('[AllManagement] Menu tabs configuration saved', { menuSelectedIds });
       }
       setIsEditMode(false);
-      if (Platform.OS === 'web') {
-        alert('Đã lưu cấu hình thành công!');
-      } else {
-        Alert.alert('Thành công', 'Đã lưu cấu hình thành công!');
-      }
+      toast.show({ type: 'success', message: 'Đã lưu cấu hình' });
     } catch (error) {
       console.log('[AllManagement] Save config error:', error instanceof Error ? error.message : String(error));
-      if (Platform.OS === 'web') {
-        alert('Lỗi khi lưu cấu hình');
-      } else {
-        Alert.alert('Lỗi', 'Không thể lưu cấu hình');
-      }
+      toast.show({ type: 'error', message: 'Không thể lưu cấu hình' });
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleFeatureToggle = (featureId: string) => {
     if (!isEditMode) return;
-
-    if (activeTab === 'home') {
-      const isSelected = selectedIds.includes(featureId);
-      if (isSelected) {
-        setSelectedIds(selectedIds.filter(id => id !== featureId));
-      } else {
-        if (selectedIds.length >= MAX_HOME_FEATURES) {
-          if (Platform.OS === 'web') {
-            alert(`Bạn chỉ có thể chọn tối đa ${MAX_HOME_FEATURES} mục`);
-          } else {
-            Alert.alert('Giới hạn', `Bạn chỉ có thể chọn tối đa ${MAX_HOME_FEATURES} mục`);
-          }
-          return;
-        }
-        setSelectedIds([...selectedIds, featureId]);
-      }
-    } else {
-      const isSelected = menuSelectedIds.includes(featureId);
-      if (isSelected) {
-        if (menuSelectedIds.length <= 1) {
-          if (Platform.OS === 'web') {
-            alert('Cần chọn ít nhất 1 mục cho tab menu');
-          } else {
-            Alert.alert('Giới hạn', 'Cần chọn ít nhất 1 mục cho tab menu');
-          }
-          return;
-        }
-        setMenuSelectedIds(menuSelectedIds.filter(id => id !== featureId));
-      } else {
-        if (menuSelectedIds.length >= MAX_MENU_TABS) {
-          if (Platform.OS === 'web') {
-            alert(`Bạn chỉ có thể chọn tối đa ${MAX_MENU_TABS} mục cho tab menu`);
-          } else {
-            Alert.alert('Giới hạn', `Bạn chỉ có thể chọn tối đa ${MAX_MENU_TABS} mục cho tab menu`);
-          }
-          return;
-        }
-        setMenuSelectedIds([...menuSelectedIds, featureId]);
-      }
+    const result =
+      activeTab === 'home'
+        ? toggleSelection(selectedIds, featureId, {
+            min: 0,
+            max: MAX_HOME_FEATURES,
+            tooManyMessage: `Bạn chỉ có thể chọn tối đa ${MAX_HOME_FEATURES} mục`,
+            tooFewMessage: '',
+          })
+        : toggleSelection(menuSelectedIds, featureId, {
+            min: 1,
+            max: MAX_MENU_TABS,
+            tooManyMessage: `Bạn chỉ có thể chọn tối đa ${MAX_MENU_TABS} mục cho tab menu`,
+            tooFewMessage: 'Cần chọn ít nhất 1 mục cho tab menu',
+          });
+    if (result.error) {
+      toast.show({ type: 'info', message: result.error });
+      return;
     }
+    setActiveSelected(result.next);
   };
 
-  const handleMoveUp = (featureId: string) => {
+  const handleMove = (featureId: string, dir: -1 | 1) => {
     if (!isEditMode) return;
-    const list = activeSelectedIds;
-    const setter = activeTab === 'home' ? setSelectedIds : setMenuSelectedIds;
-    const currentIndex = list.indexOf(featureId);
-    if (currentIndex <= 0) return;
-
-    const newOrder = [...list];
-    [newOrder[currentIndex - 1], newOrder[currentIndex]] = [newOrder[currentIndex], newOrder[currentIndex - 1]];
-    setter(newOrder);
-  };
-
-  const handleMoveDown = (featureId: string) => {
-    if (!isEditMode) return;
-    const list = activeSelectedIds;
-    const setter = activeTab === 'home' ? setSelectedIds : setMenuSelectedIds;
-    const currentIndex = list.indexOf(featureId);
-    if (currentIndex >= list.length - 1) return;
-
-    const newOrder = [...list];
-    [newOrder[currentIndex], newOrder[currentIndex + 1]] = [newOrder[currentIndex + 1], newOrder[currentIndex]];
-    setter(newOrder);
+    setActiveSelected(moveItem(activeSelectedIds, featureId, dir));
   };
 
   const handleFeaturePress = (featureId: string) => {
@@ -242,482 +192,146 @@ export default function AllManagementScreen() {
       handleFeatureToggle(featureId);
       return;
     }
-
-    console.log('[AllManagement] Feature pressed', { featureId });
-
-    if (featureId === '1') {
-      router.push('/projects');
-    } else if (featureId === '2') {
-      router.push('/products');
-    } else if (featureId === '3') {
-      router.push('/appointments');
-    } else if (featureId === '4') {
-      router.push('/locked-units');
-    } else if (featureId === '5') {
-      router.push('/bookings');
-    } else if (featureId === '6') {
-      router.push('/customers');
-    } else if (featureId === '7') {
-      console.log('[AllManagement] Hoa hồng - route not implemented');
-    } else if (featureId === '8') {
-      console.log('[AllManagement] Navigating to contracts');
-      router.push('/contracts');
-    } else if (featureId === '9') {
-      console.log('[AllManagement] Navigating to reports');
-      router.push('/reports');
-    } else if (featureId === '13') {
-      console.log('[AllManagement] Navigating to deposits');
-      router.push('/deposits');
-    } else {
-      console.log('[AllManagement] No route defined for feature', { featureId });
-    }
+    const route = routeForFeature(featureId);
+    if (route) router.push(route as never);
   };
 
   const editModeHintText =
     activeTab === 'home'
       ? `Chọn ${selectedIds.length}/${MAX_HOME_FEATURES} mục hiển thị trên trang chủ`
-      : `Chọn ${menuSelectedIds.length}/${MAX_MENU_TABS} mục hiển thị trên thanh tab (giữa Home và Tài khoản)`;
+      : `Chọn ${menuSelectedIds.length}/${MAX_MENU_TABS} mục hiển thị trên thanh tab (giữa Trang chủ và Tài khoản)`;
+
+  const unselected = features.filter((f) => selectableIds.includes(f.id) && !activeSelectedIds.includes(f.id));
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: 'Tất cả quản lý',
-          headerStyle: {
-            backgroundColor: Colors.white,
-          },
-          headerTintColor: Colors.text,
-          headerShadowVisible: false,
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={isEditMode ? handleSavePress : handleEditPress}
-              style={styles.headerButton}
-            >
-              <Text style={[styles.headerButtonText, isEditMode && styles.headerButtonTextSave]}>
-                {isEditMode ? 'Lưu' : 'Chỉnh sửa'}
-              </Text>
-            </TouchableOpacity>
-          ),
-        }}
-      />
-
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <Screen
+        header={
+          <AppHeader
+            title="Tất cả quản lý"
+            actions={
+              isEditMode ? null : (
+                <Button variant="ghost" title="Sửa" onPress={handleEditPress} />
+              )
+            }
+          />
+        }
+        footer={
+          isEditMode ? (
+            <BottomActionBar>
+              <Button variant="secondary" title="Huỷ" onPress={handleEditPress} />
+              <Button title="Lưu cấu hình" loading={saving} onPress={handleSavePress} style={styles.flex} />
+            </BottomActionBar>
+          ) : null
+        }
       >
-        {/* Segmented control: Trang chủ | Cấu hình menu */}
-        <View style={styles.tabSwitchContainer}>
-          <TouchableOpacity
-            style={[styles.tabSwitchButton, activeTab === 'home' && styles.tabSwitchButtonActive]}
-            onPress={() => handleTabSwitch('home')}
-            activeOpacity={0.8}
-          >
-            <House
-              color={activeTab === 'home' ? Colors.white : Colors.textSecondary}
-              size={16}
-              strokeWidth={2.5}
-            />
-            <Text style={[styles.tabSwitchText, activeTab === 'home' && styles.tabSwitchTextActive]}>
-              Trang chủ
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabSwitchButton, activeTab === 'menu' && styles.tabSwitchButtonActive]}
-            onPress={() => handleTabSwitch('menu')}
-            activeOpacity={0.8}
-          >
-            <LayoutGrid
-              color={activeTab === 'menu' ? Colors.white : Colors.textSecondary}
-              size={16}
-              strokeWidth={2.5}
-            />
-            <Text style={[styles.tabSwitchText, activeTab === 'menu' && styles.tabSwitchTextActive]}>
-              Cấu hình menu
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <SegmentedControl
+          value={activeTab}
+          onChange={handleTabSwitch}
+          options={[
+            { value: 'home', label: 'Trang chủ' },
+            { value: 'menu', label: 'Tab menu' },
+          ]}
+        />
 
-        {isEditMode && (
-          <View style={styles.editModeHeader}>
-            <View style={styles.editModeHeaderContent}>
-              <Settings color={Colors.primary} size={20} />
-              <View style={styles.editModeTextContainer}>
-                <Text style={styles.editModeText}>{editModeHintText}</Text>
-                <Text style={styles.editModeSubText}>
-                  Sử dụng nút mũi tên để thay đổi thứ tự hiển thị
-                </Text>
-              </View>
+        {isEditMode ? (
+          <View style={styles.hint}>
+            <Settings2 size={18} color={colors.onPrimarySubtle} />
+            <View style={styles.flex}>
+              <Text variant="caption" weight="semibold" color="onPrimarySubtle">
+                {editModeHintText}
+              </Text>
+              <Text variant="caption" color="onPrimarySubtle">
+                Chạm để chọn/bỏ chọn, dùng mũi tên để đổi thứ tự.
+              </Text>
             </View>
           </View>
-        )}
+        ) : null}
 
-        <Text style={styles.sectionTitle}>
-          {activeTab === 'home' ? 'Các mục đã chọn' : 'Tab menu hiển thị'} ({activeSelectedIds.length})
-        </Text>
-        <View style={styles.selectedItemsContainer}>
+        <SectionHeader title={`${activeTab === 'home' ? 'Các mục đã chọn' : 'Tab menu hiển thị'} (${activeSelectedIds.length})`} />
+        <Card padding={0}>
+          {activeSelectedIds.length === 0 ? (
+            <Text variant="caption" color="textSecondary" style={styles.empty}>
+              Chưa chọn mục nào.
+            </Text>
+          ) : null}
           {activeSelectedIds.map((id, index) => {
-            const feature = features.find(f => f.id === id);
+            const feature = features.find((f) => f.id === id);
             if (!feature) return null;
-
+            const Icon = feature.icon;
             return (
-              <View key={feature.id} style={styles.selectedItemRow}>
-                <View style={styles.selectedItemLeft}>
-                  <View style={styles.orderNumberBadge}>
-                    <Text style={styles.orderNumberText}>{index + 1}</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.selectedItemContent}
-                    activeOpacity={0.7}
-                    onPress={() => isEditMode ? handleFeatureToggle(feature.id) : handleFeaturePress(feature.id)}
-                  >
-                    <View
-                      style={[
-                        styles.selectedIconContainer,
-                        { backgroundColor: feature.backgroundColor },
-                      ]}
-                    >
-                      <feature.icon color={feature.iconColor} size={24} />
+              <View key={id} style={index > 0 ? styles.divider : null}>
+                <ListItem
+                  leading={
+                    <View style={styles.rowIcon}>
+                      <Icon size={20} color={colors.brand} />
                     </View>
-                    <Text style={styles.selectedItemTitle}>{feature.title}</Text>
-                  </TouchableOpacity>
-                </View>
-                {isEditMode && (
-                  <View style={styles.moveButtonsContainer}>
-                    <TouchableOpacity
-                      style={[
-                        styles.moveButton,
-                        index === 0 && styles.moveButtonDisabled,
-                      ]}
-                      onPress={() => handleMoveUp(feature.id)}
-                      disabled={index === 0}
-                    >
-                      <ChevronUp
-                        color={index === 0 ? Colors.textLight : Colors.primary}
-                        size={22}
-                        strokeWidth={2.5}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.moveButton,
-                        index === activeSelectedIds.length - 1 && styles.moveButtonDisabled,
-                      ]}
-                      onPress={() => handleMoveDown(feature.id)}
-                      disabled={index === activeSelectedIds.length - 1}
-                    >
-                      <ChevronDown
-                        color={index === activeSelectedIds.length - 1 ? Colors.textLight : Colors.primary}
-                        size={22}
-                        strokeWidth={2.5}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                )}
+                  }
+                  title={`${index + 1}. ${feature.title}`}
+                  subtitle={isEditMode ? 'Chạm để bỏ chọn' : undefined}
+                  chevron={!isEditMode}
+                  onPress={() => handleFeaturePress(id)}
+                  trailing={
+                    isEditMode ? (
+                      <View style={styles.moves}>
+                        <IconButton
+                          icon={ChevronUp}
+                          accessibilityLabel={`Đưa ${feature.title} lên trên`}
+                          disabled={index === 0}
+                          onPress={() => handleMove(id, -1)}
+                        />
+                        <IconButton
+                          icon={ChevronDown}
+                          accessibilityLabel={`Đưa ${feature.title} xuống dưới`}
+                          disabled={index === activeSelectedIds.length - 1}
+                          onPress={() => handleMove(id, 1)}
+                        />
+                      </View>
+                    ) : undefined
+                  }
+                />
               </View>
             );
           })}
-        </View>
+        </Card>
 
-        <Text style={styles.sectionTitle}>Tất cả các mục</Text>
-        <View style={styles.featuresGrid}>
-          {selectableFeatures.map((feature) => {
-            const isSelected = activeSelectedIds.includes(feature.id);
-            if (isSelected) return null;
-            return (
-              <TouchableOpacity
-                key={feature.id}
-                style={styles.featureCard}
-                activeOpacity={0.7}
-                onPress={() => handleFeaturePress(feature.id)}
-              >
-                <View
-                  style={[
-                    styles.featureIconContainer,
-                    { backgroundColor: feature.backgroundColor },
-                  ]}
-                >
-                  <feature.icon color={feature.iconColor} size={28} />
-                </View>
-                <Text style={styles.featureTitle}>{feature.title}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </ScrollView>
-    </View>
+        {unselected.length > 0 ? (
+          <>
+            <SectionHeader title="Tất cả các mục" />
+            <FeatureGrid
+              items={unselected.map((f) => ({
+                key: f.id,
+                feature: f,
+                editing: isEditMode,
+                onPress: () => handleFeaturePress(f.id),
+              }))}
+            />
+          </>
+        ) : null}
+      </Screen>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  content: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  tabSwitchContainer: {
+  flex: { flex: 1 },
+  hint: {
     flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 20,
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySubtle,
   },
-  tabSwitchButton: {
-    flex: 1,
-    flexDirection: 'row',
+  empty: { padding: space.lg },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  rowIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10,
+    backgroundColor: colors.primarySubtle,
   },
-  tabSwitchButtonActive: {
-    backgroundColor: Colors.primary,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
-  },
-  tabSwitchText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
-  tabSwitchTextActive: {
-    color: Colors.white,
-  },
-  // Grid 4 mục trên 1 hàng — gọn gàng
-  featuresGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  featureCard: {
-    width: (width - 40 - 30) / 4,
-    aspectRatio: 0.9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 6,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.06)',
-      },
-    }),
-  },
-  featureIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  featureTitle: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    textAlign: 'center',
-  },
-  headerButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  headerButtonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: Colors.primary,
-  },
-  headerButtonTextSave: {
-    color: Colors.primary,
-    fontWeight: '700' as const,
-  },
-  editModeHeader: {
-    backgroundColor: '#FFF4ED',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#FFE5D3',
-  },
-  editModeHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  editModeTextContainer: {
-    flex: 1,
-    gap: 4,
-  },
-  editModeText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.text,
-  },
-  editModeSubText: {
-    fontSize: 12,
-    fontWeight: '500' as const,
-    color: Colors.textSecondary,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    marginBottom: 16,
-  },
-  featureCardSelected: {
-    borderWidth: 2,
-    borderColor: Colors.primary,
-  },
-  checkmarkContainer: {
-    position: 'absolute' as const,
-    top: 8,
-    right: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dragHandle: {
-    position: 'absolute' as const,
-    top: 8,
-    left: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(232, 111, 37, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  orderBadge: {
-    position: 'absolute' as const,
-    top: 8,
-    right: 8,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  orderBadgeText: {
-    fontSize: 11,
-    fontWeight: '700' as const,
-    color: Colors.white,
-  },
-  featureCardDragging: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 16,
-  },
-  selectedItemsContainer: {
-    gap: 10,
-    marginBottom: 32,
-  },
-  // Card hiện đại: nền trắng, bo tròn lớn, đổ bóng mềm — không viền
-  selectedItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.white,
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingLeft: 14,
-    paddingRight: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 2,
-      },
-      web: {
-        boxShadow: '0 4px 16px rgba(15, 23, 42, 0.06)',
-      },
-    }),
-  },
-  selectedItemLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  orderNumberBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(232, 111, 37, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  orderNumberText: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: Colors.primary,
-  },
-  selectedItemContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  selectedIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  selectedItemTitle: {
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    flex: 1,
-  },
-  moveButtonsContainer: {
-    flexDirection: 'column',
-    gap: 2,
-  },
-  moveButton: {
-    width: 34,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: 'rgba(232, 111, 37, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  moveButtonDisabled: {
-    backgroundColor: 'rgba(0, 0, 0, 0.04)',
-  },
+  moves: { flexDirection: 'row' },
 });
