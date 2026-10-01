@@ -1,15 +1,27 @@
 import { Image } from "expo-image";
-import { MapPin } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { ArrowUpRight, MapPin } from "lucide-react-native";
 import React, { useState } from "react";
-import { FlatList, NativeScrollEvent, NativeSyntheticEvent, Pressable, StyleSheet, View } from "react-native";
+import {
+  FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 import { Badge, Skeleton, Text } from "@/components/ui";
 import { projectStatus } from "@/lib/productStatus";
 import { colors, radius, space } from "@/theme";
 
-const CARD_W = 280;
-const CARD_H = 200;
+const SIDE = space.xl;
 const GAP = space.md;
+/** Phần card kế tiếp ló ra để gợi ý vuốt ngang. */
+const PEEK = 36;
+const CARD_H = 216;
+const CARD_RADIUS = radius.x3;
 
 /** Ảnh mặc định khi dự án chưa có ảnh (giữ như trang chủ cũ). */
 export const DEFAULT_PROJECT_IMAGE =
@@ -23,15 +35,17 @@ type Props = {
   onPress: (project: any) => void;
 };
 
-/** Dự án nổi bật – card phong cách trưng bày (navy + cam sáng). */
+/** Dự án nổi bật – ảnh tràn card, phủ gradient navy, bo tròn lớn. */
 export function ProjectCarousel({ projects, loading, error, onRetry, onPress }: Props) {
   const [active, setActive] = useState(0);
+  const { width } = useWindowDimensions();
+  const cardW = Math.min(width - SIDE * 2 - PEEK, 360);
 
   if (loading && projects.length === 0) {
     return (
       <View style={styles.row}>
-        <Skeleton width={CARD_W} height={CARD_H} radius={radius.lg} />
-        <Skeleton width={CARD_W} height={CARD_H} radius={radius.lg} />
+        <Skeleton width={cardW} height={CARD_H} radius={CARD_RADIUS} />
+        <Skeleton width={cardW} height={CARD_H} radius={CARD_RADIUS} />
       </View>
     );
   }
@@ -55,7 +69,7 @@ export function ProjectCarousel({ projects, loading, error, onRetry, onPress }: 
   }
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    setActive(Math.round(e.nativeEvent.contentOffset.x / (CARD_W + GAP)));
+    setActive(Math.round(e.nativeEvent.contentOffset.x / (cardW + GAP)));
   };
 
   return (
@@ -66,7 +80,7 @@ export function ProjectCarousel({ projects, loading, error, onRetry, onPress }: 
         data={projects}
         keyExtractor={(p, i) => String(p?.MaDA ?? i)}
         showsHorizontalScrollIndicator={false}
-        snapToInterval={CARD_W + GAP}
+        snapToInterval={cardW + GAP}
         decelerationRate="fast"
         onScroll={onScroll}
         scrollEventThrottle={32}
@@ -81,7 +95,7 @@ export function ProjectCarousel({ projects, loading, error, onRetry, onPress }: 
               accessibilityRole="button"
               accessibilityLabel={`Dự án ${item?.TenDA ?? ""}`}
               onPress={() => onPress(item)}
-              style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
+              style={({ pressed }) => [styles.card, { width: cardW }, pressed ? styles.pressed : null]}
             >
               <Image
                 source={{ uri: item?.icon || DEFAULT_PROJECT_IMAGE }}
@@ -89,16 +103,24 @@ export function ProjectCarousel({ projects, loading, error, onRetry, onPress }: 
                 contentFit="cover"
                 transition={150}
               />
-              <View style={styles.badge}>
+              <LinearGradient
+                colors={colors.showcase.scrim}
+                locations={[0.3, 0.6, 1]}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.top}>
                 <Badge label={status.label} tone={status.tone} />
+                <View style={styles.arrow}>
+                  <ArrowUpRight size={18} color={colors.showcase.text} strokeWidth={2.2} />
+                </View>
               </View>
               <View style={styles.caption}>
-                <Text variant="heading" color={colors.showcase.text} numberOfLines={1}>
+                <Text variant="heading" color={colors.showcase.text} numberOfLines={1} style={styles.name}>
                   {item?.TenDA || "Dự án"}
                 </Text>
                 {place ? (
                   <View style={styles.place}>
-                    <MapPin size={14} color={colors.showcase.textMuted} />
+                    <MapPin size={14} color={colors.showcase.textMuted} strokeWidth={2} />
                     <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
                       {place}
                     </Text>
@@ -121,30 +143,63 @@ export function ProjectCarousel({ projects, loading, error, onRetry, onPress }: 
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", gap: GAP, paddingHorizontal: space.lg },
-  list: { paddingHorizontal: space.lg },
-  inline: { flexDirection: "row", paddingHorizontal: space.lg },
-  retry: { flexDirection: "row", alignItems: "center", minHeight: 44, paddingHorizontal: space.lg },
+  row: { flexDirection: "row", gap: GAP, paddingHorizontal: SIDE },
+  list: { paddingHorizontal: SIDE, paddingVertical: space.xs },
+  inline: { flexDirection: "row", paddingHorizontal: SIDE },
+  retry: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 44,
+    paddingHorizontal: SIDE,
+  },
   card: {
-    width: CARD_W,
     height: CARD_H,
-    borderRadius: radius.lg,
+    borderRadius: CARD_RADIUS,
     overflow: "hidden",
     backgroundColor: colors.showcase.bg,
   },
-  pressed: { opacity: 0.9 },
-  badge: { position: "absolute", top: space.md, left: space.md },
+  pressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
+  top: {
+    position: "absolute",
+    top: space.md + 2,
+    left: space.md + 2,
+    right: space.md + 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  arrow: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.showcase.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.showcase.glassBorder,
+  },
   caption: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    padding: space.md,
-    gap: 2,
-    backgroundColor: colors.showcase.bg,
+    paddingHorizontal: space.lg + 2,
+    paddingBottom: space.lg,
+    gap: space.xs,
   },
+  name: { fontSize: 18 },
   place: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  dots: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: space.md },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.borderStrong },
-  dotOn: { width: 18, backgroundColor: colors.brand },
+  dots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: space.md,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.borderStrong,
+  },
+  dotOn: { width: 20, backgroundColor: colors.brand },
 });

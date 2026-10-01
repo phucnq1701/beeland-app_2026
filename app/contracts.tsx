@@ -1,8 +1,8 @@
 import React, { useCallback } from "react";
 import { useRouter } from "expo-router";
 
-import { SalesDocList } from "@/components/sales/SalesDocList";
-import { Avatar, ListItem, MoneyText, StatusBadge } from "@/components/ui";
+import { DocTrailing, SalesDocList } from "@/components/sales/SalesDocList";
+import { Avatar, ListItem } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { HopDongService } from "@/sevicesSupabase/HopDongService";
 
@@ -15,16 +15,11 @@ export default function ContractsScreen({ embedded }: { embedded?: boolean } = {
   const renderRow = useCallback(
     (item: any) => (
       <ListItem
-        leading={<Avatar name={item.TenKH || "?"} />}
+        leading={<Avatar name={item.TenKH || "?"} size={44} round />}
         title={item.TenKH || "—"}
         subtitle={[item.KyHieu, item.TenDA].filter(Boolean).join(" · ") || undefined}
         meta={[item.SoHDMB, item.NgayKy ? `Ký ${formatDate(item.NgayKy)}` : null].filter(Boolean).join(" · ")}
-        trailing={
-          <>
-            <MoneyText value={item.TongGiaTriHDMB} short />
-            {item.TenTT ? <StatusBadge label={item.TenTT} color={item.MauNen} /> : null}
-          </>
-        }
+        trailing={<DocTrailing amount={item.TongGiaTriHDMB} status={item.TenTT} color={item.MauNen} />}
         onPress={() =>
           router.push({ pathname: "/contract/[id]", params: { id: String(item.MaHD ?? item.ID), data: JSON.stringify(item) } })
         }

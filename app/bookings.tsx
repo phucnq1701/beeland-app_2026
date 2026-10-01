@@ -23,7 +23,7 @@ import {
 } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { colors, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
 
@@ -319,31 +319,39 @@ export default function BookingsScreen({
 
   const renderItem = useCallback(
     ({ item: booking }: { item: any }) => (
-      <ListItem
-        leading={<Avatar name={booking.khachHang || "?"} />}
-        title={booking.khachHang || "—"}
-        subtitle={[booking.maSanPham || booking.soPhieu, booking.tenDA].filter(Boolean).join(" · ")}
-        meta={[booking.soPhieu, formatDate(booking.ngayGiuCho)].filter(Boolean).join(" · ")}
-        trailing={
-          <>
-            <MoneyText value={booking.tongGiaGomVAT} short />
-            {booking?.tenTT ? (
-              <StatusBadge
-                label={booking.tenTT}
-                color={booking.colorCode ?? statusColorMap[booking.tenTT]}
-              />
-            ) : null}
-          </>
-        }
-        onPress={() =>
-          router.push({
-            pathname: "/booking/[id]",
-            // id phiếu booking là duy nhất; 1 phiếu giữ chỗ (maPGC) có thể
-            // có nhiều booking (vd. booking cũ đã huỷ + booking mới)
-            params: { id: booking.id ?? booking.maPGC },
-          })
-        }
-      />
+      // Bóng ở lớp ngoài, bo + cắt ở lớp trong (iOS: overflow hidden làm mất bóng)
+      <View style={styles.card}>
+        <View style={styles.clip}>
+          <ListItem
+            leading={<Avatar name={booking.khachHang || "?"} size={44} round />}
+            title={booking.khachHang || "—"}
+            subtitle={[booking.maSanPham || booking.soPhieu, booking.tenDA].filter(Boolean).join(" · ")}
+            meta={[booking.soPhieu, formatDate(booking.ngayGiuCho)].filter(Boolean).join(" · ")}
+            trailing={
+              <>
+                {booking?.tenTT ? (
+                  // Bọc lại để badge căn phải (Badge tự alignSelf flex-start)
+                  <View style={styles.badge}>
+                    <StatusBadge
+                      label={booking.tenTT}
+                      color={booking.colorCode ?? statusColorMap[booking.tenTT]}
+                    />
+                  </View>
+                ) : null}
+                <MoneyText value={booking.tongGiaGomVAT} short variant="subhead" />
+              </>
+            }
+            onPress={() =>
+              router.push({
+                pathname: "/booking/[id]",
+                // id phiếu booking là duy nhất; 1 phiếu giữ chỗ (maPGC) có thể
+                // có nhiều booking (vd. booking cũ đã huỷ + booking mới)
+                params: { id: booking.id ?? booking.maPGC },
+              })
+            }
+          />
+        </View>
+      </View>
     ),
     [router, statusColorMap]
   );
@@ -354,6 +362,7 @@ export default function BookingsScreen({
         value={searchQuery}
         onChangeText={setSearchQuery}
         placeholder="Mã booking, khách hàng, căn"
+        variant="soft"
       />
 
       {showFilters && (
@@ -383,7 +392,13 @@ export default function BookingsScreen({
       )}
 
       {/* Lọc nhanh theo trạng thái trên dữ liệu đã tải */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+      {/* Tràn ra mép màn để bóng chip không bị cắt ở hai đầu */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipsScroll}
+        contentContainerStyle={styles.chips}
+      >
         {statusList.map((status) => {
           const active = status.id === 0 ? !selectTT || selectTT === "Tất cả" : selectTT === status.title;
           const count =
@@ -397,6 +412,7 @@ export default function BookingsScreen({
               count={count}
               selected={active}
               onPress={() => setSelectTT(status?.title)}
+              variant="soft"
             />
           );
         })}
@@ -437,17 +453,16 @@ export default function BookingsScreen({
         padded={false}
         header={
           <AppHeader
+            variant="soft"
             title="Booking"
             // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
             hideBack={embedded}
             actions={
-              <View style={styles.headerAction}>
-                <FilterToggleButton
-                  open={showFilters}
-                  activeCount={activeFilterCount}
-                  onPress={() => setShowFilters(!showFilters)}
-                />
-              </View>
+              <FilterToggleButton
+                open={showFilters}
+                activeCount={activeFilterCount}
+                onPress={() => setShowFilters(!showFilters)}
+              />
             }
           />
         }
@@ -486,15 +501,18 @@ function Separator() {
 }
 
 const styles = StyleSheet.create({
-  headerAction: { paddingRight: space.sm },
   stickyHeader: {
     backgroundColor: colors.bg,
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
-    paddingBottom: space.sm,
+    paddingHorizontal: space.xl,
+    paddingTop: space.sm,
+    paddingBottom: space.lg,
     gap: space.md,
   },
-  chips: { gap: space.sm, paddingRight: space.lg },
-  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: 68 },
+  chipsScroll: { marginHorizontal: -space.xl },
+  chips: { gap: space.sm, paddingHorizontal: space.xl, paddingVertical: space.xs },
+  separator: { height: space.sm + 2 },
+  card: { marginHorizontal: space.xl, borderRadius: radius.xxl, backgroundColor: colors.surface, ...elevation.soft },
+  clip: { borderRadius: radius.xxl, overflow: "hidden" },
+  badge: { alignSelf: "flex-end" },
   footerSpinner: { paddingVertical: space.lg },
 });

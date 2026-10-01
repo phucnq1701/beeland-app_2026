@@ -2,6 +2,7 @@ import React from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 import { KeyValueRow, MoneyText, Text } from "@/components/ui";
+import { isLowRiseProduct } from "@/lib/bookingPrice";
 import { formatArea, formatVND } from "@/lib/format";
 import type { ActivePriceListItem } from "@/sevicesSupabase/PriceServices";
 import { colors, radius, space } from "@/theme";
@@ -30,6 +31,9 @@ function Total({ label, value }: { label: string; value: unknown }) {
 
 /** Chi tiết giá sản phẩm: theo bảng giá nếu có, không thì theo dữ liệu sản phẩm. */
 export function PriceBreakdown({ activePrice, data, loading }: Props) {
+  // Tổng giá trị HĐMB chỉ áp dụng cho thấp tầng
+  const lowRise = isLowRiseProduct({ product: data, maSP: data?.KyHieu });
+
   if (loading) {
     return (
       <View style={styles.loading}>
@@ -54,7 +58,9 @@ export function PriceBreakdown({ activePrice, data, loading }: Props) {
           <KeyValueRow label="Phí bảo trì" value={money0(p.maintenance_amount)} />
           <KeyValueRow label="Tổng giá gồm PBT" value={money0(p.total_payment)} last />
         </View>
-        <Total label="Tổng giá trị HĐMB" value={Number(p.contract_total_value) || 0} />
+        {lowRise ? (
+          <Total label="Tổng giá trị HĐMB" value={Number(p.contract_total_value) || 0} />
+        ) : null}
         <Text variant="caption" color="textSecondary">
           Ghi chú: {p.note || "—"}
         </Text>
@@ -73,7 +79,7 @@ export function PriceBreakdown({ activePrice, data, loading }: Props) {
         <KeyValueRow label="Tiền VAT" value={formatVND(data?.TienVAT)} />
         <KeyValueRow label="Phí bảo trì" value={formatVND(data?.PhiBaoTri)} last />
       </View>
-      <Total label="Tổng giá trị HĐ" value={data?.TongGiaTriHDMB} />
+      {lowRise ? <Total label="Tổng giá trị HĐ" value={data?.TongGiaTriHDMB} /> : null}
     </View>
   );
 }
@@ -85,8 +91,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: space.md,
-    borderRadius: radius.md,
+    padding: space.md + 2,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.lg,
     backgroundColor: colors.primarySubtle,
   },
 });

@@ -15,16 +15,29 @@ export type TextFieldProps = TextInputProps & {
   prefix?: React.ReactNode;
   suffix?: React.ReactNode;
   containerStyle?: StyleProp<ViewStyle>;
+  /** `soft`: nền xám nhạt, không viền, bo lớn; focus → nền trắng + viền `primary` (đặt trong card trắng). */
+  variant?: 'default' | 'soft';
 };
 
 /** Ô nhập chuẩn: nhãn luôn ở trên, lỗi/gợi ý ngay dưới ô (spec 4.5). */
 export const TextField = forwardRef<TextInput, TextFieldProps>(function TextField(
-  { label, helper, error, required, prefix, suffix, containerStyle, style, onFocus, onBlur, ...inputProps },
+  { label, helper, error, required, prefix, suffix, containerStyle, variant = 'default', style, onFocus, onBlur, ...inputProps },
   ref
 ) {
   const [focused, setFocused] = useState(false);
   const fontsLoaded = useFontsLoaded();
-  const borderStyle = error ? styles.error : focused ? styles.focused : null;
+  const soft = variant === 'soft';
+  const borderStyle = soft
+    ? error
+      ? styles.softError
+      : focused
+        ? styles.softFocused
+        : null
+    : error
+      ? styles.error
+      : focused
+        ? styles.focused
+        : null;
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -32,7 +45,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
         {label}
         {required ? <Text variant="caption" weight="semibold" color="danger">{' *'}</Text> : null}
       </Text>
-      <View style={[styles.box, borderStyle]}>
+      <View style={[styles.box, soft ? styles.soft : null, borderStyle]}>
         {prefix}
         <TextInput
           ref={ref}
@@ -81,6 +94,17 @@ const styles = StyleSheet.create({
   },
   focused: { borderWidth: 2, borderColor: colors.primary, paddingHorizontal: space.md + 1 },
   error: { borderWidth: 2, borderColor: colors.danger, paddingHorizontal: space.md + 1 },
+  // Viền soft giữ nguyên độ dày khi focus/lỗi → chữ không nhảy
+  soft: {
+    minHeight: 50,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    backgroundColor: colors.surfaceMuted,
+  },
+  softFocused: { borderColor: colors.primary, backgroundColor: colors.surface },
+  softError: { borderColor: colors.danger, backgroundColor: colors.surface },
   input: {
     flex: 1,
     minHeight: 44,

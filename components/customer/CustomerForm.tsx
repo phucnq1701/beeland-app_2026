@@ -5,7 +5,6 @@ import {
   BottomActionBar,
   Button,
   Screen,
-  SectionHeader,
   SegmentedControl,
   SelectField,
   TextField,
@@ -20,7 +19,8 @@ import {
   customerSavePayload,
 } from "@/lib/customerRules";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
-import { space } from "@/theme";
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
+import { colors, elevation, radius, space } from "@/theme";
 import {
   CustomerRulesService,
   DuplicateMatch,
@@ -250,6 +250,7 @@ export function CustomerForm({
         required={configRequired.has(f) || extra.required}
         editable={!locked(f)}
         helper={identityLocked && identityField(f) ? IDENTITY_LOCK_HINT : extra.helper}
+        variant="soft"
         {...extra}
       />
     ) : null;
@@ -258,7 +259,7 @@ export function CustomerForm({
     if (!shown(f)) return null;
     if (locked(f)) {
       const current = options.find((o) => o.value === values[f])?.label ?? "—";
-      return <TextField label={label} value={current} editable={false} />;
+      return <TextField label={label} value={current} editable={false} variant="soft" />;
     }
     return (
       <SelectField
@@ -270,6 +271,7 @@ export function CustomerForm({
         required={configRequired.has(f)}
         error={errors[f]}
         sheetTitle={label}
+        variant="soft"
       />
     );
   };
@@ -280,14 +282,22 @@ export function CustomerForm({
     <Screen
       header={header}
       keyboardAware
+      padded={false}
       footer={
         <BottomActionBar>
-          <Button title={submitLabel} size="lg" loading={saving} onPress={() => void handleSubmit()} style={styles.flex} />
+          <Button
+            title={submitLabel}
+            size="lg"
+            loading={saving}
+            onPress={() => void handleSubmit()}
+            style={[styles.flex, styles.pill]}
+          />
         </BottomActionBar>
       }
     >
       <View style={styles.form}>
         <SegmentedControl
+          variant="soft"
           value={p ? "personal" : "business"}
           options={[
             { value: "personal", label: "Cá nhân" },
@@ -307,40 +317,56 @@ export function CustomerForm({
           }}
         />
 
-        {field("name", p ? "Họ và tên" : "Tên doanh nghiệp / công ty", {
-          required: true,
-          placeholder: p ? "Nguyễn Văn A" : "Công ty TNHH…",
-          autoCapitalize: "words",
-        })}
-        {field("phone", "Số điện thoại", { required: true, keyboardType: "phone-pad", placeholder: "0912345678" })}
-        {field("phone2", "Số điện thoại phụ", { keyboardType: "phone-pad" })}
-        {field("email", "Email", { keyboardType: "email-address", autoCapitalize: "none" })}
-        {p
-          ? field("cccd", "Số CCCD / CMND", { keyboardType: "number-pad" })
-          : field("taxCode", "Mã số thuế", { required: true, keyboardType: "number-pad" })}
-        {field("diaChi", p ? "Địa chỉ liên hệ" : "Địa chỉ trụ sở", { placeholder: "Số nhà, đường, phường, quận…" })}
+        <HomeSectionHeader title="Thông tin chung" />
+        <View style={styles.card}>
+          {field("name", p ? "Họ và tên" : "Tên doanh nghiệp / công ty", {
+            required: true,
+            placeholder: p ? "Nguyễn Văn A" : "Công ty TNHH…",
+            autoCapitalize: "words",
+          })}
+          {field("phone", "Số điện thoại", { required: true, keyboardType: "phone-pad", placeholder: "0912345678" })}
+          {field("phone2", "Số điện thoại phụ", { keyboardType: "phone-pad" })}
+          {field("email", "Email", { keyboardType: "email-address", autoCapitalize: "none" })}
+          {p
+            ? field("cccd", "Số CCCD / CMND", { keyboardType: "number-pad" })
+            : field("taxCode", "Mã số thuế", { required: true, keyboardType: "number-pad" })}
+          {field("diaChi", p ? "Địa chỉ liên hệ" : "Địa chỉ trụ sở", { placeholder: "Số nhà, đường, phường, quận…" })}
+        </View>
 
-        <SectionHeader title="Phân loại" />
-        {select("statusId", "Trạng thái", statusOptions)}
-        {select("sourceId", "Nguồn khách", sourceOptions)}
-
-        {!p ? (
+        {shown("statusId") || shown("sourceId") ? (
           <>
-            <SectionHeader title="Người đại diện pháp luật" />
-            {field("nguoiDaiDienPl", "Họ và tên")}
-            {field("chucVu", "Chức vụ")}
-            {field("nddDienThoai", "Số điện thoại", { keyboardType: "phone-pad" })}
-            {field("nddEmail", "Email", { keyboardType: "email-address", autoCapitalize: "none" })}
-            {field("nddSoCccd", "Số CCCD", { keyboardType: "number-pad" })}
+            <HomeSectionHeader title="Phân loại" />
+            <View style={styles.card}>
+              {select("statusId", "Trạng thái", statusOptions)}
+              {select("sourceId", "Nguồn khách", sourceOptions)}
+            </View>
           </>
         ) : null}
 
-        {mode === "create"
-          ? field("notes", "Nhu cầu / ghi chú ban đầu", {
-              multiline: true,
-              placeholder: "Khách quan tâm căn 2PN, ngân sách 3 tỷ…",
-            })
-          : null}
+        {!p ? (
+          <>
+            <HomeSectionHeader title="Người đại diện pháp luật" />
+            <View style={styles.card}>
+              {field("nguoiDaiDienPl", "Họ và tên")}
+              {field("chucVu", "Chức vụ")}
+              {field("nddDienThoai", "Số điện thoại", { keyboardType: "phone-pad" })}
+              {field("nddEmail", "Email", { keyboardType: "email-address", autoCapitalize: "none" })}
+              {field("nddSoCccd", "Số CCCD", { keyboardType: "number-pad" })}
+            </View>
+          </>
+        ) : null}
+
+        {mode === "create" && shown("notes") ? (
+          <>
+            <HomeSectionHeader title="Ghi chú" />
+            <View style={styles.card}>
+              {field("notes", "Nhu cầu / ghi chú ban đầu", {
+                multiline: true,
+                placeholder: "Khách quan tâm căn 2PN, ngân sách 3 tỷ…",
+              })}
+            </View>
+          </>
+        ) : null}
       </View>
 
       <DuplicateSheet
@@ -363,6 +389,14 @@ export function CustomerForm({
 }
 
 const styles = StyleSheet.create({
-  form: { gap: space.md },
+  form: { gap: space.md, paddingHorizontal: space.xl, paddingTop: space.sm },
+  card: {
+    gap: space.md + 2,
+    padding: space.lg + 2,
+    borderRadius: radius.xxl,
+    backgroundColor: colors.surface,
+    ...elevation.soft,
+  },
   flex: { flex: 1 },
+  pill: { borderRadius: radius.full },
 });

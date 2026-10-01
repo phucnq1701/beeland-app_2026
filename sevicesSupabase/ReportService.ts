@@ -2,6 +2,7 @@ import axiosApiSupabase from "./axiosApiSupabase";
 import { getCompanyId } from "./cloudTenant";
 import { HopDongService } from "./HopDongService";
 import { rpcRows } from "./DatCocService";
+import { VoucherDetail, toVoucherDetail } from "../lib/reportDetail";
 import {
   ProgressRow,
   agingOf,
@@ -140,6 +141,8 @@ async function lifecycleParents(projectKey: string | null): Promise<any[]> {
         TenTT: tenTT,
         TongGiaTriHD: Math.round(giaTri),
         DaThu: Math.round(daThu),
+        // buildInstallments ghi đè DaThu bằng phần của từng đợt → giữ riêng đã thu cả phiếu
+        DaThuHD: Math.round(daThu),
         ConLai: Math.round(giaTri - daThu),
         PhiBaoTri: Math.round(n(r.phi_bao_tri)),
         DaThuPBT: Math.round(p.daThuPBT || 0),
@@ -285,6 +288,23 @@ export const ReportService = {
     } catch (e) {
       console.log("ERROR report progress:", e);
       return { rows: [], overdue: [], upcoming: [], error: true };
+    }
+  },
+
+  /**
+   * Chi tiết một phiếu thu – như web VoucherDetailDrawer (ReceiptsPay.Receipts.getByID →
+   * CashVoucherService.getVoucher): fn_cash_voucher_get_by_id trả phiếu + khách + dự án + dòng chi tiết.
+   */
+  getVoucher: async (id: string): Promise<{ data: VoucherDetail | null; error?: boolean }> => {
+    try {
+      const res = await axiosApiSupabase.post("rest/v1/rpc/fn_cash_voucher_get_by_id", { p_id: String(id) });
+      // PostgREST: jsonb trả thẳng object; phòng trường hợp bọc mảng / bọc theo tên hàm
+      const raw = Array.isArray(res.data) ? res.data[0] : res.data;
+      const json = raw?.fn_cash_voucher_get_by_id ?? raw;
+      return { data: toVoucherDetail(json) };
+    } catch (e) {
+      console.log("ERROR fn_cash_voucher_get_by_id:", e);
+      return { data: null, error: true };
     }
   },
 

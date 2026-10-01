@@ -220,6 +220,12 @@ export type ProgressRow = {
   conLai: number;
   soNgayQuaHan: number;
   trangThai: string;
+  /** Thông tin phiếu cha – để mở chi tiết cọc / hợp đồng từ báo cáo. */
+  giaiDoan: string;
+  tongGiaTri: number;
+  /** Đã thu của cả phiếu (DaThu của dòng là phần phân bổ cho đợt). */
+  daThuHD: number;
+  diDong: string;
 };
 
 /** Dòng tiến độ → dòng báo cáo (web DebtProgressReport, nhóm TIENDO). */
@@ -238,6 +244,10 @@ export function toProgressRow(r: any, i = 0): ProgressRow {
     conLai: n(r.ConNo) + n(r.ConNoPBT),
     soNgayQuaHan: n(r.SoNgayQuaHan ?? r.so_ngay_qua_han),
     trangThai: r.TenTT || r.TrangThai || r.trang_thai || '',
+    giaiDoan: r.GiaiDoan || '',
+    tongGiaTri: n(r.TongGiaTriHD),
+    daThuHD: n(r.DaThuHD),
+    diDong: r.DiDong || '',
   };
 }
 

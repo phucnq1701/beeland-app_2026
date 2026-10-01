@@ -9,7 +9,7 @@ import {
 } from "lucide-react-native";
 
 import { Text } from "@/components/ui/Text";
-import { colors, radius, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 
 /**
  * Bộ lọc dùng chung cho các màn danh sách (Sản phẩm, Booking, Đặt cọc,
@@ -218,14 +218,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.xs + 2,
     minHeight: 40,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    paddingHorizontal: space.md + 2,
+    borderRadius: radius.full,
     backgroundColor: colors.surface,
+    ...elevation.soft,
   },
   toggleActive: {
-    borderColor: colors.primary,
     backgroundColor: colors.primarySubtle,
   },
   pressed: { backgroundColor: colors.surfaceMuted },
@@ -241,12 +239,11 @@ const styles = StyleSheet.create({
   badgeText: { lineHeight: 16, letterSpacing: 0 },
   panel: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md + 2,
+    borderRadius: radius.xxl,
+    paddingHorizontal: space.lg + 2,
+    paddingVertical: space.lg,
     marginBottom: space.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...elevation.soft,
   },
   panelHeader: {
     flexDirection: "row",

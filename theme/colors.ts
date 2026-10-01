@@ -45,6 +45,12 @@ export const colors = {
   onInfoSubtle: '#1E40AF',
 
   backdrop: 'rgba(15, 23, 42, 0.45)',
+  /** Kính xanh xám (thanh tab nổi): lớp phủ xanh xám nhạt trên BlurView tint default, phần còn lại do blur. */
+  frosted: 'rgba(90, 110, 148, 0.22)',
+  /** Viền sáng mép kính. */
+  frostedBorder: 'rgba(255, 255, 255, 0.45)',
+  /** Viên tab đang chọn trên kính. */
+  frostedActive: 'rgba(255, 255, 255, 0.6)',
   skeleton: '#EEF1F5',
 
   showcase: {
@@ -54,6 +60,11 @@ export const colors = {
     paper: '#F7F5F2',
     text: '#FFFFFF',
     textMuted: '#CBD5E1',
+    /** Gradient phủ ảnh (trong suốt → navy) để chữ trắng đọc được trên ảnh. */
+    scrim: ['rgba(22, 35, 59, 0)', 'rgba(22, 35, 59, 0.55)', 'rgba(22, 35, 59, 0.92)'] as const,
+    /** Nút kính mờ đặt trên ảnh (navy trong – đọc được cả trên ảnh sáng). */
+    glass: 'rgba(22, 35, 59, 0.35)',
+    glassBorder: 'rgba(255, 255, 255, 0.3)',
   },
 } as const;
 

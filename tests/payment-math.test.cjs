@@ -1,6 +1,6 @@
 /* global __dirname */
 // Tính tiền tiến độ thanh toán – chép web, một phần SO TRỰC TIẾP với code web:
-//  - allocatePaidToSchedule: beeland/src/pages/Contracts/form/ContractDetail.tsx
+//  - allocatePaidToSchedule: beeland/src/pages/contracts/components/chi-tiet-hop-dong/index.tsx
 //  - agingOf:               beeland/src/pages/Reports/DebtProgressReport.tsx
 //  - phần còn lại:          beeland/src/services/AccountingCloudService.ts, ContractScheduleService.ts
 const { test } = require("node:test");
@@ -33,7 +33,8 @@ function webFn(file, startMarker, endMarker, name, requires = {}) {
 
 test("allocatePaidToSchedule: principal first, then maintenance fee – same as web", { skip: !hasWeb && "no web repo" }, () => {
   const web = webFn(
-    "pages/Contracts/form/ContractDetail.tsx",
+    // Web dời src/pages/Contracts → src/pages/contracts (commit 77ad33db7)
+    "pages/contracts/components/chi-tiet-hop-dong/index.tsx",
     "const allocatePaidToSchedule = (rows: any[], totalPaid: number) => {",
     "\n    return result;\n  };",
     "allocatePaidToSchedule"
@@ -139,4 +140,29 @@ test("progress rows for the report (web DebtProgressReport TIENDO mapping)", () 
   assert.equal(m.isDroppedStatus("Đã hủy"), true);
   assert.equal(m.isDroppedStatus("Thanh lý"), true);
   assert.equal(m.isDroppedStatus("Hợp đồng mua bán"), false);
+});
+
+test("progress row keeps the parent doc info for opening its detail", () => {
+  const row = m.toProgressRow({
+    MaPGC: "p1",
+    GiaiDoan: "HDMB",
+    SoHD: "HD-1",
+    DotTT: 2,
+    SoTien: 100,
+    DaThu: 40,
+    DaThuHD: 540,
+    TongGiaTriHD: 1000,
+    DiDong: "0912",
+    TenTT: "Hợp đồng mua bán",
+  });
+  assert.equal(row.maPGC, "p1");
+  assert.equal(row.giaiDoan, "HDMB");
+  assert.equal(row.tongGiaTri, 1000);
+  assert.equal(row.daThuHD, 540);
+  assert.equal(row.diDong, "0912");
+  // Thiếu thông tin phiếu → giá trị rỗng an toàn
+  const bare = m.toProgressRow({ MaPGC: "p2" });
+  assert.equal(bare.giaiDoan, "");
+  assert.equal(bare.tongGiaTri, 0);
+  assert.equal(bare.daThuHD, 0);
 });

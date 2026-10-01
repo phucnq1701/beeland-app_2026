@@ -3,7 +3,7 @@ import React, { memo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { Text } from "@/components/ui";
-import { colors, radius, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 
 export type FeatureTileProps = {
   feature: { id: string; title: string; icon: LucideIcon };
@@ -13,10 +13,12 @@ export type FeatureTileProps = {
   selected?: boolean;
   /** Thứ tự hiển thị khi đã chọn (1-based). */
   order?: number;
+  /** Ô nhỏ cho lưới 4 cột (Tất cả quản lý). */
+  compact?: boolean;
 };
 
-/** Ô tính năng một tông (nền primarySubtle, icon brand) – thay cho 9 màu cầu vồng cũ. */
-function FeatureTileBase({ feature, onPress, editing, selected, order }: FeatureTileProps) {
+/** Ô tính năng bo tròn lớn, bóng mềm, icon trong vòng tròn primarySubtle. */
+function FeatureTileBase({ feature, onPress, editing, selected, order, compact }: FeatureTileProps) {
   const Icon = feature.icon;
   return (
     <Pressable
@@ -26,14 +28,21 @@ function FeatureTileBase({ feature, onPress, editing, selected, order }: Feature
       onPress={onPress}
       style={({ pressed }) => [
         styles.tile,
+        compact ? styles.compactTile : null,
         editing && selected ? styles.selected : null,
         pressed ? styles.pressed : null,
       ]}
     >
-      <View style={styles.icon}>
-        <Icon size={24} color={colors.brand} strokeWidth={2} />
+      <View style={[styles.icon, compact ? styles.compactIcon : null]}>
+        <Icon size={compact ? 18 : 22} color={colors.brand} strokeWidth={2} />
       </View>
-      <Text variant="caption" weight="medium" align="center" numberOfLines={2} style={styles.title}>
+      <Text
+        variant="caption"
+        weight="medium"
+        align="center"
+        numberOfLines={2}
+        style={compact ? styles.compactTitle : styles.title}
+      >
         {feature.title}
       </Text>
       {editing && selected && order ? (
@@ -52,32 +61,41 @@ export const FeatureTile = memo(FeatureTileBase);
 const styles = StyleSheet.create({
   tile: {
     flex: 1,
-    minHeight: 96,
+    minHeight: 104,
     alignItems: "center",
     justifyContent: "center",
-    gap: space.sm,
-    paddingVertical: space.md,
+    gap: space.sm + 2,
+    paddingVertical: space.lg + 2,
     paddingHorizontal: space.xs,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radius.xxl,
+    borderWidth: 2,
+    borderColor: "transparent",
     backgroundColor: colors.surface,
+    ...elevation.soft,
   },
-  selected: { borderWidth: 2, borderColor: colors.primary },
-  pressed: { backgroundColor: colors.surfaceMuted },
+  // Lưới 4 cột: ô thấp hơn, icon nhỏ hơn, bo vừa
+  compactTile: { minHeight: 84, gap: space.sm, paddingVertical: space.md + 2, borderRadius: radius.xl },
+  compactIcon: { width: 40, height: 40 },
+  compactTitle: { fontSize: 12, lineHeight: 16 },
+  selected: { borderColor: colors.primary },
+  pressed: {
+    backgroundColor: colors.surfaceMuted,
+    transform: [{ scale: 0.97 }],
+  },
   icon: {
     width: 48,
     height: 48,
-    borderRadius: radius.md,
+    borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.primarySubtle,
   },
-  title: { minHeight: 40 },
+  // Không giữ chỗ 2 dòng: các ô cùng hàng tự cao bằng nhau (row stretch), nội dung căn giữa.
+  title: { fontSize: 13, lineHeight: 18 },
   order: {
     position: "absolute",
-    top: space.xs + 2,
-    right: space.xs + 2,
+    top: space.sm,
+    right: space.sm,
     minWidth: 20,
     height: 20,
     borderRadius: 10,

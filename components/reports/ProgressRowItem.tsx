@@ -1,10 +1,11 @@
+import { ChevronRight } from "lucide-react-native";
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { Badge, BadgeTone, MoneyText, Text } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { AGING_LABEL, Aging, ProgressRow, agingOf } from "@/lib/paymentMath";
-import { space } from "@/theme";
+import { colors, space } from "@/theme";
 
 const AGING_TONE: Record<Aging, BadgeTone> = {
   done: "success",
@@ -28,10 +29,16 @@ export function progressSummary(rows: ProgressRow[], label: string) {
 }
 
 /** Một đợt thanh toán: khách, hợp đồng · căn · dự án, đợt + hạn, còn lại, tình trạng (như cột web). */
-export function ProgressRowItem({ row }: { row: ProgressRow }) {
+export function ProgressRowItem({ row, onPress }: { row: ProgressRow; onPress?: () => void }) {
   const aging = agingOf(row);
   return (
-    <View style={styles.row}>
+    <Pressable
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={`${row.hoTenKH || "Khách"}, ${row.dotTT}`}
+      disabled={!onPress}
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
+    >
       <View style={styles.flex}>
         <Text variant="subhead" numberOfLines={1}>
           {row.hoTenKH || "—"}
@@ -47,12 +54,15 @@ export function ProgressRowItem({ row }: { row: ProgressRow }) {
         <MoneyText value={row.conLai} short variant="subhead" />
         <Badge label={aging.startsWith("d") && row.soNgayQuaHan > 0 ? `Quá ${row.soNgayQuaHan} ngày` : AGING_LABEL[aging]} tone={AGING_TONE[aging]} />
       </View>
-    </View>
+      {onPress ? <ChevronRight size={18} color={colors.textTertiary} style={styles.chevron} /> : null}
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
+  row: { flexDirection: "row", gap: space.md, paddingLeft: space.lg, paddingRight: space.md, paddingVertical: space.md },
+  pressed: { backgroundColor: colors.surfaceMuted },
+  chevron: { alignSelf: "center", marginLeft: -space.xs },
   flex: { flex: 1, gap: 2 },
   right: { alignItems: "flex-end", gap: space.xs },
 });

@@ -1,18 +1,16 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Linking, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { Mail, MessageCircle, Pencil, Phone, ScrollText, Trash2 } from "lucide-react-native";
+import { ChevronRight, LucideIcon, Mail, MessageCircle, Pencil, Phone, ScrollText, Trash2 } from "lucide-react-native";
 
 import {
   AppHeader,
   Avatar,
   Badge,
-  Button,
   Card,
   ErrorState,
   IconButton,
   KeyValueRow,
-  ListItem,
   Screen,
   SkeletonDetail,
   StatusBadge,
@@ -22,8 +20,40 @@ import {
 } from "@/components/ui";
 import { callPhone, openZalo } from "@/components/customer/CustomerListItem";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
-import { colors, space } from "@/theme";
+import { colors, elevation, hitSlop, radius, space } from "@/theme";
 import { CustomerService } from "@/sevicesSupabase/CustomerService";
+
+/** Nút liên hệ nhanh: vòng tròn nền nhạt + nhãn bên dưới (kiểu danh bạ). */
+function QuickAction({
+  icon: Icon,
+  label,
+  color,
+  bg,
+  onPress,
+}: {
+  icon: LucideIcon;
+  label: string;
+  color: string;
+  bg: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={hitSlop}
+      onPress={onPress}
+      style={({ pressed }) => [styles.quickItem, pressed ? styles.pressedFade : null]}
+    >
+      <View style={[styles.quickIcon, { backgroundColor: bg }]}>
+        <Icon size={20} color={color} strokeWidth={2.2} />
+      </View>
+      <Text variant="caption" weight="medium" color="textSecondary">
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 type Detail = {
   id: string;
@@ -128,23 +158,26 @@ export default function CustomerDetailScreen() {
 
   const header = (
     <AppHeader
+      variant="soft"
       title="Khách hàng"
       actions={
         customer ? (
-          <>
+          <View style={styles.headerActions}>
             <IconButton
               icon={Pencil}
+              variant="soft"
               accessibilityLabel="Sửa khách hàng"
               onPress={() => router.push(`/customer/${customer.id}/edit` as any)}
             />
             <IconButton
               icon={Trash2}
+              variant="soft"
               accessibilityLabel="Xoá khách hàng"
               color={colors.danger}
               disabled={deleting}
               onPress={() => void handleDelete()}
             />
-          </>
+          </View>
         ) : null
       }
     />
@@ -179,78 +212,155 @@ export default function CustomerDetailScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <Screen header={header} refreshing={loading} onRefresh={() => void load()}>
-        <View style={styles.hero}>
-          <Avatar name={c.name} size={56} />
-          <Text variant="title" style={styles.center} accessibilityRole="header">
-            {c.name || "—"}
-          </Text>
-          {c.company ? (
-            <Text variant="caption" color="textSecondary" style={styles.center}>
-              {c.company}
+      <Screen header={header} padded={false} refreshing={loading} onRefresh={() => void load()}>
+        <View style={styles.body}>
+          <View style={styles.hero}>
+            <Avatar name={c.name} size={56} round />
+            <Text variant="title" style={styles.center} accessibilityRole="header">
+              {c.name || "—"}
             </Text>
-          ) : null}
-          <View style={styles.badges}>
-            <Badge label={c.isPersonal ? "Cá nhân" : "Doanh nghiệp"} />
-            {c.maSoKh ? <Badge label={`Mã ${c.maSoKh}`} /> : null}
-            {c.status ? <StatusBadge label={c.status} color={c.statusColor} /> : null}
-          </View>
-        </View>
-
-        {c.phone || c.email ? (
-          <View style={styles.quick}>
-            {c.phone ? (
-              <>
-                <Button title="Gọi" icon={Phone} variant="secondary" style={styles.flex} onPress={() => void callPhone(c.phone)} />
-                <Button title="Zalo" icon={MessageCircle} variant="secondary" style={styles.flex} onPress={() => void openZalo(c.phone)} />
-              </>
+            {c.company ? (
+              <Text variant="caption" color="textSecondary" style={styles.center}>
+                {c.company}
+              </Text>
             ) : null}
-            {c.email ? (
-              <Button
-                title="Email"
-                icon={Mail}
-                variant="secondary"
-                style={styles.flex}
-                onPress={() => void Linking.openURL(`mailto:${c.email}`)}
-              />
-            ) : null}
-          </View>
-        ) : null}
-
-        <Card padding={0}>
-          {visibleRows.length ? (
-            <View style={styles.rows}>
-              {visibleRows.map(([label, value], i) => (
-                <KeyValueRow key={label} label={label} value={value} last={i === visibleRows.length - 1} />
-              ))}
+            <View style={styles.badges}>
+              <Badge label={c.isPersonal ? "Cá nhân" : "Doanh nghiệp"} />
+              {c.maSoKh ? <Badge label={`Mã ${c.maSoKh}`} /> : null}
+              {c.status ? <StatusBadge label={c.status} color={c.statusColor} /> : null}
             </View>
-          ) : (
-            <Text variant="caption" color="textSecondary" style={styles.empty}>
-              Chưa có thông tin liên hệ.
-            </Text>
-          )}
-        </Card>
 
-        <Card padding={0}>
-          <ListItem
-            title="Giao dịch"
-            subtitle="Giữ chỗ, đặt cọc, hợp đồng của khách"
-            leading={<ScrollText size={20} color={colors.info} />}
-            chevron
+            {c.phone || c.email ? (
+              <View style={styles.quick}>
+                {c.phone ? (
+                  <>
+                    <QuickAction
+                      icon={Phone}
+                      label="Gọi"
+                      color={colors.success}
+                      bg={colors.successSubtle}
+                      onPress={() => void callPhone(c.phone)}
+                    />
+                    <QuickAction
+                      icon={MessageCircle}
+                      label="Zalo"
+                      color={colors.info}
+                      bg={colors.infoSubtle}
+                      onPress={() => void openZalo(c.phone)}
+                    />
+                  </>
+                ) : null}
+                {c.email ? (
+                  <QuickAction
+                    icon={Mail}
+                    label="Email"
+                    color={colors.primary}
+                    bg={colors.primarySubtle}
+                    onPress={() => void Linking.openURL(`mailto:${c.email}`)}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+
+          <Card padding={0} style={styles.card}>
+            {visibleRows.length ? (
+              <View style={styles.rows}>
+                {visibleRows.map(([label, value], i) => (
+                  <KeyValueRow key={label} label={label} value={value} last={i === visibleRows.length - 1} />
+                ))}
+              </View>
+            ) : (
+              <Text variant="caption" color="textSecondary" style={styles.empty}>
+                Chưa có thông tin liên hệ.
+              </Text>
+            )}
+          </Card>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Giao dịch của khách"
             onPress={() => router.push(`/customer/${c.id}/contracts` as any)}
-          />
-        </Card>
+            style={({ pressed }) => [styles.link, pressed ? styles.linkPressed : null]}
+          >
+            <View style={styles.linkIcon}>
+              <ScrollText size={20} color={colors.info} strokeWidth={2} />
+            </View>
+            <View style={styles.flex}>
+              <Text variant="subhead">Giao dịch</Text>
+              <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                Giữ chỗ, đặt cọc, hợp đồng của khách
+              </Text>
+            </View>
+            <View style={styles.chevron}>
+              <ChevronRight size={16} color={colors.textSecondary} strokeWidth={2.5} />
+            </View>
+          </Pressable>
+        </View>
       </Screen>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { alignItems: "center", gap: space.xs, paddingVertical: space.md },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  hero: {
+    alignItems: "center",
+    gap: space.xs,
+    paddingTop: space.xl,
+    paddingBottom: space.lg + 2,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.x3,
+    backgroundColor: colors.surface,
+    ...elevation.soft,
+  },
   center: { textAlign: "center" },
   badges: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space.xs, marginTop: space.xs },
-  quick: { flexDirection: "row", gap: space.sm },
+  quick: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: space.xxl,
+    marginTop: space.md + 2,
+    paddingTop: space.md + 2,
+    alignSelf: "stretch",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  quickItem: { alignItems: "center", gap: space.xs + 2, minWidth: 56 },
+  quickIcon: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  pressedFade: { opacity: 0.6 },
   flex: { flex: 1 },
-  rows: { paddingHorizontal: space.lg },
+  card: { borderWidth: 0, borderRadius: radius.xxl, ...elevation.soft },
+  rows: { paddingHorizontal: space.lg + 2 },
   empty: { padding: space.lg },
+  link: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: 72,
+    paddingVertical: space.md + 2,
+    paddingLeft: space.md + 2,
+    paddingRight: space.lg,
+    borderRadius: radius.xxl,
+    backgroundColor: colors.surface,
+    ...elevation.soft,
+  },
+  linkPressed: { backgroundColor: colors.surfaceMuted, transform: [{ scale: 0.98 }] },
+  linkIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.infoSubtle,
+  },
+  chevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceMuted,
+  },
 });

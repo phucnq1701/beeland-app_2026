@@ -1,16 +1,21 @@
 import React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronLeft, FileText, ImageIcon, LucideIcon, Map, MapPin, Package } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { ChevronLeft, ChevronRight, FileText, ImageIcon, LucideIcon, Map, MapPin, Package } from "lucide-react-native";
 
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import { ImageCarousel } from "@/components/product/ImageCarousel";
 import { FocusStatusBar } from "@/components/ui/FocusStatusBar";
-import { Card, IconButton, ListItem, SectionHeader, Text } from "@/components/ui";
-import { colors, radius, space } from "@/theme";
+import { IconButton, Text } from "@/components/ui";
+import { colors, elevation, radius, space } from "@/theme";
 
 const DEFAULT_PROJECT_IMAGE =
   "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/css461kotbkumrm0wjakm";
+
+/** Phần nội dung bo góc trên, trồi đè lên đáy ảnh. */
+const SHEET_OVERLAP = radius.x3;
 
 type Option = { id: string; title: string; subtitle: string; icon: LucideIcon; onPress: () => void };
 
@@ -65,49 +70,71 @@ export default function ProjectOptionsScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <FocusStatusBar style="light" />
-      {/* Màn trưng bày: ảnh tràn lên vùng status bar, nút quay lại nổi trên ảnh */}
+      {/* Màn trưng bày: ảnh tràn lên vùng status bar, tên dự án đè lên ảnh, nút quay lại kính mờ */}
       <View style={styles.root}>
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + space.xxl }}>
-          <ImageCarousel images={[projectData.icon]} fallback={DEFAULT_PROJECT_IMAGE} height={260 + insets.top} />
-          <View style={styles.info}>
-            <Text variant="title" color={colors.showcase.text} numberOfLines={2} accessibilityRole="header">
-              {projectData.TenDA || "Dự án"}
-            </Text>
-            {place ? (
-              <View style={styles.place}>
-                <MapPin size={16} color={colors.showcase.textMuted} />
-                <Text variant="caption" color={colors.showcase.textMuted}>
-                  {place}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-          <View style={styles.content}>
-            <SectionHeader title="Chức năng" />
-            <Card padding={0}>
-              {options.map((o, i) => {
+          <ImageCarousel images={[projectData.icon]} fallback={DEFAULT_PROJECT_IMAGE} height={320 + insets.top}>
+            <LinearGradient
+              colors={colors.showcase.scrim}
+              locations={[0, 0.5, 1]}
+              style={styles.scrim}
+              pointerEvents="none"
+            />
+            <View style={styles.info} pointerEvents="none">
+              <Text
+                variant="title"
+                color={colors.showcase.text}
+                numberOfLines={2}
+                accessibilityRole="header"
+                style={styles.name}
+              >
+                {projectData.TenDA || "Dự án"}
+              </Text>
+              {place ? (
+                <View style={styles.place}>
+                  <MapPin size={16} color={colors.showcase.textMuted} strokeWidth={2} />
+                  <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
+                    {place}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </ImageCarousel>
+          <View style={styles.sheet}>
+            <HomeSectionHeader title="Chức năng" />
+            <View style={styles.options}>
+              {options.map((o) => {
                 const Icon = o.icon;
                 return (
-                  <View key={o.id} style={i > 0 ? styles.divider : null}>
-                    <ListItem
-                      leading={
-                        <View style={styles.icon}>
-                          <Icon size={20} color={colors.brand} />
-                        </View>
-                      }
-                      title={o.title}
-                      subtitle={o.subtitle}
-                      chevron
-                      onPress={o.onPress}
-                    />
-                  </View>
+                  <Pressable
+                    key={o.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={o.title}
+                    onPress={o.onPress}
+                    style={({ pressed }) => [styles.option, pressed ? styles.pressed : null]}
+                  >
+                    <View style={styles.icon}>
+                      <Icon size={20} color={colors.brand} strokeWidth={2} />
+                    </View>
+                    <View style={styles.texts}>
+                      <Text variant="subhead" numberOfLines={1}>
+                        {o.title}
+                      </Text>
+                      <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                        {o.subtitle}
+                      </Text>
+                    </View>
+                    <View style={styles.chevron}>
+                      <ChevronRight size={16} color={colors.textSecondary} strokeWidth={2.5} />
+                    </View>
+                  </Pressable>
                 );
               })}
-            </Card>
+            </View>
           </View>
         </ScrollView>
         <View style={[styles.back, { top: insets.top + space.sm }]}>
-          <IconButton icon={ChevronLeft} variant="onDark" accessibilityLabel="Quay lại" onPress={() => router.back()} />
+          <IconButton icon={ChevronLeft} variant="glass" accessibilityLabel="Quay lại" onPress={() => router.back()} />
         </View>
       </View>
     </>
@@ -115,23 +142,54 @@ export default function ProjectOptionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.showcase.paper },
-  back: { position: "absolute", left: space.md },
+  root: { flex: 1, backgroundColor: colors.bg },
+  back: { position: "absolute", left: space.lg },
+  scrim: { position: "absolute", left: 0, right: 0, bottom: 0, height: 220 },
   info: {
     gap: space.xs,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.lg,
-    backgroundColor: colors.showcase.bg,
+    paddingHorizontal: space.xl,
+    paddingBottom: SHEET_OVERLAP + space.lg,
   },
+  name: { fontSize: 26, lineHeight: 34 },
   place: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  content: { padding: space.lg, gap: space.md },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  sheet: {
+    marginTop: -SHEET_OVERLAP,
+    paddingTop: space.xxl,
+    paddingHorizontal: space.xl,
+    gap: space.md,
+    borderTopLeftRadius: radius.x3,
+    borderTopRightRadius: radius.x3,
+    backgroundColor: colors.bg,
+  },
+  options: { gap: space.sm + 2 },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: 72,
+    paddingVertical: space.md + 2,
+    paddingLeft: space.md + 2,
+    paddingRight: space.lg,
+    borderRadius: radius.xxl,
+    backgroundColor: colors.surface,
+    ...elevation.soft,
+  },
+  pressed: { backgroundColor: colors.surfaceMuted, transform: [{ scale: 0.98 }] },
   icon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.primarySubtle,
+  },
+  texts: { flex: 1, gap: 2 },
+  chevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceMuted,
   },
 });

@@ -14,13 +14,15 @@ export type AppHeaderProps = {
   onBack?: () => void;
   hideBack?: boolean;
   actions?: React.ReactNode;
-  variant?: 'light' | 'dark' | 'transparent';
+  /** `soft`: hoà vào nền màn (`bg`), không viền, nút quay lại tròn – kiểu trang chủ. */
+  variant?: 'light' | 'dark' | 'transparent' | 'soft';
 };
 
 /** Header chuẩn cao 56, một cách "Quay lại" duy nhất cho toàn app. */
 export function AppHeader({ title, subtitle, onBack, hideBack, actions, variant = 'light' }: AppHeaderProps) {
   const router = useRouter();
   const dark = variant === 'dark';
+  const soft = variant === 'soft';
 
   const goBack =
     onBack ??
@@ -36,6 +38,7 @@ export function AppHeader({ title, subtitle, onBack, hideBack, actions, variant 
         variant === 'light' && styles.light,
         dark && styles.dark,
         hideBack && styles.noBack,
+        soft && styles.soft,
       ]}
     >
       {hideBack ? null : (
@@ -43,11 +46,17 @@ export function AppHeader({ title, subtitle, onBack, hideBack, actions, variant 
           icon={ChevronLeft}
           accessibilityLabel="Quay lại"
           onPress={goBack}
-          variant={dark ? 'onDark' : 'plain'}
+          variant={dark ? 'onDark' : soft ? 'soft' : 'plain'}
         />
       )}
       <View style={styles.titles}>
-        <Text variant="heading" color={dark ? colors.showcase.text : 'text'} numberOfLines={1} accessibilityRole="header">
+        <Text
+          variant="heading"
+          color={dark ? colors.showcase.text : 'text'}
+          numberOfLines={1}
+          accessibilityRole="header"
+          style={soft ? styles.softTitle : null}
+        >
           {title}
         </Text>
         {subtitle ? (
@@ -76,6 +85,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   dark: { backgroundColor: colors.showcase.bg },
+  soft: { backgroundColor: colors.bg, paddingHorizontal: space.xl, paddingTop: space.xs, gap: space.md },
+  softTitle: { fontSize: 20, lineHeight: 28 },
   titles: { flex: 1, paddingHorizontal: space.xs },
   actions: { flexDirection: 'row', alignItems: 'center' },
 });

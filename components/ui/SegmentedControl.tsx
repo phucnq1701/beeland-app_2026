@@ -9,12 +9,15 @@ export type SegmentedControlProps<T extends string> = {
   value: T;
   options: { value: T; label: string }[];
   onChange: (value: T) => void;
+  /** `soft`: rãnh + phân đoạn bo tròn hẳn, phân đoạn chọn có bóng nhẹ (kiểu trang chủ). */
+  variant?: 'default' | 'soft';
 };
 
 /** Chọn 1 trong 2–3 phân đoạn (vd "Trang chủ" / "Tab menu"). */
-export function SegmentedControl<T extends string>({ value, options, onChange }: SegmentedControlProps<T>) {
+export function SegmentedControl<T extends string>({ value, options, onChange, variant = 'default' }: SegmentedControlProps<T>) {
+  const soft = variant === 'soft';
   return (
-    <View style={styles.track} accessibilityRole="tablist">
+    <View style={[styles.track, soft ? styles.softTrack : null]} accessibilityRole="tablist">
       {options.map((o) => {
         const selected = o.value === value;
         return (
@@ -23,9 +26,18 @@ export function SegmentedControl<T extends string>({ value, options, onChange }:
             accessibilityRole="tab"
             accessibilityState={{ selected }}
             onPress={() => onChange(o.value)}
-            style={[styles.segment, selected ? [styles.selected, elevation.raised] : null]}
+            style={[
+              styles.segment,
+              soft ? styles.softSegment : null,
+              selected ? [styles.selected, soft ? elevation.soft : elevation.raised] : null,
+            ]}
           >
-            <Text variant="subhead" color={selected ? 'text' : 'textSecondary'} numberOfLines={1}>
+            <Text
+              variant={soft ? 'caption' : 'subhead'}
+              weight={soft ? 'semibold' : undefined}
+              color={selected ? (soft ? 'primary' : 'text') : 'textSecondary'}
+              numberOfLines={1}
+            >
               {o.label}
             </Text>
           </Pressable>
@@ -52,4 +64,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
   },
   selected: { backgroundColor: colors.surface },
+  softTrack: { borderRadius: radius.full, padding: 5, gap: 0, backgroundColor: colors.border },
+  softSegment: { minHeight: 38, borderRadius: radius.full },
 });

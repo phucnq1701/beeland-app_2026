@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { AlertTriangle, CalendarClock, FileText, Wallet } from "lucide-react-native";
+import { AlertTriangle, ArrowUpRight, CalendarClock, FileText, Wallet } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 
 import { DEFAULT_REPORT_FILTER, ReportFilters, ReportFilterValue, reportQuery } from "@/components/reports/ReportFilters";
-import { AppHeader, Card, ErrorState, Screen, Skeleton, Text } from "@/components/ui";
+import { AppHeader, ErrorState, Screen, Skeleton, Text } from "@/components/ui";
 import { formatVNDShort } from "@/lib/format";
 import { PERIOD_LABEL } from "@/lib/reportPeriod";
-import { colors, radius, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import { ReportService } from "@/sevicesSupabase/ReportService";
 
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
@@ -64,12 +64,20 @@ export default function ReportsScreen({ embedded }: { embedded?: boolean } = {})
     });
 
   const period = PERIOD_LABEL[filter.period].toLowerCase();
-  const cards: { title: string; subtitle: string; value: string; icon: LucideIcon; tone: string; route: string }[] = data
+  const cards: {
+    title: string;
+    subtitle: string;
+    value: string;
+    icon: LucideIcon;
+    tone: string;
+    subtle: string;
+    route: string;
+  }[] = data
     ? [
-        { title: "Thu tiền", subtitle: `Tổng thu ${period}`, value: formatVNDShort(data.thuTien), icon: Wallet, tone: colors.success, route: "/reports/payment" },
-        { title: "Hợp đồng", subtitle: `${data.soHopDong} HĐMB ký ${period}`, value: formatVNDShort(data.hopDong), icon: FileText, tone: colors.info, route: "/reports/contract" },
-        { title: "Sắp đến hạn", subtitle: `Đợt thanh toán ${period}`, value: `${data.sapDenHan} đợt`, icon: CalendarClock, tone: colors.warning, route: "/reports/payment-due" },
-        { title: "Đợt quá hạn", subtitle: "Cần xử lý ngay", value: `${data.quaHan} đợt`, icon: AlertTriangle, tone: colors.danger, route: "/reports/overdue" },
+        { title: "Thu tiền", subtitle: `Tổng thu ${period}`, value: formatVNDShort(data.thuTien), icon: Wallet, tone: colors.success, subtle: colors.successSubtle, route: "/reports/payment" },
+        { title: "Hợp đồng", subtitle: `${data.soHopDong} HĐMB ký ${period}`, value: formatVNDShort(data.hopDong), icon: FileText, tone: colors.info, subtle: colors.infoSubtle, route: "/reports/contract" },
+        { title: "Sắp đến hạn", subtitle: `Đợt thanh toán ${period}`, value: `${data.sapDenHan} đợt`, icon: CalendarClock, tone: colors.warning, subtle: colors.warningSubtle, route: "/reports/payment-due" },
+        { title: "Đợt quá hạn", subtitle: "Cần xử lý ngay", value: `${data.quaHan} đợt`, icon: AlertTriangle, tone: colors.danger, subtle: colors.dangerSubtle, route: "/reports/overdue" },
       ]
     : [];
 
@@ -77,58 +85,82 @@ export default function ReportsScreen({ embedded }: { embedded?: boolean } = {})
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <Screen
-        header={<AppHeader title="Báo cáo" hideBack={embedded} />}
+        header={<AppHeader variant="soft" title="Báo cáo" hideBack={embedded} />}
+        padded={false}
         refreshing={refreshing}
         onRefresh={() => void load(true)}
         bottomInset={embedded ? TAB_BAR_SPACE : 0}
       >
-        <ReportFilters value={filter} onChange={setFilter} />
-        {loading ? (
-          <View style={styles.grid}>
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} height={112} style={styles.cell} />
-            ))}
-          </View>
-        ) : !data || data.error ? (
-          <ErrorState description="Không tải được số liệu báo cáo." onRetry={() => void load()} />
-        ) : (
-          <View style={styles.grid}>
-            {cards.map((c) => {
-              const Icon = c.icon;
-              return (
-                <Card key={c.title} onPress={() => open(c.route)} style={styles.cell} accessibilityLabel={`${c.title}: ${c.value}`}>
-                  <View style={styles.icon}>
-                    <Icon size={20} color={c.tone} />
-                  </View>
-                  <Text variant="caption" color="textSecondary">
-                    {c.title}
-                  </Text>
-                  <Text variant="heading" numeric numberOfLines={1} adjustsFontSizeToFit>
-                    {c.value}
-                  </Text>
-                  <Text variant="label" color="textTertiary" numberOfLines={2}>
-                    {c.subtitle}
-                  </Text>
-                </Card>
-              );
-            })}
-          </View>
-        )}
+        <View style={styles.body}>
+          <ReportFilters value={filter} onChange={setFilter} />
+          {loading ? (
+            <View style={styles.grid}>
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} height={148} radius={radius.xxl} style={styles.cell} />
+              ))}
+            </View>
+          ) : !data || data.error ? (
+            <ErrorState description="Không tải được số liệu báo cáo." onRetry={() => void load()} />
+          ) : (
+            <View style={styles.grid}>
+              {cards.map((c) => {
+                const Icon = c.icon;
+                return (
+                  <Pressable
+                    key={c.title}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${c.title}: ${c.value}`}
+                    onPress={() => open(c.route)}
+                    style={({ pressed }) => [styles.cell, styles.card, pressed ? styles.pressed : null]}
+                  >
+                    <View style={styles.cardTop}>
+                      <View style={[styles.icon, { backgroundColor: c.subtle }]}>
+                        <Icon size={20} color={c.tone} strokeWidth={2} />
+                      </View>
+                      <View style={styles.arrow}>
+                        <ArrowUpRight size={14} color={colors.textSecondary} strokeWidth={2.5} />
+                      </View>
+                    </View>
+                    <Text variant="caption" color="textSecondary">
+                      {c.title}
+                    </Text>
+                    <Text variant="title" numeric numberOfLines={1} adjustsFontSizeToFit>
+                      {c.value}
+                    </Text>
+                    <Text variant="label" weight="medium" color="textTertiary" numberOfLines={2}>
+                      {c.subtitle}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+        </View>
       </Screen>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.lg },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
-  cell: { flexBasis: "47%", flexGrow: 1, gap: 2 },
-  icon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
+  cell: { flexBasis: "47%", flexGrow: 1 },
+  card: {
+    gap: 2,
+    padding: space.lg,
+    borderRadius: radius.xxl,
+    backgroundColor: colors.surface,
+    ...elevation.soft,
+  },
+  pressed: { backgroundColor: colors.surfaceMuted, transform: [{ scale: 0.98 }] },
+  cardTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: space.sm },
+  icon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  arrow: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.surfaceMuted,
-    marginBottom: space.xs,
   },
 });

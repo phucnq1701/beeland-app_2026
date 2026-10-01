@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, memo } from "react";
 import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { AlertTriangle, ChevronRight, Lock, LockOpen, LucideIcon, MapPin } from "lucide-react-native";
+import { AlertTriangle, ChevronRight, Clock, Lock, LockOpen, LucideIcon, MapPin } from "lucide-react-native";
 
 import {
   FilterPanel,
@@ -22,17 +22,20 @@ import {
   Text,
 } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
-import { colors, radius, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
 const TAB_BAR_SPACE = 100;
 
-const STATUS_CONFIGS: Record<"active" | "warning" | "expired", { tone: BadgeTone; icon: LucideIcon; label: string; bar: string }> = {
-  active: { tone: "success", icon: Lock, label: "Đang lock", bar: colors.success },
-  warning: { tone: "warning", icon: AlertTriangle, label: "Sắp hết hạn", bar: colors.warning },
-  expired: { tone: "danger", icon: LockOpen, label: "Hết hạn", bar: colors.danger },
+const STATUS_CONFIGS: Record<
+  "active" | "warning" | "expired",
+  { tone: BadgeTone; icon: LucideIcon; label: string; bar: string; subtle: string }
+> = {
+  active: { tone: "success", icon: Lock, label: "Đang lock", bar: colors.success, subtle: colors.successSubtle },
+  warning: { tone: "warning", icon: AlertTriangle, label: "Sắp hết hạn", bar: colors.warning, subtle: colors.warningSubtle },
+  expired: { tone: "danger", icon: LockOpen, label: "Hết hạn", bar: colors.danger, subtle: colors.dangerSubtle },
 };
 
 type StatusKey = keyof typeof STATUS_CONFIGS;
@@ -65,11 +68,13 @@ const LockRow = memo(function LockRow({ item, onPress }: { item: any; onPress: (
   return (
     <Card
       onPress={() => onPress(item)}
+      style={styles.card}
+      padding={space.lg + 2}
       accessibilityLabel={`Căn ${item.kyHieu ?? ""}, ${config.label}, ${formatRemaining(remainingMinutes)}`}
     >
       <View style={styles.rowHead}>
-        <View style={styles.icon}>
-          <Icon size={18} color={config.bar} />
+        <View style={[styles.icon, { backgroundColor: config.subtle }]}>
+          <Icon size={20} color={config.bar} strokeWidth={2} />
         </View>
         <View style={styles.flex}>
           <Text variant="subhead" numberOfLines={1}>
@@ -85,26 +90,26 @@ const LockRow = memo(function LockRow({ item, onPress }: { item: any; onPress: (
         <Badge label={config.label} tone={config.tone} />
       </View>
 
-      <View style={styles.timeRow}>
-        <Text variant="caption" color="textSecondary">
-          Lock lúc {formatDateTime(item.ngayLock)}
-        </Text>
-        <Text variant="caption" weight="semibold" color={config.bar}>
-          {formatRemaining(remainingMinutes)}
-        </Text>
-      </View>
-
+      {/* Còn hạn: thời gian còn lại + thanh tiến độ. Hết hạn: badge đã nói, không lặp lại */}
       {remainingMinutes > 0 ? (
-        <View style={styles.track} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <View style={[styles.fill, { width: `${Math.round(progress * 100)}%`, backgroundColor: config.bar }]} />
+        <View style={styles.remain}>
+          <Text variant="caption" weight="semibold" color={config.bar}>
+            {formatRemaining(remainingMinutes)}
+          </Text>
+          <View style={styles.track} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <View style={[styles.fill, { width: `${Math.round(progress * 100)}%`, backgroundColor: config.bar }]} />
+          </View>
         </View>
       ) : null}
 
-      <View style={styles.more}>
-        <Text variant="caption" weight="semibold" color="primary">
-          Chi tiết
+      <View style={styles.footer}>
+        <Clock size={14} color={colors.textTertiary} />
+        <Text variant="caption" color="textSecondary" style={styles.flex} numberOfLines={1}>
+          Lock lúc {formatDateTime(item.ngayLock)}
         </Text>
-        <ChevronRight size={14} color={colors.primary} />
+        <View style={styles.chevron}>
+          <ChevronRight size={16} color={colors.textSecondary} strokeWidth={2.5} />
+        </View>
       </View>
     </Card>
   );
@@ -208,7 +213,7 @@ export default function LockedUnitsScreen({
 
   const header = (
     <View style={styles.listHeader}>
-      <SearchBar value={searchInput} onChangeText={setSearchInput} placeholder="Tìm mã căn, dự án" />
+      <SearchBar value={searchInput} onChangeText={setSearchInput} placeholder="Tìm mã căn, dự án" variant="soft" />
       {showFilter && (
         <FilterPanel activeCount={selectedProjects.length > 0 ? 1 : 0} onReset={() => setSelectedProjects([])}>
           <FilterSection
@@ -224,7 +229,13 @@ export default function LockedUnitsScreen({
           />
         </FilterPanel>
       )}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+      {/* Tràn ra mép màn để bóng chip không bị cắt ở hai đầu */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipsScroll}
+        contentContainerStyle={styles.chips}
+      >
         {tabs.map((tab) => (
           <Chip
             key={tab.key}
@@ -232,6 +243,7 @@ export default function LockedUnitsScreen({
             count={tab.count}
             selected={activeTab === tab.key}
             onPress={() => setActiveTab(tab.key)}
+            variant="soft"
           />
         ))}
       </ScrollView>
@@ -246,17 +258,16 @@ export default function LockedUnitsScreen({
         padded={false}
         header={
           <AppHeader
+            variant="soft"
             title="Lock căn"
             // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
             hideBack={embedded}
             actions={
-              <View style={styles.headerAction}>
-                <FilterToggleButton
-                  open={showFilter}
-                  activeCount={selectedProjects.length > 0 ? 1 : 0}
-                  onPress={() => setShowFilter(!showFilter)}
-                />
-              </View>
+              <FilterToggleButton
+                open={showFilter}
+                activeCount={selectedProjects.length > 0 ? 1 : 0}
+                onPress={() => setShowFilter(!showFilter)}
+              />
             }
           />
         }
@@ -289,23 +300,39 @@ export default function LockedUnitsScreen({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  headerAction: { paddingRight: space.sm },
-  list: { paddingHorizontal: space.lg },
-  listHeader: { gap: space.md, paddingTop: space.md, paddingBottom: space.md },
-  chips: { gap: space.sm },
+  list: { paddingHorizontal: space.xl },
+  listHeader: { gap: space.md, paddingTop: space.sm, paddingBottom: space.md },
+  chipsScroll: { marginHorizontal: -space.xl },
+  chips: { gap: space.sm, paddingHorizontal: space.xl, paddingVertical: space.xs },
   gap: { height: space.md },
+  card: { borderWidth: 0, borderRadius: radius.xxl, ...elevation.soft },
   rowHead: { flexDirection: "row", alignItems: "center", gap: space.md },
   icon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  place: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  remain: { gap: space.sm, marginTop: space.md + 2 },
+  track: { height: 6, borderRadius: 3, backgroundColor: colors.surfaceMuted, overflow: "hidden" },
+  fill: { height: 6, borderRadius: 3 },
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs + 2,
+    marginTop: space.md + 2,
+    paddingTop: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  chevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.surfaceMuted,
   },
-  place: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  timeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: space.md },
-  track: { height: 4, borderRadius: 2, backgroundColor: colors.surfaceMuted, marginTop: space.sm, overflow: "hidden" },
-  fill: { height: 4, borderRadius: 2 },
-  more: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 2, marginTop: space.sm },
 });

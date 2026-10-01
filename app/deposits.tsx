@@ -1,8 +1,8 @@
 import React, { useCallback } from "react";
 import { useRouter } from "expo-router";
 
-import { SalesDocList, StatusOption } from "@/components/sales/SalesDocList";
-import { Avatar, ListItem, MoneyText, StatusBadge } from "@/components/ui";
+import { DocTrailing, SalesDocList, StatusOption } from "@/components/sales/SalesDocList";
+import { Avatar, ListItem } from "@/components/ui";
 import { foldVietnamese, formatDate } from "@/lib/format";
 import { DatCocService } from "@/sevicesSupabase/DatCocService";
 
@@ -24,16 +24,11 @@ export default function DepositsScreen({ embedded }: { embedded?: boolean } = {}
   const renderRow = useCallback(
     (item: any) => (
       <ListItem
-        leading={<Avatar name={item.KhachHang || "?"} />}
+        leading={<Avatar name={item.KhachHang || "?"} size={44} round />}
         title={item.KhachHang || "—"}
         subtitle={[item.MaSanPham, item.TenDA].filter(Boolean).join(" · ") || undefined}
         meta={[item.SoPhieu, formatDate(item.NgayDatCoc)].filter(Boolean).join(" · ")}
-        trailing={
-          <>
-            <MoneyText value={item.TienCoc} short />
-            {item.TenTT ? <StatusBadge label={item.TenTT} color={item.MauNen} /> : null}
-          </>
-        }
+        trailing={<DocTrailing amount={item.TienCoc} status={item.TenTT} color={item.MauNen} />}
         onPress={() =>
           router.push({ pathname: "/deposit/[id]", params: { id: String(item.MaPDC ?? item.ID), data: JSON.stringify(item) } })
         }

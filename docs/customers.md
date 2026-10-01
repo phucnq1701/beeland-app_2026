@@ -4,7 +4,9 @@
 
 | Màn | File |
 |---|---|
-| Danh sách (tìm, Cá nhân/DN, chip trạng thái, Gọi/Zalo, SĐT che) | `app/customers.tsx` + `components/customer/CustomerListItem.tsx` |
+| Danh sách (tìm, Cá nhân/DN, chip trạng thái, Gọi/Zalo, SĐT che). Kiểu bo tròn: header/ô tìm/thanh loại/chip `soft`, mỗi khách là card bo `radius.xxl`, avatar tròn, nút Gọi/Zalo tròn nền nhạt | `app/customers.tsx` + `components/customer/CustomerListItem.tsx` |
+| Chi tiết khách (kiểu bo tròn): card đầu bo `radius.x3` gồm avatar tròn, tên, nhãn, hàng nút tròn Gọi/Zalo/Email; card thông tin + card "Giao dịch" bo `radius.xxl`; header `soft` (Sửa/Xoá nút tròn) | `app/customer/[id]/index.tsx` |
+| Thêm / sửa khách (kiểu bo tròn): `CustomerForm` chia card theo nhóm (Thông tin chung / Phân loại / Người đại diện / Ghi chú), ô nhập + ô chọn `variant="soft"`, nút lưu dạng viên, header `soft` | `app/customer/new.tsx`, `app/customer/[id]/edit.tsx`, `components/customer/CustomerForm.tsx` |
 | Thêm / sửa (form chung) | `app/customer/new.tsx`, `app/customer/[id]/edit.tsx` + `components/customer/CustomerForm.tsx` |
 | Hộp trùng khách | `components/customer/DuplicateSheet.tsx` |
 | Chi tiết, xoá | `app/customer/[id]/index.tsx` |

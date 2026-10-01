@@ -4,6 +4,7 @@ import { useLocalSearchParams, Stack, useRouter, useFocusEffect } from "expo-rou
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarPlus, ChevronLeft, Lock, MapPin, PackageX } from "lucide-react-native";
 
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import { ImageCarousel } from "@/components/product/ImageCarousel";
 import { FocusStatusBar } from "@/components/ui/FocusStatusBar";
 import { PriceBreakdown } from "@/components/product/PriceBreakdown";
@@ -14,7 +15,6 @@ import {
   EmptyState,
   IconButton,
   KeyValueRow,
-  SectionHeader,
   SkeletonDetail,
   Text,
   useToast,
@@ -23,7 +23,7 @@ import { formatCountdown } from "@/lib/countdown";
 import { formatArea, formatVNDShort } from "@/lib/format";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { isOpenForSale, OPEN_FOR_SALE_MESSAGE } from "@/lib/productStatus";
-import { colors, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { ProductService } from "@/sevicesSupabase/ProductService";
 import { PriceServices, ActivePriceListItem } from "@/sevicesSupabase/PriceServices";
@@ -154,7 +154,7 @@ export default function ProductDetailScreen() {
 
   const back = (
     <View style={[styles.back, { top: insets.top + space.sm }]}>
-      <IconButton icon={ChevronLeft} variant="onDark" accessibilityLabel="Quay lại" onPress={() => router.back()} />
+      <IconButton icon={ChevronLeft} variant="glass" accessibilityLabel="Quay lại" onPress={() => router.back()} />
     </View>
   );
 
@@ -234,51 +234,58 @@ export default function ProductDetailScreen() {
       <View style={styles.root}>
         <ScrollView contentContainerStyle={styles.scroll}>
           <View testID="product-hero">
-            <ImageCarousel images={images} fallback={DEFAULT_IMAGE} height={260 + insets.top} />
+            <ImageCarousel
+              images={images}
+              fallback={DEFAULT_IMAGE}
+              height={340 + insets.top}
+              bottomInset={SHEET_OVERLAP}
+            />
           </View>
 
-          {/* Khối trưng bày: tên dự án, ký hiệu căn, giá */}
-          <View style={styles.hero}>
-            <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
-              {data?.TenDA || "Dự án"}
-            </Text>
-            <Text variant="title" color={colors.showcase.text} accessibilityRole="header">
-              {data?.KyHieu ? `Căn ${data.KyHieu}` : "Sản phẩm"}
-            </Text>
-            <Text variant="display" color={colors.showcase.accent} numeric>
-              {price}
-            </Text>
-            {data?.DiaChi ? (
-              <View style={styles.place}>
-                <MapPin size={16} color={colors.showcase.textMuted} />
-                <Text variant="caption" color={colors.showcase.textMuted} style={styles.flex}>
-                  {data.DiaChi}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-
-          <View style={styles.content}>
-            <SectionHeader title="Thông tin căn" />
-            <Card>
-              <KeyValueRow label="Ký hiệu" value={data?.KyHieu || "—"} />
-              <KeyValueRow label="Dự án" value={data?.TenDA || "—"} />
-              <KeyValueRow label="Diện tích thông thủy" value={formatArea(data?.DTThongThuy)} />
-              <KeyValueRow label="Diện tích tim tường" value={formatArea(data?.DienTich)} />
-              <KeyValueRow label="Trạng thái" value={statusName || "—"} last />
-            </Card>
-            {!canTransact ? (
-              <Text variant="caption" color="textSecondary">
-                {isLocked
-                  ? "Căn đang được lock. Tạo booking từ mục Lock căn (như trên web)."
-                  : `${OPEN_FOR_SALE_MESSAGE} – căn đang ở trạng thái “${statusName || "không xác định"}”.`}
+          {/* Khối nội dung bo góc trên trồi đè lên đáy ảnh: tên dự án, ký hiệu căn, giá */}
+          <View style={styles.sheet}>
+            <View style={styles.hero}>
+              <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                {data?.TenDA || "Dự án"}
               </Text>
-            ) : null}
+              <Text variant="title" accessibilityRole="header" style={styles.code}>
+                {data?.KyHieu ? `Căn ${data.KyHieu}` : "Sản phẩm"}
+              </Text>
+              <Text variant="display" color="primary" numeric>
+                {price}
+              </Text>
+              {data?.DiaChi ? (
+                <View style={styles.place}>
+                  <MapPin size={16} color={colors.textSecondary} strokeWidth={2} />
+                  <Text variant="caption" color="textSecondary" style={styles.flex}>
+                    {data.DiaChi}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
 
-            <SectionHeader title="Chi tiết giá" />
-            <Card>
-              <PriceBreakdown activePrice={activePrice} data={data} loading={priceLoading} />
-            </Card>
+            <View style={styles.content}>
+              <HomeSectionHeader title="Thông tin căn" />
+              <Card style={styles.card}>
+                <KeyValueRow label="Ký hiệu" value={data?.KyHieu || "—"} />
+                <KeyValueRow label="Dự án" value={data?.TenDA || "—"} />
+                <KeyValueRow label="Diện tích thông thủy" value={formatArea(data?.DTThongThuy)} />
+                <KeyValueRow label="Diện tích tim tường" value={formatArea(data?.DienTich)} />
+                <KeyValueRow label="Trạng thái" value={statusName || "—"} last />
+              </Card>
+              {!canTransact ? (
+                <Text variant="caption" color="textSecondary">
+                  {isLocked
+                    ? "Căn đang được lock. Tạo booking từ mục Lock căn (như trên web)."
+                    : `${OPEN_FOR_SALE_MESSAGE} – căn đang ở trạng thái “${statusName || "không xác định"}”.`}
+                </Text>
+              ) : null}
+
+              <HomeSectionHeader title="Chi tiết giá" />
+              <Card style={styles.card}>
+                <PriceBreakdown activePrice={activePrice} data={data} loading={priceLoading} />
+              </Card>
+            </View>
           </View>
         </ScrollView>
         {back}
@@ -298,6 +305,7 @@ export default function ProductDetailScreen() {
               title="Lock căn"
               loading={locking}
               disabled={!canTransact}
+              style={styles.pill}
               onPress={() => void handleLock()}
             />
           )}
@@ -308,7 +316,7 @@ export default function ProductDetailScreen() {
               icon={CalendarPlus}
               title="Tạo booking"
               disabled={!canTransact}
-              style={styles.flex}
+              style={[styles.flex, styles.pill]}
               onPress={() => {
                 if (!canTransact || navigating.current) return;
                 navigating.current = true;
@@ -327,27 +335,35 @@ export default function ProductDetailScreen() {
   );
 }
 
+/** Khối nội dung bo góc trên, trồi đè lên đáy ảnh. */
+const SHEET_OVERLAP = radius.x3;
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.showcase.paper },
+  root: { flex: 1, backgroundColor: colors.bg },
   center: { justifyContent: "center" },
   flex: { flex: 1 },
   scroll: { paddingBottom: space.xxl },
-  back: { position: "absolute", left: space.md },
-  hero: {
-    gap: space.xs,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.lg,
-    backgroundColor: colors.showcase.bg,
+  back: { position: "absolute", left: space.lg },
+  sheet: {
+    marginTop: -SHEET_OVERLAP,
+    paddingTop: space.xxl,
+    borderTopLeftRadius: radius.x3,
+    borderTopRightRadius: radius.x3,
+    backgroundColor: colors.bg,
   },
+  hero: { gap: space.xs, paddingHorizontal: space.xl },
+  code: { fontSize: 26, lineHeight: 34 },
   place: { flexDirection: "row", alignItems: "flex-start", gap: space.xs, marginTop: space.xs },
-  content: { padding: space.lg, gap: space.md },
+  content: { paddingHorizontal: space.xl, paddingTop: space.xxl, gap: space.md },
+  card: { borderWidth: 0, borderRadius: radius.xxl, paddingHorizontal: space.lg + 2, ...elevation.soft },
+  pill: { borderRadius: radius.full },
   lockTimer: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
     minHeight: 52,
     paddingHorizontal: space.lg,
-    borderRadius: 12,
+    borderRadius: radius.full,
     backgroundColor: colors.warningSubtle,
   },
 });

@@ -50,9 +50,21 @@ export function ReportFilters({
   return (
     <View style={styles.wrap}>
       {showPeriod ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        // Tràn ra mép màn (màn cha có lề space.xl) để bóng chip không bị cắt ở hai đầu
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipsScroll}
+          contentContainerStyle={styles.chips}
+        >
           {PERIODS.map((p) => (
-            <Chip key={p} label={PERIOD_LABEL[p]} selected={value.period === p} onPress={() => onChange({ ...value, period: p })} />
+            <Chip
+              key={p}
+              variant="soft"
+              label={PERIOD_LABEL[p]}
+              selected={value.period === p}
+              onPress={() => onChange({ ...value, period: p })}
+            />
           ))}
         </ScrollView>
       ) : null}
@@ -76,6 +88,7 @@ export function ReportFilters({
         value={value.projectId ?? ALL}
         options={[{ value: ALL, label: "Tất cả dự án" }, ...projects]}
         onChange={(v) => onChange({ ...value, projectId: v === ALL ? null : String(v) })}
+        variant="raised"
       />
     </View>
   );
@@ -83,6 +96,7 @@ export function ReportFilters({
 
 const styles = StyleSheet.create({
   wrap: { gap: space.md },
-  chips: { gap: space.sm, paddingRight: space.lg },
+  chipsScroll: { marginHorizontal: -space.xl },
+  chips: { gap: space.sm, paddingHorizontal: space.xl, paddingVertical: space.xs },
   dates: { flexDirection: "row", gap: space.md },
 });

@@ -1,46 +1,17 @@
 import { Tabs, useFocusEffect } from "expo-router";
 import { Home, LucideIcon, User } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
-import { StyleSheet } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Text } from "@/components/ui";
-import { colors, elevation } from "@/theme";
+import { FloatingTabBar } from "@/components/home/FloatingTabBar";
+import { colors } from "@/theme";
 import { features } from "@/mocks/features";
 import { loadMenuTabIds } from "@/components/utils/menuTabs";
 
-// Chiều cao vùng nội dung của tab bar (chưa gồm safe-area phía dưới)
-const TAB_BAR_CONTENT_HEIGHT = 56;
-
-function TabIcon({ icon: Icon, focused }: { icon: LucideIcon; focused: boolean }) {
-  return (
-    <Icon
-      color={focused ? colors.primary : colors.textTertiary}
-      size={24}
-      strokeWidth={focused ? 2.25 : 1.75}
-    />
-  );
-}
-
-function TabLabel({ title, focused }: { title: string; focused: boolean }) {
-  return (
-    // Nhãn tab không phóng theo cỡ chữ hệ thống để thanh tab không vỡ (ngoại lệ có chủ đích).
-    <Text
-      variant="label"
-      weight={focused ? "semibold" : "medium"}
-      color={focused ? "primary" : "textTertiary"}
-      numberOfLines={1}
-      allowFontScaling={false}
-      style={styles.label}
-    >
-      {title}
-    </Text>
-  );
+function TabIcon({ icon: Icon, focused, color }: { icon: LucideIcon; focused: boolean; color: string }) {
+  return <Icon color={color} size={20} strokeWidth={focused ? 2.25 : 1.9} />;
 }
 
 export default function TabLayout() {
-  const insets = useSafeAreaInsets();
-
   // 2 tab menu động ở giữa: cấu hình qua "Tất cả quản lý" → "Tab menu"
   // Mặc định: 2 mục đầu tiên (Dự án, Sản phẩm)
   const [menuTabIds, setMenuTabIds] = useState<string[]>(() =>
@@ -72,33 +43,18 @@ export default function TabLayout() {
     return {
       title,
       tabBarAccessibilityLabel: title,
-      tabBarLabel: ({ focused }: { focused: boolean }) => <TabLabel title={title} focused={focused} />,
-      tabBarIcon: ({ focused }: { focused: boolean }) =>
-        feature ? <TabIcon icon={feature.icon} focused={focused} /> : null,
+      tabBarIcon: ({ focused, color }: { focused: boolean; color: string }) =>
+        feature ? <TabIcon icon={feature.icon} focused={focused} color={color} /> : null,
     };
   };
 
   return (
     <Tabs
+      tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textTertiary,
-        tabBarAllowFontScaling: false,
-        tabBarStyle: {
-          // Full width, dán sát đáy; height gồm safe-area để nền phủ vùng home indicator (iOS)
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: TAB_BAR_CONTENT_HEIGHT + insets.bottom,
-          paddingBottom: insets.bottom,
-          paddingTop: 6,
-          backgroundColor: colors.surface,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: colors.border,
-          ...elevation.raised,
-        },
       }}
     >
       <Tabs.Screen
@@ -106,8 +62,7 @@ export default function TabLayout() {
         options={{
           title: "Trang chủ",
           tabBarAccessibilityLabel: "Trang chủ",
-          tabBarLabel: ({ focused }) => <TabLabel title="Trang chủ" focused={focused} />,
-          tabBarIcon: ({ focused }) => <TabIcon icon={Home} focused={focused} />,
+          tabBarIcon: ({ focused, color }) => <TabIcon icon={Home} focused={focused} color={color} />,
         }}
       />
 
@@ -126,14 +81,9 @@ export default function TabLayout() {
         options={{
           title: "Tài khoản",
           tabBarAccessibilityLabel: "Tài khoản",
-          tabBarLabel: ({ focused }) => <TabLabel title="Tài khoản" focused={focused} />,
-          tabBarIcon: ({ focused }) => <TabIcon icon={User} focused={focused} />,
+          tabBarIcon: ({ focused, color }) => <TabIcon icon={User} focused={focused} color={color} />,
         }}
       />
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  label: { letterSpacing: 0, marginTop: 2 },
-});

@@ -4,10 +4,11 @@
 
 | Màn | File |
 |---|---|
-| Danh sách dự án / chi tiết (trưng bày navy) | `app/projects.tsx`, `app/project/[id].tsx` |
-| Sản phẩm: 3 chế độ Danh sách / Lưới / Tổng quan, bộ lọc, realtime | `app/products.tsx` + `components/product/*`, `components/FilterPanel.tsx` |
+| Danh sách dự án / chi tiết (trưng bày navy; card danh sách cùng kiểu carousel trang chủ: ảnh tràn + `showcase.scrim`, bo `radius.x3`; chi tiết: tên dự án đè trên ảnh, khối nội dung bo góc trên trồi lên ảnh, nút quay lại `IconButton variant="glass"`, mỗi chức năng là card riêng) | `app/projects.tsx`, `app/project/[id].tsx` |
+| Sản phẩm: 3 chế độ Danh sách / Lưới / Tổng quan, bộ lọc, realtime. Giao diện kiểu bo tròn: header/ô tìm/thanh chế độ `soft`, mỗi sản phẩm là card riêng (`ProductListItem`, không icon); nút Bộ lọc + khung lọc (`FilterPanel`, dùng chung booking/lock căn/chứng từ) dạng viên thuốc, bóng nhẹ | `app/products.tsx` + `components/product/*`, `components/FilterPanel.tsx` |
+| Chi tiết sản phẩm: ảnh cao 340, khối nội dung bo góc trên trồi đè lên ảnh (`ImageCarousel bottomInset` đẩy chấm/bộ đếm lên), ký hiệu căn + giá (màu `primary`) trên nền sáng, card bo `radius.xxl` + `elevation.soft`, nút quay lại `glass`, nút Lock/Tạo booking dạng viên | `app/product/[id].tsx`, `components/product/PriceBreakdown.tsx` |
 | Chi tiết căn (giá, Lock căn, Tạo booking) | `app/product/[id].tsx` + `components/product/PriceBreakdown.tsx`, `ImageCarousel.tsx` |
-| Căn đã lock / chi tiết lock (đếm ngược, Tạo booking) | `app/locked-units.tsx`, `app/locked/[id].tsx` |
+| Căn đã lock / chi tiết lock (đếm ngược, Tạo booking). Danh sách kiểu bo tròn: header/ô tìm/chip `soft`, card bo `radius.xxl` + bóng nhẹ, icon tròn nền theo trạng thái; hết hạn chỉ hiện badge (không lặp chữ "Hết hạn"), chân card: giờ lock + nút ›. Chi tiết lock cùng kiểu chi tiết sản phẩm (ảnh + khối nội dung trồi lên, ô đếm ngược/hết hạn dạng viên) | `app/locked-units.tsx`, `app/locked/[id].tsx` |
 | Sơ đồ phân lô (WebView) | `app/diagram/[mada].tsx` |
 
 ## Dữ liệu

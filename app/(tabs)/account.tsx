@@ -2,10 +2,11 @@ import React, { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { Code2, LayoutGrid, LogOut, Trash2, User } from "lucide-react-native";
+import { ChevronRight, Code2, LayoutGrid, LogOut, Trash2, User } from "lucide-react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { FeatureGrid } from "@/components/home/FeatureGrid";
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import {
   Avatar,
   Button,
@@ -13,14 +14,13 @@ import {
   confirm,
   ListItem,
   Screen,
-  SectionHeader,
   Text,
   useToast,
 } from "@/components/ui";
 import { MENU_TAB_FEATURE_IDS } from "@/components/utils/menuTabs";
 import { routeForFeature, visibleFeatureIds } from "@/lib/featureConfig";
 import { features } from "@/mocks/features";
-import { colors, radius, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import { CloudProfileService, CloudProfile } from "@/sevicesSupabase/CloudProfileService";
 import {
   deleteCurrentEmployee,
@@ -164,93 +164,108 @@ export default function AccountScreen() {
   const settingsDisabled = deleting || employeeDeleted;
 
   return (
-    <Screen bottomInset={TAB_BAR_SPACE}>
-      <Text variant="title" accessibilityRole="header" style={styles.pageTitle}>
-        Tài khoản
-      </Text>
+    <Screen bottomInset={TAB_BAR_SPACE} padded={false}>
+      <View style={styles.body}>
+        <Text variant="display" accessibilityRole="header" style={styles.pageTitle}>
+          Tài khoản
+        </Text>
 
-      <Card
-        onPress={data ? () => router.push("/profile") : undefined}
-        accessibilityLabel={
-          data
-            ? `${data.HoTen || "Chưa cập nhật họ tên"}, ${data.Email || "chưa có email"}. Xem thông tin cá nhân`
-            : undefined
-        }
-      >
-        <View style={styles.profile}>
-          <Avatar name={data?.HoTen || "?"} size={56} />
-          {profileBody}
-        </View>
-      </Card>
-
-      <SectionHeader
-        title="Quản lý nhanh"
-        actionLabel={showAllManagement ? "Thu gọn" : "Tất cả"}
-        onAction={() => setShowAllManagement(!showAllManagement)}
-      />
-      {showAllManagement ? (
-        <FeatureGrid
-          items={managementFeatures.map((f) => ({
-            key: f.id,
-            feature: f,
-            onPress: () => {
-              const route = routeForFeature(f.id);
-              if (route) router.push(route as never);
-            },
-          }))}
-        />
-      ) : null}
-
-      <SectionHeader title="Cài đặt" />
-      <Card padding={0}>
-        <View pointerEvents={settingsDisabled ? "none" : "auto"} style={settingsDisabled ? styles.disabled : null}>
-          <ListItem
-            leading={<RowIcon icon={User} />}
-            title="Thông tin cá nhân"
-            chevron
-            onPress={() => router.push("/profile")}
-          />
-        </View>
-        <View
-          pointerEvents={settingsDisabled ? "none" : "auto"}
-          style={[styles.divider, settingsDisabled ? styles.disabled : null]}
+        <Card
+          style={styles.profileCard}
+          padding={space.lg + 2}
+          onPress={data ? () => router.push("/profile") : undefined}
+          accessibilityLabel={
+            data
+              ? `${data.HoTen || "Chưa cập nhật họ tên"}, ${data.Email || "chưa có email"}. Xem thông tin cá nhân`
+              : undefined
+          }
         >
-          <ListItem
-            leading={<RowIcon icon={LayoutGrid} />}
-            title="Cấu hình trang chủ & menu"
-            chevron
-            onPress={() => router.push("/all-management")}
-          />
-        </View>
-        <View pointerEvents={deleting ? "none" : "auto"} style={styles.divider}>
-          <ListItem
-            leading={<RowIcon icon={Trash2} danger />}
-            title={employeeDeleted ? "Thử đăng xuất lại" : "Xóa tài khoản"}
-            chevron
-            onPress={() => void handleDeleteAccount()}
-          />
-        </View>
-        {__DEV__ ? (
-          // Chỉ có ở bản dev: xem toàn bộ component của design system
-          <View style={styles.divider}>
-            <ListItem
-              leading={<RowIcon icon={Code2} />}
-              title="UI Gallery (dev)"
-              chevron
-              onPress={() => router.push("/dev/ui-gallery" as never)}
-            />
+          <View style={styles.profile}>
+            <Avatar name={data?.HoTen || "?"} size={56} round />
+            {profileBody}
+            {data ? (
+              <View style={styles.chevron}>
+                <ChevronRight size={16} color={colors.textSecondary} strokeWidth={2.5} />
+              </View>
+            ) : null}
           </View>
-        ) : null}
-      </Card>
+        </Card>
 
-      <Button
-        variant="secondary"
-        icon={LogOut}
-        title="Đăng xuất"
-        loading={deleting}
-        onPress={handleLogout}
-        fullWidth
-      />
+        <HomeSectionHeader
+          title="Quản lý nhanh"
+          actionLabel={showAllManagement ? "Thu gọn" : "Tất cả"}
+          onAction={() => setShowAllManagement(!showAllManagement)}
+        />
+        {showAllManagement ? (
+          <FeatureGrid
+            columns={4}
+            compact
+            items={managementFeatures.map((f) => ({
+              key: f.id,
+              feature: f,
+              onPress: () => {
+                const route = routeForFeature(f.id);
+                if (route) router.push(route as never);
+              },
+            }))}
+          />
+        ) : null}
+
+        <HomeSectionHeader title="Cài đặt" />
+        {/* Bóng ở lớp ngoài, bo + cắt ở lớp trong (iOS: overflow hidden làm mất bóng) */}
+        <View style={styles.card}>
+          <View style={styles.clip}>
+            <View pointerEvents={settingsDisabled ? "none" : "auto"} style={settingsDisabled ? styles.disabled : null}>
+              <ListItem
+                leading={<RowIcon icon={User} />}
+                title="Thông tin cá nhân"
+                chevron
+                onPress={() => router.push("/profile")}
+              />
+            </View>
+            <View
+              pointerEvents={settingsDisabled ? "none" : "auto"}
+              style={[styles.divider, settingsDisabled ? styles.disabled : null]}
+            >
+              <ListItem
+                leading={<RowIcon icon={LayoutGrid} />}
+                title="Cấu hình trang chủ & menu"
+                chevron
+                onPress={() => router.push("/all-management")}
+              />
+            </View>
+            <View pointerEvents={deleting ? "none" : "auto"} style={styles.divider}>
+              <ListItem
+                leading={<RowIcon icon={Trash2} danger />}
+                title={employeeDeleted ? "Thử đăng xuất lại" : "Xóa tài khoản"}
+                chevron
+                onPress={() => void handleDeleteAccount()}
+              />
+            </View>
+            {__DEV__ ? (
+              // Chỉ có ở bản dev: xem toàn bộ component của design system
+              <View style={styles.divider}>
+                <ListItem
+                  leading={<RowIcon icon={Code2} />}
+                  title="UI Gallery (dev)"
+                  chevron
+                  onPress={() => router.push("/dev/ui-gallery" as never)}
+                />
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        <Button
+          variant="secondary"
+          icon={LogOut}
+          title="Đăng xuất"
+          loading={deleting}
+          onPress={handleLogout}
+          fullWidth
+          style={styles.pill}
+        />
+      </View>
 
       <Modal visible={deleting} transparent animationType="fade" onRequestClose={() => {}}>
         <View style={styles.overlay}>
@@ -269,13 +284,26 @@ export default function AccountScreen() {
 function RowIcon({ icon: Icon, danger }: { icon: typeof User; danger?: boolean }) {
   return (
     <View style={[styles.rowIcon, danger ? styles.rowIconDanger : null]}>
-      <Icon size={20} color={danger ? colors.danger : colors.brand} />
+      <Icon size={20} color={danger ? colors.danger : colors.brand} strokeWidth={2} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  pageTitle: { marginTop: space.sm },
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  pageTitle: { marginTop: space.sm, marginBottom: space.xs },
+  profileCard: { borderWidth: 0, borderRadius: radius.x3, ...elevation.soft },
+  card: { borderRadius: radius.xxl, backgroundColor: colors.surface, ...elevation.soft },
+  clip: { borderRadius: radius.xxl, overflow: "hidden" },
+  pill: { borderRadius: radius.full, marginTop: space.xs },
+  chevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceMuted,
+  },
   profile: { flexDirection: "row", alignItems: "center", gap: space.md },
   profileTexts: { flex: 1, gap: 2 },
   links: { flexDirection: "row", gap: space.lg, marginTop: space.xs },
@@ -284,9 +312,9 @@ const styles = StyleSheet.create({
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   disabled: { opacity: 0.5 },
   rowIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.primarySubtle,
@@ -299,5 +327,5 @@ const styles = StyleSheet.create({
     padding: space.xxl,
     backgroundColor: colors.backdrop,
   },
-  overlayCard: { alignItems: "center", gap: space.md, minWidth: 240 },
+  overlayCard: { alignItems: "center", gap: space.md, minWidth: 240, borderWidth: 0, borderRadius: radius.xxl },
 });

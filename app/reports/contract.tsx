@@ -1,12 +1,15 @@
 import React, { useCallback } from "react";
+import { useRouter } from "expo-router";
 
 import { ReportList } from "@/components/reports/ReportList";
-import { ListItem, MoneyText, StatusBadge, Text } from "@/components/ui";
+import { DocTrailing } from "@/components/sales/SalesDocList";
+import { ListItem, MoneyText, Text } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { ReportService } from "@/sevicesSupabase/ReportService";
 
 /** Báo cáo hợp đồng: hợp đồng mua bán ký trong kỳ (fn_contract_list – như danh sách HĐ web). */
 export default function ContractReportScreen() {
+  const router = useRouter();
   const load = useCallback((q: any) => ReportService.getContracts(q), []);
   return (
     <ReportList<any>
@@ -27,11 +30,9 @@ export default function ContractReportScreen() {
           title={r.TenKH || "—"}
           subtitle={[r.SoHDMB, r.KyHieu, r.TenDA].filter(Boolean).join(" · ") || undefined}
           meta={r.NgayKy ? `Ký ${formatDate(r.NgayKy)}` : undefined}
-          trailing={
-            <>
-              <MoneyText value={r.TongGiaTriHDMB} short />
-              {r.TenTT ? <StatusBadge label={r.TenTT} color={r.MauNen} /> : null}
-            </>
+          trailing={<DocTrailing amount={r.TongGiaTriHDMB} status={r.TenTT} color={r.MauNen} />}
+          onPress={() =>
+            router.push({ pathname: "/contract/[id]", params: { id: String(r.MaHD ?? r.ID), data: JSON.stringify(r) } })
           }
         />
       )}

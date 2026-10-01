@@ -1,18 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Building2, UserPlus, UserX } from "lucide-react-native";
+import { Building2, Check, UserPlus, UserX } from "lucide-react-native";
+
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 
 import {
   AppHeader,
   Avatar,
   BottomActionBar,
   Button,
-  Card,
   EmptyState,
   Screen,
   SearchBar,
-  SectionHeader,
   SelectField,
   SkeletonList,
   Text,
@@ -23,7 +23,7 @@ import { formatVND, formatVNDShort, maskPhone } from "@/lib/format";
 import { buildBookingPayload } from "@/lib/bookingPayload";
 import { BookingSalesConfig, pickPrice, policyBookingAmount } from "@/lib/bookingPrice";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { colors, radius, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { CustomerService as CustomerSupabaseService } from "@/sevicesSupabase/CustomerService";
 import { ProductService } from "@/sevicesSupabase/ProductService";
@@ -332,7 +332,8 @@ export default function CreateBookingScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <Screen
         keyboardAware
-        header={<AppHeader title="Tạo booking" />}
+        padded={false}
+        header={<AppHeader variant="soft" title="Tạo booking" />}
         footer={
           <BottomActionBar>
             <View style={styles.footer}>
@@ -349,6 +350,7 @@ export default function CreateBookingScreen() {
               <Button
                 size="lg"
                 fullWidth
+                style={styles.pill}
                 title={loadingSan ? "Đang tải sàn giao dịch…" : "Tạo booking"}
                 loading={creatingBooking}
                 disabled={loadingSan}
@@ -358,70 +360,77 @@ export default function CreateBookingScreen() {
           </BottomActionBar>
         }
       >
-        {/* Căn đang booking – ghim trên cùng để không mất ngữ cảnh */}
-        <Card>
+        <View style={styles.body}>
+          {/* Căn đang booking – card navy trên cùng để không mất ngữ cảnh */}
           <View style={styles.unit}>
             <View style={styles.unitIcon}>
-              <Building2 size={22} color={colors.showcase.accent} />
+              <Building2 size={22} color={colors.showcase.accent} strokeWidth={2} />
             </View>
             <View style={styles.flex}>
-              <Text variant="subhead" numberOfLines={1}>
+              <Text variant="heading" color={colors.showcase.text} numberOfLines={1}>
                 {bookingData?.KyHieu || "Sản phẩm"}
               </Text>
-              <Text variant="caption" color="textSecondary" numberOfLines={1}>
+              <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
                 {bookingData?.TenDA || "—"}
               </Text>
             </View>
             {unitPrice ? (
-              <Text variant="subhead" numeric>
+              <Text variant="heading" color={colors.showcase.accent} numeric>
                 {formatVNDShort(unitPrice)}
               </Text>
             ) : null}
           </View>
-        </Card>
 
-        <SectionHeader title="Khách hàng *" />
-        {customerError ? (
-          <Text variant="caption" color="danger" accessibilityLiveRegion="polite">
-            {customerError}
-          </Text>
-        ) : null}
-        <SearchBar value={searchQuery} onChangeText={setSearchQuery} placeholder="Tên, SĐT hoặc mã KH" />
+          <HomeSectionHeader title="Khách hàng *" />
+          {customerError ? (
+            <Text variant="caption" color="danger" accessibilityLiveRegion="polite">
+              {customerError}
+            </Text>
+          ) : null}
+          <SearchBar value={searchQuery} onChangeText={setSearchQuery} placeholder="Tên, SĐT hoặc mã KH" variant="soft" />
 
-        <View style={styles.customerList}>
-          {loading && customers.length === 0 ? (
-            <Card padding={0}>
-              <SkeletonList count={4} />
-            </Card>
-          ) : customers.length === 0 ? (
-            <EmptyState icon={UserX} title="Không tìm thấy khách hàng" description="Thử từ khoá khác hoặc thêm khách hàng mới." />
-          ) : (
-            customers.map((customer) => {
-              const selected = !!selectedCustomer && customerKey(selectedCustomer) === customerKey(customer);
-              return (
-                <CustomerOption
-                  key={customerKey(customer)}
-                  customer={customer}
-                  selected={selected}
-                  onPress={() => handleSelectCustomer(customer)}
-                />
-              );
-            })
-          )}
+          <View style={styles.customerList}>
+            {loading && customers.length === 0 ? (
+              <View style={styles.skeletonCard}>
+                <SkeletonList count={4} />
+              </View>
+            ) : customers.length === 0 ? (
+              <EmptyState icon={UserX} title="Không tìm thấy khách hàng" description="Thử từ khoá khác hoặc thêm khách hàng mới." />
+            ) : (
+              customers.map((customer) => {
+                const selected = !!selectedCustomer && customerKey(selectedCustomer) === customerKey(customer);
+                return (
+                  <CustomerOption
+                    key={customerKey(customer)}
+                    customer={customer}
+                    selected={selected}
+                    onPress={() => handleSelectCustomer(customer)}
+                  />
+                );
+              })
+            )}
+          </View>
+
+          <Button
+            variant="ghost"
+            icon={UserPlus}
+            title="Thêm khách hàng mới"
+            onPress={openNewCustomer}
+            style={[styles.addButton, styles.pill]}
+          />
+
+          <SelectField
+            label="Sàn giao dịch"
+            sheetTitle="Chọn sàn giao dịch"
+            value={selectedSan ? selectedSan.ID || selectedSan.MaSan : NO_SAN}
+            options={sanOptions}
+            loading={loadingSan}
+            onChange={(v) =>
+              handleSelectSan(v === NO_SAN ? null : sanList.find((s) => (s.ID || s.MaSan) === v) ?? null)
+            }
+            variant="raised"
+          />
         </View>
-
-        <Button variant="ghost" icon={UserPlus} title="Thêm khách hàng mới" onPress={openNewCustomer} style={styles.addButton} />
-
-        <SelectField
-          label="Sàn giao dịch"
-          sheetTitle="Chọn sàn giao dịch"
-          value={selectedSan ? selectedSan.ID || selectedSan.MaSan : NO_SAN}
-          options={sanOptions}
-          loading={loadingSan}
-          onChange={(v) =>
-            handleSelectSan(v === NO_SAN ? null : sanList.find((s) => (s.ID || s.MaSan) === v) ?? null)
-          }
-        />
       </Screen>
     </>
   );
@@ -449,7 +458,7 @@ function CustomerOption({
         pressed && !selected ? styles.optionPressed : null,
       ]}
     >
-      <Avatar name={customer.tenKH || "?"} />
+      <Avatar name={customer.tenKH || "?"} size={44} round />
       <View style={styles.flex}>
         <Text variant="subhead" numberOfLines={1}>
           {customer.tenKH || "—"}
@@ -460,50 +469,66 @@ function CustomerOption({
           </Text>
         ) : null}
       </View>
-      <View style={[styles.radio, selected ? styles.radioOn : null]} />
+      <View style={[styles.radio, selected ? styles.radioOn : null]}>
+        {selected ? <Check size={14} color={colors.onPrimary} strokeWidth={3} /> : null}
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  unit: { flexDirection: "row", alignItems: "center", gap: space.md },
-  unitIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.md,
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  pill: { borderRadius: radius.full },
+  unit: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: space.lg + 2,
+    paddingVertical: space.lg,
+    borderRadius: radius.x3,
     backgroundColor: colors.showcase.bg,
+    ...elevation.soft,
+  },
+  unitIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.showcase.surface,
     alignItems: "center",
     justifyContent: "center",
   },
-  customerList: { gap: space.sm },
+  skeletonCard: { borderRadius: radius.xxl, overflow: "hidden", backgroundColor: colors.surface },
+  customerList: { gap: space.sm + 2 },
   option: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    minHeight: 64,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    minHeight: 72,
+    paddingHorizontal: space.md + 2,
+    paddingVertical: space.md,
+    borderRadius: radius.xxl,
+    // Viền luôn dày 2 (trong suốt khi chưa chọn) → chọn không làm nội dung nhảy
+    borderWidth: 2,
+    borderColor: "transparent",
     backgroundColor: colors.surface,
+    ...elevation.soft,
   },
   optionSelected: {
-    borderWidth: 2,
     borderColor: colors.primary,
     backgroundColor: colors.primarySubtle,
-    paddingHorizontal: space.md - 1,
   },
   optionPressed: { backgroundColor: colors.surfaceMuted },
   radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: colors.borderStrong,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  radioOn: { borderWidth: 6, borderColor: colors.primary },
+  radioOn: { borderColor: colors.primary, backgroundColor: colors.primary },
   addButton: { alignSelf: "flex-start" },
   footer: { flex: 1, gap: space.sm },
   footerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

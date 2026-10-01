@@ -1,4 +1,5 @@
 import React, { useCallback } from "react";
+import { useRouter } from "expo-router";
 
 import { ReportList } from "@/components/reports/ReportList";
 import { ListItem, MoneyText, Text } from "@/components/ui";
@@ -7,6 +8,7 @@ import { ReceiptRow, ReportService } from "@/sevicesSupabase/ReportService";
 
 /** Báo cáo thu tiền: phiếu thu trong kỳ (fn_cash_voucher_list loại THU – như màn Phiếu thu web). */
 export default function PaymentReportScreen() {
+  const router = useRouter();
   const load = useCallback((q: any) => ReportService.getReceipts(q), []);
   return (
     <ReportList<ReceiptRow>
@@ -28,6 +30,8 @@ export default function PaymentReportScreen() {
           subtitle={[r.soPhieu, r.tenDA].filter(Boolean).join(" · ") || undefined}
           meta={[r.ngay ? formatDate(r.ngay) : null, r.hinhThuc, r.dienGiai].filter(Boolean).join(" · ") || undefined}
           trailing={<Text variant="subhead" numeric>{formatVND(r.soTien)}</Text>}
+          chevron
+          onPress={() => router.push({ pathname: "/reports/receipt/[id]", params: { id: r.id, soPhieu: r.soPhieu } })}
         />
       )}
     />

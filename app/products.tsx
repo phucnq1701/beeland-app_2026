@@ -571,95 +571,100 @@ export default function ProductsScreen({
 
   const listHeader = (
     <View style={styles.stickyHeader}>
-      <SearchBar
-        value={searchQuery}
-        onChangeText={handleSearchChange}
-        placeholder="Mã sản phẩm, số căn hộ"
-      />
+      {/* ScrollView sticky header chuyển style của View ngoài ra lớp bọc (gap mất tác dụng) → gap đặt ở View con */}
+      <View style={styles.headerStack}>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={handleSearchChange}
+          placeholder="Mã sản phẩm, số căn hộ"
+          variant="soft"
+        />
 
-      {filterExpanded && (
-        <FilterPanel activeCount={activeFilterCount} onReset={resetFilters}>
-          <FilterSection
-            title="Dự án"
-            options={duAn.map((project: any) => ({
-              key: project?.MaDA,
-              label: project?.TenDA,
-              selected: filterCondition?.MaDA === project?.MaDA,
-              onPress: () => applyChangeFilter("MaDA", project?.MaDA),
-            }))}
-          />
-          {khuVuc?.length > 0 && (
+        {filterExpanded && (
+          <FilterPanel activeCount={activeFilterCount} onReset={resetFilters}>
             <FilterSection
-              title="Khu vực"
+              title="Dự án"
+              options={duAn.map((project: any) => ({
+                key: project?.MaDA,
+                label: project?.TenDA,
+                selected: filterCondition?.MaDA === project?.MaDA,
+                onPress: () => applyChangeFilter("MaDA", project?.MaDA),
+              }))}
+            />
+            {khuVuc?.length > 0 && (
+              <FilterSection
+                title="Khu vực"
+                options={[
+                  {
+                    key: "__all__",
+                    label: "Tất cả",
+                    selected: filterCondition?.MaKhu == null,
+                    onPress: () => applyChangeFilter("MaKhu", null),
+                  },
+                  ...khuVuc.map((kv: any) => ({
+                    key: kv?.MaKhu,
+                    label: kv?.TenKhu,
+                    selected: filterCondition?.MaKhu === kv?.MaKhu,
+                    onPress: () => applyChangeFilter("MaKhu", kv?.MaKhu),
+                  })),
+                ]}
+              />
+            )}
+            {/* Cao tầng / Thấp tầng — form_code: CAOTANG | THAPTANG | null */}
+            <FilterSection
+              title="Loại sản phẩm"
+              options={[
+                { key: null, label: "Tất cả" },
+                { key: "CAOTANG", label: "Cao tầng" },
+                { key: "THAPTANG", label: "Thấp tầng" },
+              ].map((opt) => ({
+                key: String(opt.key),
+                label: opt.label,
+                selected: filterCondition?.FormCode === opt.key,
+                onPress: () => {
+                  setFilterCondition((prev) => ({
+                    ...prev,
+                    FormCode: opt.key,
+                  }));
+                  void loadProducts2({
+                    ...filterCondition,
+                    FormCode: opt.key,
+                  });
+                },
+              }))}
+            />
+            <FilterSection
+              title="Trạng thái"
               options={[
                 {
                   key: "__all__",
                   label: "Tất cả",
-                  selected: filterCondition?.MaKhu == null,
-                  onPress: () => applyChangeFilter("MaKhu", null),
+                  selected: filterCondition?.MaTT == null,
+                  onPress: () => applyChangeFilter("TrangThai", null),
                 },
-                ...khuVuc.map((kv: any) => ({
-                  key: kv?.MaKhu,
-                  label: kv?.TenKhu,
-                  selected: filterCondition?.MaKhu === kv?.MaKhu,
-                  onPress: () => applyChangeFilter("MaKhu", kv?.MaKhu),
+                ...TrangThai.map((status: any) => ({
+                  key: status.MaTT,
+                  label: status.TenTT,
+                  selected: filterCondition?.MaTT === status.MaTT,
+                  color: status.ColorWeb,
+                  onPress: () => applyChangeFilter("TrangThai", status.MaTT),
                 })),
               ]}
             />
-          )}
-          {/* Cao tầng / Thấp tầng — form_code: CAOTANG | THAPTANG | null */}
-          <FilterSection
-            title="Loại sản phẩm"
-            options={[
-              { key: null, label: "Tất cả" },
-              { key: "CAOTANG", label: "Cao tầng" },
-              { key: "THAPTANG", label: "Thấp tầng" },
-            ].map((opt) => ({
-              key: String(opt.key),
-              label: opt.label,
-              selected: filterCondition?.FormCode === opt.key,
-              onPress: () => {
-                setFilterCondition((prev) => ({
-                  ...prev,
-                  FormCode: opt.key,
-                }));
-                void loadProducts2({
-                  ...filterCondition,
-                  FormCode: opt.key,
-                });
-              },
-            }))}
-          />
-          <FilterSection
-            title="Trạng thái"
-            options={[
-              {
-                key: "__all__",
-                label: "Tất cả",
-                selected: filterCondition?.MaTT == null,
-                onPress: () => applyChangeFilter("TrangThai", null),
-              },
-              ...TrangThai.map((status: any) => ({
-                key: status.MaTT,
-                label: status.TenTT,
-                selected: filterCondition?.MaTT === status.MaTT,
-                color: status.ColorWeb,
-                onPress: () => applyChangeFilter("TrangThai", status.MaTT),
-              })),
-            ]}
-          />
-        </FilterPanel>
-      )}
+          </FilterPanel>
+        )}
 
-      <SegmentedControl
-        value={viewMode}
-        onChange={switchViewMode}
-        options={[
-          { value: "list", label: "Danh sách" },
-          { value: "grid", label: "Lưới" },
-          { value: "overview", label: "Tổng quan" },
-        ]}
-      />
+        <SegmentedControl
+          variant="soft"
+          value={viewMode}
+          onChange={switchViewMode}
+          options={[
+            { value: "list", label: "Danh sách" },
+            { value: "grid", label: "Lưới" },
+            { value: "overview", label: "Tổng quan" },
+          ]}
+        />
+      </View>
     </View>
   );
 
@@ -703,6 +708,7 @@ export default function ProductsScreen({
         padded={false}
         header={
           <AppHeader
+            variant="soft"
             title="Sản phẩm"
             // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
             hideBack={embedded}
@@ -801,16 +807,16 @@ function Separator() {
 }
 
 const styles = StyleSheet.create({
-  headerActions: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingRight: space.sm },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: space.sm },
   stickyHeader: {
     backgroundColor: colors.bg,
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
-    paddingBottom: space.sm,
-    gap: space.md,
+    paddingHorizontal: space.xl,
+    paddingTop: space.sm,
+    paddingBottom: space.lg,
   },
-  body: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.md },
-  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: space.lg },
+  headerStack: { gap: space.lg },
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  separator: { height: space.sm + 2 },
   footer: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: space.sm, paddingVertical: space.lg },
   legendRow: {
     flexDirection: "row",

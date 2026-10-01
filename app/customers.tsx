@@ -140,13 +140,21 @@ export default function CustomersScreen({ embedded }: { embedded?: boolean } = {
         value={searchQuery}
         onChangeText={setSearchQuery}
         placeholder="Tìm tên, SĐT, CCCD, email, mã KH…"
+        variant="soft"
       />
-      <SegmentedControl value={activeTab} options={TABS} onChange={setActiveTab} />
+      <SegmentedControl variant="soft" value={activeTab} options={TABS} onChange={setActiveTab} />
       {statusCatalogs.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          <Chip label="Tất cả" selected={statusId === "all"} onPress={() => setStatusId("all")} />
+        // Tràn ra mép màn để bóng chip không bị cắt ở hai đầu
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipsScroll}
+          contentContainerStyle={styles.chips}
+        >
+          <Chip variant="soft" label="Tất cả" selected={statusId === "all"} onPress={() => setStatusId("all")} />
           {statusCatalogs.map((s) => (
             <Chip
+              variant="soft"
               key={String(s.id ?? s.value)}
               label={s.label}
               selected={statusId === s.value}
@@ -208,11 +216,12 @@ export default function CustomersScreen({ embedded }: { embedded?: boolean } = {
         padded={false}
         header={
           <AppHeader
+            variant="soft"
             title="Khách hàng"
             subtitle={`${total} khách hàng`}
             // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
             hideBack={embedded}
-            actions={<IconButton icon={Plus} accessibilityLabel="Thêm khách hàng" onPress={addCustomer} />}
+            actions={<IconButton icon={Plus} variant="soft" accessibilityLabel="Thêm khách hàng" onPress={addCustomer} />}
           />
         }
       >
@@ -252,12 +261,13 @@ function Separator() {
 const styles = StyleSheet.create({
   stickyHeader: {
     backgroundColor: colors.bg,
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
-    paddingBottom: space.sm,
+    paddingHorizontal: space.xl,
+    paddingTop: space.sm,
+    paddingBottom: space.lg,
     gap: space.md,
   },
-  chips: { gap: space.sm, paddingRight: space.lg },
-  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: 72 },
+  chipsScroll: { marginHorizontal: -space.xl },
+  chips: { gap: space.sm, paddingHorizontal: space.xl, paddingVertical: space.xs },
+  separator: { height: space.sm + 2 },
   footerSpinner: { paddingVertical: space.lg },
 });

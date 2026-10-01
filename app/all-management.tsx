@@ -5,15 +5,14 @@ import { ChevronDown, ChevronUp, Settings2 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { FeatureGrid } from '@/components/home/FeatureGrid';
+import { HomeSectionHeader } from '@/components/home/HomeSectionHeader';
 import {
   AppHeader,
   BottomActionBar,
   Button,
-  Card,
   IconButton,
   ListItem,
   Screen,
-  SectionHeader,
   SegmentedControl,
   Text,
   useToast,
@@ -34,7 +33,7 @@ import {
   visibleFeatureIds,
 } from '@/lib/featureConfig';
 import { features } from '@/mocks/features';
-import { colors, radius, space } from '@/theme';
+import { colors, elevation, radius, space } from '@/theme';
 
 const STORAGE_KEY = '@home_features_config';
 const MAX_HOME_FEATURES = 6;
@@ -208,10 +207,11 @@ export default function AllManagementScreen() {
       <Screen
         header={
           <AppHeader
+            variant="soft"
             title="Tất cả quản lý"
             actions={
               isEditMode ? null : (
-                <Button variant="ghost" title="Sửa" onPress={handleEditPress} />
+                <Button variant="ghost" title="Sửa" onPress={handleEditPress} style={styles.pill} />
               )
             }
           />
@@ -219,95 +219,106 @@ export default function AllManagementScreen() {
         footer={
           isEditMode ? (
             <BottomActionBar>
-              <Button variant="secondary" title="Huỷ" onPress={handleEditPress} />
-              <Button title="Lưu cấu hình" loading={saving} onPress={handleSavePress} style={styles.flex} />
+              <Button variant="secondary" title="Huỷ" onPress={handleEditPress} style={styles.pill} />
+              <Button title="Lưu cấu hình" loading={saving} onPress={handleSavePress} style={[styles.flex, styles.pill]} />
             </BottomActionBar>
           ) : null
         }
+        padded={false}
       >
-        <SegmentedControl
-          value={activeTab}
-          onChange={handleTabSwitch}
-          options={[
-            { value: 'home', label: 'Trang chủ' },
-            { value: 'menu', label: 'Tab menu' },
-          ]}
-        />
+        <View style={styles.body}>
+          <SegmentedControl
+            variant="soft"
+            value={activeTab}
+            onChange={handleTabSwitch}
+            options={[
+              { value: 'home', label: 'Trang chủ' },
+              { value: 'menu', label: 'Tab menu' },
+            ]}
+          />
 
-        {isEditMode ? (
-          <View style={styles.hint}>
-            <Settings2 size={18} color={colors.onPrimarySubtle} />
-            <View style={styles.flex}>
-              <Text variant="caption" weight="semibold" color="onPrimarySubtle">
-                {editModeHintText}
-              </Text>
-              <Text variant="caption" color="onPrimarySubtle">
-                Chạm để chọn/bỏ chọn, dùng mũi tên để đổi thứ tự.
-              </Text>
+          {isEditMode ? (
+            <View style={styles.hint}>
+              <Settings2 size={18} color={colors.onPrimarySubtle} />
+              <View style={styles.flex}>
+                <Text variant="caption" weight="semibold" color="onPrimarySubtle">
+                  {editModeHintText}
+                </Text>
+                <Text variant="caption" color="onPrimarySubtle">
+                  Chạm để chọn/bỏ chọn, dùng mũi tên để đổi thứ tự.
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          <HomeSectionHeader
+            title={`${activeTab === 'home' ? 'Các mục đã chọn' : 'Tab menu hiển thị'} (${activeSelectedIds.length})`}
+          />
+          {/* Bóng ở lớp ngoài, bo + cắt ở lớp trong (iOS: overflow hidden làm mất bóng) */}
+          <View style={styles.card}>
+            <View style={styles.clip}>
+              {activeSelectedIds.length === 0 ? (
+                <Text variant="caption" color="textSecondary" style={styles.empty}>
+                  Chưa chọn mục nào.
+                </Text>
+              ) : null}
+              {activeSelectedIds.map((id, index) => {
+                const feature = features.find((f) => f.id === id);
+                if (!feature) return null;
+                const Icon = feature.icon;
+                return (
+                  <View key={id} style={index > 0 ? styles.divider : null}>
+                    <ListItem
+                      leading={
+                        <View style={styles.rowIcon}>
+                          <Icon size={20} color={colors.brand} strokeWidth={2} />
+                        </View>
+                      }
+                      title={`${index + 1}. ${feature.title}`}
+                      subtitle={isEditMode ? 'Chạm để bỏ chọn' : undefined}
+                      chevron={!isEditMode}
+                      onPress={() => handleFeaturePress(id)}
+                      trailing={
+                        isEditMode ? (
+                          <View style={styles.moves}>
+                            <IconButton
+                              icon={ChevronUp}
+                              accessibilityLabel={`Đưa ${feature.title} lên trên`}
+                              disabled={index === 0}
+                              onPress={() => handleMove(id, -1)}
+                            />
+                            <IconButton
+                              icon={ChevronDown}
+                              accessibilityLabel={`Đưa ${feature.title} xuống dưới`}
+                              disabled={index === activeSelectedIds.length - 1}
+                              onPress={() => handleMove(id, 1)}
+                            />
+                          </View>
+                        ) : undefined
+                      }
+                    />
+                  </View>
+                );
+              })}
             </View>
           </View>
-        ) : null}
 
-        <SectionHeader title={`${activeTab === 'home' ? 'Các mục đã chọn' : 'Tab menu hiển thị'} (${activeSelectedIds.length})`} />
-        <Card padding={0}>
-          {activeSelectedIds.length === 0 ? (
-            <Text variant="caption" color="textSecondary" style={styles.empty}>
-              Chưa chọn mục nào.
-            </Text>
+          {unselected.length > 0 ? (
+            <>
+              <HomeSectionHeader title="Tất cả các mục" />
+              <FeatureGrid
+                columns={4}
+                compact
+                items={unselected.map((f) => ({
+                  key: f.id,
+                  feature: f,
+                  editing: isEditMode,
+                  onPress: () => handleFeaturePress(f.id),
+                }))}
+              />
+            </>
           ) : null}
-          {activeSelectedIds.map((id, index) => {
-            const feature = features.find((f) => f.id === id);
-            if (!feature) return null;
-            const Icon = feature.icon;
-            return (
-              <View key={id} style={index > 0 ? styles.divider : null}>
-                <ListItem
-                  leading={
-                    <View style={styles.rowIcon}>
-                      <Icon size={20} color={colors.brand} />
-                    </View>
-                  }
-                  title={`${index + 1}. ${feature.title}`}
-                  subtitle={isEditMode ? 'Chạm để bỏ chọn' : undefined}
-                  chevron={!isEditMode}
-                  onPress={() => handleFeaturePress(id)}
-                  trailing={
-                    isEditMode ? (
-                      <View style={styles.moves}>
-                        <IconButton
-                          icon={ChevronUp}
-                          accessibilityLabel={`Đưa ${feature.title} lên trên`}
-                          disabled={index === 0}
-                          onPress={() => handleMove(id, -1)}
-                        />
-                        <IconButton
-                          icon={ChevronDown}
-                          accessibilityLabel={`Đưa ${feature.title} xuống dưới`}
-                          disabled={index === activeSelectedIds.length - 1}
-                          onPress={() => handleMove(id, 1)}
-                        />
-                      </View>
-                    ) : undefined
-                  }
-                />
-              </View>
-            );
-          })}
-        </Card>
-
-        {unselected.length > 0 ? (
-          <>
-            <SectionHeader title="Tất cả các mục" />
-            <FeatureGrid
-              items={unselected.map((f) => ({
-                key: f.id,
-                feature: f,
-                editing: isEditMode,
-                onPress: () => handleFeaturePress(f.id),
-              }))}
-            />
-          </>
-        ) : null}
+        </View>
       </Screen>
     </>
   );
@@ -315,19 +326,23 @@ export default function AllManagementScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  pill: { borderRadius: radius.full },
+  card: { borderRadius: radius.xxl, backgroundColor: colors.surface, ...elevation.soft },
+  clip: { borderRadius: radius.xxl, overflow: 'hidden' },
   hint: {
     flexDirection: 'row',
     gap: space.sm,
-    padding: space.md,
-    borderRadius: radius.md,
+    padding: space.md + 2,
+    borderRadius: radius.lg,
     backgroundColor: colors.primarySubtle,
   },
   empty: { padding: space.lg },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primarySubtle,

@@ -4,6 +4,7 @@ import { useLocalSearchParams, Stack, useRouter, useFocusEffect } from "expo-rou
 import { CalendarPlus, ChevronLeft, Lock, LockOpen } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import { ImageCarousel } from "@/components/product/ImageCarousel";
 import { FocusStatusBar } from "@/components/ui/FocusStatusBar";
 import { PriceBreakdown } from "@/components/product/PriceBreakdown";
@@ -13,13 +14,12 @@ import {
   Card,
   IconButton,
   KeyValueRow,
-  SectionHeader,
   SkeletonDetail,
   Text,
 } from "@/components/ui";
 import { formatCountdown } from "@/lib/countdown";
 import { formatDateTime } from "@/lib/format";
-import { colors, radius, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { ProductService } from "@/sevicesSupabase/ProductService";
 
@@ -137,7 +137,7 @@ export default function LockDetailScreen() {
 
   const back = (
     <View style={[styles.back, { top: insets.top + space.sm }]}>
-      <IconButton icon={ChevronLeft} variant="onDark" accessibilityLabel="Quay lại" onPress={() => router.back()} />
+      <IconButton icon={ChevronLeft} variant="glass" accessibilityLabel="Quay lại" onPress={() => router.back()} />
     </View>
   );
 
@@ -162,52 +162,60 @@ export default function LockDetailScreen() {
       <FocusStatusBar style="light" />
       <View style={styles.root}>
         <ScrollView contentContainerStyle={styles.scroll}>
-          <ImageCarousel images={images} fallback={DEFAULT_IMAGE} height={240 + insets.top} />
+          <ImageCarousel
+            images={images}
+            fallback={DEFAULT_IMAGE}
+            height={320 + insets.top}
+            bottomInset={SHEET_OVERLAP}
+          />
 
-          <View style={styles.hero}>
-            <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
-              {data?.tenDA || "Chi tiết lock"}
-            </Text>
-            <Text variant="title" color={colors.showcase.text} accessibilityRole="header">
-              {data?.kyHieu ? `Căn ${data.kyHieu}` : "Căn đã lock"}
-            </Text>
-            <View
-              style={[styles.timer, active ? styles.timerActive : styles.timerExpired]}
-              accessible
-              accessibilityLabel={active ? `Lock còn ${formatCountdown(remainingSeconds)}` : "Đã hết hạn lock"}
-            >
-              {active ? (
-                <Lock size={18} color={colors.onWarningSubtle} />
-              ) : (
-                <LockOpen size={18} color={colors.onDangerSubtle} />
-              )}
-              <Text variant="subhead" color={active ? "onWarningSubtle" : "onDangerSubtle"}>
-                {active ? "Lock còn" : "Đã hết hạn lock"}
+          {/* Khối nội dung bo góc trên trồi đè lên đáy ảnh */}
+          <View style={styles.sheet}>
+            <View style={styles.hero}>
+              <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                {data?.tenDA || "Chi tiết lock"}
               </Text>
-              {active ? (
-                <Text variant="heading" numeric color="onWarningSubtle" style={styles.push}>
-                  {formatCountdown(remainingSeconds)}
+              <Text variant="title" accessibilityRole="header" style={styles.code}>
+                {data?.kyHieu ? `Căn ${data.kyHieu}` : "Căn đã lock"}
+              </Text>
+              <View
+                style={[styles.timer, active ? styles.timerActive : styles.timerExpired]}
+                accessible
+                accessibilityLabel={active ? `Lock còn ${formatCountdown(remainingSeconds)}` : "Đã hết hạn lock"}
+              >
+                {active ? (
+                  <Lock size={18} color={colors.onWarningSubtle} />
+                ) : (
+                  <LockOpen size={18} color={colors.onDangerSubtle} />
+                )}
+                <Text variant="subhead" color={active ? "onWarningSubtle" : "onDangerSubtle"}>
+                  {active ? "Lock còn" : "Đã hết hạn lock"}
                 </Text>
+                {active ? (
+                  <Text variant="heading" numeric color="onWarningSubtle" style={styles.push}>
+                    {formatCountdown(remainingSeconds)}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+
+            <View style={styles.content}>
+              <HomeSectionHeader title="Thông tin lock căn" />
+              <Card style={styles.card}>
+                <KeyValueRow label="Tên dự án" value={data?.tenDA || "—"} />
+                <KeyValueRow label="Mã sản phẩm" value={data?.kyHieu || "—"} />
+                <KeyValueRow label="Ngày lock" value={formatDateTime(data?.ngayLock)} last />
+              </Card>
+
+              {dataProduct ? (
+                <>
+                  <HomeSectionHeader title="Giá sản phẩm" />
+                  <Card style={styles.card}>
+                    <PriceBreakdown activePrice={null} data={dataProduct} loading={false} />
+                  </Card>
+                </>
               ) : null}
             </View>
-          </View>
-
-          <View style={styles.content}>
-            <SectionHeader title="Thông tin lock căn" />
-            <Card>
-              <KeyValueRow label="Tên dự án" value={data?.tenDA || "—"} />
-              <KeyValueRow label="Mã sản phẩm" value={data?.kyHieu || "—"} />
-              <KeyValueRow label="Ngày lock" value={formatDateTime(data?.ngayLock)} last />
-            </Card>
-
-            {dataProduct ? (
-              <>
-                <SectionHeader title="Giá sản phẩm" />
-                <Card>
-                  <PriceBreakdown activePrice={null} data={dataProduct} loading={false} />
-                </Card>
-              </>
-            ) : null}
           </View>
         </ScrollView>
         {back}
@@ -218,7 +226,7 @@ export default function LockDetailScreen() {
               size="lg"
               icon={CalendarPlus}
               title="Tạo booking"
-              style={styles.flex}
+              style={[styles.flex, styles.pill]}
               onPress={() => {
                 if (navigating.current) return;
                 navigating.current = true;
@@ -238,28 +246,36 @@ export default function LockDetailScreen() {
   );
 }
 
+/** Khối nội dung bo góc trên, trồi đè lên đáy ảnh. */
+const SHEET_OVERLAP = radius.x3;
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.showcase.paper },
+  root: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
   scroll: { paddingBottom: space.xxl },
-  back: { position: "absolute", left: space.md },
-  hero: {
-    gap: space.xs,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.lg,
-    backgroundColor: colors.showcase.bg,
+  back: { position: "absolute", left: space.lg },
+  sheet: {
+    marginTop: -SHEET_OVERLAP,
+    paddingTop: space.xxl,
+    borderTopLeftRadius: radius.x3,
+    borderTopRightRadius: radius.x3,
+    backgroundColor: colors.bg,
   },
+  hero: { gap: space.xs, paddingHorizontal: space.xl },
+  code: { fontSize: 26, lineHeight: 34 },
   timer: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    minHeight: 48,
-    marginTop: space.sm,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
+    minHeight: 52,
+    marginTop: space.md,
+    paddingHorizontal: space.lg + 2,
+    borderRadius: radius.full,
   },
   timerActive: { backgroundColor: colors.warningSubtle },
   timerExpired: { backgroundColor: colors.dangerSubtle },
   push: { marginLeft: "auto" },
-  content: { padding: space.lg, gap: space.md },
+  content: { paddingHorizontal: space.xl, paddingTop: space.xxl, gap: space.md },
+  card: { borderWidth: 0, borderRadius: radius.xxl, paddingHorizontal: space.lg + 2, ...elevation.soft },
+  pill: { borderRadius: radius.full },
 });

@@ -4,9 +4,19 @@ import { Stack, useFocusEffect } from "expo-router";
 import { FileX2, SearchX } from "lucide-react-native";
 
 import { FilterPanel, FilterSection, FilterToggleButton, multiSelectOptions } from "@/components/FilterPanel";
-import { AppHeader, Chip, EmptyState, ErrorState, Screen, SearchBar, SkeletonList } from "@/components/ui";
+import {
+  AppHeader,
+  Chip,
+  EmptyState,
+  ErrorState,
+  MoneyText,
+  Screen,
+  SearchBar,
+  SkeletonList,
+  StatusBadge,
+} from "@/components/ui";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { colors, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
 
 const PAGE_SIZE = 20;
@@ -144,7 +154,7 @@ export function SalesDocList({
 
   const header = (
     <View style={styles.sticky}>
-      <SearchBar value={query} onChangeText={setQuery} placeholder={searchPlaceholder} />
+      <SearchBar value={query} onChangeText={setQuery} placeholder={searchPlaceholder} variant="soft" />
       {showFilters ? (
         <FilterPanel activeCount={activeFilterCount} onReset={clear}>
           <FilterSection
@@ -161,10 +171,22 @@ export function SalesDocList({
         </FilterPanel>
       ) : null}
       {statuses.length ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          <Chip label="Tất cả" selected={!status} onPress={() => setStatus(0)} />
+        // Tràn ra mép màn để bóng chip không bị cắt ở hai đầu
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipsScroll}
+          contentContainerStyle={styles.chips}
+        >
+          <Chip variant="soft" label="Tất cả" selected={!status} onPress={() => setStatus(0)} />
           {statuses.map((s) => (
-            <Chip key={String(s.MaTT)} label={s.TenTT} selected={status === s.MaTT} onPress={() => setStatus(s.MaTT)} />
+            <Chip
+              variant="soft"
+              key={String(s.MaTT)}
+              label={s.TenTT}
+              selected={status === s.MaTT}
+              onPress={() => setStatus(s.MaTT)}
+            />
           ))}
         </ScrollView>
       ) : null}
@@ -195,13 +217,12 @@ export function SalesDocList({
         padded={false}
         header={
           <AppHeader
+            variant="soft"
             title={title}
             subtitle={loading ? undefined : `${total} phiếu`}
             hideBack={embedded}
             actions={
-              <View style={styles.headerAction}>
-                <FilterToggleButton open={showFilters} activeCount={activeFilterCount} onPress={() => setShowFilters(!showFilters)} />
-              </View>
+              <FilterToggleButton open={showFilters} activeCount={activeFilterCount} onPress={() => setShowFilters(!showFilters)} />
             }
           />
         }
@@ -209,7 +230,12 @@ export function SalesDocList({
         <FlatList
           data={loading ? [] : rows}
           keyExtractor={keyOf}
-          renderItem={({ item }) => renderRow(item)}
+          renderItem={({ item }) => (
+            // Mỗi phiếu là card bo tròn: bóng ở lớp ngoài, bo + cắt ở lớp trong (iOS: overflow hidden làm mất bóng)
+            <View style={styles.card}>
+              <View style={styles.clip}>{renderRow(item)}</View>
+            </View>
+          )}
           ItemSeparatorComponent={Separator}
           ListHeaderComponent={header}
           stickyHeaderIndices={[0]}
@@ -230,14 +256,31 @@ export function SalesDocList({
   );
 }
 
+/** Cột phải của dòng phiếu: trạng thái trên (căn phải), số tiền rút gọn dưới – như danh sách booking. */
+export function DocTrailing({ amount, status, color }: { amount: unknown; status?: string | null; color?: string | null }) {
+  return (
+    <>
+      {status ? (
+        <View style={styles.badge}>
+          <StatusBadge label={status} color={color} />
+        </View>
+      ) : null}
+      <MoneyText value={amount} short variant="subhead" />
+    </>
+  );
+}
+
 function Separator() {
   return <View style={styles.separator} />;
 }
 
 const styles = StyleSheet.create({
-  headerAction: { paddingRight: space.sm },
-  sticky: { backgroundColor: colors.bg, paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.sm, gap: space.md },
-  chips: { gap: space.sm, paddingRight: space.lg },
-  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: 68 },
+  sticky: { backgroundColor: colors.bg, paddingHorizontal: space.xl, paddingTop: space.sm, paddingBottom: space.lg, gap: space.md },
+  chipsScroll: { marginHorizontal: -space.xl },
+  chips: { gap: space.sm, paddingHorizontal: space.xl, paddingVertical: space.xs },
+  separator: { height: space.sm + 2 },
+  card: { marginHorizontal: space.xl, borderRadius: radius.xxl, backgroundColor: colors.surface, ...elevation.soft },
+  clip: { borderRadius: radius.xxl, overflow: "hidden" },
+  badge: { alignSelf: "flex-end" },
   footer: { paddingVertical: space.lg },
 });

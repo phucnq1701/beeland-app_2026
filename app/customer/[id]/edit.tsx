@@ -52,7 +52,7 @@ export default function CustomerEditScreen() {
     };
   }, [id, reload]);
 
-  const header = <AppHeader title="Sửa khách hàng" />;
+  const header = <AppHeader variant="soft" title="Sửa khách hàng" />;
 
   if (state.loading || !state.detail) {
     return (

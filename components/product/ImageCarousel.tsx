@@ -15,10 +15,12 @@ type Props = {
   onOpen?: (index: number) => void;
   /** Nội dung đè lên đáy ảnh (vd tên dự án). */
   children?: React.ReactNode;
+  /** Đẩy chấm phân trang + bộ đếm lên (khi có khối nội dung trồi đè lên đáy ảnh). */
+  bottomInset?: number;
 };
 
 /** Khối ảnh đầu màn trưng bày: vuốt ngang, chấm phân trang, bộ đếm, xem toàn màn hình. */
-export function ImageCarousel({ images, fallback, height = 260, onOpen, children }: Props) {
+export function ImageCarousel({ images, fallback, height = 260, onOpen, children, bottomInset = 0 }: Props) {
   const { width } = useWindowDimensions();
   const list = images.filter((u) => typeof u === "string" && u.trim() !== "");
   const data = list.length ? list : [fallback];
@@ -72,12 +74,12 @@ export function ImageCarousel({ images, fallback, height = 260, onOpen, children
       ) : null}
       {data.length > 1 ? (
         <>
-          <View style={styles.counter} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <View style={[styles.counter, { bottom: space.md + bottomInset }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             <Text variant="label" color={colors.showcase.text} style={styles.counterText}>
               {index + 1}/{data.length}
             </Text>
           </View>
-          <View style={styles.dots} pointerEvents="none">
+          <View style={[styles.dots, { bottom: space.md + bottomInset }]} pointerEvents="none">
             {data.map((u, i) => (
               <View key={`${i}-${u}`} style={[styles.dot, i === index ? styles.dotOn : null]} />
             ))}

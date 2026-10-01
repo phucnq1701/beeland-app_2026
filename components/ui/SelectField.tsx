@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { foldVietnamese as fold } from '@/lib/format';
-import { colors, radius, space } from '@/theme';
+import { colors, elevation, radius, space } from '@/theme';
 
 import { BottomSheet } from './BottomSheet';
 import { EmptyState } from './EmptyState';
@@ -22,6 +22,11 @@ export type SelectFieldProps<T extends string | number> = {
   required?: boolean;
   loading?: boolean;
   sheetTitle?: string;
+  /**
+   * `soft`: cùng kiểu TextField soft (nền xám nhạt, không viền, bo lớn) – đặt trong card trắng.
+   * `raised`: nền trắng, viên thuốc, bóng nhẹ – đặt thẳng trên nền màn (bộ lọc).
+   */
+  variant?: 'default' | 'soft' | 'raised';
 };
 
 const SEARCH_THRESHOLD = 8;
@@ -36,6 +41,7 @@ export function SelectField<T extends string | number>({
   required,
   loading,
   sheetTitle,
+  variant = 'default',
 }: SelectFieldProps<T>) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -63,7 +69,12 @@ export function SelectField<T extends string | number>({
         accessibilityHint={error ?? undefined}
         disabled={loading}
         onPress={() => setOpen(true)}
-        style={({ pressed }) => [styles.box, error ? styles.error : null, pressed ? styles.pressed : null]}
+        style={({ pressed }) => [
+          styles.box,
+          variant === 'soft' ? styles.soft : variant === 'raised' ? styles.raised : null,
+          error ? (variant === 'default' ? styles.error : styles.softError) : null,
+          pressed ? styles.pressed : null,
+        ]}
       >
         <Text variant="body" color={selected ? 'text' : 'textTertiary'} numberOfLines={1} style={styles.value}>
           {selected?.label ?? placeholder}
@@ -132,6 +143,24 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   error: { borderWidth: 2, borderColor: colors.danger },
+  soft: {
+    minHeight: 50,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    backgroundColor: colors.surfaceMuted,
+  },
+  softError: { borderColor: colors.danger, backgroundColor: colors.surface },
+  raised: {
+    minHeight: 50,
+    paddingHorizontal: space.lg + 2,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    backgroundColor: colors.surface,
+    ...elevation.soft,
+  },
   pressed: { backgroundColor: colors.surfaceMuted },
   value: { flex: 1 },
   search: { marginBottom: space.sm },

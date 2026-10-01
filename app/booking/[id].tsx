@@ -30,7 +30,7 @@ import { BookingGifts, BookingPrice } from "@/components/booking/BookingPriceAnd
 import { CollapsibleSection } from "@/components/booking/CollapsibleSection";
 import { BOOKING_STEPS, getBookingProgress } from "@/lib/bookingProgress";
 import { formatDateTime, formatNumberVN, formatVND, formatVNDShort, maskPhone } from "@/lib/format";
-import { colors, radius, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import {
   PriceServices,
@@ -249,7 +249,7 @@ export default function BookingDetailScreen() {
     }
   };
 
-  const header = <AppHeader title={data?.soPhieu ?? "Chi tiết booking"} />;
+  const header = <AppHeader variant="soft" title={data?.soPhieu ?? "Chi tiết booking"} />;
 
   if (loading && !data) {
     return (
@@ -330,6 +330,7 @@ export default function BookingDetailScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <Screen
         header={header}
+        padded={false}
         refreshing={loading}
         onRefresh={() => void loadData()}
         footer={
@@ -341,112 +342,114 @@ export default function BookingDetailScreen() {
                 title="Chứng từ"
                 loading={isUploading}
                 onPress={() => setUploadSheet(true)}
-                style={canCollect ? undefined : styles.flex}
+                style={canCollect ? styles.pill : [styles.flex, styles.pill]}
               />
             ) : (
-              <Button variant="secondary" icon={ImageIcon} title="Xem chứng từ" onPress={showDocuments} style={styles.flex} />
+              <Button variant="secondary" icon={ImageIcon} title="Xem chứng từ" onPress={showDocuments} style={[styles.flex, styles.pill]} />
             )}
             {canCollect ? (
-              <Button title="Thu tiền QR" icon={QrCode} onPress={goToPayment} style={styles.flex} />
+              <Button title="Thu tiền QR" icon={QrCode} onPress={goToPayment} style={[styles.flex, styles.pill]} />
             ) : null}
           </BottomActionBar>
         }
       >
-        {/* Chỉ gắn onExpire khi còn hạn: sau khi tải lại, booking đã hết hạn sẽ không gọi lại → tránh vòng lặp tải. */}
-        {isActiveBooking && !progress.paid ? (
-          <CountdownPill
-            expiresAt={data.hetHanLuc}
-            onExpire={progress.expired ? undefined : () => void loadData()}
-          />
-        ) : null}
-
-        <View style={styles.hero}>
-          <Text variant="caption" color={colors.showcase.textMuted}>
-            {progress.paid ? "Tiền booking đã thu" : "Tiền booking cần thu"}
-          </Text>
-          {standardAmount != null ? (
-            <MoneyText value={standardAmount} variant="display" color="onInverse" />
-          ) : (
-            <Text variant="display" color="onInverse">
-              —
-            </Text>
-          )}
-          {amountMissing ? (
-            <Text variant="caption" color={colors.showcase.accent}>
-              Dự án chưa cài “Tiền booking” trong Cài đặt bán hàng.
-            </Text>
+        <View style={styles.body}>
+          {/* Chỉ gắn onExpire khi còn hạn: sau khi tải lại, booking đã hết hạn sẽ không gọi lại → tránh vòng lặp tải. */}
+          {isActiveBooking && !progress.paid ? (
+            <CountdownPill
+              expiresAt={data.hetHanLuc}
+              onExpire={progress.expired ? undefined : () => void loadData()}
+            />
           ) : null}
-          <View style={styles.heroMeta}>
-            <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1} style={styles.flex}>
-              {[productCode, data?.project?.ten_da].filter(Boolean).join(" · ") || "—"}
-            </Text>
+
+          <View style={styles.hero}>
             <Text variant="caption" color={colors.showcase.textMuted}>
-              Giá HĐ {formatVNDShort(data.tongGia)}
+              {progress.paid ? "Tiền booking đã thu" : "Tiền booking cần thu"}
             </Text>
-          </View>
-        </View>
-
-        <Card>
-          <View style={styles.progressHead}>
-            <Text variant="subhead">Tiến độ</Text>
-            {data?.colorCode ? (
-              <StatusBadge label={statusLabel} color={data.colorCode} />
+            {standardAmount != null ? (
+              <MoneyText value={standardAmount} variant="display" color="onInverse" />
             ) : (
-              <Badge label={statusLabel} tone={STATE_TONE[data?.state] ?? "neutral"} />
+              <Text variant="display" color="onInverse">
+                —
+              </Text>
             )}
+            {amountMissing ? (
+              <Text variant="caption" color={colors.showcase.accent}>
+                Dự án chưa cài “Tiền booking” trong Cài đặt bán hàng.
+              </Text>
+            ) : null}
+            <View style={styles.heroMeta}>
+              <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1} style={styles.flex}>
+                {[productCode, data?.project?.ten_da].filter(Boolean).join(" · ") || "—"}
+              </Text>
+              <Text variant="caption" color={colors.showcase.textMuted}>
+                Giá HĐ {formatVNDShort(data.tongGia)}
+              </Text>
+            </View>
           </View>
-          <ProgressSteps steps={BOOKING_STEPS} current={progress.current} cancelled={progress.cancelled} />
-        </Card>
 
-        <Card>
-          <KeyValueRow label="Khách hàng" value={data?.customer?.tenKH || "—"} />
-          <KeyValueRow label="Mã khách hàng" value={data?.customer?.maSoKH || "—"} />
-          <KeyValueRow label="Điện thoại" value={maskPhone(data?.customer?.dienThoai) || "—"} />
-          <KeyValueRow label="Sàn giao dịch" value={data?.san?.tenCongTy || "—"} />
-          <KeyValueRow label="Nhân viên" value={data?.nhanVien || "—"} />
-          <KeyValueRow label="Đã thu" value={formatVND(data?.daThu)} />
-          <KeyValueRow label="Ngày booking" value={formatDateTime(data?.ngayGiuCho ?? data?.ngayNhap)} last />
-        </Card>
+          <Card style={styles.card}>
+            <View style={styles.progressHead}>
+              <Text variant="subhead">Tiến độ</Text>
+              {data?.colorCode ? (
+                <StatusBadge label={statusLabel} color={data.colorCode} />
+              ) : (
+                <Badge label={statusLabel} tone={STATE_TONE[data?.state] ?? "neutral"} />
+              )}
+            </View>
+            <ProgressSteps steps={BOOKING_STEPS} current={progress.current} cancelled={progress.cancelled} />
+          </Card>
 
-        <CollapsibleSection title="Chính sách & thời gian" open={openSection.policy} onToggle={() => toggleSection("policy")}>
-          <KeyValueRow label="Bảng giá" value={data?.priceList?.name || "—"} />
-          <KeyValueRow label="Chính sách bán hàng" value={data?.policy?.ten_cs || "—"} />
-          <KeyValueRow label="Cấu hình tính giá" value={pricingConfigName || "—"} />
-          <KeyValueRow label="Tiến độ thanh toán" value={data?.paymentSchedule?.name || "—"} />
-          <KeyValueRow label="Booking ưu tiên" value={data?.uuTien == null ? "—" : data.uuTien ? "Có" : "Không"} />
-          <KeyValueRow label="Hết hạn lúc" value={formatDateTime(data?.hetHanLuc)} />
-          <KeyValueRow
-            label="Thời gian giữ chỗ"
-            value={data?.thoiGianBooking != null ? `${formatNumberVN(data.thoiGianBooking)} phút` : "—"}
-            last
-          />
-        </CollapsibleSection>
+          <Card style={styles.card}>
+            <KeyValueRow label="Khách hàng" value={data?.customer?.tenKH || "—"} />
+            <KeyValueRow label="Mã khách hàng" value={data?.customer?.maSoKH || "—"} />
+            <KeyValueRow label="Điện thoại" value={maskPhone(data?.customer?.dienThoai) || "—"} />
+            <KeyValueRow label="Sàn giao dịch" value={data?.san?.tenCongTy || "—"} />
+            <KeyValueRow label="Nhân viên" value={data?.nhanVien || "—"} />
+            <KeyValueRow label="Đã thu" value={formatVND(data?.daThu)} />
+            <KeyValueRow label="Ngày booking" value={formatDateTime(data?.ngayGiuCho ?? data?.ngayNhap)} last />
+          </Card>
 
-        <CollapsibleSection title="Giá theo bảng giá" open={openSection.price} onToggle={() => toggleSection("price")}>
-          <BookingPrice
-            priceData={priceData}
-            priceListName={data?.priceList?.name}
-            fromProduct={!activePrice && data?.priceSource === "bds_products"}
-          />
-        </CollapsibleSection>
+          <CollapsibleSection title="Chính sách & thời gian" open={openSection.policy} onToggle={() => toggleSection("policy")}>
+            <KeyValueRow label="Bảng giá" value={data?.priceList?.name || "—"} />
+            <KeyValueRow label="Chính sách bán hàng" value={data?.policy?.ten_cs || "—"} />
+            <KeyValueRow label="Cấu hình tính giá" value={pricingConfigName || "—"} />
+            <KeyValueRow label="Tiến độ thanh toán" value={data?.paymentSchedule?.name || "—"} />
+            <KeyValueRow label="Booking ưu tiên" value={data?.uuTien == null ? "—" : data.uuTien ? "Có" : "Không"} />
+            <KeyValueRow label="Hết hạn lúc" value={formatDateTime(data?.hetHanLuc)} />
+            <KeyValueRow
+              label="Thời gian giữ chỗ"
+              value={data?.thoiGianBooking != null ? `${formatNumberVN(data.thoiGianBooking)} phút` : "—"}
+              last
+            />
+          </CollapsibleSection>
 
-        <CollapsibleSection
-          title="Quà tặng / Khuyến mãi"
-          count={data?.promotions?.length}
-          open={openSection.gift}
-          onToggle={() => toggleSection("gift")}
-        >
-          <BookingGifts promotions={data?.promotions} />
-        </CollapsibleSection>
+          <CollapsibleSection title="Giá theo bảng giá" open={openSection.price} onToggle={() => toggleSection("price")}>
+            <BookingPrice
+              priceData={priceData}
+              priceListName={data?.priceList?.name}
+              fromProduct={!activePrice && data?.priceSource === "bds_products"}
+            />
+          </CollapsibleSection>
 
-        <CollapsibleSection
-          title="Chứng từ"
-          count={imagesFetched ? images.length : undefined}
-          open={openSection.docs}
-          onToggle={() => toggleSection("docs")}
-        >
-          <BookingDocuments images={images} loading={loadingImages} error={imagesError} onRetry={() => void loadImages()} />
-        </CollapsibleSection>
+          <CollapsibleSection
+            title="Quà tặng / Khuyến mãi"
+            count={data?.promotions?.length}
+            open={openSection.gift}
+            onToggle={() => toggleSection("gift")}
+          >
+            <BookingGifts promotions={data?.promotions} />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Chứng từ"
+            count={imagesFetched ? images.length : undefined}
+            open={openSection.docs}
+            onToggle={() => toggleSection("docs")}
+          >
+            <BookingDocuments images={images} loading={loadingImages} error={imagesError} onRetry={() => void loadImages()} />
+          </CollapsibleSection>
+        </View>
       </Screen>
 
       <BottomSheet
@@ -483,12 +486,17 @@ export default function BookingDetailScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
   hero: {
-    backgroundColor: colors.inverse,
-    borderRadius: radius.lg,
-    padding: space.lg,
+    backgroundColor: colors.showcase.bg,
+    borderRadius: radius.x3,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.xl,
     gap: space.xs,
+    ...elevation.soft,
   },
+  card: { borderWidth: 0, borderRadius: radius.xxl, paddingHorizontal: space.lg + 2, ...elevation.soft },
+  pill: { borderRadius: radius.full },
   heroMeta: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.xs },
   progressHead: {
     flexDirection: "row",

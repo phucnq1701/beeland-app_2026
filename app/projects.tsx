@@ -2,7 +2,8 @@ import React, { useEffect, useState, useCallback, memo } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { Image } from "expo-image";
-import { Building2, MapPin, SearchX } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { ArrowUpRight, Building2, MapPin, SearchX } from "lucide-react-native";
 
 import {
   AppHeader,
@@ -23,6 +24,7 @@ const DEFAULT_PROJECT_IMAGE =
 
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
 const TAB_BAR_SPACE = 100;
+const CARD_H = 232;
 
 const ProjectCard = memo(function ProjectCard({
   item,
@@ -43,16 +45,26 @@ const ProjectCard = memo(function ProjectCard({
       onPress={() => onPress(item)}
       style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
     >
-      <Image source={{ uri }} style={styles.image} contentFit="cover" placeholder={DEFAULT_PROJECT_IMAGE} transition={150} />
-      <View style={styles.badge}>
+      <Image
+        source={{ uri }}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        placeholder={DEFAULT_PROJECT_IMAGE}
+        transition={150}
+      />
+      <LinearGradient colors={colors.showcase.scrim} locations={[0.35, 0.65, 1]} style={StyleSheet.absoluteFill} />
+      <View style={styles.top}>
         <Badge label={isActive ? "Đang bán" : "Ngừng bán"} tone={isActive ? "success" : "neutral"} />
+        <View style={styles.arrow}>
+          <ArrowUpRight size={18} color={colors.showcase.text} strokeWidth={2.2} />
+        </View>
       </View>
       <View style={styles.caption}>
-        <Text variant="heading" color={colors.showcase.text} numberOfLines={1}>
+        <Text variant="heading" color={colors.showcase.text} numberOfLines={1} style={styles.name}>
           {item?.TenDA || "Dự án"}
         </Text>
         <View style={styles.place}>
-          <MapPin size={14} color={colors.showcase.textMuted} />
+          <MapPin size={14} color={colors.showcase.textMuted} strokeWidth={2} />
           <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
             {item?.district || "Chưa cập nhật"}
           </Text>
@@ -132,8 +144,8 @@ export default function ProjectsScreen({
 
   const empty = loading ? (
     <View style={styles.skeletons}>
-      <Skeleton height={220} radius={radius.lg} />
-      <Skeleton height={220} radius={radius.lg} />
+      <Skeleton height={CARD_H} radius={radius.x3} />
+      <Skeleton height={CARD_H} radius={radius.x3} />
     </View>
   ) : loadError ? (
     <ErrorState onRetry={() => void loadProjects()} />
@@ -149,7 +161,7 @@ export default function ProjectsScreen({
       <Screen
         scroll={false}
         padded={false}
-        header={<AppHeader title="Dự án" hideBack={embedded} />}
+        header={<AppHeader title="Dự án" hideBack={embedded} variant="soft" />}
       >
         <FlatList
           data={loading && projects.length === 0 ? [] : filteredProjects}
@@ -157,7 +169,7 @@ export default function ProjectsScreen({
           keyExtractor={(item: any, index: number) => item?.MaDA?.toString() || index.toString()}
           ListHeaderComponent={
             <View style={styles.header}>
-              <SearchBar value={search} onChangeText={setSearch} placeholder="Tìm dự án, khu vực" />
+              <SearchBar value={search} onChangeText={setSearch} placeholder="Tìm dự án, khu vực" variant="soft" />
               {!loading && projects.length > 0 ? (
                 <Text variant="caption" color="textSecondary">
                   {filteredProjects.length} dự án
@@ -179,30 +191,45 @@ export default function ProjectsScreen({
 }
 
 const styles = StyleSheet.create({
-  list: { paddingHorizontal: space.lg },
-  header: { gap: space.sm, paddingTop: space.md, paddingBottom: space.md },
-  gap: { height: space.md },
-  skeletons: { gap: space.md },
+  list: { paddingHorizontal: space.xl },
+  header: { gap: space.md, paddingTop: space.sm, paddingBottom: space.lg },
+  gap: { height: space.lg },
+  skeletons: { gap: space.lg },
   card: {
-    height: 220,
-    borderRadius: radius.lg,
+    height: CARD_H,
+    borderRadius: radius.x3,
     overflow: "hidden",
     backgroundColor: colors.showcase.bg,
   },
-  pressed: { opacity: 0.9 },
-  image: { ...StyleSheet.absoluteFillObject, bottom: 64 },
-  badge: { position: "absolute", top: space.md, left: space.md },
+  pressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
+  top: {
+    position: "absolute",
+    top: space.md + 2,
+    left: space.md + 2,
+    right: space.md + 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  arrow: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.showcase.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.showcase.glassBorder,
+  },
   caption: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    minHeight: 64,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-    justifyContent: "center",
-    gap: 2,
-    backgroundColor: colors.showcase.bg,
+    paddingHorizontal: space.lg + 2,
+    paddingBottom: space.lg,
+    gap: space.xs,
   },
+  name: { fontSize: 18 },
   place: { flexDirection: "row", alignItems: "center", gap: space.xs },
 });

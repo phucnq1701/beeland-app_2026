@@ -4,8 +4,8 @@
 
 | Màn | File |
 |---|---|
-| Danh sách đặt cọc / hợp đồng (khung chung: tìm, lọc dự án, chip trạng thái, phân trang) | `app/deposits.tsx`, `app/contracts.tsx` + `components/sales/SalesDocList.tsx` |
-| Chi tiết đặt cọc / hợp đồng (tổng tiền, thông tin, lịch, phiếu thu) | `app/deposit/[id].tsx`, `app/contract/[id].tsx` + `components/sales/SalesDocDetail.tsx`, `PaymentBlocks.tsx` |
+| Danh sách đặt cọc / hợp đồng (khung chung: tìm, lọc dự án, chip trạng thái, phân trang). Kiểu bo tròn: header/ô tìm/chip `soft`, khung tự bọc mỗi dòng thành card bo `radius.xxl`; cột phải dùng `DocTrailing` (trạng thái trên, tiền rút gọn dưới), avatar tròn | `app/deposits.tsx`, `app/contracts.tsx` + `components/sales/SalesDocList.tsx` |
+| Chi tiết đặt cọc / hợp đồng (tổng tiền, thông tin, lịch, phiếu thu). Kiểu bo tròn: header `soft`, card navy bo `radius.x3` gộp khách + trạng thái + tổng tiền (`MoneySummary children`); thông tin / lịch / phiếu thu là card bo `radius.xxl`, mỗi đợt có badge Còn nợ/Đã đủ và khung số liệu nền xám | `app/deposit/[id].tsx`, `app/contract/[id].tsx` + `components/sales/SalesDocDetail.tsx`, `PaymentBlocks.tsx` |
 
 Mở chi tiết với params `{ id, data: JSON dòng danh sách }` (trang chủ cũng mở chi tiết cọc kiểu này).
 

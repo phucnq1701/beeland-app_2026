@@ -7,10 +7,10 @@ import { colors, radius } from '@/theme';
 
 import { Text } from './Text';
 
-export type AvatarProps = { name: string; uri?: string | null; size?: 32 | 40 | 56 };
+export type AvatarProps = { name: string; uri?: string | null; size?: 32 | 40 | 44 | 56; round?: boolean };
 
-export function Avatar({ name, uri, size = 40 }: AvatarProps) {
-  const box = { width: size, height: size, borderRadius: size >= 56 ? radius.lg : radius.md };
+export function Avatar({ name, uri, size = 40, round }: AvatarProps) {
+  const box = { width: size, height: size, borderRadius: round ? size / 2 : size >= 56 ? radius.lg : radius.md };
   if (uri) {
     return <Image source={{ uri }} style={[styles.base, box]} contentFit="cover" accessibilityLabel={name} />;
   }

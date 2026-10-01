@@ -24,7 +24,7 @@ export default function CustomerNewScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <CustomerForm
-        header={<AppHeader title="Thêm khách hàng" />}
+        header={<AppHeader variant="soft" title="Thêm khách hàng" />}
         mode="create"
         submitLabel={isReturningToBooking ? "Tạo khách & chọn cho booking" : "Tạo khách hàng"}
         useExistingLabel={isReturningToBooking ? "Chọn khách này cho booking" : "Xem hồ sơ khách này"}

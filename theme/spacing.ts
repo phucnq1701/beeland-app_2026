@@ -19,10 +19,12 @@ export const radius = {
   md: 12,
   lg: 16,
   xl: 20,
+  xxl: 24,
+  x3: 28,
   full: 999,
 } as const;
 
-type ElevationLevel = 'raised' | 'overlay' | 'modal';
+type ElevationLevel = 'soft' | 'raised' | 'overlay' | 'modal';
 
 function shadow(y: number, blur: number, opacity: number, androidElevation: number): ViewStyle {
   return (
@@ -43,6 +45,8 @@ function shadow(y: number, blur: number, opacity: number, androidElevation: numb
 
 /** Card phẳng + viền, không bóng. Chỉ 3 mức bóng cho lớp nổi. */
 export const elevation: Record<ElevationLevel, ViewStyle> = {
+  /** Bóng rất nhẹ cho card bo tròn lớn (trang chủ). */
+  soft: shadow(6, 24, 0.06, 2),
   raised: shadow(-4, 16, 0.06, 4),
   overlay: shadow(8, 24, 0.16, 8),
   modal: shadow(16, 40, 0.24, 16),

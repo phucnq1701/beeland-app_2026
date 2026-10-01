@@ -2,9 +2,10 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
 
-import { AppHeader, Card, KeyValueRow, Screen, SectionHeader, SkeletonDetail, StatusBadge, Text } from "@/components/ui";
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
+import { AppHeader, Card, KeyValueRow, Screen, SkeletonDetail, StatusBadge, Text } from "@/components/ui";
 import { ScheduleRow } from "@/lib/paymentMath";
-import { space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import { Receipt } from "@/sevicesSupabase/PaymentProgressService";
 
 import { MoneySummary, PaymentSchedule, ReceiptList } from "./PaymentBlocks";
@@ -56,51 +57,69 @@ export function SalesDocDetail({
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <Screen header={<AppHeader title={title} subtitle={docNo || undefined} />} refreshing={refreshing} onRefresh={onRefresh}>
-        <View style={styles.hero}>
-          <View style={styles.flex}>
-            <Text variant="title" numberOfLines={2} accessibilityRole="header">
-              {customer || "—"}
-            </Text>
-            {subtitle ? (
-              <Text variant="caption" color="textSecondary" numberOfLines={2}>
-                {subtitle}
-              </Text>
-            ) : null}
-          </View>
-          {status ? <StatusBadge label={status} color={statusColor} /> : null}
-        </View>
-
-        <MoneySummary value={value} paid={paid} deposit={deposit} />
-
-        {rows.length ? (
-          <>
-            <SectionHeader title="Thông tin" />
-            <Card padding={0}>
-              <View style={styles.rows}>
-                {rows.map(([label, v], i) => (
-                  <KeyValueRow key={label} label={label} value={v} last={i === rows.length - 1} />
-                ))}
+      <Screen
+        header={<AppHeader variant="soft" title={title} subtitle={docNo || undefined} />}
+        padded={false}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+      >
+        <View style={styles.body}>
+          {/* Card navy: khách + trạng thái ở đầu, tiền bên dưới */}
+          <MoneySummary value={value} paid={paid} deposit={deposit}>
+            <View style={styles.hero}>
+              <View style={styles.flex}>
+                <Text variant="heading" color={colors.showcase.text} numberOfLines={2} accessibilityRole="header">
+                  {customer || "—"}
+                </Text>
+                {subtitle ? (
+                  <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={2}>
+                    {subtitle}
+                  </Text>
+                ) : null}
               </View>
-            </Card>
-          </>
-        ) : null}
+              {status ? <StatusBadge label={status} color={statusColor} /> : null}
+            </View>
+          </MoneySummary>
 
-        {loading ? (
-          <SkeletonDetail />
-        ) : (
-          <>
-            <PaymentSchedule rows={schedule} error={scheduleError} />
-            <ReceiptList rows={receipts} total={receiptsTotal} error={receiptsError} />
-          </>
-        )}
+          {rows.length ? (
+            <>
+              <HomeSectionHeader title="Thông tin" />
+              <Card padding={0} style={styles.card}>
+                <View style={styles.rows}>
+                  {rows.map(([label, v], i) => (
+                    <KeyValueRow key={label} label={label} value={v} last={i === rows.length - 1} />
+                  ))}
+                </View>
+              </Card>
+            </>
+          ) : null}
+
+          {loading ? (
+            <SkeletonDetail />
+          ) : (
+            <>
+              <PaymentSchedule rows={schedule} error={scheduleError} />
+              <ReceiptList rows={receipts} total={receiptsTotal} error={receiptsError} />
+            </>
+          )}
+        </View>
       </Screen>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingTop: space.sm },
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  hero: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.md,
+    marginBottom: space.md,
+    paddingBottom: space.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.showcase.surface,
+  },
   flex: { flex: 1 },
-  rows: { paddingHorizontal: space.lg },
+  card: { borderWidth: 0, borderRadius: radius.xxl, ...elevation.soft },
+  rows: { paddingHorizontal: space.lg + 2 },
 });

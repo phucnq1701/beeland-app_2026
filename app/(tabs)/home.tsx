@@ -6,16 +6,10 @@ import { StyleSheet, View } from "react-native";
 
 import { FeatureGrid } from "@/components/home/FeatureGrid";
 import { HomeHeader } from "@/components/home/HomeHeader";
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import { ProjectCarousel } from "@/components/home/ProjectCarousel";
 import { RecentSection } from "@/components/home/RecentSection";
-import {
-  Avatar,
-  ListItem,
-  MoneyText,
-  Screen,
-  SectionHeader,
-  StatusBadge,
-} from "@/components/ui";
+import { Avatar, ListItem, MoneyText, Screen, StatusBadge } from "@/components/ui";
 import { getScopedKey } from "@/components/utils/accountScope";
 import { MENU_TAB_FEATURE_IDS } from "@/components/utils/menuTabs";
 import { formatDate, maskPhone } from "@/lib/format";
@@ -89,7 +83,7 @@ export default function HomeScreen() {
         if (cloudTenant.isJwtExpired(supabaseJwt)) {
           const p = cloudTenant.decodeJwtPayload(supabaseJwt);
           console.log(
-            `[Home] cloud_jwt expired (exp=${p?.exp}, now=${Math.floor(Date.now() / 1000)}) -> về login lấy JWT mới`
+            `[Home] cloud_jwt expired (exp=${p?.exp}, now=${Math.floor(Date.now() / 1000)}) -> về login lấy JWT mới`,
           );
           router.replace("/login");
           return;
@@ -117,7 +111,10 @@ export default function HomeScreen() {
   const loadBookings = async () => {
     setBookingsState((s) => ({ ...s, loading: true }));
     try {
-      const resBooking = await BookingService.listBookingsFromCloud({ limit: 5, offset: 0 });
+      const resBooking = await BookingService.listBookingsFromCloud({
+        limit: 5,
+        offset: 0,
+      });
       setBooking((resBooking?.data || []).slice(0, 5));
       setBookingsState({ loading: false, error: false });
     } catch (error) {
@@ -146,7 +143,10 @@ export default function HomeScreen() {
   const loadCustomers = async () => {
     setCustomersState({ loading: true, error: false });
     try {
-      const resKH = await CustomerSupabaseService.getCustomers({ limit: 5, offset: 0 });
+      const resKH = await CustomerSupabaseService.getCustomers({
+        limit: 5,
+        offset: 0,
+      });
       setKhachHang((resKH?.data || []).map(normalizeCustomer).slice(0, 5));
       setCustomersState({ loading: false, error: false });
     } catch (error) {
@@ -155,8 +155,7 @@ export default function HomeScreen() {
     }
   };
 
-  const loadData = () =>
-    Promise.all([loadProjects(), loadBookings(), loadDeposits(), loadCustomers()]);
+  const loadData = () => Promise.all([loadProjects(), loadBookings(), loadDeposits(), loadCustomers()]);
 
   const loadFeatureConfiguration = async () => {
     // Không đọc được loại tài khoản → null (resolveHomeFeatureIds coi như đại lý cho an toàn)
@@ -195,7 +194,10 @@ export default function HomeScreen() {
   const hasFocusedOnce = useRef(false);
   const refreshRecentBookings = useCallback(async () => {
     try {
-      const resBooking = await BookingService.listBookingsFromCloud({ limit: 5, offset: 0 });
+      const resBooking = await BookingService.listBookingsFromCloud({
+        limit: 5,
+        offset: 0,
+      });
       setBooking((resBooking?.data || []).slice(0, 5));
     } catch (error) {
       console.log("[Home] Error refreshing bookings:", errText(error));
@@ -207,7 +209,7 @@ export default function HomeScreen() {
       void loadFeatureConfiguration();
       if (hasFocusedOnce.current) void refreshRecentBookings();
       hasFocusedOnce.current = true;
-    }, [refreshRecentBookings])
+    }, [refreshRecentBookings]),
   );
 
   const onRefresh = async () => {
@@ -236,134 +238,153 @@ export default function HomeScreen() {
       refreshing={refreshing}
       onRefresh={onRefresh}
       header={
-        <HomeHeader
-          onSearchPress={() => router.push("/products")}
-          onBellPress={() => router.push("/notifications")}
-        />
+        <HomeHeader onSearchPress={() => router.push("/products")} onBellPress={() => router.push("/notifications")} />
       }
     >
-      <View style={styles.block}>
-        <SectionHeader title="Quản lý" actionLabel="Tất cả" onAction={() => router.push("/all-management")} />
-        <FeatureGrid
-          items={displayedFeatures.map((f) => ({ key: f.id, feature: f, onPress: () => openFeature(f.id) }))}
-        />
-      </View>
-
-      <View style={styles.carouselHead}>
-        <SectionHeader title="Dự án nổi bật" actionLabel="Xem tất cả" onAction={() => router.push("/projects")} />
-      </View>
-      <ProjectCarousel
-        projects={duAn}
-        loading={projectsState.loading}
-        error={projectsState.error}
-        onRetry={() => void loadProjects()}
-        onPress={openProject}
-      />
-
-      <RecentSection
-        title="Booking gần đây"
-        items={booking}
-        loading={bookingsState.loading}
-        error={bookingsState.error}
-        onRetry={() => void loadBookings()}
-        onSeeAll={() => router.push("/bookings")}
-        emptyText="Chưa có booking nào."
-        renderItem={(b: any) => (
-          <ListItem
-            leading={<Avatar name={b.khachHang || "?"} />}
-            title={b.khachHang || "—"}
-            subtitle={[b.maSanPham, b.tenDA].filter(Boolean).join(" · ")}
-            meta={formatDate(b.ngayGiuCho)}
-            trailing={
-              <>
-                <MoneyText value={b.tongGiaGomVAT ?? b.tong_gia} short />
-                {b.tenTT ? <StatusBadge label={b.tenTT} color={b.colorCode} /> : null}
-              </>
-            }
-            onPress={() => router.push({ pathname: "/booking/[id]", params: { id: b.id ?? b.maPGC } })}
+      <View style={styles.sections}>
+        <View style={styles.block}>
+          <HomeSectionHeader title="Quản lý" actionLabel="Tất cả" onAction={() => router.push("/all-management")} />
+          <FeatureGrid
+            items={displayedFeatures.map((f) => ({
+              key: f.id,
+              feature: f,
+              onPress: () => openFeature(f.id),
+            }))}
           />
-        )}
-      />
+        </View>
 
-      {isAgency ? (
+        <View style={styles.carousel}>
+          <View style={styles.carouselHead}>
+            <HomeSectionHeader
+              title="Dự án nổi bật"
+              actionLabel="Xem tất cả"
+              onAction={() => router.push("/projects")}
+            />
+          </View>
+          <ProjectCarousel
+            projects={duAn}
+            loading={projectsState.loading}
+            error={projectsState.error}
+            onRetry={() => void loadProjects()}
+            onPress={openProject}
+          />
+        </View>
+
         <RecentSection
-          title="Đặt cọc gần đây"
-          items={deposits}
-          loading={depositsState.loading}
-          error={depositsState.error}
-          onRetry={() => void loadDeposits()}
-          onSeeAll={() => router.push("/deposits")}
-          emptyText="Chưa có phiếu đặt cọc nào."
-          renderItem={(d: any) => (
+          title="Booking gần đây"
+          items={booking}
+          loading={bookingsState.loading}
+          error={bookingsState.error}
+          onRetry={() => void loadBookings()}
+          onSeeAll={() => router.push("/bookings")}
+          emptyText="Chưa có booking nào."
+          renderItem={(b: any) => (
             <ListItem
-              leading={
-                <View style={styles.depositIcon}>
-                  <Landmark size={20} color={colors.brand} />
-                </View>
-              }
-              title={d.KhachHang || "—"}
-              subtitle={[d.MaSanPham, d.TenDA].filter(Boolean).join(" · ")}
-              meta={formatDate(d.NgayDatCoc)}
+              leading={<Avatar name={b.khachHang || "?"} size={44} round />}
+              title={b.khachHang || "—"}
+              subtitle={[b.maSanPham, b.tenDA].filter(Boolean).join(" · ")}
+              meta={formatDate(b.ngayGiuCho)}
               trailing={
                 <>
-                  <MoneyText value={d.TienCoc} short />
-                  {d.TenTT ? <StatusBadge label={d.TenTT} color={d.MauNen} /> : null}
+                  <MoneyText value={b.tongGiaGomVAT ?? b.tong_gia} short />
+                  {b.tenTT ? <StatusBadge label={b.tenTT} color={b.colorCode} /> : null}
                 </>
               }
               onPress={() =>
                 router.push({
-                  pathname: "/deposit/[id]",
-                  params: {
-                    id: String(d.MaPDC ?? ""),
-                    data: JSON.stringify({
-                      ...d,
-                      maDC: String(d.MaPDC ?? ""),
-                      soPhieu: d.SoPhieu || "",
-                      tenKH: d.KhachHang || "",
-                      maSP: d.MaSanPham || "",
-                      soTienCoc: d.TienCoc || 0,
-                      trangThai: d.TenTT || "",
-                      tenDA: d.TenDA || "",
-                    }),
-                  },
+                  pathname: "/booking/[id]",
+                  params: { id: b.id ?? b.maPGC },
                 })
               }
             />
           )}
         />
-      ) : (
-        <RecentSection
-          title="Khách hàng gần đây"
-          items={khachHang}
-          loading={customersState.loading}
-          error={customersState.error}
-          onRetry={() => void loadCustomers()}
-          onSeeAll={() => router.push("/customers")}
-          emptyText="Chưa có khách hàng nào."
-          renderItem={(c: any) => (
-            <ListItem
-              leading={<Avatar name={c.tenKH || "?"} />}
-              title={c.tenKH || "—"}
-              subtitle={maskPhone(c.diDong) || undefined}
-              chevron
-              onPress={() =>
-                router.push({ pathname: "/customer/[id]", params: { id: c._raw?.id || c.maKH } })
-              }
-            />
-          )}
-        />
-      )}
+
+        {isAgency ? (
+          <RecentSection
+            title="Đặt cọc gần đây"
+            items={deposits}
+            loading={depositsState.loading}
+            error={depositsState.error}
+            onRetry={() => void loadDeposits()}
+            onSeeAll={() => router.push("/deposits")}
+            emptyText="Chưa có phiếu đặt cọc nào."
+            renderItem={(d: any) => (
+              <ListItem
+                leading={
+                  <View style={styles.depositIcon}>
+                    <Landmark size={20} color={colors.brand} />
+                  </View>
+                }
+                title={d.KhachHang || "—"}
+                subtitle={[d.MaSanPham, d.TenDA].filter(Boolean).join(" · ")}
+                meta={formatDate(d.NgayDatCoc)}
+                trailing={
+                  <>
+                    <MoneyText value={d.TienCoc} short />
+                    {d.TenTT ? <StatusBadge label={d.TenTT} color={d.MauNen} /> : null}
+                  </>
+                }
+                onPress={() =>
+                  router.push({
+                    pathname: "/deposit/[id]",
+                    params: {
+                      id: String(d.MaPDC ?? ""),
+                      data: JSON.stringify({
+                        ...d,
+                        maDC: String(d.MaPDC ?? ""),
+                        soPhieu: d.SoPhieu || "",
+                        tenKH: d.KhachHang || "",
+                        maSP: d.MaSanPham || "",
+                        soTienCoc: d.TienCoc || 0,
+                        trangThai: d.TenTT || "",
+                        tenDA: d.TenDA || "",
+                      }),
+                    },
+                  })
+                }
+              />
+            )}
+          />
+        ) : (
+          <RecentSection
+            title="Khách hàng gần đây"
+            items={khachHang}
+            loading={customersState.loading}
+            error={customersState.error}
+            onRetry={() => void loadCustomers()}
+            onSeeAll={() => router.push("/customers")}
+            emptyText="Chưa có khách hàng nào."
+            renderItem={(c: any) => (
+              <ListItem
+                leading={<Avatar name={c.tenKH || "?"} size={44} round />}
+                title={c.tenKH || "—"}
+                subtitle={maskPhone(c.diDong) || undefined}
+                chevron
+                onPress={() =>
+                  router.push({
+                    pathname: "/customer/[id]",
+                    params: { id: c._raw?.id || c.maKH },
+                  })
+                }
+              />
+            )}
+          />
+        )}
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  block: { gap: space.sm, paddingHorizontal: space.lg, paddingTop: space.sm },
-  carouselHead: { paddingHorizontal: space.lg },
+  sections: { gap: space.x3 - 4 },
+  block: { gap: space.md, paddingHorizontal: space.xl },
+  carousel: { gap: space.sm },
+  carouselHead: { paddingHorizontal: space.xl },
   depositIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.primarySubtle,

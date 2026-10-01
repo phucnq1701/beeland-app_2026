@@ -5,7 +5,7 @@ import { FileX2 } from "lucide-react-native";
 
 import { AppHeader, Card, EmptyState, ErrorState, Screen, SkeletonList } from "@/components/ui";
 import { PeriodType } from "@/lib/reportPeriod";
-import { colors, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 
 import { DEFAULT_REPORT_FILTER, ReportFilters, ReportFilterValue, reportQuery } from "./ReportFilters";
 
@@ -77,7 +77,7 @@ export function ReportList<T>({
   const header = (
     <View style={styles.header}>
       <ReportFilters value={filter} onChange={setFilter} showPeriod={showPeriod} />
-      {!loading && !error ? <Card>{summary(rows)}</Card> : null}
+      {!loading && !error ? <Card style={styles.summary}>{summary(rows)}</Card> : null}
     </View>
   );
 
@@ -90,11 +90,16 @@ export function ReportList<T>({
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <Screen scroll={false} padded={false} header={<AppHeader title={title} />}>
+      <Screen scroll={false} padded={false} header={<AppHeader variant="soft" title={title} />}>
         <FlatList
           data={loading || error ? [] : rows}
           keyExtractor={keyOf}
-          renderItem={({ item }) => renderRow(item)}
+          renderItem={({ item }) => (
+            // Mỗi dòng là card bo tròn: bóng ở lớp ngoài, bo + cắt ở lớp trong (iOS: overflow hidden làm mất bóng)
+            <View style={styles.card}>
+              <View style={styles.clip}>{renderRow(item)}</View>
+            </View>
+          )}
           ItemSeparatorComponent={Separator}
           ListHeaderComponent={header}
           ListEmptyComponent={empty()}
@@ -113,7 +118,10 @@ function Separator() {
 }
 
 const styles = StyleSheet.create({
-  header: { padding: space.lg, gap: space.md },
-  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: space.lg },
+  header: { paddingHorizontal: space.xl, paddingTop: space.sm, paddingBottom: space.lg, gap: space.lg },
+  summary: { borderWidth: 0, borderRadius: radius.x3, padding: space.xl, ...elevation.soft },
+  separator: { height: space.sm + 2 },
+  card: { marginHorizontal: space.xl, borderRadius: radius.xxl, backgroundColor: colors.surface, ...elevation.soft },
+  clip: { borderRadius: radius.xxl, overflow: "hidden" },
   content: { paddingBottom: space.xxl },
 });

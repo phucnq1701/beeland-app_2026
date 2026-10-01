@@ -1,8 +1,10 @@
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { Card, SectionHeader, SkeletonList, Text } from "@/components/ui";
-import { colors, space } from "@/theme";
+import { SkeletonList, Text } from "@/components/ui";
+import { colors, elevation, radius, space } from "@/theme";
+
+import { HomeSectionHeader } from "./HomeSectionHeader";
 
 type Props<T> = {
   title: string;
@@ -18,9 +20,15 @@ type Props<T> = {
 /** Khối "gần đây" ở trang chủ: mỗi khối tự báo tải / lỗi / rỗng, không ảnh hưởng khối khác. */
 export function RecentSection<T>({ title, items, loading, error, onRetry, onSeeAll, renderItem, emptyText }: Props<T>) {
   const body = (() => {
-    if (loading && items.length === 0) return <SkeletonList count={3} />;
+    if (loading && items.length === 0) {
+      return (
+        <View style={[styles.card, styles.clip]}>
+          <SkeletonList count={3} />
+        </View>
+      );
+    }
     const retryRow = (
-      <Pressable accessibilityRole="button" onPress={onRetry} style={styles.message}>
+      <Pressable accessibilityRole="button" onPress={onRetry} style={[styles.card, styles.message]}>
         <Text variant="caption" color="danger">
           {items.length ? "Không cập nhật được ·" : "Không tải được ·"}{" "}
         </Text>
@@ -32,7 +40,7 @@ export function RecentSection<T>({ title, items, loading, error, onRetry, onSeeA
     if (error && items.length === 0) return retryRow;
     if (items.length === 0) {
       return (
-        <View style={styles.message}>
+        <View style={[styles.card, styles.message]}>
           <Text variant="caption" color="textSecondary">
             {emptyText}
           </Text>
@@ -44,8 +52,9 @@ export function RecentSection<T>({ title, items, loading, error, onRetry, onSeeA
       <>
         {error ? retryRow : null}
         {items.map((item, i) => (
-          <View key={i} style={i > 0 || error ? styles.divider : null}>
-            {renderItem(item, i)}
+          // Bóng ở lớp ngoài, bo + cắt ở lớp trong (iOS: overflow hidden làm mất bóng)
+          <View key={i} style={styles.card}>
+            <View style={styles.clip}>{renderItem(item, i)}</View>
           </View>
         ))}
       </>
@@ -54,17 +63,26 @@ export function RecentSection<T>({ title, items, loading, error, onRetry, onSeeA
 
   return (
     <View style={styles.section}>
-      <SectionHeader title={title} actionLabel="Xem tất cả" onAction={onSeeAll} />
-      <Card padding={0} style={styles.card}>
-        {body}
-      </Card>
+      <HomeSectionHeader title={title} actionLabel="Xem tất cả" onAction={onSeeAll} />
+      <View style={styles.list}>{body}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { gap: space.sm, paddingHorizontal: space.lg },
-  card: { overflow: "hidden" },
-  message: { flexDirection: "row", alignItems: "center", minHeight: 44, paddingHorizontal: space.lg, paddingVertical: space.md },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  section: { gap: space.md, paddingHorizontal: space.xl },
+  list: { gap: space.sm + 2 },
+  card: {
+    borderRadius: radius.xxl,
+    backgroundColor: colors.surface,
+    ...elevation.soft,
+  },
+  clip: { borderRadius: radius.xxl, overflow: "hidden" },
+  message: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 56,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.md,
+  },
 });
