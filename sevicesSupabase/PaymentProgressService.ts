@@ -1,5 +1,5 @@
 import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyId } from "./cloudTenant";
+import { getCompanyCode, getCompanyId } from "./cloudTenant";
 import { ScheduleRow, allocatePaidToSchedule, mapScheduleRpcRow, pgcVoucherTotal } from "../lib/paymentMath";
 
 /**
@@ -36,7 +36,9 @@ function normalizeStoredRow(r: any, index: number) {
     NgayTT: r?.NgayTT ?? null,
     TyLeTT: n(r?.TyLeTT),
     PhaiThu: n(phaiThu),
-    PhaiThuPBT: n(r?.PhaiThuPBT ?? r?.PhiBT),
+    // Web chỉ phân bổ PBT theo PhaiThuPBT (không lấy PhiBT)
+    PhaiThuPBT: n(r?.PhaiThuPBT),
+    DaThu: n(r?.DaThu ?? r?.SoTienDaTT),
     DienGiai: r?.DienGiai ?? r?.GhiChu ?? "",
   };
 }
@@ -70,12 +72,14 @@ export const PaymentProgressService = {
       console.log("WARN fn_contract_payment_schedule:", e);
     }
 
-    // Dự phòng như web: lịch lưu + phân bổ tổng tiền phiếu thu (web cộng TOÀN BỘ tờ phiếu – spec 0.2)
+    // Dự phòng như web: lịch lưu (cloud_catalogs lọc theo mã công ty chữ thường – ContractCloudService) +
+    // phân bổ tổng tiền phiếu thu (web cộng TOÀN BỘ tờ phiếu – spec 0.2)
     try {
+      const code = (await getCompanyCode()).trim().toLowerCase();
       const r = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
         params: {
           select: "raw",
-          ma_ctdk_uid: `eq.${companyId}`,
+          ma_ctdk: `eq.${code}`,
           catalog_type: "eq.lich_tt_hd",
           parent_code: `eq.${pgcId}`,
         },
@@ -84,11 +88,12 @@ export const PaymentProgressService = {
         .map((x: any, i: number) => normalizeStoredRow(x?.raw || {}, i))
         .sort((a: any, b: any) => Number(a.DotTT || 0) - Number(b.DotTT || 0));
       if (!stored.length) return { rows: [], source: "none" };
-      let totalPaid = 0;
+      // Không đọc được phiếu thu → hiện lịch lưu như cũ, không phân bổ (như web)
+      let allocated: any[] = stored.map((x: any) => ({ ...x, DaThuPBT: 0 }));
       try {
-        totalPaid = (await rpcVouchers(pgcId)).reduce((s, v) => s + n(v?.so_tien), 0);
+        const totalPaid = (await rpcVouchers(pgcId)).reduce((s, v) => s + n(v?.so_tien), 0);
+        allocated = allocatePaidToSchedule(stored, totalPaid);
       } catch {}
-      const allocated = allocatePaidToSchedule(stored, totalPaid);
       const rows: ScheduleRow[] = allocated.map((x: any) => ({
         DotTT: Number(x.DotTT) || 0,
         DotTTText: x.DotTTText || `Đợt ${x.DotTT}`,

@@ -65,6 +65,8 @@ export function SalesDocList({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
   const page = useRef(1);
+  // Chặn onEndReached gọi 2 lần trước khi state kịp cập nhật (nhân đôi trang)
+  const loadingMoreRef = useRef(false);
   const version = useRef(0);
   const firstFocus = useRef(true);
 
@@ -89,7 +91,11 @@ export function SalesDocList({
       const nextPage = kind === "more" ? page.current + 1 : 1;
       if (kind === "load") setLoading(true);
       if (kind === "refresh") setRefreshing(true);
-      if (kind === "more") setLoadingMore(true);
+      if (kind === "more") {
+        if (loadingMoreRef.current) return;
+        loadingMoreRef.current = true;
+        setLoadingMore(true);
+      }
       try {
         const res = await fetchPage({ ...filter, Offset: nextPage });
         if (v !== version.current) return;
@@ -100,6 +106,7 @@ export function SalesDocList({
       } catch {
         if (v === version.current && kind !== "more") setError(true);
       } finally {
+        if (kind === "more") loadingMoreRef.current = false;
         if (v === version.current) {
           setLoading(false);
           setRefreshing(false);

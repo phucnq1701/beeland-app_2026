@@ -1,5 +1,5 @@
 import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyCode, getCompanyId } from "./cloudTenant";
+import { getCompanyId } from "./cloudTenant";
 import { HopDongService } from "./HopDongService";
 import { rpcRows } from "./DatCocService";
 import {
@@ -16,8 +16,8 @@ import {
  * Báo cáo tính trên Cloud – như web (không gọi API cũ `api/bao-cao/*`):
  *  - Thu tiền:   fn_cash_voucher_list (CashVoucherService.listVouchers, loại THU)
  *  - Hợp đồng:   fn_contract_list (ContractListService) theo ngày ký
- *  - Tiến độ:    AccountingCloudService.listDebtsCloudFirst (TIENDO): cloud_debts "TIENDO:" nếu có,
- *                không thì dựng từ vòng đời phiếu (listDebtSummaryFromLifecycle + listInstallmentsFromLifecycle)
+ *  - Tiến độ:    như DebtProgressReport mặc định (contractType GOC): luôn dựng từ vòng đời phiếu,
+ *                chỉ hợp đồng gốc (listDebtSummaryFromLifecycle + listInstallmentsFromLifecycle, không đọc cloud_debts)
  *  - Sắp đến hạn / quá hạn theo agingOf của DebtProgressReport.
  * Kỳ lọc: from/to dạng YYYY-MM-DD (giờ VN). projectId: uuid hoặc mã dự án.
  */
@@ -53,31 +53,16 @@ async function projectUuid(key: string | null | undefined): Promise<string | nul
   }
 }
 
+/** Tra bảng theo danh sách id, chia nhóm 100 id/lần (URL không quá dài). Lỗi → ném ra để báo lỗi, không im lặng. */
 async function byIds(table: string, select: string, ids: string[]): Promise<Record<string, any>> {
   const list = [...new Set(ids.filter(Boolean))];
-  if (!list.length) return {};
-  try {
-    const r = await axiosApiSupabase.get(`rest/v1/${table}`, { params: { select, id: `in.(${list.join(",")})` } });
-    return Object.fromEntries((Array.isArray(r.data) ? r.data : []).map((x: any) => [String(x.id), x]));
-  } catch {
-    return {};
+  const out: Record<string, any> = {};
+  for (let i = 0; i < list.length; i += 100) {
+    const chunk = list.slice(i, i + 100);
+    const r = await axiosApiSupabase.get(`rest/v1/${table}`, { params: { select, id: `in.(${chunk.join(",")})` } });
+    (Array.isArray(r.data) ? r.data : []).forEach((x: any) => (out[String(x.id)] = x));
   }
-}
-
-/** Dòng cloud_debts (mirror) → dòng tiến độ (web listDebtsFromCloud). */
-function fromMirror(r: any) {
-  return {
-    ...(r.raw || {}),
-    MaDA: r.raw?.MaDA ?? r.ma_da ?? null,
-    TenDA: r.raw?.TenDA ?? r.ten_da,
-    KyHieu: r.raw?.KyHieu ?? r.ky_hieu,
-    HoTenKH: r.raw?.HoTenKH ?? r.ho_ten_kh,
-    SoHDMB: r.raw?.SoHDMB ?? r.so_hdmb,
-    PhaiThu: r.raw?.PhaiThu ?? r.phai_thu,
-    DaThu: r.raw?.DaThu ?? r.da_thu,
-    ConLai: r.raw?.ConLai ?? r.con_lai,
-    MaCongNo: r.ma_cong_no,
-  };
+  return out;
 }
 
 /** Công nợ tổng hợp từng phiếu dựng từ bảng vòng đời (web listDebtSummaryFromLifecycle, không embed FK). */
@@ -91,6 +76,8 @@ async function lifecycleParents(projectKey: string | null): Promise<any[]> {
       ma_ctdk_uid: `eq.${companyId}`,
       deleted_at: "is.null",
       giai_doan: "in.(DATCOC,HDGV,HDMB)",
+      // Web DebtProgressReport mặc định contractType "GOC": chỉ hợp đồng gốc (không gồm chuyển nhượng)
+      ma_hd_goc: "is.null",
       order: "updated_at.desc",
       limit: "5000",
     },
@@ -102,16 +89,8 @@ async function lifecycleParents(projectKey: string | null): Promise<any[]> {
     byIds("cloud_catalogs", "id,item_code,item_name", docs.map((d) => str(d.trang_thai_id))),
     byIds("bds_products", "id,ma_sp,ky_hieu,ma_da", docs.map((d) => str(d.san_pham_id))),
     byIds("cloud_customers", "id,ten_kh,ten_cong_ty,dien_thoai", docs.map((d) => str(d.khach_hang_id))),
-    ids.length
-      ? axiosApiSupabase
-          .get("rest/v1/cloud_deposits", { params: { select: "phieu_giu_cho_id,so_phieu", phieu_giu_cho_id: `in.(${ids.join(",")})` } })
-          .catch(() => ({ data: [] }))
-      : Promise.resolve({ data: [] }),
-    ids.length
-      ? axiosApiSupabase
-          .get("rest/v1/cloud_contracts", { params: { select: "phieu_giu_cho_id,so_hdmb", phieu_giu_cho_id: `in.(${ids.join(",")})` } })
-          .catch(() => ({ data: [] }))
-      : Promise.resolve({ data: [] }),
+    byPgc("cloud_deposits", "phieu_giu_cho_id,so_phieu", ids),
+    byPgc("cloud_contracts", "phieu_giu_cho_id,so_hdmb", ids),
     receiptsByDoc(companyId),
   ]);
   // Dự án lấy theo phiếu, thiếu thì theo sản phẩm (web enrichProjectFromProducts)
@@ -123,10 +102,10 @@ async function lifecycleParents(projectKey: string | null): Promise<any[]> {
 
   // Số chứng từ: số phiếu cọc, số hợp đồng ghi đè sau (như web)
   const docNo = new Map<string, string>();
-  (Array.isArray(depositsRes.data) ? depositsRes.data : []).forEach((x: any) => {
+  depositsRes.forEach((x: any) => {
     if (x.phieu_giu_cho_id && x.so_phieu) docNo.set(String(x.phieu_giu_cho_id), x.so_phieu);
   });
-  (Array.isArray(contractsRes.data) ? contractsRes.data : []).forEach((x: any) => {
+  contractsRes.forEach((x: any) => {
     if (x.phieu_giu_cho_id && x.so_hdmb) docNo.set(String(x.phieu_giu_cho_id), x.so_hdmb);
   });
 
@@ -174,6 +153,18 @@ async function lifecycleParents(projectKey: string | null): Promise<any[]> {
     .filter((r) => !projectKey || r.ProjectId === projectUid || String(r.MaDA ?? "") === projectKey);
 }
 
+/** Dòng bảng con theo uuid phiếu giữ chỗ (chia nhóm 100). */
+async function byPgc(table: string, select: string, pgcIds: string[]): Promise<any[]> {
+  const out: any[] = [];
+  for (let i = 0; i < pgcIds.length; i += 100) {
+    const r = await axiosApiSupabase.get(`rest/v1/${table}`, {
+      params: { select, phieu_giu_cho_id: `in.(${pgcIds.slice(i, i + 100).join(",")})` },
+    });
+    out.push(...(Array.isArray(r.data) ? r.data : []));
+  }
+  return out;
+}
+
 /** Đã thu theo phiếu từ dòng chi tiết phiếu thu (web sumReceiptsByPgc). */
 async function receiptsByDoc(companyId: string) {
   try {
@@ -204,12 +195,13 @@ async function receiptsByDoc(companyId: string) {
     return sumReceiptLines(lines, { alias, code, pbtLoai });
   } catch (e) {
     console.log("ERROR receiptsByDoc:", e);
-    return sumReceiptLines([], { alias: {}, code: {}, pbtLoai: new Set() });
+    throw e;
   }
 }
 
 const inRange = (date: any, f: ReportFilter) => {
-  if (!date) return !f.from && !f.to;
+  // Đợt chưa có ngày: web giữ lại (không lọc được theo ngày)
+  if (!date) return true;
   const t = new Date(date).getTime();
   if (f.from && t < new Date(`${f.from}T00:00:00.000+07:00`).getTime()) return false;
   if (f.to && t > new Date(`${f.to}T23:59:59.999+07:00`).getTime()) return false;
@@ -228,7 +220,8 @@ export const ReportService = {
         p_tu_ngay: f.from || null,
         p_den_ngay: f.to || null,
         p_keyword: null,
-        p_contract_type: null,
+        // Như màn Phiếu thu web: mặc định hợp đồng gốc
+        p_contract_type: "GOC",
         p_company_ids: null,
         p_page_index: 1,
         p_page_size: 5000,
@@ -252,7 +245,7 @@ export const ReportService = {
   },
 
   /** Hợp đồng mua bán ký trong kỳ. */
-  getContracts: async (f: ReportFilter): Promise<{ rows: any[]; total: number; error?: boolean }> => {
+  getContracts: async (f: ReportFilter): Promise<{ rows: any[]; count: number; total: number; error?: boolean }> => {
     const res: any = await HopDongService.get({
       TuNgay: f.from || undefined,
       DenNgay: f.to || undefined,
@@ -261,7 +254,12 @@ export const ReportService = {
       Limit: 5000,
     });
     const rows = Array.isArray(res?.data) ? res.data : [];
-    return { rows, total: rows.reduce((s: number, r: any) => s + n(r.TongGiaTriHDMB), 0), error: !!res?.error };
+    return {
+      rows,
+      count: Number(res?.totalRows) || rows.length,
+      total: rows.reduce((s: number, r: any) => s + n(r.TongGiaTriHDMB), 0),
+      error: !!res?.error,
+    };
   },
 
   /**
@@ -272,32 +270,12 @@ export const ReportService = {
     f: ReportFilter
   ): Promise<{ rows: ProgressRow[]; overdue: ProgressRow[]; upcoming: ProgressRow[]; error?: boolean }> => {
     try {
-      const code = (await getCompanyCode()).trim().toLowerCase();
-      let source: { row: ProgressRow; ngayTT: any }[] = [];
-      // 1) Bảng mirror công nợ (web listDebtsFromCloud nhóm TIENDO)
-      if (code) {
-        const params: Record<string, string> = {
-          select: "*",
-          ma_ctdk: `eq.${code}`,
-          ma_cong_no: "like.TIENDO:*",
-          order: "ngay_den_han.asc",
-          limit: "5000",
-        };
-        if (f.projectId) params.ma_da = `in.(${f.projectId})`;
-        try {
-          const r = await axiosApiSupabase.get("rest/v1/cloud_debts", { params });
-          const mirror = (Array.isArray(r.data) ? r.data : []).map(fromMirror);
-          source = mirror.map((x: any, i: number) => ({ row: toProgressRow(x, i), ngayTT: x.NgayTT ?? x.ngay_den_han ?? null }));
-        } catch {}
-      }
-      // 2) Không có mirror → dựng từ vòng đời phiếu
-      if (!source.length) {
-        const parents = await lifecycleParents(f.projectId || null);
-        source = buildInstallments(parents, { now: Date.now() }).map((x: any, i: number) => ({
-          row: toProgressRow(x, i),
-          ngayTT: x.NgayTT,
-        }));
-      }
+      // Như web DebtProgressReport (contractType GOC mặc định): luôn dựng từ vòng đời phiếu, không đọc bảng mirror cloud_debts
+      const parents = await lifecycleParents(f.projectId || null);
+      const source = buildInstallments(parents, { now: Date.now() }).map((x: any, i: number) => ({
+        row: toProgressRow(x, i),
+        ngayTT: x.NgayTT,
+      }));
       const rows = source.map((s) => s.row);
       const overdue = rows.filter((r) => agingOf(r).startsWith("d"));
       const upcoming = source
@@ -320,7 +298,7 @@ export const ReportService = {
     return {
       thuTien: receipts.total,
       hopDong: contracts.total,
-      soHopDong: contracts.rows.length,
+      soHopDong: contracts.count,
       sapDenHan: progress.upcoming.length,
       quaHan: progress.overdue.length,
       error: !!(receipts.error || contracts.error || progress.error),

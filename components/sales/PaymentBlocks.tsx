@@ -104,7 +104,8 @@ function Amount({ label, value }: { label: string; value: number }) {
       <Text variant="label" color="textTertiary">
         {label}
       </Text>
-      <MoneyText value={value} short variant="caption" />
+      {/* Bảng tiền: hiện đủ số đồng, không rút gọn */}
+      <MoneyText value={value} variant="caption" />
     </View>
   );
 }

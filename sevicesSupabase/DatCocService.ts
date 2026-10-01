@@ -151,22 +151,23 @@ export const DatCocService = {
         filter?.DuAn ?? filter?.duAn ?? filter?.projectId
       );
 
-      // Nếu là đại lý, lọc theo scope dự án được gán
+      // Đại lý: chỉ dự án được gán; không đọc được phạm vi / chọn ngoài phạm vi → không có dữ liệu
+      // (không bao giờ để p_project_id = null = mọi dự án)
       const typeAccount = await getTypeAccount();
       if (typeAccount === "AGENCY") {
         const scope = await ProjectService.getProjects({});
-        const allowedIds = scope.data.map((p: any) => p.id);
-        const allowedCodes = scope.data.map((p: any) => p.ma_da_code);
-        
-        if (projectIds.length === 0) {
-          projectIds = allowedIds;
-        } else {
-          projectIds = projectIds.filter(id => allowedIds.includes(id) || allowedCodes.includes(id));
-        }
+        const allowedIds = (scope?.data ?? []).map((p: any) => p.id);
+        const allowedCodes = (scope?.data ?? []).map((p: any) => p.ma_da_code);
+        projectIds = projectIds.length === 0
+          ? allowedIds
+          : projectIds.filter((id) => allowedIds.includes(id) || allowedCodes.includes(id));
+        if (projectIds.length === 0) return { data: [], totalRows: 0 };
       }
 
       const projectUuids =
         projectIds.length > 0 ? await resolveProjectUuids(projectIds) : [];
+      // Có chọn dự án nhưng không đổi ra uuid nào → không có dữ liệu hợp lệ (web DepositListService)
+      if (projectIds.length > 0 && projectUuids.length === 0) return { data: [], totalRows: 0 };
       const pProjectId = projectUuids.length > 0 ? projectUuids.join(",") : null;
 
       const search = String(
@@ -264,7 +265,8 @@ export const DatCocService = {
     }
 
     const row = payload?.row ?? payload?.data ?? {};
-    const pgcId = row?.PhieuGiuChoId ?? payload?.PhieuGiuChoId; // uuid phiếu giữ chỗ
+    // uuid phiếu giữ chỗ (web: PhieuGiuChoId ?? MaPGC, MaPGC = pgc_id ?? id)
+    const pgcId = row?.PhieuGiuChoId ?? payload?.PhieuGiuChoId ?? row?.MaPGC ?? payload?.MaPGC;
 
     try {
       // 0) Bổ sung header: đọc phiếu giữ chỗ + khách hàng + sản phẩm

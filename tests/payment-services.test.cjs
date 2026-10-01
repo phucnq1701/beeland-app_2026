@@ -30,7 +30,7 @@ function run(file, map) {
 
 const math = run("lib/paymentMath.ts", {});
 
-function harness({ rpc = {}, tables = {}, failRpc = {} } = {}) {
+function harness({ rpc = {}, tables = {}, failRpc = {}, typeAccount = "SYSTEM", scope = [] } = {}) {
   const calls = [];
   const http = {
     get: async (url, opts = {}) => {
@@ -52,7 +52,7 @@ function harness({ rpc = {}, tables = {}, failRpc = {} } = {}) {
     getCompanyId: async () => tenant,
     getTenantId: async () => tenant,
     getValidSupabaseJwt: async () => "jwt",
-    getTypeAccount: async () => "SYSTEM",
+    getTypeAccount: async () => typeAccount,
     getCompanyCode: async () => "BeeSky1",
     getEmployeeId: async () => uid(7),
   };
@@ -60,7 +60,7 @@ function harness({ rpc = {}, tables = {}, failRpc = {} } = {}) {
     "./axiosApiSupabase": { default: http },
     "./cloudTenant": cloudTenant,
     "../lib/paymentMath": math,
-    "./ProjectService": { ProjectService: { getProjects: async () => ({ data: [] }) } },
+    "./ProjectService": { ProjectService: { getProjects: async () => ({ data: scope }) } },
     "@react-native-async-storage/async-storage": { default: { getItem: async () => null } },
   };
   const progress = run("sevicesSupabase/PaymentProgressService.ts", map);
@@ -143,7 +143,7 @@ test("payment schedule fallback: stored schedule of the sales doc + web allocati
   const q = h.calls.find((c) => c.table === "cloud_catalogs").params;
   assert.equal(q.parent_code, "eq.pgc1", "parent is the sales doc (phiếu giữ chỗ) like the web");
   assert.equal(q.catalog_type, "eq.lich_tt_hd");
-  assert.equal(q.ma_ctdk_uid, `eq.${tenant}`);
+  assert.equal(q.ma_ctdk, "eq.beesky1", "web filters stored schedules by the lowercase company code");
   assert.equal(res.source, "fallback");
   assert.deepEqual(plain(res.rows.map((r) => [r.DotTT, r.DaThu, r.ConLai, r.DaThuPBT])), [[1, 100, 0, 0], [2, 50, 150, 0]]);
 });
@@ -176,26 +176,16 @@ test("receipt report: fn_cash_voucher_list THU for the period", async () => {
   assert.equal(res.rows[0].tenKH, "Khách");
 });
 
-test("progress report: cloud_debts TIENDO mirror first, else built from the sales lifecycle", async () => {
-  const mirror = harness({
-    tables: { cloud_debts: [{ ma_cong_no: "TIENDO:1", raw: { SoHDMB: "HD-9", DotTT: 1, SoTien: 100, DaThu: 0, ConNo: 100, NgayTT: "2020-01-01" } }] },
-  });
-  const a = await mirror.reports().getProgress({});
-  const q = mirror.calls.find((c) => c.table === "cloud_debts").params;
-  assert.equal(q.ma_ctdk, "eq.beesky1");
-  assert.equal(q.ma_cong_no, "like.TIENDO:*");
-  assert.equal(a.rows[0].soHD, "HD-9");
-  assert.equal(a.overdue.length, 1);
-
+test("progress report: always live from the sales lifecycle, original contracts only (web default GOC)", async () => {
   const life = harness({
     tables: {
-      cloud_debts: [],
+      cloud_debts: [{ ma_cong_no: "TIENDO:1", raw: { SoHDMB: "STALE" } }],
       cloud_pgc_phieu_giucho: [
         { id: "p1", giai_doan: "HDMB", so_phieu_gc: "BK-1", san_pham_id: "s1", project_id: "d1", khach_hang_id: "k1", trang_thai_id: "t1",
-          gia_tri_hd: 300, da_thu: 0, lich_thanh_toan: [{ DotTT: 1, SoTien: 100, NgayTT: "2020-01-01" }, { DotTT: 2, SoTien: 200, NgayTT: "2999-01-01" }] },
+          gia_tri_hd: 300, da_thu: 0, lich_thanh_toan: [{ DotTT: 1, SoTien: 100, NgayTT: "2020-01-01" }, { DotTT: 2, SoTien: 200, NgayTT: "2999-01-01" }, { DotTT: 3, SoTien: 10 }] },
         { id: "p2", giai_doan: "DATCOC", trang_thai_id: "t2", lich_thanh_toan: [{ DotTT: 1, SoTien: 50, NgayTT: "2020-01-01" }] },
       ],
-      cloud_catalogs: (p) => (String(p.id || "").includes("t2") ? [{ id: "t2", item_name: "Đã hủy" }, { id: "t1", item_name: "Đã ký" }] : [{ id: "t1", item_name: "Đã ký" }, { id: "t2", item_name: "Đã hủy" }]),
+      cloud_catalogs: [{ id: "t1", item_name: "Đã ký" }, { id: "t2", item_name: "Đã hủy" }],
       cloud_contracts: [{ phieu_giu_cho_id: "p1", so_hdmb: "HD-1" }],
       cloud_deposits: [],
       cloud_cash_voucher_details: [{ pgc_id: "p1", ma_loai: null, so_tien: 60 }],
@@ -205,16 +195,60 @@ test("progress report: cloud_debts TIENDO mirror first, else built from the sale
     },
   });
   const b = await life.reports().getProgress({});
+  assert.equal(life.calls.some((c) => c.table === "cloud_debts"), false, "the stale mirror is not used");
   const pq = life.calls.find((c) => c.table === "cloud_pgc_phieu_giucho").params;
   assert.equal(pq.ma_ctdk_uid, `eq.${tenant}`);
   assert.equal(pq.deleted_at, "is.null");
   assert.equal(pq.giai_doan, "in.(DATCOC,HDGV,HDMB)");
-  assert.equal(b.rows.length, 2, "cancelled doc dropped");
-  const first = b.rows[0];
+  assert.equal(pq.ma_hd_goc, "is.null", "original contracts only");
+  assert.equal(b.rows.length, 3, "cancelled doc dropped");
+  const first = b.rows.find((r) => r.ngayDenHan === "2020-01-01");
   assert.deepEqual([first.soHD, first.tenDA, first.kyHieu, first.hoTenKH, first.daThu, first.conLai], ["HD-1", "Dự án A", "A-1", "Khách", 60, 40]);
   assert.equal(b.overdue.length, 1);
-  assert.equal(b.overdue[0].conLai, 40);
   const due = await life.reports().getProgress({ from: "2998-12-01", to: "2999-12-31" });
-  assert.equal(due.upcoming.length, 1);
-  assert.equal(due.upcoming[0].conLai, 200);
+  assert.deepEqual(plain(due.upcoming.map((r) => r.conLai).sort((x, y) => x - y)), [10, 200], "undated installments stay like the web");
+});
+
+test("progress report fails loudly when a lookup fails (no silent wrong figures)", async () => {
+  const h = harness({
+    tables: {
+      cloud_pgc_phieu_giucho: [{ id: "p1", giai_doan: "HDMB", trang_thai_id: "t1", lich_thanh_toan: [{ DotTT: 1, SoTien: 1, NgayTT: "2020-01-01" }] }],
+      cloud_catalogs: () => {
+        throw new Error("url too long");
+      },
+    },
+  });
+  const res = await h.reports().getProgress({});
+  assert.equal(res.error, true);
+});
+
+test("receipt report counts original contracts only (web Phiếu thu default GOC)", async () => {
+  const h = harness({ rpc: { fn_cash_voucher_list: { rows: [], total_count: 0 } } });
+  await h.reports().getReceipts({ from: "2026-09-01", to: "2026-09-30" });
+  assert.equal(h.calls.find((c) => c.fn === "fn_cash_voucher_list").body.p_contract_type, "GOC");
+});
+
+test("agency deposits: empty scope or a selection outside it returns nothing (never all projects)", async () => {
+  const none = harness({ typeAccount: "AGENCY", scope: [], rpc: { fn_deposit_list: [{ id: "x" }] } });
+  assert.equal((await none.deposits().get({})).data.length, 0);
+  assert.equal(none.calls.some((c) => c.fn === "fn_deposit_list"), false);
+  const outside = harness({ typeAccount: "AGENCY", scope: [{ id: uid(4), ma_da_code: "DA4" }], rpc: { fn_deposit_list: [{ id: "x" }] } });
+  assert.equal((await outside.deposits().get({ DuAn: uid(5) })).data.length, 0);
+  const inside = harness({ typeAccount: "AGENCY", scope: [{ id: uid(4), ma_da_code: "DA4" }], rpc: { fn_deposit_list: [{ id: "x" }] } });
+  await inside.deposits().get({});
+  assert.equal(inside.calls.find((c) => c.fn === "fn_deposit_list").body.p_project_id, uid(4));
+});
+
+test("schedule fallback like the web: company code filter, PBT only from PhaiThuPBT, raw rows when receipts fail", async () => {
+  const h = harness({
+    rpc: { fn_contract_payment_schedule: [] },
+    failRpc: { fn_cash_vouchers_by_pgc: true },
+    tables: { cloud_catalogs: [{ raw: { DotTT: 1, SoTien: 100, PhiBT: 9, DaThu: 30 } }] },
+  });
+  const res = await h.progress.getSchedule("pgc1");
+  const q = h.calls.find((c) => c.table === "cloud_catalogs").params;
+  assert.equal(q.ma_ctdk, "eq.beesky1");
+  assert.equal(res.rows[0].PhaiThuPBT, 0);
+  assert.equal(res.rows[0].DaThu, 30, "receipts failed → stored values shown as-is");
+  assert.equal(res.rows[0].ConLai, 70);
 });
