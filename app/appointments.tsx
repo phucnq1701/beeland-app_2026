@@ -27,7 +27,7 @@ import {
   Users,
   FileSignature,
 } from "lucide-react-native";
-import Colors from "@/constants/colors";
+import { colors } from "@/theme";
 // import { appointments, Appointment } from "@/mocks/appointments";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { CongViecService } from "@/sevices/CongViecService";
@@ -625,12 +625,12 @@ export default function AppointmentsScreen({
 
             <View style={styles.cardInfo}>
               <View style={styles.infoRow}>
-                <Clock color={Colors.textSecondary} size={14} />
+                <Clock color={colors.textSecondary} size={14} />
                 <Text style={styles.infoText}>{appointment.startTime}</Text>
               </View>
 
               <View style={styles.infoRow}>
-                <MapPin color={Colors.textSecondary} size={14} />
+                <MapPin color={colors.textSecondary} size={14} />
                 <Text style={styles.infoText} numberOfLines={1}>
                   {appointment.location}
                 </Text>
@@ -638,7 +638,7 @@ export default function AppointmentsScreen({
 
               {appointment.clientName && (
                 <View style={styles.infoRow}>
-                  <Phone color={Colors.textSecondary} size={14} />
+                  <Phone color={colors.textSecondary} size={14} />
                   <Text style={styles.infoText}>{appointment.clientName}</Text>
                 </View>
               )}
@@ -646,7 +646,7 @@ export default function AppointmentsScreen({
 
             {appointment.notes && (
               <View style={styles.notesContainer}>
-                <FileText color={Colors.textLight} size={12} />
+                <FileText color={colors.textTertiary} size={12} />
                 <Text style={styles.notesText} numberOfLines={3}>
                   {appointment.notes}
                 </Text>
@@ -655,7 +655,7 @@ export default function AppointmentsScreen({
           </View>
           {/* 
           <View style={styles.cardRight}>
-            <ChevronRight color={Colors.textLight} size={20} />
+            <ChevronRight color={colors.textTertiary} size={20} />
           </View> */}
         </TouchableOpacity>
       </Animated.View>
@@ -669,7 +669,7 @@ export default function AppointmentsScreen({
           headerShown: true,
           title: "Lịch hẹn",
           headerStyle: {
-            backgroundColor: Colors.white,
+            backgroundColor: colors.surface,
           },
           headerShadowVisible: false,
         }}
@@ -685,7 +685,7 @@ export default function AppointmentsScreen({
             onPress={() => setViewMode("list")}
           >
             <List
-              color={viewMode === "list" ? Colors.white : Colors.textSecondary}
+              color={viewMode === "list" ? colors.surface : colors.textSecondary}
               size={18}
             />
             <Text
@@ -707,7 +707,7 @@ export default function AppointmentsScreen({
           >
             <Calendar
               color={
-                viewMode === "calendar" ? Colors.white : Colors.textSecondary
+                viewMode === "calendar" ? colors.surface : colors.textSecondary
               }
               size={18}
             />
@@ -757,7 +757,7 @@ export default function AppointmentsScreen({
                   onPress={() => setFilterType(key)}
                 >
                   <IconComponent
-                    color={filterType === key ? Colors.white : config.color}
+                    color={filterType === key ? colors.surface : config.color}
                     size={16}
                   />
                   <Text
@@ -834,7 +834,7 @@ export default function AppointmentsScreen({
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
         </View>
       ) : (
@@ -861,7 +861,7 @@ export default function AppointmentsScreen({
               ))
             ) : (
               <View style={styles.emptyState}>
-                <Calendar color={Colors.textLight} size={64} />
+                <Calendar color={colors.textTertiary} size={64} />
                 <Text style={styles.emptyTitle}>Không có lịch hẹn</Text>
                 <Text style={styles.emptyDescription}>
                   Bạn chưa có lịch hẹn nào trong thời gian tới
@@ -874,7 +874,7 @@ export default function AppointmentsScreen({
             )
           ) : (
             <View style={styles.emptyState}>
-              <Calendar color={Colors.textLight} size={64} />
+              <Calendar color={colors.textTertiary} size={64} />
               <Text style={styles.emptyTitle}>Không có lịch hẹn</Text>
               <Text style={styles.emptyDescription}>
                 Không có lịch hẹn nào trong ngày này
@@ -1117,20 +1117,20 @@ export default function AppointmentsScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   header: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   viewModeContainer: {
     flexDirection: "row",
     marginHorizontal: 24,
     marginTop: 16,
     marginBottom: 16,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 4,
   },
@@ -1144,15 +1144,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   viewModeButtonActive: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
   },
   viewModeText: {
     fontSize: 14,
     fontWeight: "600" as const,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   viewModeTextActive: {
-    color: Colors.white,
+    color: colors.surface,
   },
   filterContainer: {
     paddingLeft: 24,
@@ -1167,25 +1167,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     gap: 6,
   },
   filterChipActive: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
   },
   filterChipText: {
     fontSize: 13,
     fontWeight: "600" as const,
-    color: Colors.text,
+    color: colors.text,
   },
   filterChipTextActive: {
-    color: Colors.white,
+    color: colors.surface,
   },
   weekContainer: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   weekScroll: {
     paddingHorizontal: 20,
@@ -1197,37 +1197,37 @@ const styles = StyleSheet.create({
     width: 56,
     paddingVertical: 12,
     borderRadius: 16,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   dayCardActive: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
   },
   dayLabel: {
     fontSize: 12,
     fontWeight: "500" as const,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   dayLabelActive: {
-    color: Colors.white,
+    color: colors.surface,
   },
   dayNumber: {
     fontSize: 18,
     fontWeight: "700" as const,
-    color: Colors.text,
+    color: colors.text,
   },
   dayNumberActive: {
-    color: Colors.white,
+    color: colors.surface,
   },
   dayIndicator: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     marginTop: 6,
   },
   dayIndicatorActive: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
   },
   content: {
     flex: 1,
@@ -1247,17 +1247,17 @@ const styles = StyleSheet.create({
   dateTitle: {
     fontSize: 16,
     fontWeight: "700" as const,
-    color: Colors.text,
+    color: colors.text,
     textTransform: "capitalize",
   },
   dateCount: {
     fontSize: 13,
     fontWeight: "500" as const,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   appointmentCard: {
     flexDirection: "row",
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
@@ -1298,7 +1298,7 @@ const styles = StyleSheet.create({
   appointmentTitle: {
     fontSize: 16,
     fontWeight: "700" as const,
-    color: Colors.text,
+    color: colors.text,
     flex: 1,
     marginRight: 8,
   },
@@ -1324,7 +1324,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontWeight: "500" as const,
     flex: 1,
   },
@@ -1335,11 +1335,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: colors.border,
   },
   notesText: {
     fontSize: 12,
-    color: Colors.textLight,
+    color: colors.textTertiary,
     fontStyle: "italic" as const,
     flex: 1,
   },
@@ -1355,30 +1355,30 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: "700" as const,
-    color: Colors.text,
+    color: colors.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyDescription: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     textAlign: "center",
   },
   footer: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: colors.border,
   },
   addButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",
     ...Platform.select({
       ios: {
-        shadowColor: Colors.primary,
+        shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
@@ -1394,7 +1394,7 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 16,
     fontWeight: "700" as const,
-    color: Colors.white,
+    color: colors.surface,
   },
   modalOverlay: {
     flex: 1,
@@ -1403,7 +1403,7 @@ const styles = StyleSheet.create({
   },
 
   modalContent: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 20,
@@ -1434,34 +1434,34 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
 
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: Colors.text,
+    color: colors.text,
   },
 
   modalClose: {
     fontSize: 20,
     fontWeight: "600",
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
 
   input: {
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
 
   modalSaveButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
@@ -1469,7 +1469,7 @@ const styles = StyleSheet.create({
 
     ...Platform.select({
       ios: {
-        shadowColor: Colors.primary,
+        shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
@@ -1478,7 +1478,7 @@ const styles = StyleSheet.create({
         elevation: 4,
       },
       web: {
-        boxShadow: `0 4px 12px ${Colors.primary}40`,
+        boxShadow: `0 4px 12px ${colors.primary}40`,
       },
     }),
   },
@@ -1486,7 +1486,7 @@ const styles = StyleSheet.create({
   modalSaveButtonText: {
     fontSize: 16,
     fontWeight: "700",
-    color: Colors.white,
+    color: colors.surface,
   },
 
   customerList: {
@@ -1534,8 +1534,8 @@ const styles = StyleSheet.create({
   },
 
   typeItemActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
 
   typeText: {
@@ -1578,6 +1578,6 @@ const styles = StyleSheet.create({
 
   loadingText: {
     marginTop: 10,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
 });

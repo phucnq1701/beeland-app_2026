@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Search, Filter, X, Receipt, CreditCard, Calendar, ChevronRight } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import { colors } from "@/theme";
 import { receipts, ReceiptType } from '@/mocks/receipts';
 import { featuredProperties } from '@/mocks/properties';
 
@@ -181,26 +181,26 @@ export default function ReceiptsScreen() {
         options={{
           title: 'Quản lý phiếu thu',
           headerStyle: {
-            backgroundColor: Colors.white,
+            backgroundColor: colors.surface,
           },
-          headerTintColor: Colors.text,
+          headerTintColor: colors.text,
           headerShadowVisible: false,
         }}
       />
 
       <View style={styles.header}>
         <View style={styles.searchContainer}>
-          <Search color={Colors.textSecondary} size={20} />
+          <Search color={colors.textSecondary} size={20} />
           <TextInput
             style={styles.searchInput}
             placeholder="Tìm kiếm phiếu thu, khách hàng..."
-            placeholderTextColor={Colors.textSecondary}
+            placeholderTextColor={colors.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
           {searchQuery !== '' && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <X color={Colors.textSecondary} size={20} />
+              <X color={colors.textSecondary} size={20} />
             </TouchableOpacity>
           )}
         </View>
@@ -209,7 +209,7 @@ export default function ReceiptsScreen() {
           style={[styles.filterButton, hasActiveFilters && styles.filterButtonActive]}
           onPress={() => setShowFilters(!showFilters)}
         >
-          <Filter color={hasActiveFilters ? Colors.white : Colors.text} size={20} />
+          <Filter color={hasActiveFilters ? colors.surface : colors.text} size={20} />
         </TouchableOpacity>
       </View>
 
@@ -291,7 +291,7 @@ export default function ReceiptsScreen() {
                   </Text>
                   {filter === 'custom' && timeFilter === 'custom' && (
                     <ChevronRight
-                      color={Colors.white}
+                      color={colors.surface}
                       size={14}
                       style={{ marginLeft: 4 }}
                     />
@@ -304,7 +304,7 @@ export default function ReceiptsScreen() {
                 style={styles.dateRangeDisplay}
                 onPress={handleCustomDatePress}
               >
-                <Calendar color={Colors.primary} size={16} />
+                <Calendar color={colors.primary} size={16} />
                 <Text style={styles.dateRangeText}>{formatDateRange()}</Text>
               </TouchableOpacity>
             )}
@@ -333,7 +333,7 @@ export default function ReceiptsScreen() {
             <View style={styles.datePickerHeader}>
               <Text style={styles.datePickerTitle}>Chọn khoảng thời gian</Text>
               <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                <X color={Colors.text} size={24} />
+                <X color={colors.text} size={24} />
               </TouchableOpacity>
             </View>
 
@@ -424,7 +424,7 @@ export default function ReceiptsScreen() {
             </View>
 
             <View style={styles.calendarPlaceholder}>
-              <Calendar color={Colors.textSecondary} size={48} />
+              <Calendar color={colors.textSecondary} size={48} />
               <Text style={styles.calendarPlaceholderText}>
                 Sử dụng nút "Chọn nhanh" hoặc nhập ngày thủ công
               </Text>
@@ -445,13 +445,13 @@ export default function ReceiptsScreen() {
           <Text style={styles.statValue}>{stats.total}</Text>
           <Text style={styles.statLabel}>Tổng số</Text>
         </View>
-        <View style={[styles.statBox, { borderLeftWidth: 1, borderColor: Colors.border }]}>
+        <View style={[styles.statBox, { borderLeftWidth: 1, borderColor: colors.border }]}>
           <Text style={[styles.statValue, { color: statusColors.completed }]}>
             {stats.completed}
           </Text>
           <Text style={styles.statLabel}>Hoàn thành</Text>
         </View>
-        <View style={[styles.statBox, { borderLeftWidth: 1, borderColor: Colors.border }]}>
+        <View style={[styles.statBox, { borderLeftWidth: 1, borderColor: colors.border }]}>
           <Text style={[styles.statValue, { color: statusColors.pending }]}>
             {stats.pending}
           </Text>
@@ -461,7 +461,7 @@ export default function ReceiptsScreen() {
 
       <View style={styles.totalAmountCard}>
         <View style={styles.totalAmountIcon}>
-          <CreditCard color={Colors.primary} size={24} />
+          <CreditCard color={colors.primary} size={24} />
         </View>
         <View style={styles.totalAmountInfo}>
           <Text style={styles.totalAmountLabel}>Tổng thu đã hoàn thành</Text>
@@ -476,7 +476,7 @@ export default function ReceiptsScreen() {
       >
         {filteredReceipts.length === 0 ? (
           <View style={styles.emptyState}>
-            <Receipt color={Colors.textSecondary} size={48} />
+            <Receipt color={colors.textSecondary} size={48} />
             <Text style={styles.emptyText}>Không tìm thấy phiếu thu nào</Text>
             <Text style={styles.emptySubtext}>
               Thử thay đổi bộ lọc hoặc tìm kiếm khác
@@ -493,7 +493,7 @@ export default function ReceiptsScreen() {
               <View style={styles.receiptHeader}>
                 <View style={styles.receiptHeaderLeft}>
                   <View style={styles.receiptIconContainer}>
-                    <Receipt color={Colors.primary} size={20} />
+                    <Receipt color={colors.primary} size={20} />
                   </View>
                   <View>
                     <Text style={styles.receiptId}>#{receipt.id}</Text>
@@ -535,7 +535,7 @@ export default function ReceiptsScreen() {
 
                 <View style={styles.infoRow}>
                   <View style={styles.infoIcon}>
-                    <Calendar color={Colors.textSecondary} size={16} />
+                    <Calendar color={colors.textSecondary} size={16} />
                   </View>
                   <View style={styles.infoContent}>
                     <Text style={styles.infoLabel}>Ngày thu</Text>
@@ -556,22 +556,22 @@ export default function ReceiptsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   header: {
     flexDirection: 'row',
     gap: 12,
     paddingHorizontal: 24,
     paddingVertical: 16,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 48,
@@ -580,23 +580,23 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
   },
   filterButton: {
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
   filterButtonActive: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
   },
   filtersPanel: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
     paddingVertical: 16,
   },
   filterSection: {
@@ -605,7 +605,7 @@ const styles = StyleSheet.create({
   filterLabel: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 12,
     paddingHorizontal: 24,
   },
@@ -618,21 +618,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   filterChipActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   filterChipText: {
     fontSize: 14,
     fontWeight: '500' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   filterChipTextActive: {
-    color: Colors.white,
+    color: colors.surface,
   },
   clearButton: {
     marginHorizontal: 24,
@@ -640,16 +640,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     borderRadius: 8,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   clearButtonText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   statsRow: {
     flexDirection: 'row',
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     marginHorizontal: 24,
     marginTop: 16,
     borderRadius: 16,
@@ -678,17 +678,17 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 24,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   statLabel: {
     fontSize: 12,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontWeight: '500' as const,
   },
   totalAmountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     marginHorizontal: 24,
     marginTop: 12,
     borderRadius: 16,
@@ -723,13 +723,13 @@ const styles = StyleSheet.create({
   },
   totalAmountLabel: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontWeight: '500' as const,
   },
   totalAmountValue: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   content: {
     flex: 1,
@@ -739,7 +739,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   receiptCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 20,
     ...Platform.select({
@@ -780,7 +780,7 @@ const styles = StyleSheet.create({
   receiptId: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 4,
   },
   typeBadge: {
@@ -800,7 +800,7 @@ const styles = StyleSheet.create({
   receiptAmount: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   statusDot: {
     width: 8,
@@ -809,7 +809,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: colors.border,
     marginBottom: 16,
   },
   receiptInfo: {
@@ -824,7 +824,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -840,12 +840,12 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 12,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontWeight: '500' as const,
   },
   infoValue: {
     fontSize: 14,
-    color: Colors.text,
+    color: colors.text,
     fontWeight: '600' as const,
   },
   emptyState: {
@@ -858,12 +858,12 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginTop: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   dateRangeDisplay: {
@@ -874,15 +874,15 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.primary,
+    borderColor: colors.primary,
   },
   dateRangeText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   modalOverlay: {
     flex: 1,
@@ -892,7 +892,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   datePickerContainer: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 20,
     width: '100%',
     maxWidth: 400,
@@ -919,12 +919,12 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   datePickerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   datePickerBody: {
     padding: 24,
@@ -933,27 +933,27 @@ const styles = StyleSheet.create({
   dateButton: {
     padding: 16,
     borderRadius: 12,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderWidth: 2,
     borderColor: 'transparent',
   },
   dateButtonActive: {
-    borderColor: Colors.primary,
+    borderColor: colors.primary,
     backgroundColor: '#FFF4ED',
   },
   dateButtonLabel: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontWeight: '500' as const,
     marginBottom: 4,
   },
   dateButtonValue: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   dateButtonValueActive: {
-    color: Colors.primary,
+    color: colors.primary,
   },
   dateSeparator: {
     alignItems: 'center',
@@ -962,7 +962,7 @@ const styles = StyleSheet.create({
   dateSeparatorLine: {
     width: 40,
     height: 2,
-    backgroundColor: Colors.border,
+    backgroundColor: colors.border,
   },
   quickDateOptions: {
     paddingHorizontal: 24,
@@ -971,7 +971,7 @@ const styles = StyleSheet.create({
   quickDateLabel: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 12,
   },
   quickDateButtons: {
@@ -983,15 +983,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 10,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     alignItems: 'center',
   },
   quickDateButtonText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   calendarPlaceholder: {
     alignItems: 'center',
@@ -1001,7 +1001,7 @@ const styles = StyleSheet.create({
   },
   calendarPlaceholderText: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -1010,12 +1010,12 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     paddingVertical: 16,
     borderRadius: 12,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
   },
   applyButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.white,
+    color: colors.surface,
   },
 });

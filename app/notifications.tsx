@@ -18,7 +18,7 @@ import {
   MessageCircle,
 
 } from "lucide-react-native";
-import Colors from "@/constants/colors";
+import { colors } from "@/theme";
 import {
   notifications as initialNotifications,
   Notification,
@@ -39,15 +39,15 @@ const FILTER_OPTIONS: FilterOption[] = [
   {
     key: "all",
     label: "Tất cả",
-    icon: <Bell color={Colors.textSecondary} size={18} />,
-    color: Colors.textSecondary,
+    icon: <Bell color={colors.textSecondary} size={18} />,
+    color: colors.textSecondary,
     bg: "#F3F4F6",
   },
   {
     key: "project",
     label: "Dự án",
-    icon: <FolderOpen color={Colors.primary} size={18} />,
-    color: Colors.primary,
+    icon: <FolderOpen color={colors.primary} size={18} />,
+    color: colors.primary,
     bg: "#FFF4ED",
   },
   {
@@ -157,7 +157,7 @@ export default function NotificationsScreen() {
   const _getIconByType = (type: Notification["type"]) => {
     switch (type) {
       case "project":
-        return <FolderOpen color={Colors.primary} size={20} />;
+        return <FolderOpen color={colors.primary} size={20} />;
       case "product":
         return <Package color="#10B981" size={20} />;
       case "message":
@@ -165,7 +165,7 @@ export default function NotificationsScreen() {
       case "system":
         return <SettingsIcon color="#6366F1" size={20} />;
       default:
-        return <Bell color={Colors.textSecondary} size={20} />;
+        return <Bell color={colors.textSecondary} size={20} />;
     }
   };
 
@@ -180,7 +180,7 @@ export default function NotificationsScreen() {
       case "system":
         return "#EEF2FF";
       default:
-        return Colors.background;
+        return colors.surface;
     }
   };
 
@@ -224,9 +224,9 @@ export default function NotificationsScreen() {
         options={{
           title: "Thông báo",
           headerStyle: {
-            backgroundColor: Colors.white,
+            backgroundColor: colors.surface,
           },
-          headerTintColor: Colors.text,
+          headerTintColor: colors.text,
           headerTitleStyle: {
             fontWeight: "700",
             fontSize: 18,
@@ -279,7 +279,7 @@ export default function NotificationsScreen() {
           </Text>
           <ChevronDown
             color={
-              activeFilter !== "all" ? activeOption.color : Colors.textSecondary
+              activeFilter !== "all" ? activeOption.color : colors.textSecondary
             }
             size={16}
           />
@@ -415,7 +415,7 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   header: {
     flexDirection: "row",
@@ -423,9 +423,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 24,
     paddingVertical: 16,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   headerInfo: {
     flex: 1,
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 14,
     fontWeight: "600" as const,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   markAllButton: {
     paddingHorizontal: 12,
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   markAllText: {
     fontSize: 14,
     fontWeight: "600" as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   filterBar: {
     flexDirection: "row",
@@ -450,9 +450,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   filterButton: {
     flexDirection: "row",
@@ -462,17 +462,17 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     backgroundColor: "#F9FAFB",
   },
   filterButtonText: {
     fontSize: 13,
     fontWeight: "500" as const,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   filterCount: {
     fontSize: 12,
-    color: Colors.textLight,
+    color: colors.textTertiary,
     fontWeight: "500" as const,
   },
   dropdownOverlay: {
@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
     top: Platform.OS === "ios" ? 152 : 148,
     left: 16,
     right: 16,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     zIndex: 100,
     ...Platform.select({
@@ -511,7 +511,7 @@ const styles = StyleSheet.create({
   },
   dropdownItemBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   dropdownItemIcon: {
     width: 36,
@@ -529,11 +529,11 @@ const styles = StyleSheet.create({
   dropdownItemLabel: {
     fontSize: 15,
     fontWeight: "500" as const,
-    color: Colors.text,
+    color: colors.text,
   },
   dropdownItemCount: {
     fontSize: 13,
-    color: Colors.textLight,
+    color: colors.textTertiary,
     fontWeight: "500" as const,
   },
   content: {
@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
   },
   notificationCard: {
     flexDirection: "row",
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     marginHorizontal: 16,
     marginVertical: 6,
     padding: 16,
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: "600" as const,
-    color: Colors.text,
+    color: colors.text,
   },
   notificationTitleUnread: {
     fontWeight: "700" as const,
@@ -599,16 +599,16 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
   },
   notificationDescription: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   notificationTime: {
     fontSize: 12,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
 });

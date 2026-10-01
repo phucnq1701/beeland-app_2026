@@ -1,19 +1,13 @@
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  Image,
-} from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Alert, Image, Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Eye, EyeOff, Square, SquareCheck } from "lucide-react-native";
+
 import { buildAccountScope, setAccountScope } from "@/components/utils/accountScope";
-import Colors from "@/constants/colors";
+import { Button, Screen, SegmentedControl, Text, TextField, useToast } from "@/components/ui";
+import { hapticError } from "@/lib/haptics";
+import { colors, space } from "@/theme";
 import {
   cacheCloudProfile,
   PROFILE_KEY,
@@ -27,11 +21,15 @@ import {
   looksLikeJwt,
   getSessionStatus,
 } from "@/sevicesSupabase/cloudTenant";
-import { Ionicons } from "@expo/vector-icons";
 
+/**
+ * Đăng nhập (nội bộ / đại lý). Luồng đăng nhập (lưu phiên, tenant, nhớ mật khẩu) giữ nguyên;
+ * chỉ đổi giao diện và cách báo lỗi (lỗi nhập → dưới form; lỗi đăng nhập/mạng → toast;
+ * lỗi cấu hình tài khoản nghiêm trọng → Alert như cũ).
+ */
 export default function LoginScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
+  const toast = useToast();
 
   const [loginType, setLoginType] = useState<"INTERNAL" | "AGENCY">("INTERNAL");
   const [companyCode, setCompanyCode] = useState("");
@@ -40,6 +38,8 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const submitting = useRef(false);
 
   useEffect(() => {
     const loadCredentials = async () => {
@@ -58,10 +58,14 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!companyCode || !username || !password) {
-      Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin");
+      setFormError("Vui lòng nhập đủ mã công ty, tài khoản và mật khẩu");
+      hapticError();
       return;
     }
 
+    if (submitting.current) return;
+    submitting.current = true;
+    setFormError(null);
     try {
       setLoading(true);
 
@@ -194,380 +198,119 @@ export default function LoginScreen() {
           );
         }
       } else {
-        Alert.alert("Thông báo", res?.message || "Đăng nhập thất bại");
+        hapticError();
+        toast.show({ type: "error", message: res?.message || "Đăng nhập thất bại" });
       }
     } catch (error) {
       console.log("Login error:", error);
-      Alert.alert("Lỗi", "Không kết nối được server");
+      hapticError();
+      toast.show({ type: "error", message: "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại." });
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   };
 
   const isAgency = loginType === "AGENCY";
-  const primaryColor = isAgency ? "#0284c7" : Colors.primary;
+  const Check = rememberMe ? SquareCheck : Square;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.content}>
-        <View style={styles.logoContainer}>
-          <Image
-            source={require("@/assets/images/beeland-logo.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-
-          <Text style={styles.welcomeText}>
-            {isAgency ? "Đăng nhập Đại lý" : "Đăng nhập Nội bộ"}
-          </Text>
-          <Text style={styles.subText}>
-            Vui lòng nhập thông tin để tiếp tục
-          </Text>
-        </View>
-
-        <View style={styles.formContainer}>
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Mã công ty</Text>
-            <TextInput
-              style={[styles.input, isAgency && { borderColor: "#bae6fd" }]}
-              placeholder="Nhập mã công ty"
-              placeholderTextColor={Colors.textLight}
-              value={companyCode}
-              onChangeText={setCompanyCode}
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Tài khoản</Text>
-            <TextInput
-              style={[styles.input, isAgency && { borderColor: "#bae6fd" }]}
-              placeholder="Nhập tài khoản"
-              placeholderTextColor={Colors.textLight}
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Mật khẩu</Text>
-            <View style={styles.passwordWrapper}>
-              <TextInput
-                style={[
-                  styles.input,
-                  styles.passwordInput,
-                  isAgency && { borderColor: "#bae6fd" },
-                ]}
-                placeholder="Nhập mật khẩu"
-                placeholderTextColor={Colors.textLight}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowPassword(!showPassword)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons
-                  name={showPassword ? "eye-off-outline" : "eye-outline"}
-                  size={22}
-                  color={Colors.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.rowBetween}>
-            <TouchableOpacity
-              style={styles.rememberContainer}
-              onPress={() => setRememberMe(!rememberMe)}
-            >
-              <Ionicons
-                name={rememberMe ? "checkbox" : "square-outline"}
-                size={20}
-                color={rememberMe ? primaryColor : Colors.textSecondary}
-              />
-              <Text style={styles.rememberText}>Nhớ mật khẩu</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={() => router.push("/forgot-password")}
-            >
-              <Text style={[styles.forgotPasswordText, { color: primaryColor }]}>
-                Quên mật khẩu?
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity
-            style={[
-              styles.loginButton,
-              { backgroundColor: primaryColor },
-              loading && styles.loginButtonDisabled,
-            ]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.loginButtonText}>Đăng nhập</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.registerRow}>
-            <Text style={styles.registerText}>Chưa có tài khoản? </Text>
-            <TouchableOpacity onPress={() => router.push("/register")}>
-              <Text style={[styles.registerLink, { color: primaryColor }]}>
-                Đăng ký
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.dividerContainer}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>HOẶC</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* <View style={styles.switchWrapper}>
-            <View style={styles.switchContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.switchTab,
-                  !isAgency && { backgroundColor: Colors.primary },
-                ]}
-                onPress={() => setLoginType("INTERNAL")}
-              >
-                <Text
-                  style={[
-                    styles.switchText,
-                    !isAgency && styles.switchTextActive,
-                  ]}
-                >
-                  Nội bộ
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.switchTab,
-                  isAgency && { backgroundColor: "#0284c7" },
-                ]}
-                onPress={() => setLoginType("AGENCY")}
-              >
-                <Text
-                  style={[
-                    styles.switchText,
-                    isAgency && styles.switchTextActive,
-                  ]}
-                >
-                  Đại lý
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View> */}
-          <View style={styles.roleRow}>
-            {(
-              [
-                {
-                  key: "INTERNAL",
-                  label: "Nội bộ",
-                  icon: "business-outline",
-                  color: Colors.primary,
-                },
-                {
-                  key: "AGENCY",
-                  label: "Đại lý",
-                  icon: "people-outline",
-                  color: "#0284c7",
-                },
-              ] as const
-            ).map((item) => {
-              const active = loginType === item.key;
-              return (
-                <TouchableOpacity
-                  key={item.key}
-                  activeOpacity={0.8}
-                  onPress={() => setLoginType(item.key)}
-                  style={[
-                    styles.roleCard,
-                    active && {
-                      borderColor: item.color,
-                      backgroundColor: item.color + "14", // nền nhạt ~8%
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.roleIconWrap,
-                      { backgroundColor: active ? item.color : "#f1f5f9" },
-                    ]}
-                  >
-                    <Ionicons
-                      name={item.icon}
-                      size={18}
-                      color={active ? Colors.white : Colors.textSecondary}
-                    />
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.roleText,
-                      active && { color: item.color, fontWeight: "700" },
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-
-                  {active && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={18}
-                      color={item.color}
-                      style={styles.roleCheck}
-                    />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
+    <Screen keyboardAware>
+      <View style={styles.brand}>
+        <Image source={require("@/assets/images/beeland-logo.png")} style={styles.logo} resizeMode="contain" />
+        <Text variant="title" accessibilityRole="header">
+          {isAgency ? "Đăng nhập Đại lý" : "Đăng nhập Nội bộ"}
+        </Text>
+        <Text variant="caption" color="textSecondary">
+          Vui lòng nhập thông tin để tiếp tục
+        </Text>
       </View>
-    </View>
+
+      <SegmentedControl
+        value={loginType}
+        options={[
+          { value: "INTERNAL", label: "Nội bộ" },
+          { value: "AGENCY", label: "Đại lý" },
+        ]}
+        onChange={setLoginType}
+      />
+
+      <TextField
+        label="Mã công ty"
+        placeholder="Nhập mã công ty"
+        value={companyCode}
+        onChangeText={(t) => {
+          setCompanyCode(t);
+          setFormError(null);
+        }}
+        autoCapitalize="none"
+        autoCorrect={false}
+        required
+      />
+      <TextField
+        label="Tài khoản"
+        placeholder="Nhập tài khoản"
+        value={username}
+        onChangeText={(t) => {
+          setUsername(t);
+          setFormError(null);
+        }}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="username"
+        required
+      />
+      <TextField
+        label="Mật khẩu"
+        placeholder="Nhập mật khẩu"
+        value={password}
+        onChangeText={(t) => {
+          setPassword(t);
+          setFormError(null);
+        }}
+        secureTextEntry={!showPassword}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="password"
+        returnKeyType="go"
+        onSubmitEditing={() => void handleLogin()}
+        error={formError}
+        required
+        suffix={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+            onPress={() => setShowPassword(!showPassword)}
+            hitSlop={12}
+          >
+            {showPassword ? <EyeOff size={20} color={colors.textSecondary} /> : <Eye size={20} color={colors.textSecondary} />}
+          </Pressable>
+        }
+      />
+
+      <View style={styles.row}>
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: rememberMe }}
+          onPress={() => setRememberMe(!rememberMe)}
+          style={styles.remember}
+          hitSlop={8}
+        >
+          <Check size={20} color={rememberMe ? colors.primary : colors.textSecondary} />
+          <Text variant="body">Nhớ mật khẩu</Text>
+        </Pressable>
+        <Button title="Quên mật khẩu?" variant="ghost" onPress={() => router.push("/forgot-password")} />
+      </View>
+
+      <Button title="Đăng nhập" size="lg" loading={loading} onPress={() => void handleLogin()} />
+
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { flex: 1, paddingHorizontal: 24, justifyContent: "center" },
-  logoContainer: { alignItems: "center", marginBottom: 24 },
-  logo: { width: 100, height: 100, borderRadius: 20, marginBottom: 16 },
-  welcomeText: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: Colors.text,
-    marginBottom: 6,
-  },
-  subText: { fontSize: 15, color: Colors.textSecondary },
-
-  dividerContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginVertical: 18,
-    width: "100%",
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#e2e8f0",
-  },
-  dividerText: {
-    width: 60, // độ rộng cố định để chữ luôn ở giữa
-    textAlign: "center",
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.textSecondary,
-  },
-  switchWrapper: { width: "100%", alignItems: "center" },
-  switchContainer: {
-    flexDirection: "row",
-    backgroundColor: "#e2e8f0",
-    borderRadius: 10,
-    padding: 3,
-    width: "70%",
-  },
-  switchTab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    borderRadius: 8,
-  },
-  switchText: { fontSize: 14, fontWeight: "600", color: Colors.textSecondary },
-  switchTextActive: { color: Colors.white },
-  formContainer: { width: "100%" },
-  inputContainer: { marginBottom: 18 },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.text,
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: Colors.text,
-  },
-  passwordWrapper: { position: "relative", justifyContent: "center" },
-  passwordInput: { paddingRight: 50 },
-  eyeButton: { position: "absolute", right: 16 },
-  rowBetween: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  rememberContainer: { flexDirection: "row", alignItems: "center", gap: 6 },
-  rememberText: { fontSize: 14, color: Colors.textSecondary },
-  forgotPassword: {},
-  forgotPasswordText: { fontSize: 14, fontWeight: "500" },
-  loginButton: {
-    borderRadius: 12,
-    padding: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loginButtonDisabled: { opacity: 0.7 },
-  loginButtonText: { fontSize: 16, fontWeight: "700", color: Colors.white },
-  registerRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 18,
-  },
-  registerText: { fontSize: 14, color: Colors.textSecondary },
-  registerLink: { fontSize: 14, fontWeight: "600" },
-  roleRow: {
-    flexDirection: "row",
-    gap: 12,
-    width: "100%",
-  },
-  roleCard: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  roleIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
-  },
-  roleText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.textSecondary,
-  },
-  roleCheck: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-  },
+  brand: { alignItems: "center", gap: space.xs, paddingTop: space.xl, paddingBottom: space.md },
+  logo: { width: 160, height: 64, marginBottom: space.sm },
+  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  remember: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 44 },
 });

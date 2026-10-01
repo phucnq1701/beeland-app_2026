@@ -11,7 +11,7 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Check, Users } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import { colors } from "@/theme";
 import { ChatMember } from '@/mocks/chatGroups';
 
 const availableUsers: ChatMember[] = [
@@ -86,7 +86,7 @@ export default function CreateGroupScreen() {
             isSelected && styles.checkboxSelected,
           ]}
         >
-          {isSelected && <Check color={Colors.white} size={18} />}
+          {isSelected && <Check color={colors.surface} size={18} />}
         </View>
       </TouchableOpacity>
     );
@@ -101,7 +101,7 @@ export default function CreateGroupScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <ArrowLeft color={Colors.text} size={24} />
+          <ArrowLeft color={colors.text} size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Tạo nhóm mới</Text>
         <TouchableOpacity
@@ -128,14 +128,14 @@ export default function CreateGroupScreen() {
       <View style={styles.content}>
         <View style={styles.groupInfoSection}>
           <View style={styles.groupIconContainer}>
-            <Users color={Colors.primary} size={32} />
+            <Users color={colors.primary} size={32} />
           </View>
           <TextInput
             style={styles.groupNameInput}
             value={groupName}
             onChangeText={setGroupName}
             placeholder="Nhập tên nhóm..."
-            placeholderTextColor={Colors.textLight}
+            placeholderTextColor={colors.textTertiary}
             maxLength={50}
           />
         </View>
@@ -150,7 +150,7 @@ export default function CreateGroupScreen() {
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholder="Tìm kiếm thành viên..."
-              placeholderTextColor={Colors.textLight}
+              placeholderTextColor={colors.textTertiary}
             />
           </View>
           <FlatList
@@ -175,7 +175,7 @@ export default function CreateGroupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   header: {
     flexDirection: 'row',
@@ -183,9 +183,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingBottom: 12,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   backButton: {
     width: 40,
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
     textAlign: 'center',
     marginHorizontal: 16,
   },
@@ -211,10 +211,10 @@ const styles = StyleSheet.create({
   createButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   createButtonTextDisabled: {
-    color: Colors.textLight,
+    color: colors.textTertiary,
   },
   content: {
     flex: 1,
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   groupInfoSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     padding: 20,
     gap: 16,
     marginBottom: 8,
@@ -238,20 +238,20 @@ const styles = StyleSheet.create({
   groupNameInput: {
     flex: 1,
     fontSize: 16,
-    color: Colors.text,
+    color: colors.text,
     fontWeight: '600' as const,
   },
   membersSection: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
   },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   userItem: {
     flexDirection: 'row',
@@ -264,19 +264,19 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   userAvatarText: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.white,
+    color: colors.surface,
   },
   userName: {
     flex: 1,
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
     fontWeight: '500' as const,
   },
   checkbox: {
@@ -284,33 +284,33 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
   checkboxSelected: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   separator: {
     height: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: colors.border,
     marginLeft: 80,
   },
   searchContainer: {
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   searchInput: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   emptyContainer: {
     paddingVertical: 40,
@@ -318,6 +318,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
-    color: Colors.textLight,
+    color: colors.textTertiary,
   },
 });

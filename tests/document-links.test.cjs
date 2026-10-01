@@ -85,6 +85,7 @@ function viewer(os = "ios", type = "docx") {
         shareAsync: async (uri, options) => calls.shares.push({ uri, options }),
       };
       if (name === "@/components/utils/documentLinks") return helpers;
+      if (name === "@/components/ui") return { useToast: () => ({ show: () => {} }) };
       throw new Error(`Unexpected import: ${name}`);
     },
   });

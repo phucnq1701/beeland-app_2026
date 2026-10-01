@@ -41,6 +41,18 @@ const UI_STRICT_FILES = [
   'app/reports/**/*.{ts,tsx}',
   'components/sales/**/*.{ts,tsx}',
   'components/reports/**/*.{ts,tsx}',
+  // Giai đoạn 6 – đăng nhập, media
+  'app/login.tsx',
+  'app/register.tsx',
+  'app/forgot-password.tsx',
+  'app/reset-password.tsx',
+  'app/verify-otp.tsx',
+  'app/folders/**/*.{ts,tsx}',
+  'app/documents/[[]folderId].tsx',
+  'app/photo-gallery.tsx',
+  'app/video/**/*.{ts,tsx}',
+  'app/videos/[[]folderId].tsx',
+  'components/media/**/*.{ts,tsx}',
 ];
 
 module.exports = defineConfig([

@@ -4,7 +4,6 @@ import {
   Text,
   ActivityIndicator,
   StyleSheet,
-  Alert,
   TouchableOpacity,
   Platform,
   Linking,
@@ -18,8 +17,10 @@ import {
   getRawDocumentUrl, getDocumentType, getDocumentFileName,
   getOfficeViewerUrl, OFFICE_TYPES, OFFICE_MIME, OFFICE_UTI,
 } from "@/components/utils/documentLinks";
+import { useToast } from "@/components/ui";
 
 export default function DocumentViewer() {
+  const toast = useToast();
   const { link, type, name } = useLocalSearchParams<{
     link: string;
     type: string;
@@ -66,7 +67,7 @@ export default function DocumentViewer() {
       fetch(decodedLink)
         .then((res) => res.text())
         .then((text) => setTxtContent(text))
-        .catch(() => Alert.alert("Lỗi", "Không tải được file TXT"))
+        .catch(() => toast.show({ type: "error", message: "Không tải được file TXT" }))
         .finally(() => setLoading(false));
     }
   }, [decodedLink, lowerType]);
@@ -233,7 +234,7 @@ export default function DocumentViewer() {
           onError={() => {
             if (Platform.OS !== "web") {
               Linking.openURL(decodedLink).catch(() =>
-                Alert.alert("Lỗi", "Không thể hiển thị tài liệu này.")
+                toast.show({ type: "error", message: "Không thể hiển thị tài liệu này." })
               );
             }
           }}

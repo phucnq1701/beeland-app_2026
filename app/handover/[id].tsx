@@ -23,7 +23,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import { colors } from "@/theme";
 import { handovers, HandoverIssue } from '@/mocks/handovers';
 
 export default function HandoverDetailScreen() {
@@ -154,7 +154,7 @@ export default function HandoverDetailScreen() {
         options={{
           title: handover.apartmentCode,
           headerStyle: {
-            backgroundColor: Colors.white,
+            backgroundColor: colors.surface,
           },
         }}
       />
@@ -205,21 +205,21 @@ export default function HandoverDetailScreen() {
           <Text style={styles.sectionTitle}>Thông tin căn hộ</Text>
           <View style={styles.infoCard}>
             <View style={styles.infoRow}>
-              <Home color={Colors.textSecondary} size={20} />
+              <Home color={colors.textSecondary} size={20} />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Mã căn</Text>
                 <Text style={styles.infoValue}>{handover.apartmentCode}</Text>
               </View>
             </View>
             <View style={styles.infoRow}>
-              <MapPin color={Colors.textSecondary} size={20} />
+              <MapPin color={colors.textSecondary} size={20} />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Địa chỉ</Text>
                 <Text style={styles.infoValue}>{handover.address}</Text>
               </View>
             </View>
             <View style={styles.infoRow}>
-              <User color={Colors.textSecondary} size={20} />
+              <User color={colors.textSecondary} size={20} />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Khách hàng</Text>
                 <Text style={styles.infoValue}>{handover.customerName}</Text>
@@ -227,7 +227,7 @@ export default function HandoverDetailScreen() {
             </View>
             {handover.inspector && (
               <View style={styles.infoRow}>
-                <CheckCircle color={Colors.textSecondary} size={20} />
+                <CheckCircle color={colors.textSecondary} size={20} />
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Người kiểm tra</Text>
                   <Text style={styles.infoValue}>{handover.inspector}</Text>
@@ -236,7 +236,7 @@ export default function HandoverDetailScreen() {
             )}
             {handover.scheduledDate && (
               <View style={styles.infoRow}>
-                <Calendar color={Colors.textSecondary} size={20} />
+                <Calendar color={colors.textSecondary} size={20} />
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Lịch hẹn</Text>
                   <Text style={styles.infoValue}>
@@ -284,7 +284,7 @@ export default function HandoverDetailScreen() {
                 }
               }}
             >
-              <Plus color={Colors.primary} size={20} />
+              <Plus color={colors.primary} size={20} />
               <Text style={styles.addButtonText}>Thêm lỗi</Text>
             </TouchableOpacity>
           </View>
@@ -334,7 +334,7 @@ export default function HandoverDetailScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Loại lỗi (VD: Điện, Nước, Sơn...)"
-                placeholderTextColor={Colors.textSecondary}
+                placeholderTextColor={colors.textSecondary}
                 value={newIssue.category}
                 onChangeText={(text) =>
                   setNewIssue({ ...newIssue, category: text })
@@ -343,7 +343,7 @@ export default function HandoverDetailScreen() {
               <TextInput
                 style={[styles.input, styles.textArea]}
                 placeholder="Mô tả chi tiết lỗi"
-                placeholderTextColor={Colors.textSecondary}
+                placeholderTextColor={colors.textSecondary}
                 value={newIssue.description}
                 onChangeText={(text) =>
                   setNewIssue({ ...newIssue, description: text })
@@ -401,7 +401,7 @@ export default function HandoverDetailScreen() {
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="Nhập ghi chú về bàn giao..."
-            placeholderTextColor={Colors.textSecondary}
+            placeholderTextColor={colors.textSecondary}
             value={notes}
             onChangeText={setNotes}
             multiline
@@ -415,7 +415,7 @@ export default function HandoverDetailScreen() {
           activeOpacity={0.8}
           onPress={handleSubmitAcceptance}
         >
-          <CheckCircle color={Colors.white} size={22} />
+          <CheckCircle color={colors.surface} size={22} />
           <Text style={styles.submitButtonText}>Tạo phiếu nghiệm thu</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -426,7 +426,7 @@ export default function HandoverDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   content: {
     flex: 1,
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.5)',
   },
   activeDot: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     width: 24,
   },
   section: {
@@ -473,11 +473,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 16,
   },
   infoCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
     gap: 16,
@@ -492,16 +492,16 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   infoValue: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   priceCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
   },
@@ -511,16 +511,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   priceLabel: {
     fontSize: 15,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   priceValue: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   totalRow: {
     borderBottomWidth: 0,
@@ -530,12 +530,12 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   totalValue: {
     fontSize: 18,
     fontWeight: '800' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   addButton: {
     flexDirection: 'row',
@@ -549,10 +549,10 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   issueCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -586,7 +586,7 @@ const styles = StyleSheet.create({
   issueCategory: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   severityBadge: {
     paddingHorizontal: 8,
@@ -602,7 +602,7 @@ const styles = StyleSheet.create({
   },
   issueDescription: {
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
     lineHeight: 22,
     marginBottom: 12,
   },
@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
   },
   issueDate: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   resolvedBadge: {
     flexDirection: 'row',
@@ -630,7 +630,7 @@ const styles = StyleSheet.create({
     color: '#10B981',
   },
   addIssueForm: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
     marginTop: 8,
@@ -652,24 +652,24 @@ const styles = StyleSheet.create({
   formTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 16,
   },
   formLabel: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 12,
   },
   input: {
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 14,
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   textArea: {
     minHeight: 100,
@@ -689,7 +689,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   severityOptionActive: {
-    borderColor: Colors.primary,
+    borderColor: colors.primary,
   },
   severityOptionText: {
     fontSize: 14,
@@ -703,39 +703,39 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     alignItems: 'center',
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   saveButton: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.white,
+    color: colors.surface,
   },
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     marginHorizontal: 20,
     paddingVertical: 16,
     borderRadius: 16,
     marginTop: 20,
     ...Platform.select({
       ios: {
-        shadowColor: Colors.primary,
+        shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 12,
@@ -751,30 +751,30 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.white,
+    color: colors.surface,
   },
   missingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     padding: 20,
   },
   missingTitle: {
     fontSize: 18,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 12,
     fontWeight: '600' as const,
     textAlign: 'center',
   },
   backBtn: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
   },
   backBtnText: {
-    color: Colors.white,
+    color: colors.surface,
     fontWeight: '700' as const,
     fontSize: 16,
   },
