@@ -105,3 +105,12 @@ test("booking from the lock screen forwards the lock id", () => {
   assert.equal(payload.LockId, uid(77));
   assert.equal(payload.MaSan, null);
 });
+
+test("wall-to-wall area is read from the real column dt_tim_tuong", () => {
+  const { normalizeProduct } = load("sevicesSupabase/ProductService.ts", {
+    "./axiosApiSupabase": { default: {} },
+    "./cloudTenant": cloudTenant,
+    "@react-native-async-storage/async-storage": storage,
+  });
+  assert.equal(normalizeProduct({ id: uid(3), dt_tim_tuong: 80.5 }).DTTimDuong, 80.5);
+});

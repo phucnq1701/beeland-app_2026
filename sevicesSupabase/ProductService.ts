@@ -37,7 +37,7 @@ export function normalizeProduct(r: any) {
     DienTichThongThuy: v(r?.dien_tich_thong_thuy),
     // Alias UI màn chi tiết đang dùng
     DTThongThuy: v(r?.dien_tich_thong_thuy),
-    DTTimDuong: v(r?.dt_tim_duong),
+    DTTimDuong: v(r?.dt_tim_tuong),
     SoCanHo: v(r?.so_can_ho),
     DonGia: v(r?.don_gia),
     DonGiaChuaVAT: v(r?.don_gia_chua_vat),
