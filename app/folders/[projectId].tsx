@@ -30,8 +30,8 @@ export default function FoldersScreen() {
       load={load}
       onOpen={(f) => router.push(`/documents/${f.id}?projectId=${projectId}` as any)}
       onShare={async (f) => {
-        const ok = await shareText(f.name, `Thư mục tài liệu: ${f.name}\nTổng số: ${f.count ?? 0} tài liệu`);
-        if (!ok) toast.show({ type: "error", message: "Không chia sẻ được thư mục" });
+        const res = await shareText(f.name, `Thư mục tài liệu: ${f.name}\nTổng số: ${f.count ?? 0} tài liệu`);
+        if (res === "failed") toast.show({ type: "error", message: "Không chia sẻ được thư mục" });
       }}
     />
   );

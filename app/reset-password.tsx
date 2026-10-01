@@ -10,7 +10,7 @@ import { AuthService } from "@/sevices/AuthService";
 
 /**
  * Quên mật khẩu – bước 3: đặt mật khẩu mới (payload giữ nguyên).
- * Sửa: trước đây báo "thành công" cả khi máy chủ trả lỗi → nay kiểm tra status 200 như 2 bước trước.
+ * Sửa: trước đây báo "thành công" cả khi máy chủ trả status lỗi → nay báo lỗi khi status có và khác 200.
  */
 export default function ResetPasswordScreen() {
   const router = useRouter();
@@ -37,7 +37,8 @@ export default function ResetPasswordScreen() {
         PasswordRe: confirmPassword,
         MaNV: Number(otp),
       });
-      if (res?.status === 200) {
+      // API cũ không rõ dạng trả về khi thành công (màn cũ không kiểm) → chỉ coi là lỗi khi có status khác 200
+      if (res?.status == null || Number(res.status) === 200) {
         hapticSuccess();
         toast.show({ type: "success", message: "Đã đặt lại mật khẩu. Vui lòng đăng nhập lại." });
         router.dismissAll();

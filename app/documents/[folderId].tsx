@@ -59,6 +59,14 @@ export default function DocumentsScreen() {
     void load();
   }, [load]);
 
+  // Huỷ lần tìm kiếm đang chờ khi rời màn
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    []
+  );
+
   const onQueryChange = (text: string) => {
     setQuery(text);
     if (timer.current) clearTimeout(timer.current);

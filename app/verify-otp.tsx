@@ -30,9 +30,9 @@ export default function VerifyOtpScreen() {
 
   const handleOtpChange = useCallback(
     (text: string, index: number) => {
-      const digits = text.replace(/\D/g, "");
-      // Dán cả mã 6 số vào một ô
-      if (digits.length > 1) {
+      const digits = text.replace(/\D/g, "").slice(0, OTP_LENGTH);
+      // Dán cả mã (đủ 6 số) vào một ô; gõ thêm 1 số vào ô đã có số → lấy số mới gõ
+      if (digits.length >= OTP_LENGTH) {
         const next = Array(OTP_LENGTH)
           .fill("")
           .map((_, i) => digits[i] ?? "");
@@ -41,7 +41,7 @@ export default function VerifyOtpScreen() {
         return;
       }
       const newOtp = [...otp];
-      newOtp[index] = digits;
+      newOtp[index] = digits.slice(-1);
       setOtp(newOtp);
       if (digits && index < OTP_LENGTH - 1) inputRefs.current[index + 1]?.focus();
     },
@@ -129,7 +129,7 @@ export default function VerifyOtpScreen() {
               onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, i)}
               keyboardType="number-pad"
               textContentType="oneTimeCode"
-              maxLength={i === 0 ? OTP_LENGTH : 1}
+              maxLength={i === 0 ? 40 : 2}
               accessibilityLabel={`Số thứ ${i + 1} của mã OTP`}
               maxFontSizeMultiplier={MAX_FONT_SCALE}
               style={[styles.otpBox, fontStyleFor("semibold", fontsLoaded), digit ? styles.otpFilled : null]}

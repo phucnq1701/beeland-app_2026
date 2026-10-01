@@ -109,12 +109,15 @@ export default function DocumentViewer() {
     }
   }, [decodedLink, fileType]);
 
+  // Báo link YouTube không hợp lệ một lần (không gọi toast trong lúc render)
+  const badYoutube = fileType === "youtube" && !getYoutubeVideoId(decodedLink);
+  useEffect(() => {
+    if (badYoutube) toast.show({ type: "error", message: "Không nhận dạng được link YouTube" });
+  }, [badYoutube, toast]);
+
   // ----- YouTube -----
   if (fileType === "youtube") {
     const videoId = getYoutubeVideoId(decodedLink);
-    if (!videoId) {
-      toast.show({ type: "error", message: "Không nhận dạng được link YouTube" });
-    }
     return (
       <View style={styles.container}>
         <Stack.Screen

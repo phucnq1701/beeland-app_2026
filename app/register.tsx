@@ -27,7 +27,11 @@ export default function RegisterScreen() {
             Vui lòng liên hệ quản trị viên công ty để được tạo tài khoản đăng nhập (nội bộ hoặc đại lý).
           </Text>
         </View>
-        <Button title="Về đăng nhập" size="lg" onPress={() => router.back()} />
+        <Button
+          title="Về đăng nhập"
+          size="lg"
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/login"))}
+        />
       </Screen>
     </>
   );

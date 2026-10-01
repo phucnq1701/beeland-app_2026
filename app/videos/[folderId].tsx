@@ -21,6 +21,7 @@ const MIME_TYPES: Record<string, string> = {
   jpeg: "image/jpeg",
   png: "image/png",
   pages: "application/octet-stream",
+  txt: "text/plain",
 };
 const mimeOf = (type: string) => MIME_TYPES[type.toLowerCase()] ?? "application/octet-stream";
 const normalizeExt = (raw: string) => raw.replace(/^\./, "").toLowerCase();
@@ -114,8 +115,9 @@ export default function VideoFilesScreen() {
     try {
       // Web, YouTube/video, hoặc máy không hỗ trợ chia sẻ tệp: chia sẻ link
       if (Platform.OS === "web" || doc.type === "youtube" || doc.type === "video" || !(await Sharing.isAvailableAsync())) {
-        const ok = await shareText(doc.name, doc.name, doc.link);
-        if (!ok) toast.show({ type: "error", message: "Không thể chia sẻ, vui lòng thử lại" });
+        const res = await shareText(doc.name, doc.name, doc.link);
+        if (res === "copied") toast.show({ type: "success", message: "Đã sao chép liên kết" });
+        if (res === "failed") toast.show({ type: "error", message: "Không thể chia sẻ, vui lòng thử lại" });
         return;
       }
       const safeName = doc.name?.trim() || `file.${doc.type}`;
