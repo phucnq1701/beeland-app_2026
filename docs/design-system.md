@@ -1,0 +1,42 @@
+# Design system và quy tắc giao diện
+
+## Token (`theme/` – import `@/theme`)
+
+| Nhóm | Ghi chú |
+|---|---|
+| `colors` | `primary` #C9501A (nút chính, một màu chính), `bg`, `surface`, `surfaceMuted`, `border(Strong)`, `text`, `textSecondary`, `textTertiary`, `onPrimary`, cặp trạng thái `success/warning/danger/info` + `*Subtle` + `on*Subtle`, `backdrop`, `skeleton` |
+| `colors.showcase` | Navy + cam sáng cho màn trưng bày dự án/căn (`bg` #16233B, `surface`, `accent`, `paper`, `text`, `textMuted`) |
+| `typography` | display 28 · title 22 · heading 17 · subhead/body 15 · caption 14 · label 12 (**nhỏ nhất**) |
+| `space`, `radius` (`sm…xl`, `full`), `elevation` | khoảng cách, bo góc, đổ bóng |
+| `fontStyleFor(weight, fontsLoaded)` | nơi duy nhất đặt fontFamily ngoài `Text` (font Be Vietnam Pro, dự phòng font hệ thống) |
+
+Lint: file trong `UI_STRICT_FILES` (`eslint.config.js`) cấm literal `#hex`/`rgba()` → thêm màn mới vào danh sách. Màu theo
+dữ liệu (màu trạng thái từ danh mục) dùng `StatusBadge color=…`. Test tương phản: `tests/theme-contrast.test.cjs`.
+
+## Component (`components/ui`, xem trực quan ở `app/dev/ui-gallery.tsx` – chỉ `__DEV__`)
+
+`Text` (variant, color token, `numeric`), `Button` (primary/secondary/ghost/danger, `loading` chặn bấm lặp), `IconButton`
+(bắt buộc `accessibilityLabel`), `Card`, `ListItem` (memo), `KeyValueRow`, `SectionHeader`, `Badge`/`StatusBadge`, `Chip`,
+`Avatar`, `MoneyText` (`short`), `SearchBar`, `TextField`, `SelectField` (bottom sheet, tìm khi nhiều mục), `DateField`,
+`SegmentedControl`, `BottomSheet` (`onClosed` sau khi đóng hẳn), `BottomActionBar`, `Screen` (`header`, `footer`, `scroll`,
+`keyboardAware`, `tone`), `AppHeader` (light/dark/transparent, `hideBack`), `EmptyState`, `ErrorState`, `Skeleton*`,
+`CountdownPill`, `ProgressSteps`, `FocusStatusBar`, `Toast` (`useToast`), `confirm()`.
+
+## Quy tắc màn
+
+- **Màn danh sách:** skeleton → dữ liệu / rỗng (có CTA "Xoá bộ lọc" khi đang lọc) / lỗi (có "Thử lại"); `FlatList` + item memo;
+  kéo làm mới; tải thêm khi cuộn có chặn gọi đôi; `SearchBar` debounce 300ms (`lib/useDebouncedValue`); bỏ kết quả cũ khi
+  lọc đổi nhanh (biến `version`/`requestId`). Khung sẵn: `SalesDocList`, `ReportList`, `FolderListScreen`, `FileListScreen`.
+- **Phản hồi:** toast cho thành công/lỗi thường (toast hiện **dưới**, tự né `BottomActionBar`); lỗi nhập dưới trường;
+  `confirm()` cho xoá/huỷ (web dùng `window.confirm`); `Alert` chỉ cho lỗi chặn/nghiêm trọng và xin quyền.
+- **Định dạng:** tiền/ngày/SĐT qua `lib/format.ts` (`formatVND`, `formatVNDShort`, `formatDate(Time)`, `maskPhone`,
+  `formatArea`, `foldVietnamese`). Bảng tiền (lịch thanh toán) hiện **đủ số đồng**, không rút gọn.
+- **Trợ năng:** vùng chạm ≥ 44; icon-only phải có nhãn; tối đa phóng chữ `MAX_FONT_SCALE` 1.3.
+- **Status bar:** `FocusStatusBar` theo màn (màn trưng bày nền tối dùng `light`).
+- Màn nằm trong tab nhận prop `embedded` (ẩn back, chừa 100 cho tab bar).
+- App cố định giao diện sáng (`app.json` `userInterfaceStyle: "light"`, cần build store mới có hiệu lực).
+
+## Tồn đọng
+
+- Màn mẫu (chat, phiếu thu, bàn giao, AI chat, tính giá) chỉ đổi sang token, chưa thiết kế lại; chữ trắng trên nền màu ở đó
+  đang dùng `colors.surface` thay vì `colors.onPrimary` (cùng giá trị).
