@@ -24,7 +24,6 @@ import { features, Feature } from "@/mocks/features";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { CustomerService as CustomerSupabaseService } from "@/sevicesSupabase/CustomerService";
 import { DatCocService } from "@/sevicesSupabase/DatCocService";
-import { LichHenService } from "@/sevicesSupabase/LichHenService";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
 import { colors, radius, space } from "@/theme";
 
@@ -58,7 +57,6 @@ export default function HomeScreen() {
   const [booking, setBooking] = useState<any[]>([]);
   const [deposits, setDeposits] = useState<any[]>([]);
   const [khachHang, setKhachHang] = useState<any[]>([]);
-  const [, setLichHen] = useState<any[]>([]);
 
   const [projectsState, setProjectsState] = useState<SectionState>(IDLE);
   const [bookingsState, setBookingsState] = useState<SectionState>(IDLE);
@@ -157,17 +155,8 @@ export default function HomeScreen() {
     }
   };
 
-  const loadAppointments = async () => {
-    try {
-      const resLH = await LichHenService.listRecent({ limit: 5 });
-      setLichHen((resLH?.data || []).slice(0, 5));
-    } catch (error) {
-      console.log("[Home] Error loading appointments:", errText(error));
-    }
-  };
-
   const loadData = () =>
-    Promise.all([loadProjects(), loadBookings(), loadDeposits(), loadCustomers(), loadAppointments()]);
+    Promise.all([loadProjects(), loadBookings(), loadDeposits(), loadCustomers()]);
 
   const loadFeatureConfiguration = async () => {
     // Không đọc được loại tài khoản → null (resolveHomeFeatureIds coi như đại lý cho an toàn)

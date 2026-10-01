@@ -82,6 +82,15 @@ App giữ đúng như web ở các điểm dưới đây cho tới khi đội we
    lại vẫn bị `checkCustomerDuplicate` chặn / bắt gửi yêu cầu lần nữa. **App làm giống web** (GĐ4); đề xuất đội web
    bỏ qua khách trùng đã có yêu cầu được duyệt cho đúng nhân viên đó.
 
+4. **Lịch thanh toán dự phòng cộng trùng phiếu thu.** Khi `fn_contract_payment_schedule` chưa có dữ liệu, web
+   (`ContractDetail.fetchTableData` → `getThuChi`) phân bổ **tổng tiền cả tờ phiếu thu**; một tờ phiếu thu cho nhiều hợp đồng
+   bị tính đủ cho mỗi hợp đồng. Đường chính (hàm máy chủ) và tab Phiếu thu (`so_tien_pgc`) thì đúng phần của phiếu.
+   **App làm giống web** ở cả hai đường (GĐ5); đề xuất web dùng `so_tien_pgc` cho đường dự phòng.
+5. **Báo cáo phụ thuộc cờ API cũ.** Một số màn web (vd công nợ `listDebtsCloudFirst`) còn thử API cũ trước khi
+   `cloud_global_settings.legacy_api_mode = "on"`; báo cáo khác đã tính hoàn toàn trên Cloud. **App luôn tính trên Cloud**
+   (GĐ5 – 5 màn báo cáo bỏ API cũ `api/bao-cao/*`); nếu cờ đang "on" và API cũ còn dữ liệu khác Cloud thì số liệu web/app
+   có thể lệch ở màn công nợ – cần đội web chốt tắt API cũ.
+
 ## 1. Mục tiêu và bối cảnh
 
 **Người dùng:** nhân viên kinh doanh / đại lý bất động sản, dùng app hằng ngày trên điện thoại, thường khi đang

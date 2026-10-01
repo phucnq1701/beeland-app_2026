@@ -18,10 +18,11 @@ test("agency accounts only see projects, products, bookings, deposits; features 
   const menuEligible = ["1", "2", "3", "4", "5", "6", "8", "9", "13"];
   assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: true, menuOnly: false, menuEligible })), ["1", "2", "5", "13"]);
   assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: true, menuOnly: true, menuEligible })), ["1", "2", "5", "13"]);
-  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: true, menuEligible })), menuEligible);
+  // Lịch hẹn (3) đang ẩn
+  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: true, menuEligible })), menuEligible.filter((id) => id !== "3"));
   assert.deepEqual(
     plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: false, menuEligible })),
-    all.filter((id) => id !== "7")
+    all.filter((id) => id !== "7" && id !== "3")
   );
 });
 
@@ -77,10 +78,20 @@ test("resolveHomeFeatureIds: agency or unknown account type never sees non-agenc
 test("resolveHomeFeatureIds: normal accounts keep a deliberate empty selection but recover from invalid ids", () => {
   const allIds = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "13"];
   const base = { allIds, menuEligible: [], max: 6, isAgency: false };
-  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: undefined })), ["1", "2", "3", "4", "5", "6"]);
+  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: undefined })), ["1", "2", "4", "5", "6", "8"]);
   assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: { selectedIds: [] } })), []);
   // Chỉ còn mục đã ẩn/không tồn tại → không phải người dùng chủ ý chọn rỗng → mặc định
-  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: { selectedIds: ["7", "99"] } })), ["1", "2", "3", "4", "5", "6"]);
+  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: { selectedIds: ["7", "99"] } })), ["1", "2", "4", "5", "6", "8"]);
   assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: { selectedIds: ["9", "7", "2"] } })), ["9", "2"]);
-  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: "garbage" })), ["1", "2", "3", "4", "5", "6"]);
+  assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: "garbage" })), ["1", "2", "4", "5", "6", "8"]);
+});
+
+test("Lịch hẹn (id 3) is hidden everywhere for now but keeps its route for later", () => {
+  const ids = ["1", "2", "3", "5", "6"];
+  assert.equal(f.visibleFeatureIds(ids, { isAgency: false, menuOnly: false, menuEligible: ids }).includes("3"), false);
+  assert.equal(f.FEATURE_ROUTES["3"], "/appointments");
+  assert.deepEqual(
+    [...f.resolveHomeFeatureIds({ stored: { selectedIds: ["3", "1"] }, isAgency: false, allIds: ids, menuEligible: ids, max: 6 })],
+    ["1"]
+  );
 });

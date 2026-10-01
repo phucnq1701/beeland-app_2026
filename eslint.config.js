@@ -33,6 +33,14 @@ const UI_STRICT_FILES = [
   'app/customer/**/*.{ts,tsx}',
   'app/contacts.tsx',
   'components/customer/**/*.{ts,tsx}',
+  // Giai đoạn 5 – cọc, hợp đồng, báo cáo
+  'app/deposits.tsx',
+  'app/deposit/**/*.{ts,tsx}',
+  'app/contracts.tsx',
+  'app/contract/**/*.{ts,tsx}',
+  'app/reports/**/*.{ts,tsx}',
+  'components/sales/**/*.{ts,tsx}',
+  'components/reports/**/*.{ts,tsx}',
 ];
 
 module.exports = defineConfig([

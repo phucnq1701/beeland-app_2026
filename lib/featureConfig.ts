@@ -16,6 +16,12 @@ export const FEATURE_ROUTES: Record<string, string> = {
   '13': '/deposits',
 };
 
+/**
+ * Tính năng tạm ẨN (đã có màn nhưng chưa dùng đợt này) – không hiện ở Trang chủ, Tất cả quản lý, tab menu.
+ * Bật lại: bỏ id khỏi danh sách. '3' = Lịch hẹn (ẩn trong đợt redesign; màn và dữ liệu giữ nguyên).
+ */
+export const HIDDEN_FEATURE_IDS: readonly string[] = ['3'];
+
 export function routeForFeature(id: string): string | null {
   return FEATURE_ROUTES[id] ?? null;
 }
@@ -35,6 +41,7 @@ export function visibleFeatureIds(
   return allIds.filter(
     (id) =>
       routeForFeature(id) !== null &&
+      !HIDDEN_FEATURE_IDS.includes(id) &&
       (!opts.isAgency || agency.includes(id)) &&
       (!opts.menuOnly || opts.menuEligible.includes(id))
   );

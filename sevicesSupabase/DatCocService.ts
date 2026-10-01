@@ -1,24 +1,11 @@
 import axiosApiSupabase from "./axiosApiSupabase";
 import { getCompanyId, getValidSupabaseJwt, getTypeAccount } from "./cloudTenant";
 import { ProjectService } from "./ProjectService";
+import { PaymentProgressService } from "./PaymentProgressService";
 
-const DEFAULT_TU_NGAY = "2000-01-01T00:00:00.000+07:00";
-const DEFAULT_DEN_NGAY = "2100-12-31T23:59:59.999+07:00";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Chuẩn hoá ngày → ISO (RPC nhận ISO). Trả null nếu rỗng. */
-function toIsoDate(v: any): string | null {
-  if (v === null || v === undefined || v === "") return null;
-  try {
-    const d = new Date(v);
-    if (isNaN(d.getTime())) return String(v);
-    return d.toISOString();
-  } catch {
-    return String(v);
-  }
-}
 
 /** DuAn có thể là mảng hoặc chuỗi ",a,b," → mảng id sạch. */
 function parseProjectIds(raw: any): string[] {
@@ -53,86 +40,83 @@ async function resolveProjectUuids(ids: string[]): Promise<string[]> {
   return uuids;
 }
 
+const num = (v: any) => (v == null ? null : Number(v));
+
+/** Ngày lọc theo giờ VN như web vnDayStart / vnDayEnd ("YYYY-MM-DD" hoặc Date); rỗng → null. */
+export function vnDayBound(v: any, end: boolean): string | null {
+  if (v == null || v === "") return null;
+  let ymd = "";
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v)) ymd = v.slice(0, 10);
+  else {
+    const d = new Date(v);
+    if (isNaN(d.getTime())) return null;
+    const vn = new Date(d.getTime() + 7 * 3600 * 1000);
+    ymd = vn.toISOString().slice(0, 10);
+  }
+  return end ? `${ymd}T23:59:59.999+07:00` : `${ymd}T00:00:00.000+07:00`;
+}
+
+/** Kết quả hàm máy chủ: { rows, total_count } (bản mới) hoặc mảng dòng kèm total_count (bản cũ). */
+export function rpcRows(data: any): { rows: any[]; total: number | null } {
+  if (Array.isArray(data)) {
+    const t = Number(data[0]?.total_count);
+    return { rows: data, total: Number.isFinite(t) && t > 0 ? t : null };
+  }
+  const rows = Array.isArray(data?.rows) ? data.rows : [];
+  const t = Number(data?.total_count);
+  return { rows, total: Number.isFinite(t) ? t : null };
+}
+
 /**
- * Map 1 dòng fn_deposit_list → shape UI cũ (PascalCase) mà app/deposits.tsx
- * và app/deposit/[id].tsx đang dùng.
+ * 1 dòng fn_deposit_list → dữ liệu màn hình – y hệt web DepositListService.mapRow.
+ * MaPGC / PhieuGiuChoId = uuid phiếu giữ chỗ (lịch thanh toán, phiếu thu đều theo phiếu giữ chỗ).
  */
 function mapDepositRow(r: any) {
+  const hd = r?.tt_hop_dong || {};
   return {
-    ...r,
-    ID: r?.id,
-    MaPDC: r?.id,
-    MaPGC: r?.id,
-    PhieuGiuChoId: r?.pgc_id,
-    SoPhieu: r?.so_phieu || "",
-    NgayDatCoc: r?.ngay_coc || "",
-    KhachHang: r?.ten_kh || "",
-    DiDong: r?.dien_thoai || "",
-    MaSanPham: r?.ky_hieu || "",
-    MaSP: r?.ma_sp || "",
-    TenDA: r?.ten_da || "",
-    MaDA: r?.ma_da_code || "",
-    TienCoc: r?.tien_coc ?? 0,
-    DaThu: r?.da_thu ?? 0,
-    TongGiaTriHDMB: r?.gia_tri_hd_sau_ck ?? 0,
-    DienTich: r?.dien_tich ?? null,
-    DonGiaTT: r?.don_gia_gom_vat ?? null,
-    MaTT: r?.ma_tt ?? null,
-    TenTT: r?.ten_tt || "",
-    // web: color_code -> MauNen/ColorWeb
-    MauNen: r?.color_code || r?.mau_nen || "",
-    SanGD: r?.ten_san || "",
-    NguoiNhap: r?.nguoi_tao ?? null,
-    NguoiSua: r?.nguoi_sua ?? null,
-    TotalRows: r?.total_count ?? 0,
+    ID: r.id,
+    MaDC: r.id,
+    MaPDC: r.id,
+    MaPGC: r.pgc_id ?? r.id,
+    PhieuGiuChoId: r.pgc_id ? String(r.pgc_id) : null,
+    GiaiDoan: r.giai_doan,
+    SoPhieu: r.so_phieu,
+    SoPhieuGC: r.so_phieu_gc ?? null,
+    NgayDatCoc: r.ngay_coc ?? r.ngay_nhap ?? r.created_at,
+    NgayCoc: r.ngay_coc ?? null,
+    NgayNhap: r.ngay_nhap ?? r.created_at,
+    MaDA: r.ma_da_code ?? r.project_id ?? null,
+    ProjectId: r.project_id ?? null,
+    TenDA: r.ten_da ?? null,
+    SanPhamId: r.san_pham_id ?? null,
+    MaSP: r.ma_sp ?? null,
+    KyHieu: r.ky_hieu ?? null,
+    MaSanPham: r.ky_hieu ?? null,
+    MaKH: r.khach_hang_id ?? null,
+    MaSoKH: r.ma_so_kh ?? null,
+    TenKH: r.ten_kh ?? null,
+    KhachHang: r.ten_kh ?? null,
+    SoCMND: r.cccd ?? null,
+    DiDong: r.dien_thoai ?? null,
+    Email: r.email ?? null,
+    DiaChi: r.dia_chi ?? null,
+    SanGD: r.ten_san ?? null,
+    DienTich: num(r.dien_tich),
+    DonGiaTT: num(r.don_gia_gom_vat),
+    TongGiaGomVAT: num(r.gia_tri_hd),
+    TongGiaTriHDMB: num(r.gia_tri_hd_sau_ck ?? r.gia_tri_hd),
+    TienCoc: num(r.tien_coc),
+    PhiBaoTri: num(r.phi_bao_tri),
+    DaThu: num(r.da_thu) ?? 0,
+    MaTT: r.ma_tt != null ? Number(r.ma_tt) : null,
+    TenTT: r.ten_tt ?? null,
+    MauNen: r.color_code ?? null,
+    NguoiTao: r.nguoi_tao ?? null,
+    NguoiSua: r.nguoi_sua ?? null,
+    TenNVKD: r.ten_nvkd ?? hd?.TenNVKD ?? null,
+    TenChinhSach: r.ten_chinh_sach ?? (r.chinh_sach ?? [])[0]?.TenCS ?? (r.chinh_sach ?? [])[0]?.TenChinhSach ?? null,
+    TotalRows: Number(r?.total_count) || 0,
   };
-}
-
-/** Chuẩn hoá 1 dòng lịch thanh toán (JSONB raw) → shape UI. */
-function normalizeScheduleRow(raw: any) {
-  if (!raw) return null;
-  const soTien = Number(raw?.SoTien ?? raw?.so_tien ?? 0);
-  const phaiThu = Number(raw?.PhaiThu ?? raw?.phai_thu ?? soTien);
-  const daThu = Number(raw?.DaThu ?? raw?.da_thu ?? 0);
-  const phaiThuPBT = Number(
-    raw?.PhaiThuPBT ?? raw?.PhiBT ?? raw?.phai_thu_pbt ?? 0
-  );
-  const daThuPBT = Number(raw?.DaThuPBT ?? raw?.da_thu_pbt ?? 0);
-  const conNoPBT = Number(raw?.ConNoPBT ?? raw?.con_no_pbt ?? 0);
-  return {
-    DotTT: raw?.DotTT ?? raw?.Dot ?? raw?.dot_tt ?? null,
-    DotTTText: raw?.DotTTText ?? raw?.KieuThanhToan ?? "",
-    NgayTT: raw?.NgayTT ?? raw?.ngay_tt ?? "",
-    TyLeTT: Number(raw?.TyLeTT ?? raw?.ty_le ?? 0),
-    SoTien: soTien,
-    PhaiThu: phaiThu,
-    DaThu: daThu,
-    ConLai: phaiThu - daThu,
-    PhaiThuPBT: phaiThuPBT,
-    DaThuPBT: daThuPBT,
-    ConNoPBT: conNoPBT,
-    DienGiai: raw?.DienGiai ?? raw?.dien_giai ?? "",
-  };
-}
-
-/**
- * Phân bổ tổng "đã thu" vào từng đợt (theo web allocatePaidToSchedule):
- * đổ hết PhaiThu đợt 1 → dư chảy sang đợt 2… hết phần gốc mới phân bổ PhaiThuPBT.
- */
-function allocatePaidToSchedule(rows: any[], totalPaid: number) {
-  let remaining = Number(totalPaid) || 0;
-  const withBase = rows.map((r) => {
-    const phaiThu = Number(r?.PhaiThu || 0);
-    const paid = Math.min(remaining, phaiThu);
-    remaining -= paid;
-    return { ...r, DaThu: paid, ConLai: phaiThu - paid };
-  });
-  return withBase.map((r) => {
-    const phaiThuPBT = Number(r?.PhaiThuPBT || 0);
-    const paidPBT = Math.min(remaining, phaiThuPBT);
-    remaining -= paidPBT;
-    return { ...r, DaThuPBT: paidPBT, ConNoPBT: phaiThuPBT - paidPBT };
-  });
 }
 
 /**
@@ -193,35 +177,26 @@ export const DatCocService = {
       const pMaTT =
         Number.isFinite(maTTNum) && maTTNum > 0 ? maTTNum : null;
 
+      // Như web DepositListService.listDeposits: ngày theo giờ VN, không lọc → null
       const body = {
         p_ma_ctdk_uid: tenantId || null,
         p_project_id: pProjectId,
-        p_tu_ngay: toIsoDate(filter?.TuNgay ?? filter?.tuNgay ?? DEFAULT_TU_NGAY),
-        p_den_ngay: toIsoDate(filter?.DenNgay ?? filter?.denNgay ?? DEFAULT_DEN_NGAY),
+        p_tu_ngay: vnDayBound(filter?.TuNgay ?? filter?.tuNgay, false),
+        p_den_ngay: vnDayBound(filter?.DenNgay ?? filter?.denNgay, true),
         p_input_search: search || null,
         p_ma_tt: pMaTT,
         p_offset: offset,
         p_limit: limit,
       };
 
-      const res = await axiosApiSupabase.post(
-        "rest/v1/rpc/fn_deposit_list",
-        body
-      );
-      
-      // fn_deposit_list RETURNS TABLE -> mảng dòng, mỗi dòng kèm total_count
-      const rows: any[] = Array.isArray(res.data) ? res.data : [];
+      const res = await axiosApiSupabase.post("rest/v1/rpc/fn_deposit_list", body);
+      // Hàm máy chủ trả { rows, total_count }; vẫn nhận mảng bản cũ
+      const { rows, total } = rpcRows(res.data);
       const mapped = rows.map(mapDepositRow);
-      const total = Number(rows[0]?.total_count);
-
-      return {
-        data: mapped,
-        totalRows: Number.isFinite(total) && total > 0 ? total : mapped.length,
-      };
-
+      return { data: mapped, totalRows: total ?? mapped.length };
     } catch (error) {
       console.log("ERROR DatCocService.get (fn_deposit_list):", error);
-      return { data: [], totalRows: 0 };
+      return { data: [], totalRows: 0, error: true };
     }
   },
 
@@ -289,8 +264,7 @@ export const DatCocService = {
     }
 
     const row = payload?.row ?? payload?.data ?? {};
-    const maPDC = row?.MaPDC ?? payload?.MaPDC ?? payload?.id; // cloud_deposits.id
-    let pgcId = row?.PhieuGiuChoId ?? payload?.PhieuGiuChoId; // phieu_giu_cho_id
+    const pgcId = row?.PhieuGiuChoId ?? payload?.PhieuGiuChoId; // uuid phiếu giữ chỗ
 
     try {
       // 0) Bổ sung header: đọc phiếu giữ chỗ + khách hàng + sản phẩm
@@ -382,93 +356,18 @@ export const DatCocService = {
         }
       }
 
-      // 1) Lịch thanh toán
-      let lichTT: any[] = [];
-      if (maPDC) {
-        try {
-          const r = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
-            params: {
-              select: "raw",
-              catalog_type: "eq.lich_tt_hd",
-              parent_code: `eq.${maPDC}`,
-              limit: "200",
-            },
-          });
-          const rows = Array.isArray(r.data) ? r.data : [];
-          lichTT = rows
-            .map((x: any) => normalizeScheduleRow(x?.raw))
-            .filter(Boolean)
-            .sort((a: any, b: any) => Number(a.DotTT) - Number(b.DotTT));
-        } catch (e) {
-          console.log("ERROR deposit lichTT (cloud_catalogs):", e);
-        }
-      }
-
-      // Fallback: mảng JSONB lich_thanh_toan trên row
-      if (lichTT.length === 0 && Array.isArray(row?.lich_thanh_toan)) {
-        lichTT = row.lich_thanh_toan
-          .map((x: any) => normalizeScheduleRow(x))
-          .filter(Boolean)
-          .sort((a: any, b: any) => Number(a.DotTT) - Number(b.DotTT));
-      }
-
-      // 2) Phiếu thu
-      let phieuThu: any[] = [];
-      if (pgcId) {
-        try {
-          const d = await axiosApiSupabase.get(
-            "rest/v1/cloud_cash_voucher_details",
-            {
-              params: {
-                select: "ma_phieu_id,so_tien,dot_tt",
-                loai_phieu: "eq.THU",
-                pgc_id: `eq.${pgcId}`,
-                limit: "5000",
-              },
-            }
-          );
-          const details = Array.isArray(d.data) ? d.data : [];
-          const ids = Array.from(
-            new Set(details.map((x: any) => x?.ma_phieu_id).filter(Boolean))
-          );
-          if (ids.length > 0) {
-            const v = await axiosApiSupabase.get(
-              "rest/v1/cloud_cash_vouchers",
-              {
-                params: {
-                  select:
-                    "id,so_phieu,ngay_phieu,so_tien,dien_giai,nguoi_nop,hinh_thuc",
-                  id: `in.(${ids.join(",")})`,
-                  limit: "5000",
-                },
-              }
-            );
-            const vouchers = Array.isArray(v.data) ? v.data : [];
-            phieuThu = vouchers.map((x: any) => ({
-              soPT: x?.so_phieu,
-              ngayThu: x?.ngay_phieu,
-              tienThu: x?.so_tien ?? 0,
-              dienGiai: x?.dien_giai,
-              hoTen: x?.nguoi_nop,
-              hinhThuc: x?.hinh_thuc,
-            }));
-          }
-        } catch (e) {
-          console.log("ERROR deposit phieuThu:", e);
-        }
-      }
-
-      // 3) Phân bổ đã thu vào lịch
-      const tongDaThu = phieuThu.reduce(
-        (s: number, x: any) => s + Number(x?.tienThu || 0),
-        0
-      );
-      lichTT = allocatePaidToSchedule(lichTT, tongDaThu);
-
-      return { data: header, lichTT, phieuThu, tongDaThu };
+      // 1) Lịch thanh toán + phiếu thu theo phiếu giữ chỗ – như web ContractDetail (type DATCOC)
+      const [schedule, receipts] = await Promise.all([
+        PaymentProgressService.getSchedule(pgcId),
+        PaymentProgressService.getReceipts(pgcId),
+      ]);
+      const lichTT = schedule.rows;
+      const phieuThu = receipts.rows;
+      const tongDaThu = receipts.total;
+      return { data: header, lichTT, phieuThu, tongDaThu, receiptsError: receipts.error };
     } catch (error) {
       console.log("ERROR getDepositDetail:", error);
-      return { data: row, lichTT: [], phieuThu: [], tongDaThu: 0 };
+      return { data: row, lichTT: [], phieuThu: [], tongDaThu: 0, receiptsError: true };
     }
   },
 };
