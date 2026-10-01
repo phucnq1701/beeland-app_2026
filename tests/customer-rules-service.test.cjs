@@ -31,7 +31,7 @@ function run(file, requireMap) {
 const rules = run("lib/customerRules.ts", {});
 
 /** HTTP giả: tables[table] = rows | (params) => rows; ghi lại mọi lời gọi */
-function harness(tables = {}, { failGet = {}, claims = {} } = {}) {
+function harness(tables = {}, { failGet = {}, claims = {}, deleted = [] } = {}) {
   const calls = [];
   const http = {
     get: async (url, opts = {}) => {
@@ -52,8 +52,8 @@ function harness(tables = {}, { failGet = {}, claims = {} } = {}) {
       return { data: [{ id: uid(1), ...body }] };
     },
     delete: async (url, opts) => {
-      calls.push({ method: "delete", table: url.replace("rest/v1/", ""), params: opts?.params });
-      return { data: [] };
+      calls.push({ method: "delete", table: url.replace("rest/v1/", ""), params: opts?.params, headers: opts?.headers });
+      return { data: deleted };
     },
   };
   const cloudTenant = {
@@ -260,4 +260,25 @@ test("editing only patches the columns the app form manages (web-only data is ke
   }
   assert.equal(body.dia_chi, "HCM");
   assert.equal(body.di_dong, "0901");
+});
+
+test("delete reports success only when a row was really deleted", async () => {
+  const ok = harness({}, { deleted: [{ id: uid(1) }] });
+  const res = await ok.customerService().deleteCustomer(uid(1));
+  assert.equal(res.status, 2000);
+  const del = ok.calls.find((c) => c.method === "delete");
+  assert.match(String(del.headers?.Prefer), /return=representation/);
+  // Máy chủ chặn (RLS) → 0 dòng bị xoá → báo lỗi, không báo "Đã xoá"
+  const blocked = await harness({}, { deleted: [] }).customerService().deleteCustomer(uid(1));
+  assert.notEqual(blocked.status, 2000);
+  assert.match(blocked.message, /Không xoá được khách hàng/);
+});
+
+test("a failed transactions load is reported as an error, not as 'no transactions'", async () => {
+  const h = harness({}, { failGet: { cloud_pgc_phieu_giucho: true } });
+  const res = await h.customerService().getHopDong({ MaKH: uid(1) });
+  assert.equal(res.error, true);
+  assert.equal(res.data.length, 0);
+  const fine = await harness({ cloud_pgc_phieu_giucho: [] }).customerService().getHopDong({ MaKH: uid(1) });
+  assert.equal(fine.error, false);
 });

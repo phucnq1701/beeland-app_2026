@@ -32,11 +32,14 @@ export default function CustomerTransactionsScreen() {
     async (refresh = false) => {
       if (!id) return;
       if (refresh) setRefreshing(true);
-      else setLoading(true);
+      else {
+        setLoading(true);
+        setError(false);
+      }
       try {
         const res: any = await CustomerService.getHopDong({ MaKH: String(id) });
         setList(Array.isArray(res?.data) ? res.data : []);
-        setError(false);
+        setError(!!res?.error);
       } catch (err) {
         console.log("[Customer transactions] Error:", err);
         setError(true);

@@ -970,7 +970,18 @@ export const CustomerService = {
         params.ma_ctdk = `eq.${tenantId}`;
       }
 
-      await axiosApiSupabase.delete("rest/v1/cloud_customers", { params });
+      // Đọc lại dòng đã xoá: máy chủ chặn (RLS) thì không có dòng nào → báo lỗi, không báo đã xoá
+      const res = await axiosApiSupabase.delete("rest/v1/cloud_customers", {
+        params,
+        headers: { Prefer: "return=representation" },
+      });
+      const deleted = Array.isArray(res?.data) ? res.data.length : 0;
+      if (deleted === 0) {
+        return {
+          status: 403,
+          message: "Không xoá được khách hàng: tài khoản không có quyền xoá hoặc khách đã bị xoá trước đó.",
+        };
+      }
       return { status: 2000, message: "Xoá khách hàng thành công" };
     } catch (error) {
       console.log("ERROR delete customer (cloud):", error);
@@ -1015,8 +1026,9 @@ export const CustomerService = {
       ]);
       return rows.map((r) => mapCustomerTransaction(r, { products, projects, statuses }));
     } catch (e) {
+      // Không nuốt lỗi: màn giao dịch phải phân biệt "lỗi tải" với "chưa có giao dịch"
       console.log("ERROR getCustomerTransactions:", e);
-      return [];
+      throw e;
     }
   },
 
@@ -1139,19 +1151,18 @@ export const CustomerService = {
     return { status: 2000, message: "Tính năng đang được phát triển" };
   },
 
+  /** Giao dịch của khách; error=true khi tải lỗi (khác với danh sách rỗng). */
   getHopDong: async (payload: any = {}) => {
     const id = payload?.MaKH || payload?.khach_hang_id;
-    if (!id) return { data: [] };
-    const list = await CustomerService.getCustomerTransactions(id);
-    return { data: list };
+    if (!id) return { data: [], error: false };
+    try {
+      return { data: await CustomerService.getCustomerTransactions(id), error: false };
+    } catch {
+      return { data: [], error: true };
+    }
   },
 
-  getAllContracts: async (payload: any = {}) => {
-    const id = payload?.MaKH || payload?.khach_hang_id;
-    if (!id) return { data: [] };
-    const list = await CustomerService.getCustomerTransactions(id);
-    return { data: list };
-  },
+  getAllContracts: async (payload: any = {}) => CustomerService.getHopDong(payload),
 
   getQRCode: async (payload: any) => {
     return await axiosApi
