@@ -7,6 +7,7 @@ import {
   getEmployeeId,
   getValidSupabaseJwt,
 } from "./cloudTenant";
+import { BookingSalesConfig, isLowRiseProduct, mapPriceListItem, sortPriceLists } from "../lib/bookingPrice";
 
 /** Ngày dương lịch theo giờ máy (VN) dạng YYYY-MM-DD — không dùng toISOString (UTC lệch ngày 0h–7h). */
 export const localYmd = (d: Date = new Date()) =>
@@ -55,6 +56,22 @@ const LOCK_STATE = {
   RELEASED: "RELEASED",
 } as const;
 const DEFAULT_LOCK_MINUTES = 30;
+
+/** uuid dự án: đã là uuid thì dùng luôn, không thì tra da_projects theo ma_da_code (web resolveProjectId). */
+async function resolveProjectUid(maDA: any): Promise<string | null> {
+  const v = String(maDA ?? "").trim();
+  if (!v) return null;
+  if (UUID_RE.test(v)) return v;
+  try {
+    const r = await axiosApiSupabase.get("rest/v1/da_projects", {
+      params: { select: "id", ma_da_code: `eq.${v}`, limit: "1" },
+    });
+    const rows = Array.isArray(r.data) ? r.data : [];
+    return rows[0]?.id || null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Resolve thời gian lock (phút) theo web SalesSettingsService.resolve:
@@ -527,8 +544,10 @@ export const BookingService = {
       }
       if (!khUid) return { status: 5000, message: "Không tìm thấy khách hàng" };
 
-      // Cài đặt bán hàng: tien_booking + thoi_gian_booking
-      let tienGiuCho: number | null = null;
+      // Tiền booking như web (BookingFormDialog.handleSubmit): chính sách bán hàng đã chọn (payload.TienGiuCho)
+      // trước, không có mới lấy cài đặt bán hàng (tien_booking, trống thì tien_dat_coc).
+      const policyAmount = Number(payload?.TienGiuCho);
+      let tienGiuCho: number | null = Number.isFinite(policyAmount) && policyAmount > 0 ? policyAmount : null;
       let hetHanLuc: string | null = null;
       try {
         const s = await axiosApiSupabase.get("rest/v1/cloud_sales_settings", {
@@ -543,16 +562,12 @@ export const BookingService = {
         const setting = pickSalesSetting(rows, daUid, localYmd(now));
         // Giống web: tiền booking = "Tiền booking" của cài đặt, trống thì mới lấy "Tiền đặt cọc"
         const t = Number(setting?.tien_booking) || Number(setting?.tien_dat_coc) || 0;
-        if (Number.isFinite(t) && t > 0) tienGiuCho = t;
+        if (tienGiuCho == null && Number.isFinite(t) && t > 0) tienGiuCho = t;
         const minutes = Number(setting?.thoi_gian_booking);
         if (Number.isFinite(minutes) && minutes > 0) {
           hetHanLuc = new Date(now.getTime() + minutes * 60000).toISOString();
         }
       } catch {}
-      if (tienGiuCho == null && payload?.TienGiuCho != null) {
-        const t = Number(payload.TienGiuCho);
-        if (Number.isFinite(t) && t > 0) tienGiuCho = t;
-      }
 
       const staff = await getStaffName();
       const employeeId = await getEmployeeId();
@@ -594,7 +609,13 @@ export const BookingService = {
         tt_hop_dong: {
           MaSP: maSP,
           MaDA: payload?.MaDA ?? payload?.maDA,
+          MaCan: payload?.KyHieu ?? null,
           TongGiaGomVAT: payload?.TongGiaGomVAT ?? payload?.TongGiaGomPBT,
+          // Như web salesConfigPayload → Payload.TTHopDong
+          MaDotGia: payload?.MaDotGia ?? null,
+          MaCS: payload?.MaCS ?? null,
+          MaCSTong: payload?.MaCSTong ?? null,
+          MaTDTT: payload?.MaTDTT ?? null,
         },
         tt_khach_hang: { MaKH: maKH },
         lock_id: payload?.LockId ?? null,
@@ -633,6 +654,56 @@ export const BookingService = {
     } catch (error) {
       console.log("ERROR createBooking:", error);
       return { status: 5000, message: "Tạo booking thất bại" };
+    }
+  },
+
+  /**
+   * Cấu hình bán hàng web tự chọn khi mở form booking (useSalesConfigOptions + BookingFormDialog):
+   * bảng giá hiện hành ưu tiên cao nhất theo dự án + loại BĐS, chính sách bán hàng gắn với bảng giá đó,
+   * dòng giá của sản phẩm trong bảng giá. Không có / lỗi → null hết (dùng giá sản phẩm).
+   * product: ProductService.normalizeProduct (uuid ở "ID").
+   */
+  getBookingSalesConfig: async (product: any): Promise<BookingSalesConfig> => {
+    const empty: BookingSalesConfig = { priceListId: null, priceItem: null, policy: null };
+    try {
+      const companyId = await getCompanyId();
+      const productId = String(product?.ID ?? product?.id ?? product?.Id ?? "");
+      if (!UUID_RE.test(companyId || "") || !UUID_RE.test(productId)) return empty;
+      const projectId = await resolveProjectUid(product?.MaDA);
+      if (!projectId) return empty;
+
+      const isLow = isLowRiseProduct({ product, maSP: product?.KyHieu });
+      const rpc = async (fn: string, body: Record<string, any>): Promise<any[]> => {
+        const res = await axiosApiSupabase.post(`rest/v1/rpc/${fn}`, body);
+        return Array.isArray(res.data) ? res.data : [];
+      };
+      const [lists, policies] = await Promise.all([
+        rpc("fn_get_current_price_lists", {
+          p_ma_ctdk_uid: companyId,
+          p_da_project_id: projectId,
+          p_type: isLow ? "Thấp tầng" : "Chung cư",
+        }),
+        rpc("fn_get_sales_policies", {
+          p_ma_ctdk: companyId,
+          p_da_project_id: projectId,
+          p_form_code: isLow ? "THAPTANG" : "CAOTANG",
+        }),
+      ]);
+      const list = sortPriceLists(lists)[0];
+      if (!list?.id) return empty;
+      const priceListId = String(list.id);
+      const policy = list.sales_policy_id
+        ? policies.find((c: any) => String(c.id) === String(list.sales_policy_id)) ?? null
+        : null;
+      const items = await rpc("fn_get_price_list_item_by_product", {
+        p_price_list_id: priceListId,
+        p_product_id: productId,
+        p_ma_ctdk_uid: companyId,
+      });
+      return { priceListId, priceItem: mapPriceListItem(items[0] ?? null), policy };
+    } catch (e) {
+      console.log("ERROR getBookingSalesConfig:", e);
+      return empty;
     }
   },
 

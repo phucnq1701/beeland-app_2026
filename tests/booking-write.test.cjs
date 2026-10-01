@@ -26,14 +26,23 @@ const pgError = (message) => Object.assign(new Error("Request failed with status
   response: { status: 400, data: { code: "P0001", message } },
 });
 
-function load({ reject = {}, rpcResult } = {}) {
+const compileExports = (file) => {
+  const out = ts.transpileModule(fs.readFileSync(path.join(__dirname, "..", file), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  const exports = {};
+  vm.runInNewContext(out, { exports, require: () => ({}) });
+  return exports;
+};
+
+function load({ reject = {}, rpcResult, rpc = {}, settings } = {}) {
   const posts = [];
   const gets = [];
   const http = {
     get: async (url, { params }) => {
       const table = url.replace("rest/v1/", "");
       gets.push({ table, params });
-      let data = rows[table] ?? [];
+      let data = (table === "cloud_sales_settings" && settings) || rows[table] || [];
       for (const [key, value] of Object.entries(params)) {
         if (typeof value === "string" && value.startsWith("eq.")) {
           data = data.filter((r) => String(r[key]) === value.slice(3));
@@ -46,6 +55,10 @@ function load({ reject = {}, rpcResult } = {}) {
       posts.push({ target, body });
       if (reject[target]) throw reject[target];
       if (target === "rpc/fn_booking_create") return { data: rpcResult };
+      if (target.startsWith("rpc/") && target.slice(4) in rpc) {
+        const r = rpc[target.slice(4)];
+        return { data: typeof r === "function" ? r(body) : r };
+      }
       return { data: [{ id: uid(500 + posts.length) }] };
     },
   };
@@ -67,6 +80,7 @@ function load({ reject = {}, rpcResult } = {}) {
       if (name === "@react-native-async-storage/async-storage") {
         return { default: { getItem: async () => JSON.stringify({ ho_ten: "NV Test" }) } };
       }
+      if (name === "../lib/bookingPrice") return compileExports("lib/bookingPrice.ts");
       return { default: {} };
     },
   });
@@ -165,4 +179,68 @@ test("createLock counts this month's locks from 00:00 Vietnam time", async () =>
   const count = gets.find((g) => g.table === "cloud_bookings" && g.params.loai_ct === "eq.LOCK");
   const { lockVoucherMonth } = loadExports();
   assert.equal(count.params.created_at, `gte.${lockVoucherMonth(new Date()).fromIso}`);
+});
+
+// Cấu hình bán hàng web tự chọn khi mở form booking (useSalesConfigOptions + BookingFormDialog)
+test("booking sales config: the highest-priority current price list, its policy and the product's price line", async () => {
+  const { service, posts } = load({
+    rpc: {
+      fn_get_current_price_lists: [
+        { id: "pl-low", priority: 9, sales_policy_id: "cs9" },
+        { id: "pl-top", priority: 1, sales_policy_id: "cs1" },
+      ],
+      fn_get_sales_policies: [
+        { id: "cs1", pricing_config_id: "cf1", payment_schedule_id: "ps1", tien_booking: 50000000 },
+        { id: "cs9" },
+      ],
+      fn_get_price_list_item_by_product: [{ area: 70, unit_price: 20000000, vat_rate: 10, maintenance_rate: 2 }],
+    },
+  });
+  const cfg = await service.getBookingSalesConfig({ ID: uid(3), MaDA: uid(4), KyHieu: "B2-608", FormCode: "CAOTANG" });
+  const call = (fn) => posts.find((p) => p.target === `rpc/${fn}`).body;
+  assert.deepEqual({ ...call("fn_get_current_price_lists") }, { p_ma_ctdk_uid: tenant, p_da_project_id: uid(4), p_type: "Chung cư" });
+  assert.deepEqual({ ...call("fn_get_sales_policies") }, { p_ma_ctdk: tenant, p_da_project_id: uid(4), p_form_code: "CAOTANG" });
+  assert.deepEqual({ ...call("fn_get_price_list_item_by_product") }, { p_price_list_id: "pl-top", p_product_id: uid(3), p_ma_ctdk_uid: tenant });
+  assert.equal(cfg.priceListId, "pl-top");
+  assert.equal(cfg.policy.id, "cs1");
+  assert.equal(cfg.priceItem.TongGiaChuaVAT, 1400000000);
+  assert.equal(cfg.priceItem.TongGiaGomPBT, 1570800000);
+});
+
+test("booking sales config for low-rise units and projects without a price list", async () => {
+  const low = load({ rpc: { fn_get_current_price_lists: [], fn_get_sales_policies: [] } });
+  const cfg = await low.service.getBookingSalesConfig({ ID: uid(3), MaDA: uid(4), KyHieu: "LK-01" });
+  const pl = low.posts.find((p) => p.target === "rpc/fn_get_current_price_lists").body;
+  assert.equal(pl.p_type, "Thấp tầng");
+  assert.equal(low.posts.find((p) => p.target === "rpc/fn_get_sales_policies").body.p_form_code, "THAPTANG");
+  assert.deepEqual({ ...cfg }, { priceListId: null, priceItem: null, policy: null });
+  assert.equal(low.posts.some((p) => p.target === "rpc/fn_get_price_list_item_by_product"), false);
+  const failing = load({ reject: { "rpc/fn_get_current_price_lists": new Error("x") } });
+  assert.deepEqual({ ...(await failing.service.getBookingSalesConfig({ ID: uid(3), MaDA: uid(4) })) }, {
+    priceListId: null, priceItem: null, policy: null,
+  });
+});
+
+test("createBooking: the policy booking amount wins over sales settings and the price list is recorded", async () => {
+  const { service, posts } = load({
+    rpcResult: { phieu_giu_cho_id: uid(200), booking_id: uid(201), so_phieu: "BK-1" },
+    settings: [{ ma_ctdk: tenant, ma_da: uid(4), ap_dung: true, tien_booking: 5000000 }],
+  });
+  await service.createBooking({
+    ...bookingInput, TienGiuCho: 50000000, MaDotGia: "pl-top", MaCS: "cs1", MaCSTong: "cf1", MaTDTT: "ps1",
+  });
+  const body = posts.find((p) => p.target === "rpc/fn_booking_create").body.p_payload;
+  assert.equal(body.tien_giu_cho, 50000000);
+  assert.equal(body.price_list_id, "pl-top");
+  assert.equal(body.sales_policy_id, "cs1");
+  assert.equal(body.tt_hop_dong.MaDotGia, "pl-top");
+  assert.equal(body.tt_hop_dong.MaCS, "cs1");
+  assert.equal(body.tt_hop_dong.MaTDTT, "ps1");
+
+  const noPolicy = load({
+    rpcResult: { phieu_giu_cho_id: uid(200), booking_id: uid(201), so_phieu: "BK-1" },
+    settings: [{ ma_ctdk: tenant, ma_da: uid(4), ap_dung: true, tien_booking: 5000000 }],
+  });
+  await noPolicy.service.createBooking(bookingInput);
+  assert.equal(noPolicy.posts.find((p) => p.target === "rpc/fn_booking_create").body.p_payload.tien_giu_cho, 5000000);
 });

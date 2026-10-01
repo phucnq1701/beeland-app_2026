@@ -72,7 +72,7 @@ test("booking from the real product shape sends the product uuid and the VAT fie
   assert.equal(product.ID, uid(3));
   assert.equal(product.SanPhamId, undefined, "the screen data has no SanPhamId");
 
-  const { buildBookingPayload } = load("lib/bookingPayload.ts", {});
+  const { buildBookingPayload } = load("lib/bookingPayload.ts", { "./bookingPrice": load("lib/bookingPrice.ts", {}) });
   const payload = buildBookingPayload(
     product,
     { maKH: "KH-00006", tenKH: "Khách", diDong: "0900000000", email: "" },
@@ -100,7 +100,7 @@ test("booking from the real product shape sends the product uuid and the VAT fie
 });
 
 test("booking from the lock screen forwards the lock id", () => {
-  const { buildBookingPayload } = load("lib/bookingPayload.ts", {});
+  const { buildBookingPayload } = load("lib/bookingPayload.ts", { "./bookingPrice": load("lib/bookingPrice.ts", {}) });
   const payload = buildBookingPayload({ ID: uid(3), MaSP: "SP01", LockId: uid(77) }, { maKH: "KH-1" }, null);
   assert.equal(payload.LockId, uid(77));
   assert.equal(payload.MaSan, null);

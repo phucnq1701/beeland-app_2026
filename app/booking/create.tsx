@@ -21,6 +21,7 @@ import {
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { formatVND, formatVNDShort, maskPhone } from "@/lib/format";
 import { buildBookingPayload } from "@/lib/bookingPayload";
+import { BookingSalesConfig, pickPrice, policyBookingAmount } from "@/lib/bookingPrice";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
@@ -124,6 +125,21 @@ export default function CreateBookingScreen() {
   // Chặn gửi trùng ngay cả khi người dùng bấm 2 lần trước khi màn kịp vẽ lại
   const submitting = useRef(false);
 
+  // Bảng giá / chính sách web tự chọn cho căn này (giá booking lấy theo bảng giá, thiếu thì giá sản phẩm)
+  const [salesConfig, setSalesConfig] = useState<BookingSalesConfig | null>(null);
+  const salesConfigTask = useRef<Promise<BookingSalesConfig> | null>(null);
+  const loadSalesConfig = () => {
+    if (!salesConfigTask.current) {
+      salesConfigTask.current = BookingService.getBookingSalesConfig(bookingData);
+      void salesConfigTask.current.then(setSalesConfig);
+    }
+    return salesConfigTask.current;
+  };
+  useEffect(() => {
+    void loadSalesConfig();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Quay về từ customer/new (router.dismissTo giữ nguyên màn này, chỉ đổi param) → chọn KH mới
   useEffect(() => {
     if (!newCustomer) return;
@@ -190,7 +206,8 @@ export default function CreateBookingScreen() {
       setCreatingBooking(true);
 
       // Payload theo chuẩn BookingService.createBooking (trường giá như web)
-      const initDataBooking = buildBookingPayload(bookingData, selectedCustomer, selectedSan);
+      const sales = salesConfig ?? (await loadSalesConfig());
+      const initDataBooking = buildBookingPayload(bookingData, selectedCustomer, selectedSan, sales);
 
       const resultBooking = await BookingService.createBooking(initDataBooking);
 
@@ -298,8 +315,11 @@ export default function CreateBookingScreen() {
     [sanList]
   );
 
-  const unitPrice = bookingData?.TongGiaTriHDMB ?? bookingData?.TongGomPBT ?? bookingData?.TongGiaGomVAT;
-  const holdAmount = bookingData?.TienGiuCho ?? bookingData?.TienBooking ?? null;
+  const productPrice = bookingData?.TongGiaTriHDMB ?? bookingData?.TongGomPBT ?? bookingData?.TongGiaGomVAT;
+  // Giá hiển thị = giá sẽ ghi vào booking (bảng giá trước, như web)
+  const unitPrice = salesConfig?.priceItem ? pickPrice(salesConfig.priceItem.TongGiaGomPBT, productPrice) : productPrice;
+  const holdAmount =
+    policyBookingAmount(salesConfig?.policy ?? null) ?? bookingData?.TienGiuCho ?? bookingData?.TienBooking ?? null;
 
   const openNewCustomer = () => {
     const params: Record<string, string> = { returnToBooking: "1" };
