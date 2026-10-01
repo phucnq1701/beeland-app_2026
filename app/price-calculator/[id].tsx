@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform }
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { featuredProperties, Property } from '@/mocks/properties';
 import { paymentPolicies, PaymentPolicy } from '@/mocks/paymentPolicies';
-import Colors from '@/constants/colors';
+import { colors } from "@/theme";
 import { ChevronDown, CheckCircle2, Printer } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
@@ -522,7 +522,7 @@ export default function PriceCalculatorScreen() {
               style={styles.printButton}
               activeOpacity={0.7}
             >
-              <Printer color={Colors.primary} size={24} />
+              <Printer color={colors.primary} size={24} />
             </TouchableOpacity>
           ) : undefined,
         }} 
@@ -547,7 +547,7 @@ export default function PriceCalculatorScreen() {
             <Text style={styles.dropdownText}>
               {selectedPolicy ? selectedPolicy.name : 'Chọn gói chính sách'}
             </Text>
-            <ChevronDown color={Colors.textSecondary} size={20} />
+            <ChevronDown color={colors.textSecondary} size={20} />
           </TouchableOpacity>
 
           {showDropdown && (
@@ -576,7 +576,7 @@ export default function PriceCalculatorScreen() {
                     </View>
                   </View>
                   {selectedPolicyId === policy.id && (
-                    <CheckCircle2 color={Colors.primary} size={24} />
+                    <CheckCircle2 color={colors.primary} size={24} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -632,7 +632,7 @@ export default function PriceCalculatorScreen() {
                   <Text style={styles.benefitsTitle}>Ưu đãi:</Text>
                   {selectedPolicy.benefits.map((benefit, index) => (
                     <View key={index} style={styles.benefitItem}>
-                      <CheckCircle2 color={Colors.primary} size={18} />
+                      <CheckCircle2 color={colors.primary} size={18} />
                       <Text style={styles.benefitText}>{benefit}</Text>
                     </View>
                   ))}
@@ -726,7 +726,7 @@ export default function PriceCalculatorScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   scrollContent: {
     paddingTop: 16,
@@ -738,41 +738,41 @@ const styles = StyleSheet.create({
   propertyName: {
     fontSize: 24,
     fontWeight: '800' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 4,
   },
   propertyLocation: {
     fontSize: 15,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 12,
   },
   dropdown: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   dropdownText: {
     fontSize: 16,
-    color: Colors.text,
+    color: colors.text,
     flex: 1,
   },
   dropdownMenu: {
     marginTop: 8,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     overflow: 'hidden',
   },
   dropdownItem: {
@@ -782,7 +782,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   dropdownItemContent: {
     flex: 1,
@@ -791,45 +791,45 @@ const styles = StyleSheet.create({
   dropdownItemTitle: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 4,
   },
   dropdownItemDesc: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   dropdownItemDiscount: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   policyCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 16,
   },
   policyName: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 4,
   },
   policyDesc: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 16,
   },
   milestoneContainer: {
     marginBottom: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: colors.border,
   },
   milestoneTitle: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 12,
   },
   milestoneItem: {
@@ -841,7 +841,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     marginTop: 6,
     marginRight: 12,
   },
@@ -851,22 +851,22 @@ const styles = StyleSheet.create({
   milestoneName: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 2,
   },
   milestoneDesc: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   benefitsContainer: {
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: colors.border,
   },
   benefitsTitle: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 12,
   },
   benefitItem: {
@@ -876,12 +876,12 @@ const styles = StyleSheet.create({
   },
   benefitText: {
     fontSize: 14,
-    color: Colors.text,
+    color: colors.text,
     marginLeft: 8,
     flex: 1,
   },
   priceDetails: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 16,
   },
@@ -891,16 +891,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   detailLabel: {
     fontSize: 15,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   detailValue: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   discountRow: {
     backgroundColor: '#FEF3C7',
@@ -922,7 +922,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   discountItemRow: {
     flexDirection: 'row',
@@ -952,22 +952,22 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   totalValue: {
     fontSize: 18,
     fontWeight: '800' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   paymentSchedule: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     overflow: 'hidden',
   },
   scheduleItem: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   scheduleHeader: {
     flexDirection: 'row',
@@ -987,12 +987,12 @@ const styles = StyleSheet.create({
   scheduleName: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   schedulePercentage: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.primary,
+    color: colors.primary,
     backgroundColor: '#F0F9FF',
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -1001,7 +1001,7 @@ const styles = StyleSheet.create({
   scheduleTime: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     backgroundColor: '#F3F4F6',
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -1009,13 +1009,13 @@ const styles = StyleSheet.create({
   },
   scheduleDesc: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   scheduleAmount: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   placeholderContainer: {
     padding: 40,
@@ -1024,29 +1024,29 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     fontSize: 16,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   missingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   missingTitle: {
     fontSize: 18,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 12,
     fontWeight: '600' as const,
   },
   backBtn: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 10,
   },
   backBtnText: {
-    color: Colors.white,
+    color: colors.surface,
     fontWeight: '700' as const,
   },
   printButton: {

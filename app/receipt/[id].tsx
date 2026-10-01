@@ -15,7 +15,7 @@ import {
   CheckCircle,
   Clock,
 } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import { colors } from "@/theme";
 import { receipts, ReceiptType } from '@/mocks/receipts';
 
 export default function ReceiptDetailScreen() {
@@ -81,9 +81,9 @@ export default function ReceiptDetailScreen() {
         options={{
           title: `Phiếu thu #${receipt.id}`,
           headerStyle: {
-            backgroundColor: Colors.white,
+            backgroundColor: colors.surface,
           },
-          headerTintColor: Colors.text,
+          headerTintColor: colors.text,
           headerShadowVisible: false,
         }}
       />
@@ -134,7 +134,7 @@ export default function ReceiptDetailScreen() {
 
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
-                <Phone color={Colors.textSecondary} size={20} />
+                <Phone color={colors.textSecondary} size={20} />
               </View>
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Số điện thoại</Text>
@@ -144,7 +144,7 @@ export default function ReceiptDetailScreen() {
 
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
-                <Calendar color={Colors.textSecondary} size={20} />
+                <Calendar color={colors.textSecondary} size={20} />
               </View>
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Ngày thu</Text>
@@ -156,7 +156,7 @@ export default function ReceiptDetailScreen() {
 
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
-                <CreditCard color={Colors.textSecondary} size={20} />
+                <CreditCard color={colors.textSecondary} size={20} />
               </View>
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Phương thức thanh toán</Text>
@@ -170,7 +170,7 @@ export default function ReceiptDetailScreen() {
               <View style={styles.divider} />
               <View style={styles.notesSection}>
                 <View style={styles.notesTitleRow}>
-                  <FileText color={Colors.text} size={20} />
+                  <FileText color={colors.text} size={20} />
                   <Text style={styles.sectionTitle}>Ghi chú</Text>
                 </View>
                 <Text style={styles.notesText}>{receipt.notes}</Text>
@@ -217,7 +217,7 @@ export default function ReceiptDetailScreen() {
 
         {receipt.status === 'completed' && (
           <View style={styles.completedCard}>
-            <CheckCircle color={Colors.success} size={32} />
+            <CheckCircle color={colors.success} size={32} />
             <View style={styles.completedInfo}>
               <Text style={styles.completedTitle}>Đã hoàn thành</Text>
               <Text style={styles.completedText}>
@@ -247,13 +247,13 @@ export default function ReceiptDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   content: {
     flex: 1,
   },
   card: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     marginHorizontal: 24,
     marginTop: 24,
     borderRadius: 16,
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
   receiptId: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
   amount: {
     fontSize: 32,
     fontWeight: '700' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   typeBadge: {
     paddingHorizontal: 16,
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: colors.border,
     marginVertical: 20,
   },
   infoSection: {
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 4,
   },
   infoRow: {
@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -346,12 +346,12 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontWeight: '500' as const,
   },
   infoValue: {
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
     fontWeight: '600' as const,
   },
   notesSection: {
@@ -364,11 +364,11 @@ const styles = StyleSheet.create({
   },
   notesText: {
     fontSize: 14,
-    color: Colors.text,
+    color: colors.text,
     lineHeight: 22,
   },
   summaryCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     marginHorizontal: 24,
     marginTop: 16,
     borderRadius: 16,
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
   summaryTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 16,
   },
   summaryRow: {
@@ -402,12 +402,12 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontWeight: '500' as const,
   },
   summaryValue: {
     fontSize: 14,
-    color: Colors.text,
+    color: colors.text,
     fontWeight: '600' as const,
   },
   totalRow: {
@@ -419,12 +419,12 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   totalValue: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   completedCard: {
     flexDirection: 'row',
@@ -483,6 +483,6 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
 });

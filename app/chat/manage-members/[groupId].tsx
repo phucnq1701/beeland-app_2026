@@ -20,7 +20,7 @@ import {
   Check,
   X as XIcon,
 } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import { colors } from "@/theme";
 import { chatGroups, ChatMember, currentUserId } from '@/mocks/chatGroups';
 import { contacts } from '@/mocks/contacts';
 
@@ -157,7 +157,7 @@ export default function ManageGroupMembersScreen() {
             </Text>
             {isMemberAdmin && (
               <View style={styles.adminBadge}>
-                <Shield size={12} color={Colors.primary} />
+                <Shield size={12} color={colors.primary} />
                 <Text style={styles.adminBadgeText}>Admin</Text>
               </View>
             )}
@@ -171,9 +171,9 @@ export default function ManageGroupMembersScreen() {
               onPress={() => handleToggleAdmin(item.id, item.name, isMemberAdmin)}
             >
               {isMemberAdmin ? (
-                <Shield size={20} color={Colors.textSecondary} />
+                <Shield size={20} color={colors.textSecondary} />
               ) : (
-                <Shield size={20} color={Colors.textLight} />
+                <Shield size={20} color={colors.textTertiary} />
               )}
             </TouchableOpacity>
             <TouchableOpacity
@@ -211,7 +211,7 @@ export default function ManageGroupMembersScreen() {
             isSelected && styles.checkboxSelected,
           ]}
         >
-          {isSelected && <Check color={Colors.white} size={16} />}
+          {isSelected && <Check color={colors.surface} size={16} />}
         </View>
       </TouchableOpacity>
     );
@@ -230,7 +230,7 @@ export default function ManageGroupMembersScreen() {
               setSelectedContacts([]);
             }}
           >
-            <ArrowLeft color={Colors.text} size={24} />
+            <ArrowLeft color={colors.text} size={24} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Thêm thành viên</Text>
           <TouchableOpacity
@@ -254,17 +254,17 @@ export default function ManageGroupMembersScreen() {
 
         <View style={styles.searchContainer}>
           <View style={styles.searchBox}>
-            <Search size={20} color={Colors.textLight} />
+            <Search size={20} color={colors.textTertiary} />
             <TextInput
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholder="Tìm kiếm..."
-              placeholderTextColor={Colors.textLight}
+              placeholderTextColor={colors.textTertiary}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <XIcon size={20} color={Colors.textLight} />
+                <XIcon size={20} color={colors.textTertiary} />
               </TouchableOpacity>
             )}
           </View>
@@ -287,7 +287,7 @@ export default function ManageGroupMembersScreen() {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <User size={48} color={Colors.textLight} />
+              <User size={48} color={colors.textTertiary} />
               <Text style={styles.emptyText}>
                 {searchQuery ? 'Không tìm thấy thành viên' : 'Không có thành viên để thêm'}
               </Text>
@@ -307,7 +307,7 @@ export default function ManageGroupMembersScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <ArrowLeft color={Colors.text} size={24} />
+          <ArrowLeft color={colors.text} size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Quản lý thành viên</Text>
         {isAdmin && (
@@ -315,24 +315,24 @@ export default function ManageGroupMembersScreen() {
             style={styles.addMemberButton}
             onPress={() => setShowAddMember(true)}
           >
-            <UserPlus size={22} color={Colors.primary} />
+            <UserPlus size={22} color={colors.primary} />
           </TouchableOpacity>
         )}
       </View>
 
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
-          <Search size={20} color={Colors.textLight} />
+          <Search size={20} color={colors.textTertiary} />
           <TextInput
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder="Tìm kiếm thành viên..."
-            placeholderTextColor={Colors.textLight}
+            placeholderTextColor={colors.textTertiary}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <XIcon size={20} color={Colors.textLight} />
+              <XIcon size={20} color={colors.textTertiary} />
             </TouchableOpacity>
           )}
         </View>
@@ -355,7 +355,7 @@ export default function ManageGroupMembersScreen() {
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <User size={48} color={Colors.textLight} />
+            <User size={48} color={colors.textTertiary} />
             <Text style={styles.emptyText}>Không tìm thấy thành viên</Text>
           </View>
         }
@@ -367,7 +367,7 @@ export default function ManageGroupMembersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   header: {
     flexDirection: 'row',
@@ -375,9 +375,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingBottom: 12,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   backButton: {
     width: 40,
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
     textAlign: 'center',
     marginHorizontal: 8,
   },
@@ -409,20 +409,20 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   addButtonTextDisabled: {
-    color: Colors.textLight,
+    color: colors.textTertiary,
   },
   searchContainer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -431,30 +431,30 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
   },
   memberCount: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   memberCountText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   selectedCount: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   selectedCountText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   listContent: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
   },
   memberItem: {
     flexDirection: 'row',
@@ -467,14 +467,14 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   memberAvatarText: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.white,
+    color: colors.surface,
   },
   memberInfo: {
     flex: 1,
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   adminBadge: {
     flexDirection: 'row',
@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
   adminBadgeText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.primary,
+    color: colors.primary,
   },
   memberActions: {
     flexDirection: 'row',
@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 20,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   removeButton: {
     backgroundColor: '#FEE2E2',
@@ -529,14 +529,14 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   contactAvatarText: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.white,
+    color: colors.surface,
   },
   contactInfo: {
     flex: 1,
@@ -544,11 +544,11 @@ const styles = StyleSheet.create({
   contactName: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   contactRole: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   checkbox: {
@@ -556,17 +556,17 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
   checkboxSelected: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   separator: {
     height: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: colors.border,
     marginLeft: 76,
   },
   emptyContainer: {
@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 12,
   },
 });

@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MessageCircle, Search, Plus, Users, UserPlus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Colors from '@/constants/colors';
+import { colors } from "@/theme";
 import { chatGroups, ChatGroup, currentUserId } from '@/mocks/chatGroups';
 
 export default function ChatListScreen() {
@@ -53,7 +53,7 @@ export default function ChatListScreen() {
         <View style={styles.avatarContainer}>
           <View style={[styles.avatar, isGroup && styles.groupAvatar]}>
             {isGroup ? (
-              <Users color={Colors.primary} size={24} />
+              <Users color={colors.primary} size={24} />
             ) : (
               <Text style={styles.avatarText}>
                 {item.name.charAt(0).toUpperCase()}
@@ -116,7 +116,7 @@ export default function ChatListScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={Colors.gradients.background}
+        colors={[colors.surface, colors.bg, colors.surface] as const}
         style={styles.backgroundGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -126,14 +126,14 @@ export default function ChatListScreen() {
 
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <LinearGradient
-          colors={Colors.gradients.warmGlass}
+          colors={[colors.surface, colors.surfaceMuted] as const}
           style={StyleSheet.absoluteFill}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
         />
         <View style={styles.headerTop}>
           <View style={styles.headerTitleContainer}>
-            <MessageCircle color={Colors.primary} size={28} />
+            <MessageCircle color={colors.primary} size={28} />
             <Text style={styles.headerTitle}>Chat</Text>
           </View>
           <View style={styles.headerButtons}>
@@ -141,23 +141,23 @@ export default function ChatListScreen() {
               style={styles.contactsButton}
               onPress={() => router.push('/contacts')}
             >
-              <UserPlus color={Colors.primary} size={22} />
+              <UserPlus color={colors.primary} size={22} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => router.push('/chat/create-group')}
             >
-              <Plus color={Colors.primary} size={24} />
+              <Plus color={colors.primary} size={24} />
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.searchContainer}>
-          <Search color={Colors.textLight} size={20} />
+          <Search color={colors.textTertiary} size={20} />
           <TextInput
             style={styles.searchInput}
             placeholder="Tìm kiếm cuộc trò chuyện..."
-            placeholderTextColor={Colors.textLight}
+            placeholderTextColor={colors.textTertiary}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -182,7 +182,7 @@ export default function ChatListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   backgroundGradient: {
     position: 'absolute',
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   headerButtons: {
     flexDirection: 'row',
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.glass.border,
+    borderColor: colors.border,
   },
   addButton: {
     width: 44,
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.glass.border,
+    borderColor: colors.border,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -271,12 +271,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 12,
     borderWidth: 1,
-    borderColor: Colors.glass.border,
+    borderColor: colors.border,
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
   },
   listContent: {
     paddingTop: 8,
@@ -294,25 +294,25 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   groupAvatar: {
     backgroundColor: 'rgba(232, 111, 37, 0.1)',
     borderWidth: 1,
-    borderColor: Colors.glass.border,
+    borderColor: colors.border,
   },
   avatarText: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: Colors.white,
+    color: colors.surface,
   },
   unreadBadge: {
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: Colors.error,
+    backgroundColor: colors.danger,
     minWidth: 22,
     height: 22,
     borderRadius: 11,
@@ -320,12 +320,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 6,
     borderWidth: 2,
-    borderColor: Colors.white,
+    borderColor: colors.surface,
   },
   unreadBadgeText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.white,
+    color: colors.surface,
   },
   chatContent: {
     flex: 1,
@@ -341,12 +341,12 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginRight: 8,
   },
   chatTime: {
     fontSize: 13,
-    color: Colors.textLight,
+    color: colors.textTertiary,
   },
   chatFooter: {
     flexDirection: 'row',
@@ -356,24 +356,24 @@ const styles = StyleSheet.create({
   lastMessage: {
     flex: 1,
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginRight: 8,
   },
   unreadMessage: {
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   senderName: {
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   memberCount: {
     fontSize: 12,
-    color: Colors.textLight,
+    color: colors.textTertiary,
   },
   separator: {
     height: 1,
-    backgroundColor: Colors.glass.border,
+    backgroundColor: colors.border,
     marginLeft: 88,
   },
 });

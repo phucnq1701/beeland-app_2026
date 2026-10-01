@@ -12,7 +12,7 @@ import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Search, MapPin, Calendar, CheckCircle, Clock, XCircle, ChevronRight } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import { colors } from "@/theme";
 import { handovers, Handover, HandoverStatus } from '@/mocks/handovers';
 
 const statusConfig: Record<HandoverStatus, { label: string; color: string; bg: string; icon: any }> = {
@@ -94,18 +94,18 @@ export default function HandoversScreen() {
           headerShown: true,
           title: 'Bàn giao',
           headerStyle: {
-            backgroundColor: Colors.white,
+            backgroundColor: colors.surface,
           },
         }}
       />
 
       <View style={[styles.header, { paddingTop: 16 }]}>
         <View style={styles.searchContainer}>
-          <Search color={Colors.textSecondary} size={20} />
+          <Search color={colors.textSecondary} size={20} />
           <TextInput
             style={styles.searchInput}
             placeholder="Tìm mã căn, khách hàng, dự án..."
-            placeholderTextColor={Colors.textSecondary}
+            placeholderTextColor={colors.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -153,7 +153,7 @@ export default function HandoversScreen() {
       >
         {filteredHandovers.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <CheckCircle color={Colors.textSecondary} size={64} />
+            <CheckCircle color={colors.textSecondary} size={64} />
             <Text style={styles.emptyTitle}>Không tìm thấy bàn giao</Text>
             <Text style={styles.emptyText}>Thử thay đổi bộ lọc hoặc tìm kiếm khác</Text>
           </View>
@@ -188,7 +188,7 @@ export default function HandoversScreen() {
                   <Text style={styles.projectName}>{handover.projectName}</Text>
 
                   <View style={styles.infoRow}>
-                    <MapPin color={Colors.textSecondary} size={16} />
+                    <MapPin color={colors.textSecondary} size={16} />
                     <Text style={styles.infoText}>{handover.address}</Text>
                   </View>
 
@@ -199,7 +199,7 @@ export default function HandoversScreen() {
 
                   {handover.scheduledDate && (
                     <View style={styles.infoRow}>
-                      <Calendar color={Colors.textSecondary} size={16} />
+                      <Calendar color={colors.textSecondary} size={16} />
                       <Text style={styles.infoText}>
                         {handover.status === 'completed'
                           ? `Hoàn thành: ${formatDate(handover.completedDate!)}`
@@ -213,7 +213,7 @@ export default function HandoversScreen() {
                       <Text style={styles.areaLabel}>Diện tích:</Text>
                       <Text style={styles.areaValue}>{handover.clearArea} m²</Text>
                     </View>
-                    <ChevronRight color={Colors.primary} size={20} />
+                    <ChevronRight color={colors.primary} size={20} />
                   </View>
                 </View>
               </TouchableOpacity>
@@ -228,19 +228,19 @@ export default function HandoversScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   header: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
   },
   filterScroll: {
     gap: 8,
@@ -259,21 +259,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   filterChipActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   filterText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   filterTextActive: {
-    color: Colors.white,
+    color: colors.surface,
   },
   content: {
     flex: 1,
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   handoverCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     marginBottom: 16,
     overflow: 'hidden',
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
   apartmentCode: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   statusBadge: {
     flexDirection: 'row',
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
   projectName: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 12,
   },
   infoRow: {
@@ -345,17 +345,17 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     flex: 1,
   },
   customerLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   customerName: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     flex: 1,
   },
   cardFooter: {
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: colors.border,
   },
   areaInfo: {
     flexDirection: 'row',
@@ -374,12 +374,12 @@ const styles = StyleSheet.create({
   },
   areaLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   areaValue: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -389,13 +389,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 15,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
 });

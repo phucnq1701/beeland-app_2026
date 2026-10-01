@@ -1,30 +1,26 @@
 import React, { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Platform,
-  Dimensions,
-  Alert,
-  ActivityIndicator,
-  Modal,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
+import { ChevronRight, Code2, LayoutGrid, LogOut, Trash2, User } from "lucide-react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { FeatureGrid } from "@/components/home/FeatureGrid";
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import {
-  User,
-  Settings,
-  LogOut,
-  ChevronRight,
-  Trash2,
-  Sparkles,
-} from "lucide-react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import Colors from "@/constants/colors";
+  Avatar,
+  Button,
+  Card,
+  confirm,
+  ListItem,
+  Screen,
+  Text,
+  useToast,
+} from "@/components/ui";
+import { MENU_TAB_FEATURE_IDS } from "@/components/utils/menuTabs";
+import { routeForFeature, visibleFeatureIds } from "@/lib/featureConfig";
 import { features } from "@/mocks/features";
+import { colors, elevation, radius, space } from "@/theme";
 import { CloudProfileService, CloudProfile } from "@/sevicesSupabase/CloudProfileService";
 import {
   deleteCurrentEmployee,
@@ -32,58 +28,14 @@ import {
   DeletedEmployeeSession,
 } from "@/sevicesSupabase/AccountDeletionService";
 
-const { width } = Dimensions.get("window");
-
-interface MenuItem {
-  id: string;
-  title: string;
-  icon: React.ComponentType<any>;
-  color: string;
-}
-
-interface ManagementItem {
-  id: string;
-  title: string;
-  icon: React.ComponentType<any>;
-  route: string | null;
-  color: string;
-}
-
-const menuItems: MenuItem[] = [
-  { id: "1", title: "Thông tin cá nhân", icon: User, color: Colors.iconOrange },
-  { id: "2", title: "Cài đặt", icon: Settings, color: Colors.iconBlue },
-  { id: "3", title: "Xóa tài khoản", icon: Trash2, color: Colors.error },
-];
-
-// Route cho từng tính năng — đồng bộ với màn "Tất cả quản lý" / Home.
-// null = tính năng chưa có màn hình (Hoa hồng).
-const featureRoutes: Record<string, string | null> = {
-  "1": "/projects",
-  "2": "/products",
-  "3": "/appointments",
-  "4": "/locked-units",
-  "5": "/bookings",
-  "6": "/customers",
-  "7": null,
-  "8": "/contracts",
-  "9": "/reports",
-  "13": "/deposits",
-};
-
-// Lấy ĐỦ danh sách tính năng từ features (10 mục) thay vì hardcode 7 mục —
-// icon/tên/màu dùng chung với Home & Tất cả quản lý để luôn nhất quán.
-const managementItems: ManagementItem[] = features.map((f) => ({
-  id: f.id,
-  title: f.title,
-  icon: f.icon,
-  route: featureRoutes[f.id] ?? null,
-  color: f.iconColor,
-}));
+/** Chừa chỗ cho tab bar nổi. */
+const TAB_BAR_SPACE = 100;
 
 export default function AccountScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
+  const toast = useToast();
   const [showAllManagement, setShowAllManagement] = React.useState(false);
+  const [isAgency, setIsAgency] = useState<boolean>(false);
   const [data, setData] = useState<CloudProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -94,29 +46,28 @@ export default function AccountScreen() {
   const deleteBusy = useRef(false);
   const confirmationOpen = useRef(false);
   const deletedSession = useRef<DeletedEmployeeSession | null>(null);
+  // Chặn bấm "Đăng xuất" 2 lần làm mở 2 màn đăng nhập chồng nhau
+  const loggingOut = useRef(false);
 
   const handleLogout = () => {
-    if (deleteBusy.current) return;
+    if (deleteBusy.current || loggingOut.current) return;
     if (deletedSession.current) {
       void performDeleteAccount();
       return;
     }
+    loggingOut.current = true;
     router.push("/login");
-  };
-
-  const handleManagementItemPress = (route: string | null) => {
-    if (!route) {
-      console.log("[Account] Tính năng chưa có màn hình:", route);
-      return;
-    }
-    router.push(route as never);
   };
 
   useFocusEffect(useCallback(() => {
     let active = true;
+    loggingOut.current = false;
     setData(null);
     setLoadingProfile(true);
     setProfileError(null);
+    void AsyncStorage.getItem('@type_account').then((type: string | null) => {
+      if (active) setIsAgency(type === 'AGENCY');
+    });
     void CloudProfileService.userInfo().then((res) => {
       if (active && !deleteBusy.current && !deletedSession.current) setData(res.data);
     }).catch((error: unknown) => {
@@ -125,6 +76,8 @@ export default function AccountScreen() {
       if (active) setLoadingProfile(false);
     });
     return () => { active = false; };
+    // `retry` cố ý: bấm "Thử lại" tăng retry để tải lại hồ sơ
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retry]));
 
   const performDeleteAccount = async () => {
@@ -145,556 +98,234 @@ export default function AccountScreen() {
     } catch (error: unknown) {
       const title = deletedSession.current ? "Chưa đăng xuất được" : "Không thể xóa";
       const message = error instanceof Error ? error.message : "Có lỗi xảy ra. Vui lòng thử lại.";
-      if (Platform.OS === "web") window.alert(`${title}\n${message}`);
-      else Alert.alert(title, message);
+      toast.show({ type: "error", message: `${title}: ${message}` });
     } finally {
       deleteBusy.current = false;
       setDeleting(false);
     }
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
     if (deleteBusy.current || confirmationOpen.current) return;
     if (deletedSession.current) {
       void performDeleteAccount();
       return;
     }
-    const message = "Bạn có chắc chắn muốn xóa hồ sơ nhân viên của mình như trên web và đăng xuất khỏi app? Không thể hoàn tác việc xóa hồ sơ. Tài khoản đăng nhập trên hệ thống không bị vô hiệu hóa.";
     confirmationOpen.current = true;
-    if (Platform.OS === "web") {
-      const confirmed = window.confirm(message);
-      confirmationOpen.current = false;
-      if (confirmed) void performDeleteAccount();
-    } else {
-      Alert.alert("Xóa tài khoản", message, [
-        { text: "Hủy", style: "cancel", onPress: () => { confirmationOpen.current = false; } },
-        {
-          text: "Xóa",
-          style: "destructive",
-          onPress: () => {
-            confirmationOpen.current = false;
-            void performDeleteAccount();
-          },
-        },
-      ], { cancelable: true, onDismiss: () => { confirmationOpen.current = false; } });
-    }
+    const confirmed = await confirm({
+      title: "Xóa tài khoản",
+      message:
+        "Bạn có chắc chắn muốn xóa hồ sơ nhân viên của mình như trên web và đăng xuất khỏi app? Không thể hoàn tác việc xóa hồ sơ. Tài khoản đăng nhập trên hệ thống không bị vô hiệu hóa.",
+      confirmText: "Xóa",
+      cancelText: "Hủy",
+      destructive: true,
+    });
+    confirmationOpen.current = false;
+    if (confirmed) void performDeleteAccount();
   };
 
+  const managementIds = visibleFeatureIds(
+    features.map((f) => f.id),
+    { isAgency, menuOnly: false, menuEligible: MENU_TAB_FEATURE_IDS }
+  );
+  const managementFeatures = features.filter((f) => managementIds.includes(f.id));
+
+  const profileBody = loadingProfile ? (
+    <ActivityIndicator color={colors.primary} accessibilityLabel="Đang tải hồ sơ" />
+  ) : profileError ? (
+    <View style={styles.profileTexts}>
+      <Text variant="caption" color="danger">
+        {profileError}
+      </Text>
+      <View style={styles.links}>
+        <Pressable accessibilityRole="button" hitSlop={12} style={styles.link} onPress={() => setRetry((v) => v + 1)}>
+          <Text variant="caption" weight="semibold" color="primary">
+            Thử lại
+          </Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" hitSlop={12} style={styles.link} onPress={() => router.push("/login")}>
+          <Text variant="caption" weight="semibold" color="primary">
+            Đăng nhập lại
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  ) : (
+    <View style={styles.profileTexts}>
+      <Text variant="heading" numberOfLines={1}>
+        {data?.HoTen || "Chưa cập nhật họ tên"}
+      </Text>
+      <Text variant="caption" color="textSecondary" numberOfLines={1}>
+        {data?.Email || "Chưa cập nhật email"}
+      </Text>
+    </View>
+  );
+
+  const settingsDisabled = deleting || employeeDeleted;
+
   return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={Colors.gradients.background}
-        style={styles.backgroundGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
+    <Screen bottomInset={TAB_BAR_SPACE} padded={false}>
+      <View style={styles.body}>
+        <Text variant="display" accessibilityRole="header" style={styles.pageTitle}>
+          Tài khoản
+        </Text>
 
-      <View style={styles.orb1} />
-      <View style={styles.orb2} />
-
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-      >
-        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-          <View style={styles.headerTop}>
-            <View>
-              <View style={styles.greetingRow}>
-                <Sparkles size={14} color={Colors.primary} />
-                <Text style={styles.greeting}>{data?.HoTen}</Text>
-              </View>
-              <Text style={styles.headerTitle}>Cài đặt</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.profileCardContainer}>
-          <View style={styles.profileCard}>
-            <LinearGradient
-              colors={[
-                "rgba(232, 111, 37, 0.08)",
-                "rgba(255, 138, 76, 0.04)",
-                "transparent",
-              ]}
-              style={StyleSheet.absoluteFill}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            />
-            <View style={styles.avatarContainer}>
-              <LinearGradient
-                colors={Colors.gradients.primary}
-                style={styles.avatar}
-              >
-                <User color={Colors.white} size={36} />
-              </LinearGradient>
-              <View style={styles.statusDot} />
-            </View>
-            {loadingProfile ? (
-              <ActivityIndicator color={Colors.primary} accessibilityLabel="Đang tải hồ sơ" />
-            ) : profileError ? (
-              <>
-                <Text style={styles.profileEmail}>{profileError}</Text>
-                <TouchableOpacity onPress={() => setRetry((value) => value + 1)}>
-                  <Text style={styles.seeAllText}>Thử lại</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => router.push("/login")}>
-                  <Text style={styles.seeAllText}>Đăng nhập lại</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={styles.profileName}>{data?.HoTen || "Chưa cập nhật họ tên"}</Text>
-                <Text style={styles.profileEmail}>{data?.Email || "Chưa cập nhật email"}</Text>
-              </>
-            )}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleContainer}>
-              <LinearGradient
-                colors={Colors.gradients.primary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.sectionIndicator}
-              />
-              <Text style={styles.sectionTitle}>Quản lý</Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => setShowAllManagement(!showAllManagement)}
-              style={styles.seeAllButton}
-            >
-              <Text style={styles.seeAllText}>
-                {showAllManagement ? "Thu gọn" : "Tất cả"}
-              </Text>
-              <ChevronRight color={Colors.primary} size={16} />
-            </TouchableOpacity>
-          </View>
-
-          {showAllManagement && (
-            <View style={styles.managementGrid}>
-              {managementItems.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.managementCard}
-                  onPress={() => handleManagementItemPress(item.route)}
-                  activeOpacity={0.8}
-                >
-                  <View
-                    style={[
-                      styles.managementIconContainer,
-                      { backgroundColor: `${item.color}18` },
-                    ]}
-                  >
-                    <item.icon color={item.color} size={24} />
-                  </View>
-                  <Text style={styles.managementCardTitle}>{item.title}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionTitleRow}>
-            <LinearGradient
-              colors={Colors.gradients.primary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.sectionIndicator}
-            />
-            <Text style={styles.sectionTitle}>Cài đặt</Text>
-          </View>
-
-          <View style={styles.menuContainer}>
-            {menuItems.map((item, index) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.menuItem,
-                  index === menuItems.length - 1 && styles.menuItemLast,
-                ]}
-                activeOpacity={0.8}
-                disabled={deleting || (employeeDeleted && item.id !== "3")}
-                onPress={() => {
-                  if (item.id === "1") {
-                    router.push("/profile");
-                  } else if (item.id === "3") {
-                    handleDeleteAccount();
-                  }
-                }}
-              >
-                <View style={styles.menuItemLeft}>
-                  <View
-                    style={[
-                      styles.menuIconContainer,
-                      { backgroundColor: `${item.color}18` },
-                    ]}
-                  >
-                    <item.icon color={item.color} size={22} />
-                  </View>
-                  <Text style={styles.menuItemText}>
-                    {item.id === "3" && employeeDeleted ? "Thử đăng xuất lại" : item.title}
-                  </Text>
-                </View>
-                <ChevronRight color={Colors.textTertiary} size={20} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={handleLogout}
-          disabled={deleting}
-          activeOpacity={0.9}
+        <Card
+          style={styles.profileCard}
+          padding={space.lg + 2}
+          onPress={data ? () => router.push("/profile") : undefined}
+          accessibilityLabel={
+            data
+              ? `${data.HoTen || "Chưa cập nhật họ tên"}, ${data.Email || "chưa có email"}. Xem thông tin cá nhân`
+              : undefined
+          }
         >
-          <LinearGradient
-            colors={["rgba(239, 68, 68, 0.1)", "rgba(239, 68, 68, 0.05)"]}
-            style={StyleSheet.absoluteFill}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+          <View style={styles.profile}>
+            <Avatar name={data?.HoTen || "?"} size={56} round />
+            {profileBody}
+            {data ? (
+              <View style={styles.chevron}>
+                <ChevronRight size={16} color={colors.textSecondary} strokeWidth={2.5} />
+              </View>
+            ) : null}
+          </View>
+        </Card>
+
+        <HomeSectionHeader
+          title="Quản lý nhanh"
+          actionLabel={showAllManagement ? "Thu gọn" : "Tất cả"}
+          onAction={() => setShowAllManagement(!showAllManagement)}
+        />
+        {showAllManagement ? (
+          <FeatureGrid
+            columns={4}
+            compact
+            items={managementFeatures.map((f) => ({
+              key: f.id,
+              feature: f,
+              onPress: () => {
+                const route = routeForFeature(f.id);
+                if (route) router.push(route as never);
+              },
+            }))}
           />
-          <LogOut color={Colors.error} size={20} />
-          <Text style={styles.logoutText}>Đăng xuất</Text>
-        </TouchableOpacity>
-      </ScrollView>
+        ) : null}
+
+        <HomeSectionHeader title="Cài đặt" />
+        {/* Bóng ở lớp ngoài, bo + cắt ở lớp trong (iOS: overflow hidden làm mất bóng) */}
+        <View style={styles.card}>
+          <View style={styles.clip}>
+            <View pointerEvents={settingsDisabled ? "none" : "auto"} style={settingsDisabled ? styles.disabled : null}>
+              <ListItem
+                leading={<RowIcon icon={User} />}
+                title="Thông tin cá nhân"
+                chevron
+                onPress={() => router.push("/profile")}
+              />
+            </View>
+            <View
+              pointerEvents={settingsDisabled ? "none" : "auto"}
+              style={[styles.divider, settingsDisabled ? styles.disabled : null]}
+            >
+              <ListItem
+                leading={<RowIcon icon={LayoutGrid} />}
+                title="Cấu hình trang chủ & menu"
+                chevron
+                onPress={() => router.push("/all-management")}
+              />
+            </View>
+            <View pointerEvents={deleting ? "none" : "auto"} style={styles.divider}>
+              <ListItem
+                leading={<RowIcon icon={Trash2} danger />}
+                title={employeeDeleted ? "Thử đăng xuất lại" : "Xóa tài khoản"}
+                chevron
+                onPress={() => void handleDeleteAccount()}
+              />
+            </View>
+            {__DEV__ ? (
+              // Chỉ có ở bản dev: xem toàn bộ component của design system
+              <View style={styles.divider}>
+                <ListItem
+                  leading={<RowIcon icon={Code2} />}
+                  title="UI Gallery (dev)"
+                  chevron
+                  onPress={() => router.push("/dev/ui-gallery" as never)}
+                />
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        <Button
+          variant="secondary"
+          icon={LogOut}
+          title="Đăng xuất"
+          loading={deleting}
+          onPress={handleLogout}
+          fullWidth
+          style={styles.pill}
+        />
+      </View>
+
       <Modal visible={deleting} transparent animationType="fade" onRequestClose={() => {}}>
-        <View style={styles.deletingOverlay}>
-          <View style={styles.deletingCard}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.menuItemText}>
+        <View style={styles.overlay}>
+          <Card style={styles.overlayCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text variant="body" align="center">
               {employeeDeleted ? "Đang đăng xuất..." : "Đang xóa hồ sơ nhân viên..."}
             </Text>
-          </View>
+          </Card>
         </View>
       </Modal>
+    </Screen>
+  );
+}
+
+function RowIcon({ icon: Icon, danger }: { icon: typeof User; danger?: boolean }) {
+  return (
+    <View style={[styles.rowIcon, danger ? styles.rowIconDanger : null]}>
+      <Icon size={20} color={danger ? colors.danger : colors.brand} strokeWidth={2} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  deletingOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  deletingCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 18,
-    padding: 28,
-    gap: 16,
-    alignItems: "center",
-  },
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  backgroundGradient: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  orb1: {
-    position: "absolute",
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: "rgba(232, 111, 37, 0.06)",
-    top: -100,
-    right: -100,
-    ...(Platform.OS === "web" ? { filter: "blur(80px)" } : { opacity: 0.6 }),
-  },
-  orb2: {
-    position: "absolute",
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: "rgba(255, 138, 76, 0.05)",
-    bottom: 200,
-    left: -80,
-    ...(Platform.OS === "web" ? { filter: "blur(60px)" } : { opacity: 0.5 }),
-  },
-  content: {
-    flex: 1,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  headerTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-  greetingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 4,
-  },
-  greeting: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    fontWeight: "500",
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: Colors.text,
-    letterSpacing: -0.5,
-  },
-  profileCardContainer: {
-    marginHorizontal: 20,
-    marginBottom: 24,
-  },
-  profileCard: {
-    borderRadius: 28,
-    padding: 24,
-    alignItems: "center",
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-    backgroundColor: "rgba(255, 255, 255, 0.7)",
-    ...Platform.select({
-      ios: {
-        shadowColor: "rgba(232, 111, 37, 0.15)",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 1,
-        shadowRadius: 24,
-      },
-      android: {
-        elevation: 8,
-      },
-      web: {
-        boxShadow: "0 8px 32px rgba(232, 111, 37, 0.08)",
-        backdropFilter: "blur(16px)",
-      },
-    }),
-  },
-  avatarContainer: {
-    position: "relative",
-    marginBottom: 16,
-  },
-  avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    justifyContent: "center",
-    alignItems: "center",
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 12,
-      },
-    }),
-  },
-  statusDot: {
-    position: "absolute",
-    bottom: 4,
-    right: 4,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: Colors.success,
-    borderWidth: 3,
-    borderColor: Colors.white,
-  },
-  profileName: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  profileEmail: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 20,
-  },
-  section: {
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  sectionTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  sectionTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  sectionIndicator: {
-    width: 4,
-    height: 24,
-    borderRadius: 2,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: Colors.text,
-  },
-  seeAllButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.7)",
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-  },
-  seeAllText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.primary,
-  },
-  managementGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    paddingHorizontal: 20,
-  },
-  managementCard: {
-    width: (width - 40 - 24) / 3,
-    aspectRatio: 1,
-    borderRadius: 20,
-    padding: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-    backgroundColor: "rgba(255, 255, 255, 0.65)",
-    ...Platform.select({
-      ios: {
-        shadowColor: "rgba(232, 111, 37, 0.1)",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 1,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: "0 4px 16px rgba(232, 111, 37, 0.06)",
-        backdropFilter: "blur(12px)",
-      },
-    }),
-  },
-  managementIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  managementCardTitle: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.textSecondary,
-    textAlign: "center",
-  },
-  menuContainer: {
-    paddingHorizontal: 20,
-    gap: 8,
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    borderRadius: 18,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-    backgroundColor: "rgba(255, 255, 255, 0.65)",
-    ...Platform.select({
-      ios: {
-        shadowColor: "rgba(232, 111, 37, 0.06)",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 1,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 1,
-      },
-      web: {
-        boxShadow: "0 2px 8px rgba(232, 111, 37, 0.04)",
-        backdropFilter: "blur(12px)",
-      },
-    }),
-  },
-  menuItemLast: {
-    marginBottom: 0,
-  },
-  menuItemLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  menuIconContainer: {
-    width: 46,
-    height: 46,
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  pageTitle: { marginTop: space.sm, marginBottom: space.xs },
+  profileCard: { borderWidth: 0, borderRadius: radius.x3, ...elevation.soft },
+  card: { borderRadius: radius.xxl, backgroundColor: colors.surface, ...elevation.soft },
+  clip: { borderRadius: radius.xxl, overflow: "hidden" },
+  pill: { borderRadius: radius.full, marginTop: space.xs },
+  chevron: {
+    width: 28,
+    height: 28,
     borderRadius: 14,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  menuItemText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: Colors.text,
-  },
-  logoutButton: {
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 24,
-    padding: 18,
-    borderRadius: 18,
-    gap: 10,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.15)",
-    backgroundColor: "rgba(255, 255, 255, 0.6)",
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.error,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 2,
-      },
-      web: {
-        boxShadow: "0 4px 16px rgba(239, 68, 68, 0.06)",
-      },
-    }),
+    backgroundColor: colors.surfaceMuted,
   },
-  logoutText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.error,
+  profile: { flexDirection: "row", alignItems: "center", gap: space.md },
+  profileTexts: { flex: 1, gap: 2 },
+  links: { flexDirection: "row", gap: space.lg, marginTop: space.xs },
+  // 20 (dòng chữ) + 2×12 hitSlop = 44
+  link: { minHeight: 20, justifyContent: "center" },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  disabled: { opacity: 0.5 },
+  rowIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primarySubtle,
   },
+  rowIconDanger: { backgroundColor: colors.dangerSubtle },
+  overlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: space.xxl,
+    backgroundColor: colors.backdrop,
+  },
+  overlayCard: { alignItems: "center", gap: space.md, minWidth: 240, borderWidth: 0, borderRadius: radius.xxl },
 });

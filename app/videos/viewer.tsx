@@ -4,10 +4,10 @@ import {
   ActivityIndicator,
   StyleSheet,
   Dimensions,
-  Alert,
-} from "react-native";
+  } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { WebView } from "react-native-webview";
+import { useToast } from "@/components/ui";
 
 // Lấy YouTube video ID từ nhiều dạng URL
 const getYoutubeVideoId = (url: string): string | null => {
@@ -87,6 +87,7 @@ const getOfficeViewerUrl = (url: string) =>
   )}`;
 
 export default function DocumentViewer() {
+  const toast = useToast();
   const { link, type, name } = useLocalSearchParams<{
     link: string;
     type: string;
@@ -104,16 +105,19 @@ export default function DocumentViewer() {
       fetch(decodedLink)
         .then((res) => res.text())
         .then(setTxtContent)
-        .catch(() => Alert.alert("Lỗi", "Không tải được file TXT"));
+        .catch(() => toast.show({ type: "error", message: "Không tải được file TXT" }));
     }
   }, [decodedLink, fileType]);
+
+  // Báo link YouTube không hợp lệ một lần (không gọi toast trong lúc render)
+  const badYoutube = fileType === "youtube" && !getYoutubeVideoId(decodedLink);
+  useEffect(() => {
+    if (badYoutube) toast.show({ type: "error", message: "Không nhận dạng được link YouTube" });
+  }, [badYoutube, toast]);
 
   // ----- YouTube -----
   if (fileType === "youtube") {
     const videoId = getYoutubeVideoId(decodedLink);
-    if (!videoId) {
-      Alert.alert("Lỗi", "Không nhận dạng được link YouTube");
-    }
     return (
       <View style={styles.container}>
         <Stack.Screen
@@ -127,7 +131,7 @@ export default function DocumentViewer() {
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
           javaScriptEnabled
-          onError={() => Alert.alert("Lỗi", "Không thể phát video")}
+          onError={() => toast.show({ type: "error", message: "Không thể phát video" })}
         />
       </View>
     );
@@ -175,7 +179,7 @@ export default function DocumentViewer() {
         renderLoading={() => (
           <ActivityIndicator size="large" style={styles.loading} />
         )}
-        onError={() => Alert.alert("Lỗi", "Không thể hiển thị tài liệu này.")}
+        onError={() => toast.show({ type: "error", message: "Không thể hiển thị tài liệu này." })}
       />
     </View>
   );

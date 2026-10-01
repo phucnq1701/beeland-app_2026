@@ -1,4 +1,4 @@
-import { LucideIcon, Building2, Home, Calendar, Lock, BookOpen, Users, DollarSign, FileText, BarChart3, Landmark } from 'lucide-react-native';
+import { LucideIcon, Building2, DoorOpen, Calendar, Lock, BookOpen, Users, DollarSign, FileText, BarChart3, Landmark } from 'lucide-react-native';
 
 export interface Feature {
   id: string;
@@ -19,7 +19,7 @@ export const features: Feature[] = [
   {
     id: '2',
     title: 'Sản phẩm',
-    icon: Home,
+    icon: DoorOpen,
     backgroundColor: 'rgba(59, 130, 246, 0.2)',
     iconColor: '#3B82F6',
   },

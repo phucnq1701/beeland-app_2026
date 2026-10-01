@@ -25,7 +25,7 @@ import {
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import Colors from '@/constants/colors';
+import { colors } from "@/theme";
 import {
   chatGroups,
   chatMessages,
@@ -76,7 +76,7 @@ const MessageItem = React.memo(
                 } else {
                   return (
                     <View key={attachment.id} style={styles.documentAttachment}>
-                      <File color={Colors.primary} size={24} />
+                      <File color={colors.primary} size={24} />
                       <View style={styles.documentInfo}>
                         <Text style={styles.documentName} numberOfLines={1}>
                           {attachment.name}
@@ -326,7 +326,7 @@ export default function ChatConversationScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <ArrowLeft color={Colors.text} size={24} />
+          <ArrowLeft color={colors.text} size={24} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.headerInfo}
@@ -351,7 +351,7 @@ export default function ChatConversationScreen() {
             style={styles.manageMembersButton}
             onPress={() => router.push(`/chat/manage-members/${group.id}`)}
           >
-            <Users color={Colors.primary} size={22} />
+            <Users color={colors.primary} size={22} />
           </TouchableOpacity>
         )}
       </View>
@@ -378,7 +378,7 @@ export default function ChatConversationScreen() {
           <View style={styles.emojiPickerHeader}>
             <Text style={styles.emojiPickerTitle}>Emoji & Stickers</Text>
             <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
-              <X color={Colors.textSecondary} size={20} />
+              <X color={colors.textSecondary} size={20} />
             </TouchableOpacity>
           </View>
           
@@ -429,21 +429,21 @@ export default function ChatConversationScreen() {
                     style={styles.removeAttachmentButton}
                     onPress={() => handleRemoveAttachment(attachment.id)}
                   >
-                    <X color={Colors.white} size={16} />
+                    <X color={colors.surface} size={16} />
                   </TouchableOpacity>
                 </View>
               );
             } else {
               return (
                 <View key={attachment.id} style={styles.previewDocument}>
-                  <File color={Colors.primary} size={20} />
+                  <File color={colors.primary} size={20} />
                   <Text style={styles.previewDocumentName} numberOfLines={1}>
                     {attachment.name}
                   </Text>
                   <TouchableOpacity
                     onPress={() => handleRemoveAttachment(attachment.id)}
                   >
-                    <X color={Colors.textLight} size={18} />
+                    <X color={colors.textTertiary} size={18} />
                   </TouchableOpacity>
                 </View>
               );
@@ -458,19 +458,19 @@ export default function ChatConversationScreen() {
             style={styles.attachButton}
             onPress={handlePickImage}
           >
-            <ImageIcon color={Colors.primary} size={22} />
+            <ImageIcon color={colors.primary} size={22} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.attachButton}
             onPress={handlePickDocument}
           >
-            <Paperclip color={Colors.primary} size={22} />
+            <Paperclip color={colors.primary} size={22} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.attachButton, showEmojiPicker && styles.attachButtonActive]}
             onPress={() => setShowEmojiPicker(!showEmojiPicker)}
           >
-            <Smile color={showEmojiPicker ? Colors.white : Colors.primary} size={22} />
+            <Smile color={showEmojiPicker ? colors.surface : colors.primary} size={22} />
           </TouchableOpacity>
         </View>
 
@@ -480,7 +480,7 @@ export default function ChatConversationScreen() {
             value={inputText}
             onChangeText={setInputText}
             placeholder="Nhập tin nhắn..."
-            placeholderTextColor={Colors.textLight}
+            placeholderTextColor={colors.textTertiary}
             multiline
             maxLength={1000}
           />
@@ -493,7 +493,7 @@ export default function ChatConversationScreen() {
             onPress={handleSend}
             disabled={!inputText.trim() && attachments.length === 0}
           >
-            <Send color={Colors.white} size={20} />
+            <Send color={colors.surface} size={20} />
           </TouchableOpacity>
         </View>
       </View>
@@ -504,16 +504,16 @@ export default function ChatConversationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 12,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
     gap: 12,
   },
   backButton: {
@@ -529,11 +529,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   manageMembersButton: {
@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
   },
   senderNameLabel: {
     fontSize: 12,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 4,
     marginLeft: 12,
   },
@@ -566,24 +566,24 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   myMessageBubble: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     borderBottomRightRadius: 4,
   },
   otherMessageBubble: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderBottomLeftRadius: 4,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   messageText: {
     fontSize: 15,
     lineHeight: 21,
   },
   myMessageText: {
-    color: Colors.white,
+    color: colors.surface,
   },
   otherMessageText: {
-    color: Colors.text,
+    color: colors.text,
   },
   messageTime: {
     fontSize: 11,
@@ -594,7 +594,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   otherMessageTime: {
-    color: Colors.textLight,
+    color: colors.textTertiary,
   },
   attachmentContainer: {
     marginBottom: 8,
@@ -618,19 +618,19 @@ const styles = StyleSheet.create({
   documentName: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   documentSize: {
     fontSize: 12,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   attachmentPreview: {
     flexDirection: 'row',
     padding: 12,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: colors.border,
     gap: 8,
   },
   previewImageContainer: {
@@ -657,19 +657,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     padding: 8,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderRadius: 8,
     maxWidth: 200,
   },
   previewDocumentName: {
     flex: 1,
     fontSize: 13,
-    color: Colors.text,
+    color: colors.text,
   },
   inputContainer: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: colors.border,
     paddingHorizontal: 16,
     paddingTop: 8,
   },
@@ -690,7 +690,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderRadius: 24,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -698,7 +698,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
     maxHeight: 100,
     paddingVertical: 8,
   },
@@ -706,21 +706,21 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: Colors.textLight,
+    backgroundColor: colors.textTertiary,
     opacity: 0.5,
   },
   attachButtonActive: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
   },
   emojiPickerContainer: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: colors.border,
     maxHeight: 360,
   },
   emojiPickerHeader: {
@@ -730,12 +730,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: colors.border,
   },
   emojiPickerTitle: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   emojiSection: {
     paddingHorizontal: 16,
@@ -744,7 +744,7 @@ const styles = StyleSheet.create({
   emojiSectionTitle: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 12,
   },
   emojiGrid: {
@@ -758,7 +758,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   emojiText: {
     fontSize: 28,
@@ -769,9 +769,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 12,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   stickerText: {
     fontSize: 32,

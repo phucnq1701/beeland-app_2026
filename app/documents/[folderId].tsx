@@ -1,435 +1,106 @@
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Platform,
-  Alert,
-  Linking,
-} from "react-native";
-import { router, Stack, useLocalSearchParams } from "expo-router";
-import {
-  Search,
-  FileText,
-  FileSpreadsheet,
-  Image,
-  File,
-  X,
-} from "lucide-react-native";
-import Colors from "@/constants/colors";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Linking, Platform } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+
+import { FileItem, FileListScreen } from "@/components/media/FileListScreen";
+import { useToast } from "@/components/ui";
+import { getDocumentType, getRawDocumentUrl, OFFICE_TYPES } from "@/components/utils/documentLinks";
 import { DocumentService } from "@/sevicesSupabase/DocumentService";
-import { getRawDocumentUrl, getDocumentType, OFFICE_TYPES } from "@/components/utils/documentLinks";
 
-// cấu hình icon theo type
-const FILE_TYPE_CONFIG: Record<
-  string,
-  { icon: typeof FileText; color: string; label: string }
-> = {
-  pdf: { icon: FileText, color: "#EF4444", label: "PDF" },
-  doc: { icon: File, color: "#3B82F6", label: "DOC" },
-  docx: { icon: File, color: "#3B82F6", label: "DOCX" },
-  xls: { icon: FileSpreadsheet, color: "#10B981", label: "XLS" },
-  xlsx: { icon: FileSpreadsheet, color: "#10B981", label: "XLSX" },
-  jpg: { icon: Image, color: "#F59E0B", label: "JPG" },
-  png: { icon: Image, color: "#F59E0B", label: "PNG" },
-  pages: { icon: File, color: "#8B5CF6", label: "PAGES" },
-  txt: { icon: FileText, color: "#6B7280", label: "TXT" },
-};
+type Doc = FileItem & { link: string };
 
-const getTypeConfig = (type: string) =>
-  FILE_TYPE_CONFIG[type.toLowerCase()] ?? {
-    icon: File,
-    color: "#6B7280",
-    label: type.toUpperCase(),
-  };
+const WEB_VIEW_TYPES = ["pdf", "jpg", "jpeg", "png", "txt", "html", "doc", "docx", "xls", "xlsx"];
 
-interface DocumentItem {
-  id: number;
-  name: string;
-  type: string;
-  size: string;
-  date: string;
-  link: string;
-  ghiChu: string;
-}
-
+/** Tài liệu trong thư mục: tìm kiếm phía máy chủ (chờ 500ms như cũ), mở bằng trình xem hoặc ứng dụng ngoài. */
 export default function DocumentsScreen() {
-  const { folderId } = useLocalSearchParams<{
-    folderId: string;
-  }>();
+  const { folderId } = useLocalSearchParams<{ folderId: string }>();
+  const toast = useToast();
+  const [docs, setDocs] = useState<Doc[]>([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const version = useRef(0);
 
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [documents, setDocuments] = useState<DocumentItem[]>([]);
-  const [selectedType, setSelectedType] = useState<string>("all");
-  const [searchTimer, setSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
-
-  const loadData = async (inputSearch: string = "") => {
-    try {
-      const res = await DocumentService.getDetail({
-        DocumentID: Number(folderId),
-        InputSearch: inputSearch,
-      });
-
-      const mapped: DocumentItem[] = res?.data?.map((doc: any) => ({
-        id: doc.ID,
-        name: doc.Name,
-        type: getDocumentType(doc.Type || "", doc.Name || "", doc.Link || ""),
-        size: doc.Size > 0 ? `${doc.Size} MB` : "0 MB",
-        date: new Date(doc.CreatedAt).toLocaleDateString(),
-        link: !doc.Link ? "" : /^https?:\/\//i.test(doc.Link)
-          ? doc.Link
-          : `https://upload.beesky.vn/${doc.Link.replace(/^\/+/, "")}`,
-        ghiChu: doc.GhiChu,
-      }));
-
-      setDocuments(mapped);
-    } catch (error) {
-      console.error("Load documents error:", error);
-      Alert.alert("Lỗi", "Không tải được dữ liệu tài liệu");
-    }
-  };
+  const load = useCallback(
+    async (search = "", refresh = false) => {
+      const v = ++version.current;
+      if (refresh) setRefreshing(true);
+      try {
+        const res: any = await DocumentService.getDetail({ DocumentID: Number(folderId), InputSearch: search });
+        if (v !== version.current) return;
+        setDocs(
+          (res?.data ?? []).map((doc: any) => ({
+            id: doc.ID,
+            name: doc.Name,
+            type: getDocumentType(doc.Type || "", doc.Name || "", doc.Link || ""),
+            size: doc.Size > 0 ? `${doc.Size} MB` : undefined,
+            date: doc.CreatedAt ? new Date(doc.CreatedAt).toLocaleDateString("vi-VN") : undefined,
+            link: !doc.Link ? "" : /^https?:\/\//i.test(doc.Link) ? doc.Link : `https://upload.beesky.vn/${doc.Link.replace(/^\/+/, "")}`,
+            note: doc.GhiChu,
+          }))
+        );
+        setError(false);
+      } catch (e) {
+        console.error("Load documents error:", e);
+        if (v === version.current) setError(true);
+      } finally {
+        if (v === version.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
+    },
+    [folderId]
+  );
 
   useEffect(() => {
-    void loadData();
-  }, [folderId]);
+    void load();
+  }, [load]);
 
-  // debounce input search
-  const handleSearchChange = (text: string) => {
-    setSearchQuery(text);
-    if (searchTimer) clearTimeout(searchTimer);
-    setSearchTimer(
-      setTimeout(() => {
-        void loadData(text);
-      }, 500)
-    );
-  };
-
-  const filteredDocuments = documents.filter(
-    (doc) =>
-      (selectedType === "all" || doc.type.toLowerCase() === selectedType) &&
-      doc.name.toLowerCase().includes(searchQuery.toLowerCase())
+  // Huỷ lần tìm kiếm đang chờ khi rời màn
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    []
   );
 
-  const handleTypePress = (type: string) => {
-    setSelectedType(type);
-  };
-  const canOpenInWebView = (type: string) => {
-    const webTypes = [
-      "pdf",
-      "jpg",
-      "jpeg",
-      "png",
-      "txt",
-      "html",
-      "doc",
-      "docx",
-      "xls",
-      "xlsx",
-    ];
-    return webTypes.includes(type.toLowerCase());
+  const onQueryChange = (text: string) => {
+    setQuery(text);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => void load(text), 500);
   };
 
-  const handleDocumentPress = (document: DocumentItem) => {
+  const open = (item: FileItem) => {
+    const doc = item as Doc;
     try {
-      const rawUrl = getRawDocumentUrl(document.link);
-      const fileType = getDocumentType(document.type, document.name, rawUrl);
-      // Office luôn có màn lựa chọn/fallback, cả trên web; không tự mở Microsoft.
-      if (OFFICE_TYPES.includes(fileType) ||
-          (Platform.OS !== "web" && canOpenInWebView(fileType))) {
-        router.push({
-          pathname: "/documents/viewer",
-          params: { link: rawUrl, type: fileType, name: document.name },
-        });
+      const rawUrl = getRawDocumentUrl(doc.link);
+      const fileType = getDocumentType(doc.type, doc.name, rawUrl);
+      // Office luôn qua màn xem (có lựa chọn/dự phòng); định dạng xem được trong app → màn xem
+      if (OFFICE_TYPES.includes(fileType) || (Platform.OS !== "web" && WEB_VIEW_TYPES.includes(fileType.toLowerCase()))) {
+        router.push({ pathname: "/documents/viewer", params: { link: rawUrl, type: fileType, name: doc.name } });
         return;
       }
-      if (Platform.OS === "web") {
-        window.open(rawUrl, "_blank", "noopener,noreferrer");
-      } else {
-        Linking.openURL(rawUrl).catch(() =>
-          Alert.alert("Lỗi", "Không thể mở tài liệu")
-        );
-      }
+      if (Platform.OS === "web") window.open(rawUrl, "_blank", "noopener,noreferrer");
+      else Linking.openURL(rawUrl).catch(() => toast.show({ type: "error", message: "Không thể mở tài liệu" }));
     } catch {
-      Alert.alert("Lỗi", "Đường dẫn tài liệu trống hoặc không hợp lệ.");
+      toast.show({ type: "error", message: "Đường dẫn tài liệu trống hoặc không hợp lệ" });
     }
   };
 
-  const typeGroups = filteredDocuments.reduce<Record<string, DocumentItem[]>>(
-    (acc, doc) => {
-      const key = doc.type;
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(doc);
-      return acc;
-    },
-    {}
-  );
-
-  const uniqueTypes = Array.from(
-    new Set(documents.map((doc) => doc.type.toLowerCase()))
-  );
-
   return (
-    <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: `Folder ${folderId}`,
-          headerStyle: { backgroundColor: "#FAFAFA" },
-          headerTintColor: Colors.text,
-          headerShadowVisible: false,
-        }}
-      />
-
-      <View style={styles.topSection}>
-        <View style={styles.statsRow}>
-          <TouchableOpacity
-            style={[
-              styles.statChip,
-              {
-                backgroundColor:
-                  selectedType === "all" ? "#3B82F612" : Colors.white,
-                borderWidth: selectedType === "all" ? 0 : 1,
-                borderColor: Colors.border,
-              },
-            ]}
-            onPress={() => handleTypePress("all")}
-          >
-            <Text
-              style={[
-                styles.statNumber,
-                { color: selectedType === "all" ? "#3B82F6" : Colors.text },
-              ]}
-            >
-              {documents.length}
-            </Text>
-            <Text
-              style={[
-                styles.statLabel,
-                { color: selectedType === "all" ? "#3B82F6" : Colors.text },
-              ]}
-            >
-              Tất cả
-            </Text>
-          </TouchableOpacity>
-
-          {uniqueTypes.map((type) => {
-            const config = getTypeConfig(type);
-            return (
-              <TouchableOpacity
-                key={type}
-                style={[
-                  styles.statChip,
-                  {
-                    backgroundColor:
-                      selectedType === type
-                        ? config.color + "20"
-                        : config.color + "10",
-                  },
-                ]}
-                onPress={() => handleTypePress(type)}
-              >
-                <Text style={[styles.statNumber, { color: config.color }]}>
-                  {typeGroups[type]?.length || 0}
-                </Text>
-                <Text style={[styles.statLabel, { color: config.color }]}>
-                  {config.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <View style={styles.searchContainer}>
-          <Search color={Colors.textTertiary} size={18} strokeWidth={2} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Tìm kiếm tài liệu..."
-            placeholderTextColor={Colors.textTertiary}
-            value={searchQuery}
-            onChangeText={handleSearchChange}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => handleSearchChange("")}
-              activeOpacity={0.7}
-            >
-              <X color={Colors.textTertiary} size={18} strokeWidth={2} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {filteredDocuments.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📭</Text>
-            <Text style={styles.emptyText}>Không tìm thấy tài liệu</Text>
-          </View>
-        ) : (
-          filteredDocuments.map((document, index) => {
-            const config = getTypeConfig(document.type);
-            const IconComponent = config.icon;
-            const isLast = index === filteredDocuments.length - 1;
-
-            return (
-              <TouchableOpacity
-                key={document.id}
-                style={[
-                  styles.documentRow,
-                  !isLast && styles.documentRowBorder,
-                ]}
-                activeOpacity={0.6}
-                onPress={() => handleDocumentPress(document)}
-              >
-                <View
-                  style={[
-                    styles.typeIndicator,
-                    { backgroundColor: config.color },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.iconBox,
-                    { backgroundColor: config.color + "10" },
-                  ]}
-                >
-                  <IconComponent
-                    color={config.color}
-                    size={20}
-                    strokeWidth={1.8}
-                  />
-                </View>
-
-                <View style={styles.docInfo}>
-                  <Text style={styles.docName} numberOfLines={1}>
-                    {document.name}
-                  </Text>
-                  <View style={styles.docMeta}>
-                    <View
-                      style={[
-                        styles.typeBadge,
-                        { backgroundColor: config.color + "12" },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.typeBadgeText, { color: config.color }]}
-                      >
-                        {config.label}
-                      </Text>
-                    </View>
-                    <Text style={styles.docMetaText}>{document.size}</Text>
-                    <View style={styles.dotSep} />
-                    <Text style={styles.docMetaText}>{document.date}</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            );
-          })
-        )}
-      </ScrollView>
-    </View>
+    <FileListScreen
+      title="Tài liệu"
+      items={docs}
+      loading={loading}
+      error={error}
+      refreshing={refreshing}
+      onRefresh={() => void load(query, true)}
+      onOpen={open}
+      query={query}
+      onQueryChange={onQueryChange}
+    />
   );
 }
-
-// Styles giữ nguyên
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FAFAFA" },
-  topSection: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 16,
-    backgroundColor: "#FAFAFA",
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 14,
-    flexWrap: "wrap",
-  },
-  statChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-  },
-  statNumber: { fontSize: 14, fontWeight: "700" },
-  statLabel: { fontSize: 12, fontWeight: "500" },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  searchInput: { flex: 1, fontSize: 15, color: Colors.text, padding: 0 },
-  content: { flex: 1 },
-  scrollContent: {
-    paddingBottom: 40,
-    marginHorizontal: 20,
-    backgroundColor: Colors.white,
-    borderRadius: 18,
-    overflow: "hidden",
-  },
-  documentRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingRight: 16,
-    paddingLeft: 0,
-  },
-  documentRowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(0,0,0,0.06)",
-  },
-  typeIndicator: {
-    width: 3,
-    height: 32,
-    borderTopRightRadius: 3,
-    borderBottomRightRadius: 3,
-    marginRight: 12,
-  },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  docInfo: { flex: 1, gap: 5 },
-  docName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.text,
-    lineHeight: 19,
-  },
-  docMeta: { flexDirection: "row", alignItems: "center", gap: 8 },
-  typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
-  typeBadgeText: { fontSize: 10, fontWeight: "700", letterSpacing: 0.3 },
-  docMetaText: { fontSize: 12, color: Colors.textTertiary, fontWeight: "400" },
-  dotSep: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: Colors.textLight,
-  },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  emptyIcon: { fontSize: 40, marginBottom: 12 },
-  emptyText: { fontSize: 15, color: Colors.textSecondary, fontWeight: "500" },
-});

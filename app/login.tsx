@@ -1,57 +1,89 @@
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  Image,
-} from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Alert, Image, Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Colors from "@/constants/colors";
-import { cacheCloudProfile, PROFILE_KEY } from "@/sevicesSupabase/CloudProfileService";
+import { Eye, EyeOff, Square, SquareCheck } from "lucide-react-native";
+
+import { buildAccountScope, setAccountScope } from "@/components/utils/accountScope";
+import { Button, Screen, SegmentedControl, Text, TextField, useToast } from "@/components/ui";
+import { hapticError } from "@/lib/haptics";
+import { colors, space } from "@/theme";
+import {
+  cacheCloudProfile,
+  PROFILE_KEY,
+} from "@/sevicesSupabase/CloudProfileService";
 import { AuthSupabaseService } from "@/sevicesSupabase/AuthService";
-import { persistTenantFromJwt } from "@/sevicesSupabase/cloudTenant";
+import {
+  persistTenantFromJwt,
+  decodeJwtPayload,
+  isJwtExpired,
+  findJwtInObject,
+  looksLikeJwt,
+  getSessionStatus,
+} from "@/sevicesSupabase/cloudTenant";
 
+/**
+ * Đăng nhập (nội bộ / đại lý). Luồng đăng nhập (lưu phiên, tenant, nhớ mật khẩu) giữ nguyên;
+ * chỉ đổi giao diện và cách báo lỗi (lỗi nhập → dưới form; lỗi đăng nhập/mạng → toast;
+ * lỗi cấu hình tài khoản nghiêm trọng → Alert như cũ).
+ */
 export default function LoginScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
+  const toast = useToast();
 
+  const [loginType, setLoginType] = useState<"INTERNAL" | "AGENCY">("INTERNAL");
   const [companyCode, setCompanyCode] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const submitting = useRef(false);
+
+  useEffect(() => {
+    const loadCredentials = async () => {
+      const saved = await AsyncStorage.getItem("@remember_login");
+      if (saved) {
+        const { companyCode, username, password, loginType, rememberMe } = JSON.parse(saved);
+        setCompanyCode(companyCode || "");
+        setUsername(username || "");
+        setPassword(password || "");
+        setLoginType(loginType || "INTERNAL");
+        setRememberMe(rememberMe || false);
+      }
+    };
+    loadCredentials();
+  }, []);
 
   const handleLogin = async () => {
     if (!companyCode || !username || !password) {
-      Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin");
+      setFormError("Vui lòng nhập đủ mã công ty, tài khoản và mật khẩu");
+      hapticError();
       return;
     }
 
+    if (submitting.current) return;
+    submitting.current = true;
+    setFormError(null);
     try {
       setLoading(true);
 
-      const res = await AuthSupabaseService.login(
-        //   {
-        //   TenCTDKVT: companyCode.trim(),
-        //   Email: username.trim(),
-        //   Password: password,
-        // }
-        {
-          action: "login",
-          maCTDK: companyCode.trim(),
-          email: username.trim(),
-          password: password,
-          typeAccount: "SYSTEM",
-        }
-      );
+      const payload = {
+        action: "login",
+        maCTDK: companyCode.trim(),
+        email: username.trim(),
+        password: password,
+        typeAccount: loginType === "AGENCY" ? "AGENCY" : "SYSTEM",
+      };
+
+      const res = await AuthSupabaseService.login(payload);
       console.log("[Login] cloud-auth response keys:", Object.keys(res || {}));
       if (res?.status === 200) {
-        const dataObj = (res as any)?.data && typeof (res as any).data === "object" ? (res as any).data : {};
+        const dataObj =
+          (res as any)?.data && typeof (res as any).data === "object"
+            ? (res as any).data
+            : {};
         const token =
           (res as any)?.acessToken ??
           (res as any)?.accessToken ??
@@ -60,7 +92,6 @@ export default function LoginScreen() {
           dataObj?.accessToken ??
           dataObj?.token ??
           "";
-        // Backend mới có thể trả jwt ở nhiều chỗ khác nhau — quét hết
         let supabaseJwt =
           (res as any)?.jwt ??
           (res as any)?.cloud_jwt ??
@@ -73,13 +104,6 @@ export default function LoginScreen() {
           dataObj?.access_token ??
           "";
         try {
-          const {
-            decodeJwtPayload,
-            isJwtExpired,
-            findJwtInObject,
-            looksLikeJwt,
-          } = await import("@/sevicesSupabase/cloudTenant");
-          // Quét đệ quy phòng backend đổi tên key chứa JWT
           if (!supabaseJwt || !looksLikeJwt(supabaseJwt)) {
             const scanned = findJwtInObject(res);
             if (scanned) {
@@ -89,17 +113,15 @@ export default function LoginScreen() {
           }
           const p = decodeJwtPayload(supabaseJwt || "");
           console.log(
-            `[Login] jwt exp=${p?.exp} now=${Math.floor(Date.now() / 1000)} expired=${isJwtExpired(supabaseJwt || "")} company_id=${p?.company_id || p?.ma_ctdk} company_code=${p?.company_code} role=${p?.role}`
+            `[Login] jwt exp=${p?.exp} now=${Math.floor(
+              Date.now() / 1000
+            )} expired=${isJwtExpired(supabaseJwt || "")} company_id=${
+              p?.company_id || p?.ma_ctdk
+            } company_code=${p?.company_code} role=${p?.role}`
           );
-          if (!supabaseJwt) console.log("[Login] WARN không tìm thấy cloud_jwt trong response, kiểm tra keys ở trên");
-          if (supabaseJwt && isJwtExpired(supabaseJwt)) console.log("[Login] WARN jwt vừa nhận đã expired, báo AI web kiểm tra expiresIn/secret");
         } catch {}
 
-        // Lưu session khi có token HOẶC jwt (trước đây chỉ lưu khi có token
-        // nên nhiều tài khoản vào được home nhưng mọi API Supabase đều rỗng).
-        // Không bao giờ lưu chuỗi rỗng vào @supabase_jwt.
         if (token || supabaseJwt) {
-          // Xoá sạch phiên cũ trước khi ghi mới để tránh kẹt token/tenant cũ
           await AsyncStorage.multiRemove([
             PROFILE_KEY,
             "@token",
@@ -113,6 +135,7 @@ export default function LoginScreen() {
             "@ma_nv",
             "@type_account",
             "maCTDK_UUID",
+            "@home_features_config",
           ]);
           if (token) {
             await AsyncStorage.setItem("@token", token);
@@ -122,12 +145,38 @@ export default function LoginScreen() {
           } else {
             await AsyncStorage.removeItem("@supabase_jwt");
           }
-          await AsyncStorage.setItem("maCTDK", String(dataObj?.maCTDK ?? (res as any)?.maCTDK ?? ""));
+          await AsyncStorage.setItem(
+            "maCTDK",
+            String(dataObj?.maCTDK ?? (res as any)?.maCTDK ?? "")
+          );
           await AsyncStorage.setItem("tenCTDKVT", companyCode.trim());
-          await persistTenantFromJwt(supabaseJwt || "", companyCode.trim(), res);
+          await AsyncStorage.setItem(
+            "@type_account",
+            loginType === "AGENCY" ? "AGENCY" : "SYSTEM"
+          );
+          await setAccountScope(
+            buildAccountScope(
+              loginType === "AGENCY" ? "AGENCY" : "SYSTEM",
+              companyCode,
+              username
+            )
+          );
+          
+          if (rememberMe) {
+            await AsyncStorage.setItem("@remember_login", JSON.stringify({
+              companyCode, username, password, loginType, rememberMe
+            }));
+          } else {
+            await AsyncStorage.removeItem("@remember_login");
+          }
+
+          await persistTenantFromJwt(
+            supabaseJwt || "",
+            companyCode.trim(),
+            res
+          );
           await cacheCloudProfile(res, supabaseJwt || "");
           try {
-            const { getSessionStatus } = await import("@/sevicesSupabase/cloudTenant");
             const st = await getSessionStatus();
             console.log(
               `[Login] session sau khi lưu: ok=${st.ok} reason=${st.reason} tenant=${st.tenantId} hasJwt=${st.hasJwt} expired=${st.jwtExpired}`
@@ -149,205 +198,119 @@ export default function LoginScreen() {
           );
         }
       } else {
-        Alert.alert("Thông báo", res?.message || "Đăng nhập thất bại");
+        hapticError();
+        toast.show({ type: "error", message: res?.message || "Đăng nhập thất bại" });
       }
     } catch (error) {
       console.log("Login error:", error);
-      Alert.alert("Lỗi", "Không kết nối được server");
+      hapticError();
+      toast.show({ type: "error", message: "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại." });
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   };
 
+  const isAgency = loginType === "AGENCY";
+  const Check = rememberMe ? SquareCheck : Square;
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.content}>
-        <View style={styles.logoContainer}>
-          <Image
-            source={require("@/assets/images/beeland-logo.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-
-          <Text style={styles.welcomeText}>Đăng nhập</Text>
-          <Text style={styles.subText}>
-            Vui lòng nhập thông tin để tiếp tục
-          </Text>
-        </View>
-
-        <View style={styles.formContainer}>
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Mã công ty</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Nhập mã công ty"
-              placeholderTextColor={Colors.textLight}
-              value={companyCode}
-              onChangeText={setCompanyCode}
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Tài khoản</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Nhập tài khoản"
-              placeholderTextColor={Colors.textLight}
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Mật khẩu</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Nhập mật khẩu"
-              placeholderTextColor={Colors.textLight}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          </View>
-
-          <TouchableOpacity
-            style={styles.forgotPassword}
-            onPress={() => router.push("/forgot-password")}
-          >
-            <Text style={styles.forgotPasswordText}>Quên mật khẩu?</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.loginButtonText}>Đăng nhập</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.registerRow}>
-            <Text style={styles.registerText}>Chưa có tài khoản? </Text>
-            <TouchableOpacity onPress={() => router.push("/register")}>
-              <Text style={styles.registerLink}>Đăng ký</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+    <Screen keyboardAware>
+      <View style={styles.brand}>
+        <Image source={require("@/assets/images/beeland-logo.png")} style={styles.logo} resizeMode="contain" />
+        <Text variant="title" accessibilityRole="header">
+          {isAgency ? "Đăng nhập Đại lý" : "Đăng nhập Nội bộ"}
+        </Text>
+        <Text variant="caption" color="textSecondary">
+          Vui lòng nhập thông tin để tiếp tục
+        </Text>
       </View>
-    </View>
+
+      <SegmentedControl
+        value={loginType}
+        options={[
+          { value: "INTERNAL", label: "Nội bộ" },
+          { value: "AGENCY", label: "Đại lý" },
+        ]}
+        onChange={setLoginType}
+      />
+
+      <TextField
+        label="Mã công ty"
+        placeholder="Nhập mã công ty"
+        value={companyCode}
+        onChangeText={(t) => {
+          setCompanyCode(t);
+          setFormError(null);
+        }}
+        autoCapitalize="none"
+        autoCorrect={false}
+        required
+      />
+      <TextField
+        label="Tài khoản"
+        placeholder="Nhập tài khoản"
+        value={username}
+        onChangeText={(t) => {
+          setUsername(t);
+          setFormError(null);
+        }}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="username"
+        required
+      />
+      <TextField
+        label="Mật khẩu"
+        placeholder="Nhập mật khẩu"
+        value={password}
+        onChangeText={(t) => {
+          setPassword(t);
+          setFormError(null);
+        }}
+        secureTextEntry={!showPassword}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="password"
+        returnKeyType="go"
+        onSubmitEditing={() => void handleLogin()}
+        error={formError}
+        required
+        suffix={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+            onPress={() => setShowPassword(!showPassword)}
+            hitSlop={12}
+          >
+            {showPassword ? <EyeOff size={20} color={colors.textSecondary} /> : <Eye size={20} color={colors.textSecondary} />}
+          </Pressable>
+        }
+      />
+
+      <View style={styles.row}>
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: rememberMe }}
+          onPress={() => setRememberMe(!rememberMe)}
+          style={styles.remember}
+          hitSlop={8}
+        >
+          <Check size={20} color={rememberMe ? colors.primary : colors.textSecondary} />
+          <Text variant="body">Nhớ mật khẩu</Text>
+        </Pressable>
+        <Button title="Quên mật khẩu?" variant="ghost" onPress={() => router.push("/forgot-password")} />
+      </View>
+
+      <Button title="Đăng nhập" size="lg" loading={loading} onPress={() => void handleLogin()} />
+
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    justifyContent: "center",
-  },
-
-  logoContainer: {
-    alignItems: "center",
-    marginBottom: 48,
-  },
-
-  logo: {
-    width: 120,
-    height: 120,
-    borderRadius: 24,
-    marginBottom: 24,
-  },
-
-  welcomeText: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: Colors.text,
-    marginBottom: 8,
-  },
-
-  subText: {
-    fontSize: 16,
-    color: Colors.textSecondary,
-  },
-
-  formContainer: {
-    width: "100%",
-  },
-
-  inputContainer: {
-    marginBottom: 20,
-  },
-
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.text,
-    marginBottom: 8,
-  },
-
-  input: {
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: Colors.text,
-  },
-
-  forgotPassword: {
-    alignSelf: "flex-end",
-    marginBottom: 24,
-  },
-
-  forgotPasswordText: {
-    fontSize: 14,
-    color: Colors.primary,
-    fontWeight: "500",
-  },
-
-  loginButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    padding: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  loginButtonDisabled: {
-    opacity: 0.7,
-  },
-
-  loginButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.white,
-  },
-  registerRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 20,
-  },
-  registerText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  registerLink: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.primary,
-  },
+  brand: { alignItems: "center", gap: space.xs, paddingTop: space.xl, paddingBottom: space.md },
+  logo: { width: 160, height: 64, marginBottom: space.sm },
+  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  remember: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 44 },
 });

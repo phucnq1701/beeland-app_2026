@@ -8,7 +8,6 @@ import {
   Image,
   Modal,
   Dimensions,
-  Alert,
   Platform,
   FlatList,
   ActivityIndicator,
@@ -19,6 +18,7 @@ import { X, ChevronLeft, ChevronRight } from "lucide-react-native";
 import * as Sharing from "expo-sharing";
 import * as MediaLibrary from "expo-media-library";
 import { DocumentService } from "@/sevicesSupabase/DocumentService";
+import { useToast } from "@/components/ui";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -32,6 +32,7 @@ type Photo = {
 };
 
 export default function PhotosScreen() {
+  const toast = useToast();
   const { folderId, folder } = useLocalSearchParams<{
     folderId: string;
     folder: string;
@@ -86,7 +87,7 @@ export default function PhotosScreen() {
       setPhotos(mapped);
     } catch (err) {
       console.log(err);
-      Alert.alert("Lỗi", "Không tải được ảnh");
+      toast.show({ type: "error", message: "Không tải được ảnh" });
     } finally {
       setLoading(false);
     }
@@ -157,7 +158,7 @@ export default function PhotosScreen() {
 
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Lỗi", "Cần cấp quyền lưu ảnh");
+        toast.show({ type: "error", message: "Cần cấp quyền lưu ảnh" });
         return;
       }
 
@@ -168,10 +169,10 @@ export default function PhotosScreen() {
         () => {}
       );
 
-      Alert.alert("OK", "Đã tải ảnh");
+      toast.show({ type: "success", message: "Đã tải ảnh" });
     } catch (e) {
       console.log("DOWNLOAD ERROR:", e);
-      Alert.alert("Lỗi", "Tải ảnh thất bại");
+      toast.show({ type: "error", message: "Tải ảnh thất bại" });
     } finally {
       setLoading(false);
     }
@@ -185,7 +186,7 @@ export default function PhotosScreen() {
         await Sharing.shareAsync(photo.url);
       }
     } catch {
-      Alert.alert("Lỗi", "Không share được");
+      toast.show({ type: "error", message: "Không share được" });
     }
   };
 
@@ -205,6 +206,8 @@ export default function PhotosScreen() {
                 key={photo.id}
                 style={styles.photoCard}
                 onPress={() => handlePhotoPress(photo, index)}
+                accessibilityRole="button"
+                accessibilityLabel={`Xem ảnh ${index + 1}`}
               >
                 <Image
                   source={{ uri: photo.thumbnail }}
@@ -224,7 +227,7 @@ export default function PhotosScreen() {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={handleClose}>
+            <TouchableOpacity onPress={handleClose} accessibilityRole="button" accessibilityLabel="Đóng" hitSlop={12}>
               <X color="white" size={28} />
             </TouchableOpacity>
           </View>
@@ -263,11 +266,11 @@ export default function PhotosScreen() {
               )}
             />
 
-            <TouchableOpacity style={styles.leftNav} onPress={handlePrevPhoto}>
+            <TouchableOpacity style={styles.leftNav} onPress={handlePrevPhoto} accessibilityRole="button" accessibilityLabel="Ảnh trước">
               <ChevronLeft color="white" size={30} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.rightNav} onPress={handleNextPhoto}>
+            <TouchableOpacity style={styles.rightNav} onPress={handleNextPhoto} accessibilityRole="button" accessibilityLabel="Ảnh sau">
               <ChevronRight color="white" size={30} />
             </TouchableOpacity>
           </View>

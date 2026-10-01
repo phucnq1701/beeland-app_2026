@@ -1,65 +1,42 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Platform,
-  ActivityIndicator,
-  Animated,
-} from "react-native";
+import React, { useState, useEffect, useCallback, memo } from "react";
+import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  Search,
-  Filter,
-  X,
-  MapPin,
-  Lock,
-  Unlock,
-  Timer,
-  ChevronRight,
-  ChevronLeft,
-  ChevronUp,
-  ChevronDown,
-  AlertTriangle,
-} from "lucide-react-native";
+import { AlertTriangle, ChevronRight, Clock, Lock, LockOpen, LucideIcon, MapPin } from "lucide-react-native";
 
-import Colors from "@/constants/colors";
+import {
+  FilterPanel,
+  FilterSection,
+  FilterToggleButton,
+  multiSelectOptions,
+} from "@/components/FilterPanel";
+import {
+  AppHeader,
+  Badge,
+  BadgeTone,
+  Card,
+  Chip,
+  EmptyState,
+  Screen,
+  SearchBar,
+  SkeletonList,
+  Text,
+} from "@/components/ui";
+import { formatDateTime } from "@/lib/format";
+import { colors, elevation, radius, space } from "@/theme";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 
-const STATUS_CONFIGS = {
-  active: {
-    bg: "#EBF8F1",
-    color: "#0D9B54",
-    borderColor: "#B4E8CD",
-    accentBg: "#0D9B54",
-    icon: Lock,
-    label: "Đang lock",
-    emoji: "🔒",
-  },
-  warning: {
-    bg: "#FFF8EB",
-    color: "#CC7A00",
-    borderColor: "#FFE0A3",
-    accentBg: "#CC7A00",
-    icon: AlertTriangle,
-    label: "Sắp hết hạn",
-    emoji: "⚠️",
-  },
-  expired: {
-    bg: "#FFF0F0",
-    color: "#D63031",
-    borderColor: "#FFBCBC",
-    accentBg: "#D63031",
-    icon: Unlock,
-    label: "Hết hạn",
-    emoji: "🔓",
-  },
-} as const;
+/** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
+const TAB_BAR_SPACE = 100;
+
+const STATUS_CONFIGS: Record<
+  "active" | "warning" | "expired",
+  { tone: BadgeTone; icon: LucideIcon; label: string; bar: string; subtle: string }
+> = {
+  active: { tone: "success", icon: Lock, label: "Đang lock", bar: colors.success, subtle: colors.successSubtle },
+  warning: { tone: "warning", icon: AlertTriangle, label: "Sắp hết hạn", bar: colors.warning, subtle: colors.warningSubtle },
+  expired: { tone: "danger", icon: LockOpen, label: "Hết hạn", bar: colors.danger, subtle: colors.dangerSubtle },
+};
 
 type StatusKey = keyof typeof STATUS_CONFIGS;
 
@@ -70,94 +47,81 @@ const getStatus = (remainingMinutes: number, lockDuration: number): StatusKey =>
   return "active";
 };
 
-function AnimatedProgressBar({
-  progress,
-  color,
-}: {
-  progress: number;
-  color: string;
-}) {
-  const animValue = useRef(new Animated.Value(0)).current;
+const formatRemaining = (mins: number) => {
+  if (mins <= 0) return "Hết hạn";
+  if (mins >= 60) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `Còn ${h} giờ ${m} phút`;
+  }
+  return `Còn ${mins} phút`;
+};
 
-  useEffect(() => {
-    Animated.timing(animValue, {
-      toValue: progress,
-      duration: 800,
-      useNativeDriver: false,
-    }).start();
-  }, [progress, animValue]);
-
-  const width = animValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0%", "100%"],
-  });
+const LockRow = memo(function LockRow({ item, onPress }: { item: any; onPress: (item: any) => void }) {
+  const remainingMinutes = item.thoiGianConLai || 0;
+  const lockDuration = item.thoiGianLock || 30;
+  const progress = Math.min(remainingMinutes / lockDuration, 1);
+  const status = getStatus(remainingMinutes, lockDuration);
+  const config = STATUS_CONFIGS[status];
+  const Icon = config.icon;
 
   return (
-    <View style={progressStyles.track}>
-      <Animated.View
-        style={[progressStyles.fill, { width, backgroundColor: color }]}
-      />
-    </View>
+    <Card
+      onPress={() => onPress(item)}
+      style={styles.card}
+      padding={space.lg + 2}
+      accessibilityLabel={`Căn ${item.kyHieu ?? ""}, ${config.label}, ${formatRemaining(remainingMinutes)}`}
+    >
+      <View style={styles.rowHead}>
+        <View style={[styles.icon, { backgroundColor: config.subtle }]}>
+          <Icon size={20} color={config.bar} strokeWidth={2} />
+        </View>
+        <View style={styles.flex}>
+          <Text variant="subhead" numberOfLines={1}>
+            {item.kyHieu || "—"}
+          </Text>
+          <View style={styles.place}>
+            <MapPin size={12} color={colors.textTertiary} />
+            <Text variant="caption" color="textSecondary" numberOfLines={1} style={styles.flex}>
+              {item.tenDA || "—"}
+            </Text>
+          </View>
+        </View>
+        <Badge label={config.label} tone={config.tone} />
+      </View>
+
+      {/* Còn hạn: thời gian còn lại + thanh tiến độ. Hết hạn: badge đã nói, không lặp lại */}
+      {remainingMinutes > 0 ? (
+        <View style={styles.remain}>
+          <Text variant="caption" weight="semibold" color={config.bar}>
+            {formatRemaining(remainingMinutes)}
+          </Text>
+          <View style={styles.track} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <View style={[styles.fill, { width: `${Math.round(progress * 100)}%`, backgroundColor: config.bar }]} />
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.footer}>
+        <Clock size={14} color={colors.textTertiary} />
+        <Text variant="caption" color="textSecondary" style={styles.flex} numberOfLines={1}>
+          Lock lúc {formatDateTime(item.ngayLock)}
+        </Text>
+        <View style={styles.chevron}>
+          <ChevronRight size={16} color={colors.textSecondary} strokeWidth={2.5} />
+        </View>
+      </View>
+    </Card>
   );
-}
-
-const progressStyles = StyleSheet.create({
-  track: {
-    height: 5,
-    backgroundColor: "#F0F1F3",
-    borderRadius: 3,
-    overflow: "hidden" as const,
-  },
-  fill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-});
-
-function CountdownBadge({ minutes, color }: { minutes: number; color: string }) {
-  const formatRemaining = (mins: number) => {
-    if (mins <= 0) return "Hết hạn";
-    if (mins >= 60) {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return `${h}h ${m}p`;
-    }
-    return `${mins} phút`;
-  };
-
-  return (
-    <View style={[countdownStyles.container, { backgroundColor: color + "18" }]}>
-      <Timer size={13} color={color} />
-      <Text style={[countdownStyles.text, { color }]}>
-        {formatRemaining(minutes)}
-      </Text>
-    </View>
-  );
-}
-
-const countdownStyles = StyleSheet.create({
-  container: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  text: {
-    fontSize: 13,
-    fontWeight: "700" as const,
-  },
 });
 
 export default function LockedUnitsScreen({
   embedded,
 }: { embedded?: boolean } = {}) {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [duAn, setDuAn] = useState<any[]>([]);
   const [dataLook, setDataLook] = useState<any[]>([]);
@@ -211,20 +175,15 @@ export default function LockedUnitsScreen({
   }, [fetchLockList]);
 
   const loadMore = () => {
-    if (loadingMore || loading) return;
-    setLoadingMore(true);
-    setLimit((prev) => prev + 50);
-    setLoadingMore(false);
+    if (loading) return;
+    // Tải thêm = tăng giới hạn (API không phân trang theo offset), chỉ khi có thể còn dữ liệu
+    if (dataLook.length >= limit) setLimit((prev) => prev + 50);
   };
 
-  const formatLockTime = (dateStr: string) => {
-    const d = new Date(dateStr);
-    const h = String(d.getHours()).padStart(2, "0");
-    const m = String(d.getMinutes()).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const year = d.getFullYear();
-    return `${h}:${m} - ${day}/${month}/${year}`;
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchLockList();
+    setRefreshing(false);
   };
 
   const filteredData = dataLook.filter((item: any) => {
@@ -238,615 +197,142 @@ export default function LockedUnitsScreen({
   const expiredCount = dataLook.filter((i: any) => (i.thoiGianConLai || 0) <= 0).length;
 
   const tabs = [
-    { key: "all" as const, label: "Tất cả", count: dataLook.length, color: Colors.primary },
-    { key: "active" as const, label: "Đang lock", count: activeCount, color: "#0D9B54" },
-    { key: "expired" as const, label: "Hết hạn", count: expiredCount, color: "#D63031" },
+    { key: "all" as const, label: "Tất cả", count: dataLook.length },
+    { key: "active" as const, label: "Đang lock", count: activeCount },
+    { key: "expired" as const, label: "Hết hạn", count: expiredCount },
   ];
 
-  return (
-    <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: "Lock căn",
-          headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
-          headerTitleStyle: { fontWeight: "700", fontSize: 18 },
-          headerShadowVisible: false,
-          // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
-          headerLeft: embedded
-            ? undefined
-            : () => (
-                <TouchableOpacity
-                  onPress={() => router.back()}
-                  style={styles.headerBackButton}
-                >
-                  <ChevronLeft color={Colors.text} size={24} />
-                </TouchableOpacity>
-              ),
-        }}
-      />
+  const openLock = useCallback(
+    (item: any) =>
+      router.push({
+        pathname: "/locked/[id]",
+        params: { id: item.id, maSP: item?.maSP },
+      }),
+    [router]
+  );
 
+  const header = (
+    <View style={styles.listHeader}>
+      <SearchBar value={searchInput} onChangeText={setSearchInput} placeholder="Tìm mã căn, dự án" variant="soft" />
+      {showFilter && (
+        <FilterPanel activeCount={selectedProjects.length > 0 ? 1 : 0} onReset={() => setSelectedProjects([])}>
+          <FilterSection
+            title="Dự án"
+            hint="Chọn nhiều"
+            options={multiSelectOptions(
+              duAn,
+              (p: any) => p.MaDA,
+              (p: any) => p.TenDA,
+              selectedProjects,
+              setSelectedProjects
+            )}
+          />
+        </FilterPanel>
+      )}
+      {/* Tràn ra mép màn để bóng chip không bị cắt ở hai đầu */}
       <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + 20 },
-        ]}
-        onMomentumScrollEnd={(e) => {
-          const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-          const isEnd =
-            layoutMeasurement.height + contentOffset.y >=
-            contentSize.height - 20;
-          if (isEnd) loadMore();
-        }}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipsScroll}
+        contentContainerStyle={styles.chips}
       >
-        {/* Search & Filter */}
-        <View style={styles.searchAndFilterRow}>
-          <View style={styles.searchContainer}>
-            <Search color={Colors.textSecondary} size={20} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Tìm mã căn, dự án..."
-              placeholderTextColor={Colors.textSecondary}
-              value={searchInput}
-              onChangeText={setSearchInput}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {searchInput.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchInput("")}>
-                <X color={Colors.textSecondary} size={20} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              selectedProjects.length > 0 && styles.filterButtonActive,
-            ]}
-            onPress={() => setShowFilter(!showFilter)}
-            activeOpacity={0.7}
-          >
-            <Filter color={Colors.primary} size={18} />
-            <Text style={styles.filterText}>Bộ lọc</Text>
-            {showFilter ? (
-              <ChevronUp color={Colors.primary} size={18} />
-            ) : (
-              <ChevronDown color={Colors.primary} size={18} />
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Filters Panel */}
-        {showFilter && (
-          <View style={styles.filterPanel}>
-            <View style={styles.filterSectionHeader}>
-              <Text style={styles.filterSectionTitle}>Lọc theo dự án</Text>
-              {selectedProjects.length > 0 && (
-                <TouchableOpacity
-                  style={styles.resetFilterButton}
-                  onPress={() => setSelectedProjects([])}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.resetFilterText}>Đặt lại</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <View style={styles.filterOptionsGrid}>
-              {duAn.map((project) => {
-                const active = selectedProjects.includes(project.MaDA);
-                return (
-                  <TouchableOpacity
-                    key={project.MaDA}
-                    style={[
-                      styles.filterOption,
-                      active && styles.filterOptionActive,
-                    ]}
-                    onPress={() => {
-                      if (active) {
-                        setSelectedProjects((prev) =>
-                          prev.filter((pid) => pid !== project.MaDA)
-                        );
-                      } else {
-                        setSelectedProjects((prev) => [...prev, project.MaDA]);
-                      }
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        active && styles.filterOptionTextActive,
-                      ]}
-                    >
-                      {project.TenDA}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        )}
-
-        {/* Status Tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.statsScrollContent}
-          style={styles.statsScroll}
-        >
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.key;
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                activeOpacity={0.8}
-                style={[
-                  styles.statCard,
-                  { backgroundColor: tab.color },
-                  isActive && styles.statCardSelected,
-                ]}
-                onPress={() => setActiveTab(tab.key)}
-              >
-                <Text style={styles.statValue}>{tab.count}</Text>
-                <Text style={styles.statLabel} numberOfLines={1}>
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
-          </View>
-        ) : (
-          <>
-            {filteredData.length === 0 && (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIconWrap}>
-                  <Lock color={Colors.textSecondary} size={36} />
-                </View>
-                <Text style={styles.emptyTitle}>Không có dữ liệu</Text>
-                <Text style={styles.emptySubtitle}>
-                  Chưa có lock căn nào phù hợp với bộ lọc
-                </Text>
-              </View>
-            )}
-
-            {filteredData.map((item: any, index: number) => {
-              const remainingMinutes = item.thoiGianConLai || 0;
-              const lockDuration = item.thoiGianLock || 30;
-              const progress = Math.min(remainingMinutes / lockDuration, 1);
-              const status = getStatus(remainingMinutes, lockDuration);
-              const config = STATUS_CONFIGS[status];
-              const StatusIcon = config.icon;
-
-              return (
-                <TouchableOpacity
-                  key={item.id || index}
-                  style={[
-                    styles.unitCard,
-                    { borderLeftColor: config.accentBg, borderLeftWidth: 4 },
-                  ]}
-                  activeOpacity={0.7}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/locked/[id]",
-                      params: { id: item.id, maSP: item?.maSP },
-                    })
-                  }
-                >
-                  <View style={styles.cardHeader}>
-                    <View style={styles.cardHeaderLeft}>
-                      <View
-                        style={[styles.iconCircle, { backgroundColor: config.bg }]}
-                      >
-                        <StatusIcon size={16} color={config.color} />
-                      </View>
-                      <View>
-                        <Text style={styles.productCode}>{item.kyHieu}</Text>
-                        <View style={styles.projectRow}>
-                          <MapPin size={12} color={Colors.textTertiary} />
-                          <Text style={styles.projectName} numberOfLines={1}>
-                            {item.tenDA}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    <View style={styles.cardHeaderRight}>
-                      <View
-                        style={[
-                          styles.statusPill,
-                          {
-                            backgroundColor: config.bg,
-                            borderColor: config.borderColor,
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.statusPillText, { color: config.color }]}>
-                          {config.label}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  <View style={styles.cardBody}>
-                    <View style={styles.timeRow}>
-                      <View style={styles.timeItem}>
-                        <Text style={styles.timeLabel}>Thời gian lock</Text>
-                        <Text style={styles.timeValue}>
-                          {formatLockTime(item.ngayLock)}
-                        </Text>
-                      </View>
-                      <CountdownBadge minutes={remainingMinutes} color={config.color} />
-                    </View>
-
-                    {remainingMinutes > 0 && (
-                      <View style={styles.progressSection}>
-                        <AnimatedProgressBar
-                          progress={progress}
-                          color={config.color}
-                        />
-                        <View style={styles.progressLabels}>
-                          <Text style={styles.progressLabelText}>0%</Text>
-                          <Text
-                            style={[
-                              styles.progressLabelText,
-                              { color: config.color, fontWeight: "600" as const },
-                            ]}
-                          >
-                            {Math.round(progress * 100)}%
-                          </Text>
-                        </View>
-                      </View>
-                    )}
-                  </View>
-
-                  <View style={styles.cardFooter}>
-                    <Text style={styles.viewDetail}>Chi tiết</Text>
-                    <ChevronRight size={14} color={Colors.primary} />
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-
-            {loadingMore && (
-              <View style={styles.loadMoreContainer}>
-                <ActivityIndicator size="small" color={Colors.primary} />
-                <Text style={styles.loadMoreText}>Đang tải thêm...</Text>
-              </View>
-            )}
-          </>
-        )}
+        {tabs.map((tab) => (
+          <Chip
+            key={tab.key}
+            label={tab.label}
+            count={tab.count}
+            selected={activeTab === tab.key}
+            onPress={() => setActiveTab(tab.key)}
+            variant="soft"
+          />
+        ))}
       </ScrollView>
     </View>
+  );
+
+  return (
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <Screen
+        scroll={false}
+        padded={false}
+        header={
+          <AppHeader
+            variant="soft"
+            title="Lock căn"
+            // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
+            hideBack={embedded}
+            actions={
+              <FilterToggleButton
+                open={showFilter}
+                activeCount={selectedProjects.length > 0 ? 1 : 0}
+                onPress={() => setShowFilter(!showFilter)}
+              />
+            }
+          />
+        }
+      >
+        <FlatList
+          data={loading && dataLook.length === 0 ? [] : filteredData}
+          keyExtractor={(item: any, index: number) => String(item.id || index)}
+          renderItem={({ item }) => <LockRow item={item} onPress={openLock} />}
+          ListHeaderComponent={header}
+          ListEmptyComponent={
+            loading ? (
+              <SkeletonList count={4} />
+            ) : (
+              <EmptyState icon={Lock} title="Không có dữ liệu" description="Chưa có lock căn nào phù hợp với bộ lọc." />
+            )
+          }
+          ItemSeparatorComponent={() => <View style={styles.gap} />}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.3}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[styles.list, { paddingBottom: embedded ? TAB_BAR_SPACE : space.xxl }]}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+          }
+        />
+      </Screen>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  headerBackButton: {
-    marginLeft: 8,
-  },
-  content: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 15,
-    paddingBottom: 40,
-  },
-  searchAndFilterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.text,
-    padding: 0,
-    ...Platform.select({ web: { outlineStyle: "none" as any } }),
-  },
-  filterButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  filterButtonActive: {
-    borderColor: Colors.primary,
-  },
-  filterText: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  filterPanel: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  filterSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  filterSectionTitle: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-    marginBottom: 12,
-  },
-  resetFilterButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: Colors.primary,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  resetFilterText: {
-    fontSize: 12,
-    fontWeight: "500" as const,
-    color: Colors.white,
-  },
-  filterOptionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  filterOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  filterOptionActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  filterOptionText: {
-    fontSize: 14,
-    fontWeight: "500" as const,
-    color: Colors.text,
-  },
-  filterOptionTextActive: {
-    color: Colors.white,
-  },
-  statsScroll: {
-    marginBottom: 16,
-  },
-  statsScrollContent: {
-    gap: 8,
-    paddingVertical: 2,
-  },
-  statCard: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center" as const,
-    minWidth: 72,
-  },
-  statCardSelected: {
-    borderWidth: 2.5,
-    borderColor: Colors.white,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "800" as const,
-    color: Colors.white,
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 10,
-    fontWeight: "700" as const,
-    color: Colors.white,
-    letterSpacing: 0.3,
-  },
-  unitCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    marginBottom: 10,
-    overflow: "hidden" as const,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
-      },
-      android: { elevation: 2 },
-    }),
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    paddingTop: 16,
-    paddingRight: 16,
-    paddingLeft: 14,
-  },
-  cardHeaderLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  cardHeaderRight: {
-    alignItems: "flex-end",
-  },
-  productCode: {
-    fontSize: 16,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    letterSpacing: -0.3,
-  },
-  projectRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    marginTop: 3,
-  },
-  projectName: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-    fontWeight: "500" as const,
-    maxWidth: 140,
-  },
-  statusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  statusPillText: {
-    fontSize: 11,
-    fontWeight: "700" as const,
-    textTransform: "uppercase" as const,
-    letterSpacing: 0.3,
-  },
-  cardBody: {
-    paddingHorizontal: 14,
-    paddingTop: 14,
-  },
-  timeRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  timeItem: {
-    flex: 1,
-  },
-  timeLabel: {
-    fontSize: 11,
-    color: Colors.textTertiary,
-    fontWeight: "500" as const,
-    marginBottom: 3,
-  },
-  timeValue: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.textSecondary,
-  },
-  progressSection: {
-    marginTop: 14,
-  },
-  progressLabels: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 4,
-  },
-  progressLabelText: {
-    fontSize: 10,
-    color: Colors.textTertiary,
-    fontWeight: "500" as const,
-  },
-  cardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 2,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  viewDetail: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  loadingContainer: {
-    alignItems: "center",
-    paddingVertical: 40,
-    gap: 12,
-  },
-  loadingText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-  },
-  emptyState: {
+  flex: { flex: 1 },
+  list: { paddingHorizontal: space.xl },
+  listHeader: { gap: space.md, paddingTop: space.sm, paddingBottom: space.md },
+  chipsScroll: { marginHorizontal: -space.xl },
+  chips: { gap: space.sm, paddingHorizontal: space.xl, paddingVertical: space.xs },
+  gap: { height: space.md },
+  card: { borderWidth: 0, borderRadius: radius.xxl, ...elevation.soft },
+  rowHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  icon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 60,
   },
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-    backgroundColor: Colors.backgroundTertiary,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: Colors.textTertiary,
-    marginTop: 4,
-  },
-  loadMoreContainer: {
+  place: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  remain: { gap: space.sm, marginTop: space.md + 2 },
+  track: { height: 6, borderRadius: 3, backgroundColor: colors.surfaceMuted, overflow: "hidden" },
+  fill: { height: 6, borderRadius: 3 },
+  footer: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 20,
+    gap: space.xs + 2,
+    marginTop: space.md + 2,
+    paddingTop: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
-  loadMoreText: {
-    color: Colors.textSecondary,
-    fontSize: 13,
+  chevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceMuted,
   },
 });

@@ -7,7 +7,7 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Puzzle } from 'lucide-react-native';
 
-import Colors from '@/constants/colors';
+import { colors } from "@/theme";
 import { loadMenuTabIds } from '@/components/utils/menuTabs';
 
 import ProjectsScreen from '@/app/projects';
@@ -40,7 +40,7 @@ interface FeatureTabScreenProps {
 
 /**
  * Màn hình cho 2 tab menu động ở giữa tab bar.
- * Nội dung được quyết định bởi cấu hình "Cấu hình menu" trong "Tất cả quản lý"
+ * Nội dung được quyết định bởi cấu hình "Tab menu" trong "Tất cả quản lý"
  * (AsyncStorage: @menu_tabs_config). Mặc định: 2 mục đầu tiên (Dự án, Sản phẩm).
  */
 export default function FeatureTabScreen({ slot }: FeatureTabScreenProps) {
@@ -69,7 +69,7 @@ export default function FeatureTabScreen({ slot }: FeatureTabScreenProps) {
   if (!loaded) {
     return (
       <View style={[styles.container, styles.emptyContainer]}>
-        <ActivityIndicator size="small" color={Colors.primary} />
+        <ActivityIndicator size="small" color={colors.primary} />
       </View>
     );
   }
@@ -79,10 +79,10 @@ export default function FeatureTabScreen({ slot }: FeatureTabScreenProps) {
   if (!ScreenComponent) {
     return (
       <View style={[styles.container, styles.emptyContainer]}>
-        <Puzzle color={Colors.textTertiary} size={44} strokeWidth={1.5} />
+        <Puzzle color={colors.textTertiary} size={44} strokeWidth={1.5} />
         <Text style={styles.emptyTitle}>Tính năng chưa khả dụng</Text>
         <Text style={styles.emptySubtitle}>
-          {'Chọn mục khác trong "Tất cả quản lý" → "Cấu hình menu"'}
+          {'Chọn mục khác trong "Tất cả quản lý" → "Tab menu"'}
         </Text>
       </View>
     );
@@ -95,7 +95,7 @@ export default function FeatureTabScreen({ slot }: FeatureTabScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.surface,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -106,12 +106,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
+    color: colors.text,
     marginTop: 4,
   },
   emptySubtitle: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 18,
   },

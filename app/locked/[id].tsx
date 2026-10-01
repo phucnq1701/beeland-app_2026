@@ -1,24 +1,31 @@
-import React, { useEffect, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  FlatList,
-  Dimensions,
-  ActivityIndicator,
-} from "react-native";
-import { useLocalSearchParams, Stack, useRouter } from "expo-router";
-import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
-import { Calendar, ChevronLeft } from "lucide-react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { useLocalSearchParams, Stack, useRouter, useFocusEffect } from "expo-router";
+import { CalendarPlus, ChevronLeft, Lock, LockOpen } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import Colors from "@/constants/colors";
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
+import { ImageCarousel } from "@/components/product/ImageCarousel";
+import { FocusStatusBar } from "@/components/ui/FocusStatusBar";
+import { PriceBreakdown } from "@/components/product/PriceBreakdown";
+import {
+  BottomActionBar,
+  Button,
+  Card,
+  IconButton,
+  KeyValueRow,
+  SkeletonDetail,
+  Text,
+} from "@/components/ui";
+import { formatCountdown } from "@/lib/countdown";
+import { formatDateTime } from "@/lib/format";
+import { colors, elevation, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { ProductService } from "@/sevicesSupabase/ProductService";
-import { Format_Date } from "@/components/utils/common";
+
+/** Ảnh dùng khi sản phẩm chưa có ảnh. */
+const DEFAULT_IMAGE =
+  "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/css461kotbkumrm0wjakm";
 
 export default function LockDetailScreen() {
   const { id, maSP } = useLocalSearchParams<any>();
@@ -31,22 +38,26 @@ export default function LockDetailScreen() {
   const [dataProduct, setDataProduct] = useState<any>(null);
 
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
-  const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [, setIsLocked] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
-  
 
   const timerRef = useRef<any>(null);
+  // Lock đang còn hạn lúc mở màn / sau khi tải lại → khi đếm về 0 thì quét lock hết hạn đúng 1 lần
+  const wasActive = useRef(false);
+  const swept = useRef(false);
+  // Chặn bấm "Tạo booking" 2 lần mở 2 màn tạo booking
+  const navigating = useRef(false);
 
-  const screenWidth = Dimensions.get("window").width;
-  const flatListRef = useRef<FlatList>(null);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      navigating.current = false;
+    }, [])
+  );
 
-  /* =========================
-        LOAD DATA
-  ========================= */
+  /* ---------------- Tải dữ liệu ---------------- */
 
   const loadData = async () => {
-    setLoading(true)
+    setLoading(true);
     const res = await BookingService.getLockDetailCloud({
       ID: id,
     });
@@ -64,7 +75,7 @@ export default function LockDetailScreen() {
         setRemainingSeconds(0);
       }
     }
-    setLoading(false)
+    setLoading(false);
   };
 
   const getBannerProduct = async () => {
@@ -86,11 +97,10 @@ export default function LockDetailScreen() {
     loadData();
     getBannerProduct();
     getProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* =========================
-        COUNTDOWN
-  ========================= */
+  /* ---------------- Đếm ngược ---------------- */
 
   useEffect(() => {
     if (remainingSeconds > 0) {
@@ -108,340 +118,164 @@ export default function LockDetailScreen() {
     return () => clearInterval(timerRef.current);
   }, [remainingSeconds]);
 
-  /* =========================
-        FORMAT TIME
-  ========================= */
-
-  const formatCountdown = (seconds: number) => {
-    const ss = Math.floor(seconds % 60);
-    const mm = Math.floor((seconds % (60 * 60)) / 60);
-
-    return `${mm < 10 ? "0" + mm : mm}:${ss < 10 ? "0" + ss : ss}`;
-  };
-
-  /* =========================
-        LOCK CĂN
-  ========================= */
-
-  const handleLock = async () => {
-    if (isLocked) return;
-
-    try {
-      // Tạo lock cloud: RPC đổi trạng thái SP (2→18) + insert phiếu LOCK
-      const res = await BookingService.createLock({
-        maSP: data?.maSP ?? data?.MaSP,
-        kyHieu: data?.kyHieu ?? data?.KyHieu,
-        maDA: data?.MaDA,
-      });
-
-      if (res?.status === 2000) {
-        const seconds = res?.data || 0;
-
-        setIsLocked(true);
-        setRemainingSeconds(seconds);
-        void loadData();
-      }
-    } catch (err) {
-      console.log("Lock error", err);
+  // Hết giờ lock (giống chi tiết sản phẩm): trả căn về Mở bán + tải lại trạng thái, một lần
+  useEffect(() => {
+    if (remainingSeconds > 0) {
+      wasActive.current = true;
+      swept.current = false;
+      return;
     }
-  };
+    if (wasActive.current && !swept.current) {
+      swept.current = true;
+      void (async () => {
+        await BookingService.sweepExpiredLocks();
+        await loadData();
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remainingSeconds]);
 
-  /* =========================
-        IMAGE SLIDER
-  ========================= */
+  const back = (
+    <View style={[styles.back, { top: insets.top + space.sm }]}>
+      <IconButton icon={ChevronLeft} variant="glass" accessibilityLabel="Quay lại" onPress={() => router.back()} />
+    </View>
+  );
 
-  const handleScroll = (event: any) => {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(offsetX / screenWidth);
-    setCurrentImageIndex(index);
-  };
+  if (loading && !data) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.root, { paddingTop: insets.top + 56 }]}>
+          <SkeletonDetail />
+          {back}
+        </View>
+      </>
+    );
+  }
 
-  /* =========================
-        FORMAT MONEY
-  ========================= */
-
-  const formatCurrency = (value: number) => {
-    if (!value) return "0 ₫";
-
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(value);
-  };
-
-  /* =========================
-        UI
-  ========================= */
+  const images = bannerProduct.map((b: any) => b?.HinhAnh).filter((u: unknown): u is string => !!u);
+  const active = remainingSeconds > 0;
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: data?.tenDA || "Chi tiết lock",
-          headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
-          headerTitleStyle: { fontWeight: "700", fontSize: 18 },
-          headerShadowVisible: false,
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={styles.headerBackButton}
-            >
-              <ChevronLeft color={Colors.text} size={24} />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
-        </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={{
-            paddingBottom: insets.bottom + 24,
-          }}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* IMAGE */}
-          <View style={styles.heroCard}>
-            <FlatList
-              ref={flatListRef}
-              data={bannerProduct}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              keyExtractor={(item, index) => `img-${index}`}
-              renderItem={({ item }) => (
-                <Image
-                  source={{ uri: item?.HinhAnh }}
-                  style={[styles.heroImage, { width: screenWidth }]}
-                  contentFit="cover"
-                />
-              )}
-            />
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <FocusStatusBar style="light" />
+      <View style={styles.root}>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <ImageCarousel
+            images={images}
+            fallback={DEFAULT_IMAGE}
+            height={320 + insets.top}
+            bottomInset={SHEET_OVERLAP}
+          />
 
-            <LinearGradient
-              colors={["transparent", "rgba(0,0,0,0.85)"]}
-              style={styles.heroOverlay}
-            />
-
-            {bannerProduct.length > 1 && (
-              <View style={styles.paginationDots}>
-                {bannerProduct.map((_, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.dot,
-                      index === currentImageIndex && styles.activeDot,
-                    ]}
-                  />
-                ))}
-              </View>
-            )}
-          </View>
-
-          {/* THÔNG TIN LOCK */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Thông tin lock căn</Text>
-
-            <View style={styles.priceDetails}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Tên dự án</Text>
-                <Text style={styles.detailValue}>{data?.tenDA}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Mã sản phẩm</Text>
-                <Text style={styles.detailValue}>{data?.kyHieu}</Text>
-              </View>
-
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Ngày lock</Text>
-                <Text style={styles.detailValue}>
-                  {Format_Date(data?.ngayLock)}
+          {/* Khối nội dung bo góc trên trồi đè lên đáy ảnh */}
+          <View style={styles.sheet}>
+            <View style={styles.hero}>
+              <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                {data?.tenDA || "Chi tiết lock"}
+              </Text>
+              <Text variant="title" accessibilityRole="header" style={styles.code}>
+                {data?.kyHieu ? `Căn ${data.kyHieu}` : "Căn đã lock"}
+              </Text>
+              <View
+                style={[styles.timer, active ? styles.timerActive : styles.timerExpired]}
+                accessible
+                accessibilityLabel={active ? `Lock còn ${formatCountdown(remainingSeconds)}` : "Đã hết hạn lock"}
+              >
+                {active ? (
+                  <Lock size={18} color={colors.onWarningSubtle} />
+                ) : (
+                  <LockOpen size={18} color={colors.onDangerSubtle} />
+                )}
+                <Text variant="subhead" color={active ? "onWarningSubtle" : "onDangerSubtle"}>
+                  {active ? "Lock còn" : "Đã hết hạn lock"}
                 </Text>
-              </View>
-
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Thời gian còn lại</Text>
-
-                <Text style={styles.countdownText}>
-                  {formatCountdown(remainingSeconds)}
-                </Text>
+                {active ? (
+                  <Text variant="heading" numeric color="onWarningSubtle" style={styles.push}>
+                    {formatCountdown(remainingSeconds)}
+                  </Text>
+                ) : null}
               </View>
             </View>
-          </View>
 
-          {/* ACTION BUTTON */}
-          <View style={styles.bottomActions}>
-            {/* {remainingSeconds === 0 && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.lockButton]}
-              onPress={handleLock}
-            >
-              <Lock color={Colors.white} size={20} />
-              <Text style={styles.actionButtonText}>Lock căn</Text>
-            </TouchableOpacity>
-          )} */}
+            <View style={styles.content}>
+              <HomeSectionHeader title="Thông tin lock căn" />
+              <Card style={styles.card}>
+                <KeyValueRow label="Tên dự án" value={data?.tenDA || "—"} />
+                <KeyValueRow label="Mã sản phẩm" value={data?.kyHieu || "—"} />
+                <KeyValueRow label="Ngày lock" value={formatDateTime(data?.ngayLock)} last />
+              </Card>
 
-            {remainingSeconds > 0 && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.bookButton]}
-                onPress={() =>
-                  router.push({
-                    pathname: "/booking/create",
-                    params: {
-                      dataBooking: JSON.stringify(dataProduct || data),
-                    },
-                  })
-                }
-              >
-                <Calendar color={Colors.white} size={20} />
-                <Text style={styles.actionButtonText}>Book ngay</Text>
-              </TouchableOpacity>
-            )}
+              {dataProduct ? (
+                <>
+                  <HomeSectionHeader title="Giá sản phẩm" />
+                  <Card style={styles.card}>
+                    <PriceBreakdown activePrice={null} data={dataProduct} loading={false} />
+                  </Card>
+                </>
+              ) : null}
+            </View>
           </View>
         </ScrollView>
-      )}
-    </View>
+        {back}
+
+        {active ? (
+          <BottomActionBar>
+            <Button
+              size="lg"
+              icon={CalendarPlus}
+              title="Tạo booking"
+              style={[styles.flex, styles.pill]}
+              onPress={() => {
+                if (navigating.current) return;
+                navigating.current = true;
+                router.push({
+                  pathname: "/booking/create",
+                  params: {
+                    // Kèm id phiếu lock như web (LockList → LockId) để máy chủ giải phóng đúng phiếu này
+                    dataBooking: JSON.stringify({ ...(dataProduct || data), LockId: id }),
+                  },
+                });
+              }}
+            />
+          </BottomActionBar>
+        ) : null}
+      </View>
+    </>
   );
 }
 
-/* =========================
-        STYLE
-========================= */
+/** Khối nội dung bo góc trên, trồi đè lên đáy ảnh. */
+const SHEET_OVERLAP = radius.x3;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-
-  headerBackButton: {
-    marginLeft: 8,
+  root: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+  scroll: { paddingBottom: space.xxl },
+  back: { position: "absolute", left: space.lg },
+  sheet: {
+    marginTop: -SHEET_OVERLAP,
+    paddingTop: space.xxl,
+    borderTopLeftRadius: radius.x3,
+    borderTopRightRadius: radius.x3,
+    backgroundColor: colors.bg,
   },
-
-  heroCard: {
-    height: 320,
-    backgroundColor: Colors.white,
-  },
-
-  heroImage: {
-    height: "100%",
-  },
-
-  heroOverlay: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: "55%",
-  },
-
-  section: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: Colors.text,
-  },
-
-  priceDetails: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-
-  detailRow: {
+  hero: { gap: space.xs, paddingHorizontal: space.xl },
+  code: { fontSize: 26, lineHeight: 34 },
+  timer: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-
-  detailLabel: {
-    color: Colors.textSecondary,
-  },
-
-  detailValue: {
-    fontWeight: "600",
-    color: Colors.text,
-  },
-
-  countdownText: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: Colors.primary,
-  },
-
-  bottomActions: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    marginTop: 24,
-  },
-
-  actionButton: {
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "center",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 12,
+    gap: space.sm,
+    minHeight: 52,
+    marginTop: space.md,
+    paddingHorizontal: space.lg + 2,
+    borderRadius: radius.full,
   },
-
-  lockButton: {
-    backgroundColor: "#6B7280",
-  },
-
-  bookButton: {
-    backgroundColor: Colors.primary,
-  },
-
-  actionButtonText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-
-  paginationDots: {
-    position: "absolute",
-    bottom: 20,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-  },
-
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "rgba(255,255,255,0.5)",
-  },
-
-  activeDot: {
-    backgroundColor: Colors.white,
-    width: 24,
-  },
-
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  loadingText: {
-    marginTop: 10,
-    color: Colors.textSecondary,
-  },
+  timerActive: { backgroundColor: colors.warningSubtle },
+  timerExpired: { backgroundColor: colors.dangerSubtle },
+  push: { marginLeft: "auto" },
+  content: { paddingHorizontal: space.xl, paddingTop: space.xxl, gap: space.md },
+  card: { borderWidth: 0, borderRadius: radius.xxl, paddingHorizontal: space.lg + 2, ...elevation.soft },
+  pill: { borderRadius: radius.full },
 });

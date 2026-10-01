@@ -5,81 +5,79 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-} from "react-native";
+import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import {
   Stack,
   useRouter,
   useLocalSearchParams,
   useFocusEffect,
 } from "expo-router";
+import { Palette, SearchX } from "lucide-react-native";
 import {
-  Search,
-  List,
-  Grid3x3,
-  Filter,
-  ChevronLeft,
-  ChevronDown,
-  ChevronUp,
-  LayoutDashboard,
-} from "lucide-react-native";
+  FilterPanel,
+  FilterSection,
+  FilterToggleButton,
+} from "@/components/FilterPanel";
+import BlockGrid from "@/components/product/BlockGrid";
+import { OverviewView } from "@/components/product/OverviewView";
+import { ProductListItem } from "@/components/product/ProductListItem";
 import {
-  overviewBlocks,
-  statusConfig,
-  getOverviewStats,
-  UnitStatus,
-} from "@/mocks/overviewUnits";
-import Colors from "@/constants/colors";
-import { Product } from "@/mocks/properties";
+  AppHeader,
+  BottomSheet,
+  Button,
+  EmptyState,
+  IconButton,
+  Screen,
+  SearchBar,
+  SegmentedControl,
+  SkeletonList,
+  Text,
+} from "@/components/ui";
+import { SummaryKey } from "@/lib/productOverview";
+import { applyRealtimeChange, resolveCatalogStatus, unitStatusOf } from "@/lib/productRealtime";
+import { colors, space } from "@/theme";
 import { ProductService } from "@/sevicesSupabase/ProductService";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
 import { FilterService } from "@/sevicesSupabase/FilterService";
 import { PriceServices } from "@/sevicesSupabase/PriceServices";
 
 import * as signalR from "@microsoft/signalr";
-import BlockGrid from "./product/BlockGrid";
 
 type ViewMode = "list" | "grid" | "overview";
 
+/** Màu lưu dạng số nguyên (ARGB) trong dữ liệu → chuỗi hex. Ngoài component để tham chiếu ổn định. */
+const getHexColor = (number: any) => {
+  if (number === null || number === undefined) return colors.surfaceMuted;
+  return `#${(Number(number) >>> 0).toString(16).slice(-6)}`;
+};
+
 // Số sản phẩm mỗi lần gọi API (phân trang cuộn vô hạn)
 const PAGE_SIZE = 16;
+/** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
+const TAB_BAR_SPACE = 100;
 
 export default function ProductsScreen({
   embedded,
 }: { embedded?: boolean } = {}) {
-  const { showFavorites } = useLocalSearchParams<{ showFavorites?: string }>();
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [filterExpanded, setFilterExpanded] = useState<boolean>(false);
-  const [_selectedStatus, _setSelectedStatus] = useState<
-    Product["status"] | "all"
-  >("all");
-  const [_currentBlockIndex, _setCurrentBlockIndex] = useState<number>(0);
-  const [selectedOverviewStatus, setSelectedOverviewStatus] = useState<
-    UnitStatus | "all"
-  >("all");
-  const [_onlyShowFavorites, _setOnlyShowFavorites] = useState<boolean>(
-    showFavorites === "true"
-  );
+  const [legendOpen, setLegendOpen] = useState<boolean>(false);
+  const [selectedOverviewStatus, setSelectedOverviewStatus] = useState<SummaryKey>("all");
   const router = useRouter();
   const { MaDA } = useLocalSearchParams();
 
-  const scrollYRef = useRef(0);
-  const leftRef = useRef<ScrollView>(null);
-  const rightRef = useRef<ScrollView>(null);
 
   const [products2, setProducts2] = useState<any[]>([]);
   const [duAn, setDuAn] = useState<any[]>([]);
   const [khuVuc, setKhuVuc] = useState<any[]>([]);
   const [TrangThai, setTrangThai] = useState<any[]>([]);
+  const trangThaiRef = useRef<any[]>([]);
+  trangThaiRef.current = TrangThai;
   const [dataGrid, setDataGrid] = useState<any[]>([]);
+  // Bản mới nhất cho handler realtime (đăng ký một lần, tránh closure cũ)
+  const dataGridRef = useRef<any[]>([]);
+  dataGridRef.current = dataGrid;
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -146,52 +144,20 @@ export default function ProductsScreen({
 
     try {
       hubConnection.on("ChangeTable", (response: any) => {
-        console.log(response, "response");
+        // Tra trạng thái mới theo mã/uuid trong danh mục → cập nhật cả tên và màu (lib/productRealtime).
+        // Danh mục + lưới đọc qua ref vì handler chỉ đăng ký một lần.
+        const catalog = trangThaiRef.current;
+        const entry = resolveCatalogStatus(response?.maTT, catalog);
+        const { changedMaSP } = applyRealtimeChange(dataGridRef.current, response, catalog);
 
-        setDataGrid((prev) => {
-          return prev.map((block) => {
-            if (block.rawBlock?.maKhu !== response.data?.MaKhu) {
-              return block; // giữ nguyên reference
-            }
+        setDataGrid((prev) => applyRealtimeChange(prev, response, catalog).grid);
 
-            let changed = false;
-
-            const newFloors = block.rawBlock.floor.map((floor: any) => {
-              if (Number(floor.maTang) !== Number(response.data?.MaTang)) {
-                return floor;
-              }
-
-              const newDetails = floor.detailFloor.map((item: any) => {
-                if (Number(item.MaVT) !== Number(response.data?.MaVT)) {
-                  return item;
-                }
-
-                changed = true;
-
-                return {
-                  ...item,
-                  MaTT: response.maTT,
-                  MauNen: response.mauNen,
-                };
-              });
-
-              return {
-                ...floor,
-                detailFloor: newDetails,
-              };
-            });
-
-            if (!changed) return block;
-
-            return {
-              ...block,
-              rawBlock: {
-                ...block.rawBlock,
-                floor: newFloors,
-              },
-            };
-          });
-        });
+        // Danh sách: đổi trạng thái đúng dòng của căn vừa đổi
+        if (changedMaSP && entry) {
+          setProducts2((list) =>
+            list.map((p) => (p?.MaSP === changedMaSP ? { ...p, MaTT: entry.MaTT } : p))
+          );
+        }
         setLocalChange({
           MaTang: response.data?.MaTang,
           MaVT: response.data?.MaVT,
@@ -248,23 +214,8 @@ export default function ProductsScreen({
 
     void handleFormGrid(MaDA);
   };
-  // MaTT giờ là uuid → map trạng thái theo TÊN (TenTT) từ FK cloud_catalogs
-  const mapStatusByTT = (item: any) => {
-    const t = String(item?.TenTT || "").toLowerCase();
-    if (
-      t.includes("đã bán") ||
-      t.includes("hdmb") ||
-      t.includes("bàn giao") ||
-      t.includes("sổ đỏ") ||
-      t.includes("góp vốn") ||
-      t.includes("thanh lý")
-    )
-      return "sold";
-    if (t.includes("đặt cọc")) return "deposit";
-    if (t.includes("booking")) return "booking";
-    if (t.includes("giữ chỗ") || t.includes("lock")) return "locked";
-    return "available";
-  };
+  // MaTT là uuid → nhóm trạng thái theo MÃ danh mục (fallback theo tên) – lib/productRealtime
+  const mapStatusByTT = (item: any) => unitStatusOf(item, trangThaiRef.current);
 
   const handleFormGrid = async (MaDA: any) => {
     const result = await PriceServices.getBlock({
@@ -297,7 +248,7 @@ export default function ProductsScreen({
           stats: {
             total: units.length,
             available: units.filter((u) => u.status === "available").length,
-            deposit: units.filter((u) => u.status === "deposit").length,
+            hold: units.filter((u) => u.status === "hold").length,
           },
         };
       });
@@ -319,7 +270,7 @@ export default function ProductsScreen({
       const finalMa = isNaN(ma) ? resDA?.data?.[0]?.MaDA : ma;
 
       // Cập nhật defaultFilterRef để khớp với trạng thái ban đầu thực tế
-      // (tránh isFilterChanged = true ngay khi load trang)
+      // (bộ đếm bộ lọc không tính dự án ban đầu)
       defaultFilterRef.current = {
         MaDA: finalMa ?? -1,
         MaKhu: null,
@@ -465,6 +416,9 @@ export default function ProductsScreen({
   // Tải thêm sản phẩm khi cuộn tới cuối danh sách.
   // Tự động dừng khi đã tải hết (hasMore = false) → không gọi API nữa.
   const loadMore = async () => {
+    // Danh sách rỗng trong lúc tải lại (lọc/tìm/làm mới) cũng kích hoạt onEndReached → bỏ qua,
+    // tránh gửi thêm một request trang 1 song song như bản cuộn cũ không có
+    if (loading || products2.length === 0) return;
     if (loadingMoreRef.current || !hasMoreRef.current) return;
 
     loadingMoreRef.current = true;
@@ -516,21 +470,10 @@ export default function ProductsScreen({
     }
   };
 
-  // Phát hiện cuộn gần tới cuối (còn cách đáy 200px) → nạp thêm
-  const handleScroll = (event: any) => {
-    if (viewMode !== "list") return;
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    if (
-      layoutMeasurement.height + contentOffset.y >=
-      contentSize.height - 200
-    ) {
-      void loadMore();
-    }
-  };
-
   // Chỉ load mặc định khi mount lần đầu
   useEffect(() => {
     void loadProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Ref giữ filter mới nhất để dùng trong useFocusEffect (tránh stale closure)
@@ -549,1389 +492,340 @@ export default function ProductsScreen({
       }
       void loadProducts2(filterConditionRef.current);
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, []),
   );
 
-  useEffect(() => {
-    if (rightRef.current) {
-      rightRef.current.scrollTo({
-        y: scrollYRef.current,
-        animated: false,
-      });
-    }
-
-    if (leftRef.current) {
-      leftRef.current.scrollTo({
-        y: scrollYRef.current,
-        animated: false,
-      });
-    }
-  }, [dataGrid]);
 
   const getStatusLabel = (status: number) => {
     const item = TrangThai.find((i) => i.MaTT === status);
     return item?.TenTT || "";
   };
 
-  const getStatusColor = (status: number) => {
+  const getStatusColor = (status: number): string | null => {
     const item = TrangThai.find((i) => i.MaTT === status);
-    return item?.ColorWeb || "#9CA3AF";
+    return item?.ColorWeb || null;
   };
 
-  // Chữ tự động đen/trắng theo độ sáng của màu nền (dễ đọc trên mọi màu danh mục)
-  const getStatusTextColor = (bg: string) => {
-    try {
-      let hex = String(bg || "")
-        .trim()
-        .replace("#", "");
-      if (hex.length === 3) {
-        hex = hex
-          .split("")
-          .map((c) => c + c)
-          .join("");
-      }
-      if (hex.length !== 6) return "#fff";
-      const r = parseInt(hex.slice(0, 2), 16) / 255;
-      const g = parseInt(hex.slice(2, 4), 16) / 255;
-      const b = parseInt(hex.slice(4, 6), 16) / 255;
-      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      return lum > 0.6 ? "#111827" : "#fff";
-    } catch {
-      return "#fff";
-    }
+  // useCallback: truyền xuống BlockGrid/UnitCell (memo) – tránh vẽ lại mọi ô khi có sự kiện realtime
+  const handlePressProduct = useCallback(
+    (id: string) => {
+      console.log("[Products] Navigate to product detail", { id });
+      router.push({ pathname: "/product/[id]", params: { id } });
+    },
+    [router]
+  );
+
+
+  // Số nhóm lọc đang khác mặc định (hiện badge trên nút Bộ lọc)
+  const getDefaultMaDA = () => {
+    const initial = defaultFilterRef.current.MaDA;
+    return initial != null && initial !== -1
+      ? initial
+      : (duAn?.[0]?.MaDA ?? (Number(MaDA) || null));
   };
 
-  const handlePressProduct = (id: string) => {
-    console.log("[Products] Navigate to product detail", { id });
-    router.push({ pathname: "/product/[id]", params: { id } });
-  };
-
-  const getHexColor = (number: any) => {
-    if (number === null || number === undefined) return "#ccc";
-    return "#" + (Number(number) >>> 0).toString(16).slice(-6);
-  };
-
-  // Check if filter has changed from default (for "Đặt lại" button highlight)
-  const isFilterChanged = useMemo(() => {
-    const defaultFilter = defaultFilterRef.current;
-    const currentFilter = filterCondition;
-    const isEqual = (a: any, b: any) => {
-      if (a === b) return true;
-      if (Number.isNaN(a) && Number.isNaN(b)) return true;
-      if (a == null && b == null) return true;
-      return false;
-    };
-    return (
-      !isEqual(currentFilter.MaDA, defaultFilter.MaDA) ||
-      !isEqual(currentFilter.MaKhu, defaultFilter.MaKhu) ||
-      !isEqual(currentFilter.MaPK, defaultFilter.MaPK) ||
-      !isEqual(currentFilter.MaTT, defaultFilter.MaTT) ||
-      !isEqual(currentFilter.FormCode, defaultFilter.FormCode) ||
-      !isEqual(currentFilter.KyHieu, defaultFilter.KyHieu)
-    );
-  }, [filterCondition]);
-
-  const currentOverviewBlock = overviewBlocks[0];
-  const overviewStats = getOverviewStats(currentOverviewBlock);
-
-  const _statusSummaryItems: Array<{
-    key: UnitStatus | "all";
-    label: string;
-    count: number;
-    color: string;
-  }> = [
-    { key: "all", label: "TỔNG", count: overviewStats.total, color: "#3B82F6" },
-    {
-      key: "available",
-      label: "TRỐNG",
-      count: overviewStats.available,
-      color: "#22C55E",
-    },
-    {
-      key: "holding",
-      label: "GIỮ CHỖ",
-      count: overviewStats.holding,
-      color: "#F59E0B",
-    },
-    {
-      key: "pending_kitchen",
-      label: "BẾP CHỜ",
-      count: overviewStats.pendingKitchen,
-      color: "#F97316",
-    },
-    {
-      key: "sold",
-      label: "ĐÃ BÁN",
-      count: overviewStats.sold,
-      color: "#EF4444",
-    },
-    {
-      key: "deposit",
-      label: "ĐÃ CỌC",
-      count: overviewStats.deposit,
-      color: "#3B82F6",
-    },
-  ];
-  const buildOverviewData = (dataGrid: any) => {
-    const floorsMap: Record<string, any> = {};
-
-    dataGrid.forEach((block: any) => {
-      block?.rawBlock?.floor?.forEach((floor: any) => {
-        const floorKey = `${block.rawBlock.maKhu}_${floor.maTang}`;
-
-        if (!floorsMap[floorKey]) {
-          floorsMap[floorKey] = {
-            id: floorKey,
-            name: floor.tenTang,
-            floorNumber: Number(floor.maTang),
-            units: [],
-          };
-        }
-
-        const units = (floor.detailFloor || []).map((item: any) => ({
-          id: item.MaSP,
-          code: item.KyHieu,
-          price: item.GiaBan
-            ? new Intl.NumberFormat("vi-VN").format(Math.round(item.GiaBan))
-            : "",
-          status: mapStatusByTT(item),
-          column: String(item.MaVT),
-        }));
-
-        floorsMap[floorKey].units.push(...units);
-      });
-    });
-
-    Object.values(floorsMap).forEach((floor: any) => {
-      // column là uuid (vi_tri) → sắp theo chuỗi
-      floor.units.sort((a: any, b: any) =>
-        String(a.column).localeCompare(String(b.column))
-      );
-      floor.totalUnits = floor.units.length;
-    });
-
-    return Object.values(floorsMap);
-  };
-
-  const buildStatusSummary = (floors: any[]) => {
-    const allUnits = floors.flatMap((f: any) => f.units);
-
+  const activeFilterCount = useMemo(() => {
+    const defaultMaDA = getDefaultMaDA();
     return [
-      {
-        key: "all",
-        label: "TỔNG",
-        count: allUnits.length,
-        color: "#3B82F6",
-      },
-      {
-        key: "available",
-        label: "TRỐNG",
-        count: allUnits.filter((u: any) => u.status === "available").length,
-        color: "#22C55E",
-      },
-      {
-        key: "deposit",
-        label: "ĐÃ CỌC",
-        count: allUnits.filter((u: any) => u.status === "deposit").length,
-        color: "#3B82F6",
-      },
-      {
-        key: "locked",
-        label: "KHÓA",
-        count: allUnits.filter((u: any) => u.status === "locked").length,
-        color: "#555A64",
-      },
-      {
-        key: "sold",
-        label: "ĐÃ BÁN",
-        count: allUnits.filter((u: any) => u.status === "sold").length,
-        color: "#EF4444",
-      },
-      {
-        key: "booking",
-        label: "BOOKING",
-        count: allUnits.filter((u: any) => u.status === "booking").length,
-        color: "#CCCCCC",
-      },
-    ];
-  };
-  const renderOverviewView = () => {
-    const floors = buildOverviewData(dataGrid);
-    const statusSummaryItems = buildStatusSummary(floors);
+      filterCondition?.MaDA != null && filterCondition.MaDA !== defaultMaDA,
+      filterCondition?.MaKhu != null,
+      filterCondition?.FormCode != null,
+      filterCondition?.MaTT != null,
+    ].filter(Boolean).length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterCondition, duAn, MaDA]);
 
-    return (
-      <View style={styles.overviewContainer}>
-        {/* STATUS SUMMARY */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.statusSummaryScroll}
-          contentContainerStyle={styles.statusSummaryContent}
-        >
-          {statusSummaryItems.map((item) => (
-            <TouchableOpacity
-              key={item.key}
-              style={[
-                styles.statusSummaryItem,
-                { backgroundColor: item.color },
-                selectedOverviewStatus === item.key &&
-                  styles.statusSummaryItemActive,
-              ]}
-              onPress={() =>
-                setSelectedOverviewStatus(item.key as UnitStatus | "all")
-              }
-              activeOpacity={0.8}
-            >
-              <Text style={styles.statusSummaryLabel}>{item.label}</Text>
-              <Text style={styles.statusSummaryCount}>{item.count}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* FLOORS */}
-        {floors.map((floor: any) => {
-          const filteredUnits =
-            selectedOverviewStatus === "all"
-              ? floor.units
-              : floor.units.filter(
-                  (u: any) => u.status === selectedOverviewStatus
-                );
-
-          if (filteredUnits.length === 0) return null;
-
-          return (
-            <View key={String(floor.id)} style={styles.floorSection}>
-              {/* HEADER */}
-              <View style={styles.floorHeader}>
-                <Text style={styles.floorName}>{floor.name}</Text>
-                <Text style={styles.floorCount}>
-                  ({filteredUnits.length}/{floor.totalUnits} CĂN)
-                </Text>
-              </View>
-
-              {/* GRID */}
-              <View style={styles.unitsGrid}>
-                {filteredUnits.map((unit: any) => {
-                  const config = statusConfig[unit.status as UnitStatus] || {};
-
-                  return (
-                    <TouchableOpacity
-                      key={unit.id}
-                      style={[
-                        styles.unitCard,
-                        {
-                          backgroundColor: config.bgColor || "#ccc",
-                        },
-                      ]}
-                      onPress={() => handlePressProduct(unit.id)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.unitCode} numberOfLines={1}>
-                        {unit.code}
-                      </Text>
-
-                      {!!unit.price && (
-                        <Text style={styles.unitPrice}>{unit.price}</Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          );
-        })}
-      </View>
-    );
-  };
-  // const renderOverviewView = () => (
-  //   <View style={styles.overviewContainer}>
-  //     <ScrollView
-  //       horizontal
-  //       showsHorizontalScrollIndicator={false}
-  //       style={styles.statusSummaryScroll}
-  //       contentContainerStyle={styles.statusSummaryContent}
-  //     >
-  //       {statusSummaryItems.map((item) => (
-  //         <TouchableOpacity
-  //           key={item.key}
-  //           style={[
-  //             styles.statusSummaryItem,
-  //             { backgroundColor: item.color },
-  //             selectedOverviewStatus === item.key &&
-  //               styles.statusSummaryItemActive,
-  //           ]}
-  //           onPress={() => setSelectedOverviewStatus(item.key)}
-  //           activeOpacity={0.8}
-  //         >
-  //           <Text style={styles.statusSummaryLabel}>{item.label}</Text>
-  //           <Text style={styles.statusSummaryCount}>{item.count}</Text>
-  //         </TouchableOpacity>
-  //       ))}
-  //     </ScrollView>
-
-  //     {currentOverviewBlock.floors.map((floor) => {
-  //       const filteredUnits =
-  //         selectedOverviewStatus === "all"
-  //           ? floor.units
-  //           : floor.units.filter((u) => u.status === selectedOverviewStatus);
-
-  //       if (filteredUnits.length === 0) return null;
-
-  //       return (
-  //         <View key={floor.name} style={styles.floorSection}>
-  //           <View style={styles.floorHeader}>
-  //             <Text style={styles.floorName}>{floor.name}</Text>
-  //             <Text style={styles.floorCount}>({floor.totalUnits} CĂN)</Text>
-  //           </View>
-  //           <View style={styles.unitsGrid}>
-  //             {filteredUnits.map((unit) => {
-  //               const config = statusConfig[unit.status];
-  //               return (
-  //                 <TouchableOpacity
-  //                   key={unit.id}
-  //                   style={[
-  //                     styles.unitCard,
-  //                     { backgroundColor: config.bgColor },
-  //                   ]}
-  //                   onPress={() => handlePressProduct(unit.id)}
-  //                   activeOpacity={0.8}
-  //                 >
-  //                   <Text style={styles.unitCode} numberOfLines={1}>
-  //                     {unit.code}
-  //                   </Text>
-  //                   <Text style={styles.unitPrice}>{unit.price}</Text>
-  //                 </TouchableOpacity>
-  //               );
-  //             })}
-  //           </View>
-  //         </View>
-  //       );
-  //     })}
-  //   </View>
-  // );
-
-  const renderGridView = () => {
-    if (!dataGrid || dataGrid.length === 0) return null;
-
-    return (
-      <View style={styles.gridContainer}>
-        {TrangThai?.length > 0 && (
-          <View style={styles.statusLegend}>
-            <View style={styles.legendItems}>
-              {TrangThai.map((item) => (
-                <View key={item.MaTT} style={styles.legendItem}>
-                  <View
-                    style={[
-                      styles.legendDot,
-                      { backgroundColor: item.ColorWeb || "#ccc" },
-                    ]}
-                  />
-                  <Text style={styles.legendText}>{item.TenTT}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-        {dataGrid.map((block) => (
-          <BlockGrid
-            key={block.rawBlock?.maKhu}
-            block={block}
-            leftRef={leftRef}
-            rightRef={rightRef}
-            scrollYRef={scrollYRef}
-            localChange={localChange}
-            handlePressProduct={handlePressProduct}
-            getHexColor={getHexColor}
-            styles={styles}
-          />
-        ))}
-      </View>
-    );
+  // Reset toàn bộ bộ lọc về mặc định
+  const resetFilters = () => {
+    const resetFilter = {
+      MaDA: getDefaultMaDA(),
+      MaKhu: null,
+      MaPK: null,
+      MaTT: null,
+      FormCode: null,
+      KyHieu: "",
+    };
+    setFilterCondition(resetFilter);
+    setSearchQuery("");
+    void loadProducts2(resetFilter);
   };
 
-  const formatCurrency = (num: any) => {
-    if (!num) return "0 đ";
-    return new Intl.NumberFormat("vi-VN").format(Math.round(num));
+  const switchViewMode = (mode: ViewMode) => {
+    setViewMode(mode);
+    // Lưới cần dữ liệu khối mới nhất như bản cũ
+    if (mode === "grid") void handleFormGrid(filterCondition?.MaDA);
   };
 
-  return (
-    <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: "Sản phẩm",
-          headerStyle: {
-            backgroundColor: Colors.background,
-          },
-          headerTintColor: Colors.text,
-          headerTitleStyle: {
-            fontWeight: "700",
-            fontSize: 18,
-          },
-          headerShadowVisible: false,
-          // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
-          headerLeft: embedded
-            ? undefined
-            : () => (
-                <TouchableOpacity
-                  onPress={() => router.back()}
-                  style={styles.headerBackButton}
-                >
-                  <ChevronLeft color={Colors.text} size={24} />
-                </TouchableOpacity>
-              ),
-          headerRight: () => (
-            <View style={styles.headerViewMode}>
-              <TouchableOpacity
-                style={[
-                  styles.headerViewBtn,
-                  viewMode === "list" && styles.headerViewBtnActive,
-                ]}
-                onPress={() => setViewMode("list")}
-                activeOpacity={0.8}
-              >
-                <List
-                  color={
-                    viewMode === "list" ? Colors.white : Colors.textTertiary
-                  }
-                  size={18}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.headerViewBtn,
-                  viewMode === "grid" && styles.headerViewBtnActive,
-                ]}
-                onPress={() => {
-                  setViewMode("grid");
-                  void handleFormGrid(filterCondition?.MaDA);
-                }}
-                activeOpacity={0.8}
-              >
-                <Grid3x3
-                  color={
-                    viewMode === "grid" ? Colors.white : Colors.textTertiary
-                  }
-                  size={18}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.headerViewBtn,
-                  viewMode === "overview" && styles.headerViewBtnActive,
-                ]}
-                onPress={() => setViewMode("overview")}
-                activeOpacity={0.8}
-              >
-                <LayoutDashboard
-                  color={
-                    viewMode === "overview" ? Colors.white : Colors.textTertiary
-                  }
-                  size={18}
-                />
-              </TouchableOpacity>
-            </View>
-          ),
-        }}
+  const renderProduct = useCallback(
+    ({ item }: { item: any }) => (
+      <ProductListItem
+        product={item}
+        statusLabel={getStatusLabel(item.MaTT)}
+        statusColor={getStatusColor(item.MaTT)}
+        onPress={handlePressProduct}
       />
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [TrangThai]
+  );
 
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        onScroll={handleScroll}
-        scrollEventThrottle={300}
-      >
-        <View style={styles.searchAndFilterRow}>
-          <View style={styles.searchContainer}>
-            <Search color={Colors.textSecondary} size={20} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Tìm kiếm theo mã sản phẩm, số căn hộ..."
-              placeholderTextColor={Colors.textSecondary}
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={styles.filterButton}
-            activeOpacity={0.7}
-            onPress={() => setFilterExpanded(!filterExpanded)}
-          >
-            <Filter color={Colors.primary} size={18} />
-            <Text style={styles.filterText}>Bộ lọc</Text>
-            {filterExpanded ? (
-              <ChevronUp color={Colors.primary} size={18} />
-            ) : (
-              <ChevronDown color={Colors.primary} size={18} />
-            )}
-          </TouchableOpacity>
-        </View>
+  const listHeader = (
+    <View style={styles.stickyHeader}>
+      {/* ScrollView sticky header chuyển style của View ngoài ra lớp bọc (gap mất tác dụng) → gap đặt ở View con */}
+      <View style={styles.headerStack}>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={handleSearchChange}
+          placeholder="Mã sản phẩm, số căn hộ"
+          variant="soft"
+        />
 
         {filterExpanded && (
-          <View style={styles.filterPanel}>
-            <View style={styles.filterSection}>
-              <View style={styles.filterSectionHeader}>
-                <Text style={styles.filterSectionTitle}>Dự án</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.resetFilterButton,
-                    isFilterChanged && styles.resetFilterButtonHighlight,
-                  ]}
-                  disabled={!isFilterChanged}
-                  onPress={() => {
-                    // Reset toàn bộ bộ lọc về mặc định
-                    const firstProject = duAn?.[0];
-                    const defaultMaDA =
-                      firstProject?.MaDA ?? (Number(MaDA) || null);
-                    const resetFilter = {
-                      MaDA: defaultMaDA,
-                      MaKhu: null,
-                      MaPK: null,
-                      MaTT: null,
-                      FormCode: null,
-                      KyHieu: "",
-                    };
-                    setFilterCondition(resetFilter);
-                    setSearchQuery("");
-                    void loadProducts2(resetFilter);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.resetFilterText,
-                      isFilterChanged && styles.resetFilterTextHighlight,
-                    ]}
-                  >
-                    Đặt lại
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={{ maxHeight: 200 }}>
-                <View style={styles.filterOptionsGrid}>
-                  {duAn.map((project) => (
-                    <TouchableOpacity
-                      key={project?.MaDA}
-                      style={[
-                        styles.filterOption,
-                        filterCondition?.MaDA === project?.MaDA &&
-                          styles.filterOptionActive,
-                      ]}
-                      onPress={() => {
-                        applyChangeFilter("MaDA", project?.MaDA);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.filterOptionText,
-                          filterCondition?.MaDA === project?.MaDA &&
-                            styles.filterOptionTextActive,
-                        ]}
-                      >
-                        {project?.TenDA}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-            </View>
-
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Khu Vực</Text>
-              <ScrollView style={{ maxHeight: 200 }}>
-                <View style={styles.filterOptionsGrid}>
-                  {khuVuc.map((project) => (
-                    <TouchableOpacity
-                      key={project?.MaKhu}
-                      style={[
-                        styles.filterOption,
-                        filterCondition?.MaKhu === project?.MaKhu &&
-                          styles.filterOptionActive,
-                      ]}
-                      onPress={() => {
-                        applyChangeFilter("MaKhu", project?.MaKhu);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.filterOptionText,
-                          filterCondition?.MaKhu === project?.MaKhu &&
-                            styles.filterOptionTextActive,
-                        ]}
-                      >
-                        {project?.TenKhu}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-            </View>
-
+          <FilterPanel activeCount={activeFilterCount} onReset={resetFilters}>
+            <FilterSection
+              title="Dự án"
+              options={duAn.map((project: any) => ({
+                key: project?.MaDA,
+                label: project?.TenDA,
+                selected: filterCondition?.MaDA === project?.MaDA,
+                onPress: () => applyChangeFilter("MaDA", project?.MaDA),
+              }))}
+            />
+            {khuVuc?.length > 0 && (
+              <FilterSection
+                title="Khu vực"
+                options={[
+                  {
+                    key: "__all__",
+                    label: "Tất cả",
+                    selected: filterCondition?.MaKhu == null,
+                    onPress: () => applyChangeFilter("MaKhu", null),
+                  },
+                  ...khuVuc.map((kv: any) => ({
+                    key: kv?.MaKhu,
+                    label: kv?.TenKhu,
+                    selected: filterCondition?.MaKhu === kv?.MaKhu,
+                    onPress: () => applyChangeFilter("MaKhu", kv?.MaKhu),
+                  })),
+                ]}
+              />
+            )}
             {/* Cao tầng / Thấp tầng — form_code: CAOTANG | THAPTANG | null */}
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Loại sản phẩm</Text>
-              <View style={styles.filterOptionsGrid}>
-                {[
-                  { key: null, label: "Tất cả" },
-                  { key: "CAOTANG", label: "Cao tầng" },
-                  { key: "THAPTANG", label: "Thấp tầng" },
-                ].map((opt) => (
-                  <TouchableOpacity
-                    key={String(opt.key)}
-                    style={[
-                      styles.filterOption,
-                      filterCondition?.FormCode === opt.key &&
-                        styles.filterOptionActive,
-                    ]}
-                    onPress={() => {
-                      setFilterCondition((prev) => ({
-                        ...prev,
-                        FormCode: opt.key,
-                      }));
-                      void loadProducts2({
-                        ...filterCondition,
-                        FormCode: opt.key,
-                      });
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        filterCondition?.FormCode === opt.key &&
-                          styles.filterOptionTextActive,
-                      ]}
-                    >
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Trạng thái</Text>
-              <View style={styles.filterOptionsGrid}>
-                <TouchableOpacity
-                  key={null}
-                  style={[
-                    styles.filterOption,
-                    filterCondition?.MaTT === null && styles.filterOptionActive,
-                  ]}
-                  onPress={() => {
-                    applyChangeFilter("TrangThai", null);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.filterOptionText,
-                      filterCondition?.MaTT === null &&
-                        styles.filterOptionTextActive,
-                    ]}
-                  >
-                    Tất cả
-                  </Text>
-                </TouchableOpacity>
-                {TrangThai.map((status) => (
-                  <TouchableOpacity
-                    key={status.MaTT}
-                    style={[
-                      styles.filterOption,
-                      filterCondition?.MaTT === status.MaTT &&
-                        styles.filterOptionActive,
-                    ]}
-                    onPress={() => {
-                      applyChangeFilter("TrangThai", status.MaTT);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        filterCondition?.MaTT === status.MaTT &&
-                          styles.filterOptionTextActive,
-                      ]}
-                    >
-                      {status.TenTT}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </View>
+            <FilterSection
+              title="Loại sản phẩm"
+              options={[
+                { key: null, label: "Tất cả" },
+                { key: "CAOTANG", label: "Cao tầng" },
+                { key: "THAPTANG", label: "Thấp tầng" },
+              ].map((opt) => ({
+                key: String(opt.key),
+                label: opt.label,
+                selected: filterCondition?.FormCode === opt.key,
+                onPress: () => {
+                  setFilterCondition((prev) => ({
+                    ...prev,
+                    FormCode: opt.key,
+                  }));
+                  void loadProducts2({
+                    ...filterCondition,
+                    FormCode: opt.key,
+                  });
+                },
+              }))}
+            />
+            <FilterSection
+              title="Trạng thái"
+              options={[
+                {
+                  key: "__all__",
+                  label: "Tất cả",
+                  selected: filterCondition?.MaTT == null,
+                  onPress: () => applyChangeFilter("TrangThai", null),
+                },
+                ...TrangThai.map((status: any) => ({
+                  key: status.MaTT,
+                  label: status.TenTT,
+                  selected: filterCondition?.MaTT === status.MaTT,
+                  color: status.ColorWeb,
+                  onPress: () => applyChangeFilter("TrangThai", status.MaTT),
+                })),
+              ]}
+            />
+          </FilterPanel>
         )}
 
-        {viewMode === "list" ? (
-          <>
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={Colors.primary} />
-                <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
-              </View>
-            ) : (
-              <View style={styles.productTable}>
-                <View style={styles.tableHeader}>
-                  <View style={[styles.colStatus]}>
-                    <Text>Trạng thái</Text>
-                  </View>
-                  <View style={[styles.colCode]}>
-                    <Text>Mã sản phẩm</Text>
-                  </View>
-                  <View style={[styles.colPrice]}>
-                    <Text style={[styles.priceHeaderText]}>
-                      Tổng giá trị gồm PBT
-                    </Text>
-                  </View>
-                </View>
-
-                {products2.map((product, index) => (
-                  <TouchableOpacity
-                    key={`${product.MaSP}-${index}`}
-                    style={[
-                      styles.tableRow,
-                      index % 2 === 1 && styles.tableRowAlt,
-                    ]}
-                    activeOpacity={0.7}
-                    onPress={() => handlePressProduct(product.MaSP)}
-                  >
-                    <View
-                      style={[styles.colStatus, styles.statusBadgeContainer]}
-                    >
-                      <View
-                        style={[
-                          styles.statusBadge,
-                          { backgroundColor: getStatusColor(product.MaTT) },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.statusBadgeText,
-                            {
-                              color: getStatusTextColor(
-                                getStatusColor(product.MaTT)
-                              ),
-                            },
-                          ]}
-                        >
-                          {getStatusLabel(product.MaTT)}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={[styles.colCode]}>
-                      {product.KyHieu || product.MaSP}
-                    </Text>
-                    <Text
-                      style={[styles.colPrice, styles.priceText]}
-                      numberOfLines={
-                        Number(product?.TongGomPBT || 0) < 99_000_000_000
-                          ? 1
-                          : 0
-                      }
-                      adjustsFontSizeToFit={
-                        Number(product?.TongGomPBT || 0) < 99_000_000_000
-                      }
-                      minimumFontScale={0.8}
-                    >
-                      {formatCurrency(product?.TongGomPBT)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-
-                {products2.length === 0 && (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>
-                      Không tìm thấy sản phẩm phù hợp
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {!loading && (
-              <View style={styles.footerContainer}>
-                {loadingMore ? (
-                  <View style={styles.footerLoading}>
-                    <ActivityIndicator size="small" color={Colors.primary} />
-                    <Text style={styles.footerText}>Đang tải thêm...</Text>
-                  </View>
-                ) : !hasMore && products2.length > 0 ? (
-                  <Text style={styles.footerText}>
-                    Đã hiển thị tất cả sản phẩm
-                  </Text>
-                ) : null}
-              </View>
-            )}
-          </>
-        ) : viewMode === "grid" ? (
-          renderGridView()
-        ) : (
-          renderOverviewView()
-        )}
-      </ScrollView>
+        <SegmentedControl
+          variant="soft"
+          value={viewMode}
+          onChange={switchViewMode}
+          options={[
+            { value: "list", label: "Danh sách" },
+            { value: "grid", label: "Lưới" },
+            { value: "overview", label: "Tổng quan" },
+          ]}
+        />
+      </View>
     </View>
+  );
+
+  const listEmpty = loading ? (
+    <SkeletonList />
+  ) : (
+    <EmptyState
+      icon={SearchX}
+      title="Không tìm thấy sản phẩm phù hợp"
+      description="Thử đổi từ khoá hoặc bỏ bớt bộ lọc."
+      actionLabel={activeFilterCount > 0 || searchQuery ? "Xoá bộ lọc" : undefined}
+      onAction={activeFilterCount > 0 || searchQuery ? resetFilters : undefined}
+    />
+  );
+
+  const listFooter =
+    viewMode === "list" && !loading ? (
+      loadingMore ? (
+        <View style={styles.footer}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text variant="caption" color="textSecondary">
+            Đang tải thêm...
+          </Text>
+        </View>
+      ) : !hasMore && products2.length > 0 ? (
+        <View style={styles.footer}>
+          <Text variant="caption" color="textTertiary">
+            Đã hiển thị tất cả sản phẩm
+          </Text>
+        </View>
+      ) : null
+    ) : null;
+
+  const bottomPad = { paddingBottom: embedded ? TAB_BAR_SPACE : space.xxl };
+
+  return (
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <Screen
+        scroll={false}
+        padded={false}
+        header={
+          <AppHeader
+            variant="soft"
+            title="Sản phẩm"
+            // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
+            hideBack={embedded}
+            actions={
+              <View style={styles.headerActions}>
+                {viewMode === "grid" && TrangThai?.length > 0 ? (
+                  <IconButton icon={Palette} accessibilityLabel="Chú thích màu trạng thái" onPress={() => setLegendOpen(true)} />
+                ) : null}
+                <FilterToggleButton
+                  open={filterExpanded}
+                  activeCount={activeFilterCount}
+                  onPress={() => setFilterExpanded(!filterExpanded)}
+                />
+              </View>
+            }
+          />
+        }
+      >
+        {viewMode === "list" ? (
+          <FlatList
+            data={loading ? [] : products2}
+            keyExtractor={(item, index) => `${item?.MaSP}-${index}`}
+            renderItem={renderProduct}
+            ItemSeparatorComponent={Separator}
+            ListHeaderComponent={listHeader}
+            stickyHeaderIndices={[0]}
+            ListEmptyComponent={listEmpty}
+            ListFooterComponent={listFooter}
+            onEndReached={() => void loadMore()}
+            onEndReachedThreshold={0.4}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={bottomPad}
+            refreshControl={
+              <RefreshControl
+                refreshing={false}
+                onRefresh={() => void loadProducts2(filterConditionRef.current)}
+                tintColor={colors.primary}
+                colors={[colors.primary]}
+              />
+            }
+          />
+        ) : (
+          <ScrollView
+            stickyHeaderIndices={[0]}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={bottomPad}
+          >
+            {listHeader}
+            <View style={styles.body}>
+              {viewMode === "grid" ? (
+                dataGrid?.length ? (
+                  dataGrid.map((block) => (
+                    <BlockGrid
+                      key={block.rawBlock?.maKhu}
+                      block={block}
+                      localChange={localChange}
+                      handlePressProduct={handlePressProduct}
+                      getHexColor={getHexColor}
+                    />
+                  ))
+                ) : (
+                  <EmptyState title="Chưa có sơ đồ căn" description="Dự án/khu đang chọn chưa có dữ liệu lưới." />
+                )
+              ) : (
+                <OverviewView
+                  dataGrid={dataGrid}
+                  catalog={TrangThai}
+                  selected={selectedOverviewStatus}
+                  onSelect={setSelectedOverviewStatus}
+                  onPressUnit={handlePressProduct}
+                />
+              )}
+            </View>
+          </ScrollView>
+        )}
+      </Screen>
+
+      {/* Chú thích màu trạng thái (thay khối thu/mở cũ) */}
+      <BottomSheet visible={legendOpen} onClose={() => setLegendOpen(false)} title="Chú thích trạng thái">
+        <ScrollView>
+          {TrangThai.map((item: any) => (
+            <View key={item.MaTT} style={styles.legendRow}>
+              <View style={[styles.legendDot, { backgroundColor: item.ColorWeb || colors.surfaceMuted }]} />
+              <Text variant="body">{item.TenTT}</Text>
+            </View>
+          ))}
+        </ScrollView>
+        <Button variant="secondary" title="Đóng" fullWidth onPress={() => setLegendOpen(false)} style={styles.legendClose} />
+      </BottomSheet>
+    </>
   );
 }
 
+function Separator() {
+  return <View style={styles.separator} />;
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  headerActions: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  stickyHeader: {
+    backgroundColor: colors.bg,
+    paddingHorizontal: space.xl,
+    paddingTop: space.sm,
+    paddingBottom: space.lg,
   },
-  headerBackButton: {
-    marginLeft: 8,
-  },
-  headerViewMode: {
+  headerStack: { gap: space.lg },
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  separator: { height: space.sm + 2 },
+  footer: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: space.sm, paddingVertical: space.lg },
+  legendRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginRight: 8,
-  },
-  headerViewBtn: {
-    padding: 6,
-    borderRadius: 6,
-  },
-  headerViewBtnActive: {
-    backgroundColor: Colors.primary,
-  },
-  content: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 15,
-    // Chừa chỗ cho tab bar phía dưới để nội dung (đặc biệt lưới Sản phẩm)
-    // không bị che và cuộn được đến hàng cuối cùng
-    paddingBottom: 100,
-  },
-  searchAndFilterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.text,
-  },
-  controlsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  viewModeLabel: {
-    fontSize: 15,
-    color: Colors.text,
-    fontWeight: "500" as const,
-  },
-  viewModeContainer: {
-    flexDirection: "row",
-    borderRadius: 8,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  viewModeButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 8,
-    backgroundColor: Colors.white,
-  },
-  viewModeButtonLeft: {
-    borderRightWidth: 1,
-    borderRightColor: Colors.border,
-  },
-  viewModeButtonMiddle: {
-    borderRightWidth: 1,
-    borderRightColor: Colors.border,
-  },
-  viewModeButtonRight: {},
-  viewModeButtonActive: {
-    backgroundColor: Colors.primary,
-  },
-  viewModeText: {
-    fontSize: 14,
-    fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  viewModeTextActive: {
-    color: Colors.white,
-  },
-  filterButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  filterText: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  productCount: {
-    fontSize: 15,
-    color: Colors.textSecondary,
-    marginBottom: 16,
-  },
-  productCountBold: {
-    fontWeight: "700" as const,
-    color: Colors.primary,
-  },
-
-  productTable: {
-    backgroundColor: Colors.white,
-    borderRadius: 10,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  tableHeader: {
-    flexDirection: "row",
-    backgroundColor: "#F9FAFB",
-    paddingVertical: 10,
-    paddingHorizontal: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  tableRow: {
-    flexDirection: "row",
-    paddingVertical: 10,
-    paddingHorizontal: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    alignItems: "center",
-  },
-  colStatus: {
-    width: 110,
-    borderRightWidth: 1,
-    borderRightColor: Colors.border,
-    paddingHorizontal: 8,
-  },
-  colCode: {
-    flex: 1,
-    minWidth: 0,
-    paddingHorizontal: 8,
-    borderRightWidth: 1,
-    borderRightColor: Colors.border,
-  },
-  colPrice: {
-    width: 130,
-    paddingHorizontal: 8,
-    textAlign: "right",
-  },
-  priceHeaderText: {
-    fontSize: 12,
-    lineHeight: 16,
-    textAlign: "right",
-  },
-  statusBadgeContainer: {
-    alignItems: "flex-start",
-  },
-  statusBadge: {
-    alignSelf: "flex-start" as const,
-    maxWidth: "80%",
-    flexShrink: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  statusBadgeText: {
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "600" as const,
-    color: Colors.white,
-  },
-  priceText: {
-    fontSize: 14,
-    fontWeight: "600" as const,
-    fontVariant: ["tabular-nums"] as const,
-  },
-  tableRowAlt: {
-    backgroundColor: "#FCFCFD",
-  },
-  emptyContainer: {
-    paddingVertical: 32,
-    alignItems: "center" as const,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  filterPanel: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  filterSection: {
-    marginBottom: 20,
-  },
-  filterSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  filterSectionTitle: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-    marginBottom: 12,
-  },
-  resetFilterButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: "#E5E7EB",
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    opacity: 0.6,
-  },
-  resetFilterButtonHighlight: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-    opacity: 1,
-  },
-  resetFilterText: {
-    fontSize: 12,
-    fontWeight: "500" as const,
-    color: "#9CA3AF",
-  },
-  resetFilterTextHighlight: {
-    color: Colors.white,
-  },
-  filterOptionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  filterOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  filterOptionActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  filterOptionText: {
-    fontSize: 14,
-    fontWeight: "500" as const,
-    color: Colors.text,
-  },
-  filterOptionTextActive: {
-    color: Colors.white,
-  },
-  gridContainer: {
-    gap: 20,
-  },
-  statusLegend: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  legendTitle: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: Colors.text,
-    marginBottom: 12,
-  },
-  legendItems: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 16,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  legendText: {
-    fontSize: 14,
-    color: Colors.text,
-  },
-  blockCard: {
-    backgroundColor: "#FEF7F3",
-    borderRadius: 12,
-    // padding: 2,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  blockTitle: {
-    fontSize: 18,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    // marginBottom: 16,
-    padding: 10,
-  },
-  grid: {
-    gap: 8,
-  },
-  gridRow: {
-    flexDirection: "row",
-    gap: 3,
-    marginBottom: 3,
-    height: 45,
-  },
-  gridCell: {
-    // flex: 1,
-    // aspectRatio: 1,
-    width: 45,
-    height: 45,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  headerCell: {
-    backgroundColor: "#F3E8DC",
-    borderRadius: 6,
-  },
-  headerCellText: {
-    fontSize: 10,
-    fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  floorCell: {
-    backgroundColor: "#E8EAF6",
-    borderRadius: 6,
-  },
-  floorCellText: {
-    fontSize: 10,
-    fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  unitCell: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 6,
-  },
-  unitCellText: {
-    fontSize: 9,
-    fontWeight: "700" as const,
-    color: "#333",
-  },
-  emptyCell: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  emptyCellText: {
-    fontSize: 14,
-    color: "#9CA3AF",
-  },
-  blockNavigation: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
-    marginTop: 16,
-    marginBottom: 12,
-  },
-  navButton: {
-    padding: 8,
-  },
-  navButtonDisabled: {
-    opacity: 0.3,
-  },
-  progressBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 16,
-  },
-  progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#D1D5DB",
-    flex: 1,
-    maxWidth: 60,
-  },
-  progressDotActive: {
-    backgroundColor: Colors.primary,
-  },
-  blockStats: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: "center" as const,
-    marginTop: 15,
-  },
-  overviewContainer: {
-    gap: 16,
-  },
-  statusSummaryScroll: {
-    marginBottom: 4,
-  },
-  statusSummaryContent: {
-    gap: 8,
-    paddingVertical: 2,
-  },
-  statusSummaryItem: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center" as const,
-    minWidth: 72,
-  },
-  statusSummaryItemActive: {
-    borderWidth: 2.5,
-    borderColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  statusSummaryLabel: {
-    fontSize: 10,
-    fontWeight: "700" as const,
-    color: "#FFFFFF",
-    letterSpacing: 0.3,
-    marginBottom: 2,
-  },
-  statusSummaryCount: {
-    fontSize: 18,
-    fontWeight: "800" as const,
-    color: "#FFFFFF",
-  },
-  floorSection: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  floorHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "#F8FAFC",
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    gap: 6,
-  },
-  floorName: {
-    fontSize: 16,
-    fontWeight: "700" as const,
-    color: Colors.text,
-  },
-  floorCount: {
-    fontSize: 14,
-    fontWeight: "500" as const,
-    color: Colors.textSecondary,
-  },
-  unitsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    padding: 8,
-    gap: 6,
-  },
-  unitCard: {
-    width: "23%" as unknown as number,
-    flexBasis: "23%" as unknown as number,
-    flexGrow: 0,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    borderRadius: 8,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
-  unitCode: {
-    fontSize: 11,
-    fontWeight: "700" as const,
-    color: "#FFFFFF",
-    marginBottom: 2,
-  },
-  unitPrice: {
-    fontSize: 10,
-    fontWeight: "500" as const,
-    color: "rgba(255,255,255,0.85)",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 100,
-  },
-
-  loadingText: {
-    marginTop: 10,
-    color: Colors.textSecondary,
-  },
-  footerContainer: {
-    paddingVertical: 20,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
-  footerLoading: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 8,
-  },
-  footerText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  disabledCell: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#E5E7EB",
-    borderRadius: 6,
-  },
-
-  disabledText: {
-    fontSize: 12,
-    color: "#9CA3AF",
-  },
+    gap: space.md,
+    minHeight: 44,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  legendDot: { width: 16, height: 16, borderRadius: 8 },
+  legendClose: { marginTop: space.md },
 });

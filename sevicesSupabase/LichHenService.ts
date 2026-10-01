@@ -1,5 +1,7 @@
 import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyCode, getValidSupabaseJwt } from "./cloudTenant";
+import { getCompanyId, getValidSupabaseJwt } from "./cloudTenant";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function normalizeLichHen(row: any) {
   const raw = row?.raw || {};
@@ -23,7 +25,7 @@ export const LichHenService = {
       console.log("[LichHen] bỏ qua vì chưa có cloud_jwt hợp lệ (cloud_catalogs cấm anon)");
       return { data: [] };
     }
-    const companyCode = await getCompanyCode();
+    const companyId = await getCompanyId();
     try {
       const params: Record<string, string> = {
         select: "id,item_code,item_name,parent_code,raw,created_at",
@@ -31,7 +33,7 @@ export const LichHenService = {
         order: "created_at.desc",
         limit: String(limit),
       };
-      if (companyCode) params.ma_ctdk = `eq.${companyCode}`;
+      if (companyId && UUID_RE.test(companyId)) params.ma_ctdk_uid = `eq.${companyId}`;
       const res = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
         params,
         headers: { Prefer: "count=exact" },
