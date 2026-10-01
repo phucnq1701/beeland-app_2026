@@ -14,6 +14,14 @@ import {
 import { currentUserName } from "./CustomerRulesService";
 import { mapCustomerTransaction } from "../lib/customerRules";
 
+/** Cột cloud_customers mà màn sửa khách trên app quản lý (PATCH chỉ gồm các cột này). */
+const APP_EDIT_COLUMNS = new Set([
+  "ma_ctdk", "ma_so_kh", "company_id", "is_personal", "ten_kh", "ten_cong_ty", "di_dong", "dien_thoai", "di_dong2",
+  "dien_thoai_ct", "email", "email_ct", "cccd", "so_cmnd", "dia_chi", "dia_chi_ct", "ma_so_thue_ct", "ma_so_ttncn",
+  "nguoi_dai_dien_pl", "chuc_vu", "ndd_dien_thoai", "ndd_email", "ndd_so_cccd", "ma_tt_id", "ma_nguon_id",
+  "ngay_sua", "updated_by_id",
+]);
+
 const escapeIlike = (value: string) => value.replace(/[%,()]/g, "");
 
 const UUID_RE =
@@ -851,6 +859,11 @@ export const CustomerService = {
         delete updateInput.created_by_id;
         delete updateInput.created_at;
         delete updateInput.updated_at;
+        // Chỉ ghi các cột form app quản lý; cột chỉ nhập trên web (ngày sinh, nơi cấp, tài khoản, email phụ,
+        // thường trú riêng, danh xưng…) không có trong payload thì giữ nguyên, không bị ghi đè null.
+        Object.keys(updateInput).forEach((key) => {
+          if (!APP_EDIT_COLUMNS.has(key)) delete updateInput[key];
+        });
         Object.keys(updateInput).forEach((key) => {
           if (updateInput[key] === undefined) delete updateInput[key];
         });

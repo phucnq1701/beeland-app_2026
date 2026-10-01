@@ -87,23 +87,35 @@ test("duplicate values come from the form like the web payload", () => {
   assert.deepEqual(plain(r.duplicateValues(form({ name: " Nguyễn A ", phone: "0901", cccd: "0123", taxCode: "999" }))), {
     cccd: "0123", phone: "0901", email: "", tax_code: "", full_name: "Nguyễn A",
   });
-  const org = plain(r.duplicateValues(form({ isPersonal: false, name: "Cty B", taxCode: "0312", cccd: "x" })));
-  assert.equal(org.full_name, "Cty B");
-  assert.equal(org.tax_code, "0312");
-  assert.equal(org.cccd, "");
+  // Web: tab Doanh nghiệp nhập SĐT/email vào DienThoaiCT/EmailCT nên không kiểm DiDong/Email/SoCMND
+  const org = plain(r.duplicateValues(form({ isPersonal: false, name: "Cty B", taxCode: "0312", cccd: "x", phone: "0902", email: "b@c.d" })));
+  assert.deepEqual(org, { cccd: "", phone: "", email: "", tax_code: "0312", full_name: "Cty B" });
+});
+
+test("save payload only sends the fields of the current customer type", () => {
+  const personal = r.customerSavePayload(form({ name: "A", phone: "0901", cccd: "012", taxCode: "TNCN1" }), "edit");
+  assert.equal(personal.cccd, "012");
+  assert.equal(personal.taxCode, "TNCN1", "edit keeps the personal tax code");
+  assert.equal(r.customerSavePayload(form({ name: "A", taxCode: "x" }), "create").taxCode, null);
+  const org = r.customerSavePayload(form({ isPersonal: false, name: "Cty", cccd: "012", taxCode: "0312", nguoiDaiDienPl: "B" }), "create");
+  assert.equal(org.cccd, null, "a CCCD typed before switching to business is not saved");
+  assert.equal(org.tenCongTy, "Cty");
+  assert.equal(org.taxCode, "0312");
+  assert.equal(org.nguoiDaiDienPl, "B");
+  assert.equal("nguoiDaiDienPl" in personal, false);
 });
 
 // Nguồn web: services/RequiredFieldService.ts + config/requiredFieldCatalog.ts (agencyFormKey)
-test("form key: agency accounts use agency_* only when that form exists", () => {
-  assert.equal(r.customerFormKey(true, false, ["customer", "agency_customer"]), "customer");
-  assert.equal(r.customerFormKey(true, true, ["agency_customer"]), "agency_customer");
-  assert.equal(r.customerFormKey(false, true, ["customer_org"]), "customer_org");
-  assert.equal(r.customerFormKey(false, true, ["agency_customer_org"]), "agency_customer_org");
+test("form key: agency accounts use agency_customer for personal customers (web agencyFormKey)", () => {
+  assert.equal(r.customerFormKey(true, false), "customer");
+  assert.equal(r.customerFormKey(true, true), "agency_customer");
+  assert.equal(r.customerFormKey(false, false), "customer_org");
+  assert.equal(r.customerFormKey(false, true), "customer_org", "the web catalog has no agency_customer_org");
 });
 
 test("required fields: app fields get inline errors, hidden ones are skipped, missing app fields block", () => {
   const res = r.checkRequired(
-    ["TenKH", "NgaySinh", "Email", "MaSoKH", "MaNguon"],
+    ["TenKH", "NgaySinh", "Email", "MaSoKH", "MaNguon", "DiDong2", "MaSoTTNCN"],
     new Set(["Email"]),
     form({ sourceId: "u1" }),
     { NgaySinh: "Ngày sinh" }
@@ -112,11 +124,20 @@ test("required fields: app fields get inline errors, hidden ones are skipped, mi
   assert.equal(res.fieldErrors.name, "Vui lòng nhập Họ và tên");
   assert.equal(res.fieldErrors.email, undefined);
   assert.equal(res.fieldErrors.sourceId, undefined);
-  assert.deepEqual(plain(res.unsupported), ["Ngày sinh"]);
+  assert.equal(res.fieldErrors.phone2, "Vui lòng nhập Số điện thoại phụ");
+  assert.equal(res.fieldErrors.taxCode, undefined, "personal form has no MST TNCN field");
+  assert.deepEqual(plain(res.unsupported), ["Ngày sinh", "Số thuế TNCN"]);
   assert.match(res.message, /Ngày sinh/);
   const ok = r.checkRequired(["DienThoaiCT", "MaSoThueCT"], new Set(), form({ isPersonal: false, phone: "09", taxCode: "03" }), {});
   assert.equal(ok.ok, true);
   assert.equal(ok.message, "");
+});
+
+test("required keys outside the web form catalog are ignored like the web", () => {
+  // Trường cá nhân lẫn vào cấu hình doanh nghiệp (web: tự bỏ qua, không chặn lưu)
+  const res = r.checkRequired(["TenKH", "NgaySinh", "XyzLa"], new Set(), form({ isPersonal: false, name: "Cty" }), {});
+  assert.equal(res.ok, true);
+  assert.deepEqual(plain(res.unsupported), []);
 });
 
 test("stage labels and transaction mapping", () => {

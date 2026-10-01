@@ -17,6 +17,7 @@ import {
   EMPTY_CUSTOMER_FORM,
   appFieldOf,
   checkRequired,
+  customerSavePayload,
 } from "@/lib/customerRules";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { space } from "@/theme";
@@ -79,6 +80,7 @@ export function CustomerForm({
   const savingRef = useRef(false);
   const [dup, setDup] = useState<DuplicateResult | null>(null);
   const [dupOpen, setDupOpen] = useState(false);
+  const taxByType = useRef<{ personal?: string; business?: string }>({});
 
   // Danh mục trạng thái / nguồn khách; tạo mới thì chọn sẵn mục đầu (như màn cũ)
   useEffect(() => {
@@ -141,7 +143,10 @@ export function CustomerForm({
     [rules, values.isPersonal] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  const locked = (f: CustomerFormField) => readonly.has(f) || (identityLocked && (f === "name" || f === "cccd"));
+  /** Web khoá TenKH, SoCMND (cá nhân) và TenCongTy, MaSoThueCT (doanh nghiệp) khi khách có lịch ký. */
+  const identityField = (f: CustomerFormField) =>
+    f === "name" || (values.isPersonal ? f === "cccd" : f === "taxCode");
+  const locked = (f: CustomerFormField) => readonly.has(f) || (identityLocked && identityField(f));
   const shown = (f: CustomerFormField) => !hidden.has(f);
 
   const set = (field: CustomerFormField) => (text: string) => {
@@ -161,30 +166,10 @@ export function CustomerForm({
     return e;
   };
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     const payload: any = {
       ...(mode === "edit" ? { id: customerId } : {}),
-      isPersonal: values.isPersonal,
-      tenKh: values.name.trim(),
-      tenCongTy: values.isPersonal ? null : values.name.trim(),
-      diDong: values.phone.trim(),
-      diDong2: values.phone2.trim() || null,
-      email: values.email.trim() || null,
-      cccd: values.cccd.trim() || null,
-      diaChi: values.diaChi.trim() || null,
-      // Tạo mới: cá nhân không nhập MST (như màn cũ); sửa: giữ MST TNCN đang có
-      taxCode: mode === "create" && values.isPersonal ? null : values.taxCode.trim() || null,
-      maTtId: values.statusId || null,
-      maNguonId: values.sourceId || null,
-      ...(values.isPersonal
-        ? {}
-        : {
-            nguoiDaiDienPl: values.nguoiDaiDienPl.trim() || null,
-            chucVu: values.chucVu.trim() || null,
-            nddDienThoai: values.nddDienThoai.trim() || null,
-            nddEmail: values.nddEmail.trim() || null,
-            nddSoCccd: values.nddSoCccd.trim() || null,
-          }),
+      ...customerSavePayload(values, mode),
     };
     const res: any = await CustomerService.saveCustomerCloud(payload);
     if (res?.status === 2000 && res.data) {
@@ -201,34 +186,40 @@ export function CustomerForm({
       hapticSuccess();
       toast.show({ type: "success", message: mode === "create" ? "Đã thêm khách hàng" : "Đã cập nhật khách hàng" });
       onSaved(res.data);
-      return;
+      return true;
     }
     hapticError();
     if (res?.needLogin && onNeedLogin) {
       onNeedLogin(res.message || "Chưa đăng nhập hoặc phiên đã hết hạn");
-      return;
+      return false;
     }
     toast.show({ type: "error", message: res?.message || "Không thể lưu khách hàng, vui lòng thử lại" });
+    return false;
   };
 
   const handleSubmit = async () => {
     if (savingRef.current) return;
+    savingRef.current = true;
+    // Như web (RequiredFieldService.preload trước khi kiểm): cấu hình chưa tải xong thì chờ tải
+    const r: FormRules =
+      rules ??
+      (await CustomerRulesService.getFormRules(values.isPersonal).catch(
+        // Không đọc được cấu hình → không ràng buộc thêm (như web)
+        (): FormRules => ({ formKey: "", required: [], hidden: new Set(), readonly: new Set() })
+      ));
     const e = baseErrors(values);
-    const req = checkRequired(rules?.required ?? [], rules?.hidden ?? new Set(), values, {});
+    const req = checkRequired(r.required, r.hidden, values, {});
     const all: Errors = { ...req.fieldErrors, ...e };
     setErrors(all);
-    if (Object.keys(all).length) {
+    if (Object.keys(all).length || !req.ok) {
+      savingRef.current = false;
       hapticError();
-      return;
-    }
-    if (!req.ok) {
-      hapticError();
-      toast.show({ type: "error", message: req.message });
+      if (!Object.keys(all).length) toast.show({ type: "error", message: req.message });
       return;
     }
 
-    savingRef.current = true;
     setSaving(true);
+    let saved = false;
     try {
       const result = await CustomerRulesService.checkDuplicate(values, mode === "edit" ? customerId : null);
       if (result.matches.length && result.mode !== "allow") {
@@ -237,13 +228,14 @@ export function CustomerForm({
         setDupOpen(true);
         return;
       }
-      await save();
+      saved = await save();
     } catch (err) {
       console.log("Customer save error:", err);
       hapticError();
       toast.show({ type: "error", message: "Đã xảy ra sự cố khi lưu dữ liệu" });
     } finally {
-      savingRef.current = false;
+      // Đã lưu xong thì giữ khoá (màn đang chuyển đi) – bấm thêm lần nữa không tạo khách thứ hai
+      if (!saved) savingRef.current = false;
       setSaving(false);
     }
   };
@@ -257,7 +249,7 @@ export function CustomerForm({
         error={errors[f]}
         required={configRequired.has(f) || extra.required}
         editable={!locked(f)}
-        helper={identityLocked && (f === "name" || f === "cccd") ? IDENTITY_LOCK_HINT : extra.helper}
+        helper={identityLocked && identityField(f) ? IDENTITY_LOCK_HINT : extra.helper}
         {...extra}
       />
     ) : null;
@@ -302,7 +294,15 @@ export function CustomerForm({
             { value: "business", label: "Doanh nghiệp" },
           ]}
           onChange={(v) => {
-            setValues((s) => ({ ...s, isPersonal: v === "personal" }));
+            const toPersonal = v === "personal";
+            if (toPersonal === values.isPersonal) return;
+            // MST TNCN (cá nhân) và MST doanh nghiệp là 2 cột khác nhau – giữ riêng từng loại khi đổi qua lại
+            taxByType.current[values.isPersonal ? "personal" : "business"] = values.taxCode;
+            setValues((s) => ({
+              ...s,
+              isPersonal: toPersonal,
+              taxCode: taxByType.current[toPersonal ? "personal" : "business"] ?? "",
+            }));
             setErrors({});
           }}
         />

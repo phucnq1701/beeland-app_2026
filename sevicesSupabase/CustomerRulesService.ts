@@ -66,6 +66,8 @@ export type DuplicateMatch = {
   customerId: string;
   customerName: string;
   customerCode: string | null;
+  isPersonal: boolean;
+  email: string | null;
   phone: string | null;
   cccd: string | null;
   ownerId: string | null;
@@ -138,7 +140,7 @@ export const CustomerRulesService = {
       const clean = value.replace(/[,)]/g, "");
       const or = DUPLICATE_FIELD_COLUMNS[key].map((c) => `${c}.eq.${clean}`).join(",");
       const params: Record<string, string> = {
-        select: "id,ten_kh,ten_cong_ty,ma_so_kh,di_dong,dien_thoai,cccd,created_by_id,created_at",
+        select: "id,ten_kh,ten_cong_ty,ma_so_kh,is_personal,di_dong,dien_thoai,email,cccd,created_by_id,created_at",
         ma_ctdk: `eq.${companyId}`,
         or: `(${or})`,
         limit: "10",
@@ -159,6 +161,8 @@ export const CustomerRulesService = {
             customerId: id,
             customerName: str(r.ten_kh) || str(r.ten_cong_ty) || "(chưa có tên)",
             customerCode: str(r.ma_so_kh) || null,
+            isPersonal: r.is_personal !== false,
+            email: str(r.email) || null,
             phone: str(r.di_dong) || str(r.dien_thoai) || null,
             cccd: str(r.cccd) || null,
             ownerId: uid(r.created_by_id),
@@ -286,7 +290,7 @@ export const CustomerRulesService = {
       console.log("ERROR getFormRules required:", e);
       required = {};
     }
-    const formKey = customerFormKey(isPersonal, isAgency, Object.keys(required));
+    const formKey = customerFormKey(isPersonal, isAgency);
     const rules = NO_RULES(formKey);
     const cfg = required[formKey];
     if (cfg && cfg.is_active !== false) rules.required = arr(cfg.required_fields);

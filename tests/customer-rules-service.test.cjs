@@ -47,7 +47,10 @@ function harness(tables = {}, { failGet = {}, claims = {} } = {}) {
       calls.push({ method: "post", table, body });
       return { data: [{ id: uid(500 + calls.length) }] };
     },
-    patch: async () => ({ data: [] }),
+    patch: async (url, body) => {
+      calls.push({ method: "patch", table: url.replace("rest/v1/", ""), body });
+      return { data: [{ id: uid(1), ...body }] };
+    },
     delete: async (url, opts) => {
       calls.push({ method: "delete", table: url.replace("rest/v1/", ""), params: opts?.params });
       return { data: [] };
@@ -113,6 +116,10 @@ test("phone duplicate of a customer with a sales contract is blocked", async () 
   assert.equal(m.ownerName, "NV Khác");
   assert.equal(m.isOwn, false);
   assert.deepEqual([...m.fields], ["phone"]);
+  assert.equal(m.isPersonal, true);
+  const sel = h.calls.find((c) => c.table === "cloud_customers").params.select;
+  assert.match(sel, /is_personal/);
+  assert.match(sel, /email/);
   const care = h.calls.find((c) => c.table === "cloud_customer_activities");
   assert.equal(care.params.ma_ctdk, "eq.beesky1", "activities are scoped by the lowercase company code like the web");
 });
@@ -238,4 +245,19 @@ test("care notes are written like the web (company code, staff name)", async () 
   assert.equal(post.body.ma_ctdk, "beesky1");
   assert.equal(post.body.nguoi_thuc_hien, "NV Test");
   assert.equal(post.body.loai, "note");
+});
+
+test("editing only patches the columns the app form manages (web-only data is kept)", async () => {
+  const existing = { id: uid(1), ma_ctdk: tenant, ma_so_kh: "KH-1", company_id: uid(8), ngay_sinh: "1990-01-01", thuong_tru: "Hà Nội" };
+  const h = harness({ cloud_customers: [existing] });
+  const svc = h.customerService();
+  svc.getCustomerDetailCloud = async () => existing;
+  const patched = await svc.saveCustomerCloud({ id: uid(1), isPersonal: true, tenKh: "A", diDong: "0901", diaChi: "HCM" });
+  assert.equal(patched.status, 2000);
+  const body = h.calls.find((c) => c.method === "patch").body;
+  for (const k of ["ngay_sinh", "ngay_cap", "noi_cap", "so_tai_khoan", "ten_ngan_hang", "email2", "thuong_tru", "ma_qd", "ten_qd"]) {
+    assert.equal(k in body, false, `${k} must not be overwritten`);
+  }
+  assert.equal(body.dia_chi, "HCM");
+  assert.equal(body.di_dong, "0901");
 });

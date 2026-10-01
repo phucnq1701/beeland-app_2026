@@ -35,7 +35,14 @@ export default function CustomerNewScreen() {
         }}
         onUseExisting={(m) => {
           if (isReturningToBooking) {
-            backToBooking({ id: m.customerId, ten_kh: m.customerName, dien_thoai: m.phone, cccd: m.cccd });
+            backToBooking({
+              id: m.customerId,
+              ten_kh: m.customerName,
+              is_personal: m.isPersonal,
+              dien_thoai: m.phone,
+              email: m.email,
+              cccd: m.cccd,
+            });
           } else {
             router.replace(`/customer/${m.customerId}` as any);
           }

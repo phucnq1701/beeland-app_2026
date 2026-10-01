@@ -290,31 +290,78 @@ export const EMPTY_CUSTOMER_FORM: CustomerFormValues = {
 
 const t = (v: unknown) => String(v ?? '').trim();
 
-/** Giá trị từng tiêu chí trùng lấy từ form (web duplicateValuesFromPayload). */
+/**
+ * Giá trị từng tiêu chí trùng lấy từ form (web duplicateValuesFromPayload đọc DiDong/Email/SoCMND/MaSoThueCT/TenKH|TenCongTy).
+ * Tab Doanh nghiệp của web nhập SĐT/email vào DienThoaiCT/EmailCT → web không kiểm SĐT/email/CCCD của doanh nghiệp.
+ */
 export function duplicateValues(f: CustomerFormValues): Record<DuplicateField, string> {
   return {
     cccd: f.isPersonal ? t(f.cccd) : '',
-    phone: t(f.phone),
-    email: t(f.email),
+    phone: f.isPersonal ? t(f.phone) : '',
+    email: f.isPersonal ? t(f.email) : '',
     tax_code: f.isPersonal ? '' : t(f.taxCode),
     full_name: t(f.name),
   };
 }
 
-/** form_key cấu hình (web RequiredFieldService.resolveKey + agencyFormKey). */
-export function customerFormKey(isPersonal: boolean, isAgency: boolean, knownKeys: string[]): string {
-  const base = isPersonal ? 'customer' : 'customer_org';
-  const agency = `agency_${base}`;
-  return isAgency && knownKeys.includes(agency) ? agency : base;
+/**
+ * Dữ liệu gửi CustomerService.saveCustomerCloud – chỉ trường của loại khách đang chọn
+ * (CCCD gõ trước khi đổi sang Doanh nghiệp không bị lưu nhầm).
+ */
+export function customerSavePayload(v: CustomerFormValues, mode: 'create' | 'edit'): Record<string, any> {
+  const n = (x: string) => t(x) || null;
+  return {
+    isPersonal: v.isPersonal,
+    tenKh: t(v.name),
+    tenCongTy: v.isPersonal ? null : t(v.name),
+    diDong: t(v.phone),
+    diDong2: n(v.phone2),
+    email: n(v.email),
+    cccd: v.isPersonal ? n(v.cccd) : null,
+    diaChi: n(v.diaChi),
+    // Tạo mới: cá nhân không nhập MST (như màn cũ); sửa: giữ MST TNCN đang có
+    taxCode: mode === 'create' && v.isPersonal ? null : n(v.taxCode),
+    maTtId: n(v.statusId),
+    maNguonId: n(v.sourceId),
+    ...(v.isPersonal
+      ? {}
+      : {
+          nguoiDaiDienPl: n(v.nguoiDaiDienPl),
+          chucVu: n(v.chucVu),
+          nddDienThoai: n(v.nddDienThoai),
+          nddEmail: n(v.nddEmail),
+          nddSoCccd: n(v.nddSoCccd),
+        }),
+  };
 }
+
+/**
+ * form_key cấu hình (web RequiredFieldService.resolveKey + agencyFormKey): đại lý dùng bản agency_* khi danh mục web
+ * có bản đó – hiện chỉ có agency_customer (cá nhân); doanh nghiệp luôn customer_org.
+ */
+export function customerFormKey(isPersonal: boolean, isAgency: boolean): string {
+  if (!isPersonal) return 'customer_org';
+  return isAgency ? 'agency_customer' : 'customer';
+}
+
+/** Các trường có trên form web theo danh mục (requiredFieldCatalog) – key ngoài danh mục web tự bỏ qua. */
+const PERSONAL_CATALOG = new Set([
+  'TenKH', 'MaQD', 'MaSoKH', 'NgaySinh', 'SoCMND', 'NgayCap', 'NoiCap', 'MaSoTTNCN', 'SoTaiKhoan', 'TenNganHang',
+  'DiDong', 'DiDong2', 'Email', 'Email2', 'ThuongTru', 'DiaChi', 'MaNguon', 'MaTT', 'AnhCCCDTruoc', 'AnhCCCDSau',
+]);
+const ORG_CATALOG = new Set([
+  'MaSoKH', 'TenCongTy', 'MaSoThueCT', 'DiaChiCT', 'MaTT', 'MaNguon', 'DienThoaiCT', 'EmailCT', 'FaxCT', 'SoGPKD',
+  'NoiCapGDKKD', 'NgayCapGDKKD', 'NguoiDaiDienPL', 'ChucVu', 'NDDDienThoai', 'NDDEmail', 'NDDSoCCCD', 'NDDNgayCap',
+  'NDDNoiCap', 'NDDThuongTru', 'NDDDiaChiLH', 'NguoiUyQuyenList',
+]);
 
 /** Key cấu hình web → trường form app. Key web không có ở đây = app chưa có trường đó. */
 const PERSONAL_FIELDS: Record<string, CustomerFormField | null> = {
   TenKH: 'name',
   DiDong: 'phone',
+  DiDong2: 'phone2',
   Email: 'email',
   SoCMND: 'cccd',
-  MaSoTTNCN: 'taxCode',
   DiaChi: 'diaChi',
   ThuongTru: 'diaChi',
   MaTT: 'statusId',
@@ -353,6 +400,8 @@ export const REQUIRED_FIELD_LABELS: Record<string, string> = {
   SoTaiKhoan: 'Số tài khoản',
   TenNganHang: 'Ngân hàng',
   DiDong: 'Số điện thoại',
+  DiDong2: 'Số điện thoại phụ',
+  Email2: 'Email phụ',
   Email: 'Email',
   ThuongTru: 'Địa chỉ thường trú',
   DiaChi: 'Địa chỉ liên hệ',
@@ -402,8 +451,9 @@ export function checkRequired(
   const fieldErrors: Partial<Record<CustomerFormField, string>> = {};
   const unsupported: string[] = [];
   const label = (k: string) => labels[k] || REQUIRED_FIELD_LABELS[k] || k;
+  const catalog = values.isPersonal ? PERSONAL_CATALOG : ORG_CATALOG;
   for (const key of requiredKeys) {
-    if (hidden.has(key)) continue;
+    if (hidden.has(key) || !catalog.has(key)) continue;
     const field = appFieldOf(values.isPersonal, key);
     if (field === null) continue;
     if (field === undefined) {
