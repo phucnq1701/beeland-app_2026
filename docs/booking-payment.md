@@ -42,6 +42,7 @@ Param `dataBooking` = JSON sản phẩm (`normalizeProduct`). Tạo xong → `ro
 4. VA hết hạn: action `expire_sweep`; xoá VA: action `delete`.
 - Trạng thái màn: `lib/qrPaymentState.getQrScreenState` (loading/error/paid/noDeadline/expired/mismatch/active/needsNewQr/needsQr)
   – có test. `mismatch` = số tiền VA khác số tiền cần thu → yêu cầu tạo QR mới.
+- Màn QR đặt cọc dùng chung `getQrScreenState` với `requiresDeadline: false` – xem `docs/deposits-contracts.md`.
 
 ## Bẫy đã gặp
 

@@ -33,6 +33,7 @@ export function SalesDocDetail({
   loading,
   refreshing,
   onRefresh,
+  footer,
 }: {
   title: string;
   docNo: string;
@@ -52,6 +53,8 @@ export function SalesDocDetail({
   loading: boolean;
   refreshing: boolean;
   onRefresh: () => void;
+  /** Thanh thao tác dưới đáy (vd "Thu tiền cọc QR") */
+  footer?: React.ReactNode;
 }) {
   const rows = info.filter(([, v]) => v != null && String(v).trim() !== "") as [string, string][];
   return (
@@ -62,6 +65,7 @@ export function SalesDocDetail({
         padded={false}
         refreshing={refreshing}
         onRefresh={onRefresh}
+        footer={footer}
       >
         <View style={styles.body}>
           {/* Card navy: khách + trạng thái ở đầu, tiền bên dưới */}

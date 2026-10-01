@@ -36,10 +36,25 @@ function ResultCard({ icon: Icon, tone, title, lines }: { icon: LucideIcon; tone
 }
 
 /** Trạng thái "Đã nhận tiền" ngay trên màn QR (thay Alert). */
-export function QrPaid({ amount, paidAt, bookingCode }: { amount: unknown; paidAt?: string | null; bookingCode: string }) {
-  const lines = [paidAt ? `Lúc ${formatDateTime(paidAt)}` : null, bookingCode ? `Booking ${bookingCode}` : null].filter(
-    (x): x is string => !!x
-  );
+export function QrPaid({
+  amount,
+  paidAt,
+  bookingCode,
+  docLabel = "Booking",
+  note,
+}: {
+  amount: unknown;
+  paidAt?: string | null;
+  bookingCode: string;
+  /** Tên loại phiếu đứng trước số phiếu (đặt cọc dùng "Đặt cọc") */
+  docLabel?: string;
+  note?: string;
+}) {
+  const lines = [
+    paidAt ? `Lúc ${formatDateTime(paidAt)}` : null,
+    bookingCode ? `${docLabel} ${bookingCode}` : null,
+    note ?? null,
+  ].filter((x): x is string => !!x);
   return <ResultCard icon={CheckCircle2} tone="success" title={`Đã nhận ${formatVND(amount)}`} lines={lines} />;
 }
 

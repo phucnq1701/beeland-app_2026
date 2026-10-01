@@ -2,6 +2,7 @@ import axiosApiSupabase from "./axiosApiSupabase";
 import { getCompanyId, getValidSupabaseJwt, getTypeAccount } from "./cloudTenant";
 import { ProjectService } from "./ProjectService";
 import { PaymentProgressService } from "./PaymentProgressService";
+import { statusCodeNum } from "../lib/depositQr";
 
 
 const UUID_RE =
@@ -108,7 +109,8 @@ function mapDepositRow(r: any) {
     TienCoc: num(r.tien_coc),
     PhiBaoTri: num(r.phi_bao_tri),
     DaThu: num(r.da_thu) ?? 0,
-    MaTT: r.ma_tt != null ? Number(r.ma_tt) : null,
+    // item_code có thể lẫn chữ → lấy phần số như fn_deposit_list (Number() sẽ ra NaN)
+    MaTT: statusCodeNum(r.ma_tt),
     TenTT: r.ten_tt ?? null,
     MauNen: r.color_code ?? null,
     NguoiTao: r.nguoi_tao ?? null,
@@ -355,6 +357,25 @@ export const DatCocService = {
           }
         } catch (e) {
           console.log("ERROR deposit pgc header:", e);
+        }
+
+        // Trạng thái hiện tại của phiếu (dòng danh sách có thể cũ, vd vừa tự duyệt sau khi thu QR đủ cọc)
+        try {
+          const t = await axiosApiSupabase.get("rest/v1/cloud_pgc_phieu_giucho", {
+            params: {
+              select: "tt:cloud_catalogs!trang_thai_id(item_code,item_name,color_code)",
+              id: `eq.${pgcId}`,
+              limit: "1",
+            },
+          });
+          const tt = Array.isArray(t.data) ? t.data[0]?.tt : null;
+          if (tt?.item_name) {
+            header.TenTT = tt.item_name;
+            header.MaTT = statusCodeNum(tt.item_code);
+            header.MauNen = tt.color_code ?? header.MauNen;
+          }
+        } catch (e) {
+          console.log("ERROR deposit status:", e);
         }
       }
 
