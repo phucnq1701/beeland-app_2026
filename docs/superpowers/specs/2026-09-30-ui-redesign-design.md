@@ -77,6 +77,11 @@ App giữ đúng như web ở các điểm dưới đây cho tới khi đội we
    coi mã 5 (Đã đặt cọc) là "Đã bán" và mã 4 không tồn tại – lệch với bảng mã `ProductTransactionStatus.ts`.
    **App giữ như web** (spec 0.1); đề xuất đội web xếp nhóm theo `item_code` của danh mục.
 
+3. **Yêu cầu trùng khách đã được duyệt vẫn bị chặn.** Web có `CustomerDupRequestService.findApprovalFor`
+   (yêu cầu "Cho tạo khách hàng mới"/"Chuyển giao" đã duyệt) nhưng **không nơi nào gọi** → nhân viên được duyệt nhập
+   lại vẫn bị `checkCustomerDuplicate` chặn / bắt gửi yêu cầu lần nữa. **App làm giống web** (GĐ4); đề xuất đội web
+   bỏ qua khách trùng đã có yêu cầu được duyệt cho đúng nhân viên đó.
+
 ## 1. Mục tiêu và bối cảnh
 
 **Người dùng:** nhân viên kinh doanh / đại lý bất động sản, dùng app hằng ngày trên điện thoại, thường khi đang

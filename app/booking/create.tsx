@@ -105,9 +105,9 @@ export default function CreateBookingScreen() {
   const { dataBooking, newCustomer } = useLocalSearchParams();
 
   const bookingData = parseJsonParam(dataBooking);
-  const initialNewCustomer = parseJsonParam(
-    newCustomer
-  ) as BookingCustomer | null;
+  // KH vừa tạo ở customer/new (bản ghi cloud_customers) → chuẩn hoá về BookingCustomer
+  const parsedNewCustomer = parseJsonParam(newCustomer);
+  const initialNewCustomer = parsedNewCustomer ? normalizeCustomer(parsedNewCustomer) : null;
   const bookingParam = typeof dataBooking === "string" ? dataBooking : "";
 
   const [selectedCustomer, setSelectedCustomer] =
@@ -123,6 +123,16 @@ export default function CreateBookingScreen() {
   const [customerError, setCustomerError] = useState<string | null>(null);
   // Chặn gửi trùng ngay cả khi người dùng bấm 2 lần trước khi màn kịp vẽ lại
   const submitting = useRef(false);
+
+  // Quay về từ customer/new (router.dismissTo giữ nguyên màn này, chỉ đổi param) → chọn KH mới
+  useEffect(() => {
+    if (!newCustomer) return;
+    const parsed = parseJsonParam(newCustomer);
+    if (parsed) {
+      setSelectedCustomer(normalizeCustomer(parsed));
+      setCustomerError(null);
+    }
+  }, [newCustomer]);
 
   // Lấy danh sách sàn giao dịch từ dm_companies (is_san=true)
   const loadSanList = async () => {

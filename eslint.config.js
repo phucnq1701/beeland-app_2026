@@ -28,6 +28,11 @@ const UI_STRICT_FILES = [
   'app/locked/**/*.{ts,tsx}',
   'app/diagram/**/*.{ts,tsx}',
   'components/product/**/*.{ts,tsx}',
+  // Giai đoạn 4 – khách hàng
+  'app/customers.tsx',
+  'app/customer/**/*.{ts,tsx}',
+  'app/contacts.tsx',
+  'components/customer/**/*.{ts,tsx}',
 ];
 
 module.exports = defineConfig([

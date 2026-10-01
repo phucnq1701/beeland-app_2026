@@ -1,11 +1,6 @@
 import { Stack } from "expo-router";
 
+/** Các màn khách hàng tự dựng AppHeader (design system) → tắt header mặc định. */
 export default function CustomerDetailLayout() {
-  return (
-    <Stack screenOptions={{ headerBackTitle: "Quay lại" }}>
-      <Stack.Screen name="index" options={{ headerShown: true }} />
-      <Stack.Screen name="contracts" options={{ headerShown: true }} />
-      <Stack.Screen name="edit" options={{ headerShown: true }} />
-    </Stack>
-  );
+  return <Stack screenOptions={{ headerShown: false }} />;
 }

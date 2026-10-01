@@ -9,7 +9,10 @@ import {
   getValidSupabaseJwt,
   getTypeAccount,
   getMaNv,
+  getCompanyCode,
 } from "./cloudTenant";
+import { currentUserName } from "./CustomerRulesService";
+import { mapCustomerTransaction } from "../lib/customerRules";
 
 const escapeIlike = (value: string) => value.replace(/[%,()]/g, "");
 
@@ -900,6 +903,25 @@ export const CustomerService = {
     }
 
     try {
+      // 0. Như web (CustomerList → PreBookingCloudService.countByKH): có phiếu booking thiện chí → không xoá
+      if (tenantId && UUID_RE.test(tenantId)) {
+        const preRes = await axiosApiSupabase.get("rest/v1/cloud_pre_bookings", {
+          params: {
+            select: "id",
+            ma_ctdk_uid: `eq.${tenantId}`,
+            khach_hang_id: `eq.${id}`,
+            deleted_at: "is.null",
+          },
+          headers: { Prefer: "count=exact" },
+        });
+        const range = String(preRes.headers?.["content-range"] ?? "");
+        const total = range.includes("/") ? Number(range.split("/").pop()) : NaN;
+        const count = Number.isFinite(total) ? total : Array.isArray(preRes.data) ? preRes.data.length : 0;
+        if (count > 0) {
+          return { status: 400, message: `Khách hàng đã có ${count} phiếu booking, không được phép xóa.` };
+        }
+      }
+
       // 1. Kiểm tra xem khách hàng có giao dịch phiếu giữ chỗ / cọc / HĐ không
       const pgcRes = await axiosApiSupabase.get("rest/v1/cloud_pgc_phieu_giucho", {
         params: {
@@ -944,32 +966,41 @@ export const CustomerService = {
   },
 
   /** Lấy danh sách giao dịch (Booking / Cọc / HĐ) của khách từ cloud_pgc_phieu_giucho */
-  getCustomerTransactions: async (customerId: string) => {
+  getCustomerTransactions: async (customerIdOrCode: string) => {
+    const customerId = await resolveCustomerUuid(customerIdOrCode);
     if (!customerId) return [];
     try {
+      // Cột thật của cloud_pgc_phieu_giucho (không có tong_gia_tri / tien_giu_cho); không embed FK –
+      // tra dự án / sản phẩm / trạng thái theo id như getBookingEditDetail.
       const res = await axiosApiSupabase.get("rest/v1/cloud_pgc_phieu_giucho", {
         params: {
           khach_hang_id: `eq.${customerId}`,
+          deleted_at: "is.null",
           select:
-            "id,so_phieu_gc,giai_doan,tong_gia_tri,tien_giu_cho,da_thu,created_at,sp:bds_products!san_pham_id(id,ma_sp,ky_hieu),da:da_projects!project_id(id,ten_da),tt:cloud_catalogs!trang_thai_id(id,item_name,color_code)",
+            "id,so_phieu_gc,giai_doan,gia_tri_hd,gia_tri_hd_sau_ck,tien_coc,da_thu,san_pham_id,project_id,trang_thai_id,created_at",
           order: "created_at.desc",
           limit: "50",
         },
       });
-      const rows = Array.isArray(res.data) ? res.data : [];
-      return rows.map((r: any) => ({
-        id: r.id,
-        soPhieu: r.so_phieu_gc || "---",
-        giaiDoan: r.giai_doan || "GIUCHO",
-        tongGia: Number(r.tong_gia_tri || 0),
-        tienGiuCho: Number(r.tien_giu_cho || 0),
-        daThu: Number(r.da_thu || 0),
-        tenDA: r.da?.ten_da || "Dự án",
-        maSP: r.sp?.ma_sp || r.sp?.ky_hieu || "Sản phẩm",
-        status: r.tt?.item_name || r.giai_doan || "---",
-        statusColor: r.tt?.color_code || "#3B82F6",
-        createdAt: r.created_at,
-      }));
+      const rows: any[] = Array.isArray(res.data) ? res.data : [];
+      const ids = (key: string) => [...new Set(rows.map((r) => r?.[key]).filter(Boolean).map(String))];
+      const lookup = async (table: string, select: string, list: string[]) => {
+        if (!list.length) return {} as Record<string, any>;
+        try {
+          const r = await axiosApiSupabase.get(`rest/v1/${table}`, {
+            params: { select, id: `in.(${list.join(",")})` },
+          });
+          return Object.fromEntries((Array.isArray(r.data) ? r.data : []).map((x: any) => [String(x.id), x]));
+        } catch {
+          return {} as Record<string, any>;
+        }
+      };
+      const [products, projects, statuses] = await Promise.all([
+        lookup("bds_products", "id,ma_sp,ky_hieu", ids("san_pham_id")),
+        lookup("da_projects", "id,ten_da", ids("project_id")),
+        lookup("cloud_catalogs", "id,item_name,color_code", ids("trang_thai_id")),
+      ]);
+      return rows.map((r) => mapCustomerTransaction(r, { products, projects, statuses }));
     } catch (e) {
       console.log("ERROR getCustomerTransactions:", e);
       return [];
@@ -1012,27 +1043,25 @@ export const CustomerService = {
     title?: string;
     loai?: "call" | "meeting" | "quote" | "email" | "note";
   }) => {
-    const tenantId = await getTenantId();
-    const employeeId = await getEmployeeId();
     const uuid = await resolveCustomerUuid(payload.customerId);
     if (!uuid) {
       return { status: 400, message: "Không xác định được khách hàng" };
     }
     try {
+      // Như web CustomerActivityCloudService.saveCustomerActivity: ma_ctdk = mã công ty (chữ thường),
+      // nguoi_thuc_hien = tên người nhập – để web đọc được và tính mức bảo vệ khách.
+      const code = (await getCompanyCode()).trim().toLowerCase();
+      if (!code) return { status: 400, message: "Thiếu mã công ty đăng ký" };
       const body: Record<string, any> = {
+        ma_ctdk: code,
         khach_hang_id: uuid,
         noi_dung: payload.content,
         tieu_de: payload.title || "Chăm sóc khách hàng",
-        loai: payload.loai || "call",
+        loai: payload.loai || "note",
         trang_thai: "hoan_thanh",
+        nguoi_thuc_hien: (await currentUserName()) || null,
         thoi_gian: new Date().toISOString(),
       };
-      if (tenantId && UUID_RE.test(tenantId)) {
-        body.ma_ctdk = tenantId;
-      }
-      if (employeeId && UUID_RE.test(employeeId)) {
-        body.nguoi_thuc_hien = employeeId;
-      }
       const res = await axiosApiSupabase.post("rest/v1/cloud_customer_activities", body);
       return { status: 2000, data: res.data, message: "Thêm nhật ký thành công" };
     } catch (e) {
