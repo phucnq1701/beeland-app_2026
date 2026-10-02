@@ -321,6 +321,7 @@ export function CustomerForm({
             ? field("cccd", "Số CCCD / CMND", { keyboardType: "number-pad" })
             : field("taxCode", "Mã số thuế", { required: true, keyboardType: "number-pad" })}
           {field("diaChi", p ? "Địa chỉ liên hệ" : "Địa chỉ trụ sở", { placeholder: "Số nhà, đường, phường, quận…" })}
+          {field("notes", "Ghi chú", { multiline: true, placeholder: "Nhu cầu, ngân sách, lưu ý về khách…" })}
         </View>
 
         {shown("statusId") || shown("sourceId") ? (
@@ -346,17 +347,6 @@ export function CustomerForm({
           </>
         ) : null}
 
-        {shown("notes") ? (
-          <>
-            <HomeSectionHeader title="Ghi chú" />
-            <View style={styles.card}>
-              {field("notes", "Ghi chú", {
-                multiline: true,
-                placeholder: "Nhu cầu, ngân sách, lưu ý về khách…",
-              })}
-            </View>
-          </>
-        ) : null}
       </View>
 
       <DuplicateSheet
