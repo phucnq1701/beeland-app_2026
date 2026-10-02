@@ -134,13 +134,20 @@ test("editing skips the customer itself and 'allow' fields are not queried", asy
   assert.equal(q[0].params.ma_ctdk, `eq.${tenant}`);
 });
 
+test("same name alone is not a duplicate (many people share a name)", async () => {
+  const h = harness({ cloud_customers: [{ id: uid(1), ten_kh: "Nguyễn Quang Phúc" }] });
+  const res = await h.rulesService.checkDuplicate(form({ name: "Nguyễn Quang Phúc" }));
+  assert.equal(res.mode, "allow");
+  assert.equal(h.calls.filter((c) => c.table === "cloud_customers").length, 0);
+});
+
 test("own duplicate follows ownDuplicateMode", async () => {
   const h = harness({
     cloud_catalogs: [{ raw: { ownDuplicateMode: "allow" } }],
     cloud_customers: [{ id: uid(1), ten_kh: "Của tôi", created_by_id: ME }],
     cloud_pgc_phieu_giucho: [{ giai_doan: "HDMB" }],
   });
-  const res = await h.rulesService.checkDuplicate(form({ name: "Của tôi" }));
+  const res = await h.rulesService.checkDuplicate(form({ name: "Của tôi", phone: "0901" }));
   assert.equal(res.mode, "allow");
   assert.equal(res.matches[0].isOwn, true);
 });

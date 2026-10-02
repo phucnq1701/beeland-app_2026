@@ -98,6 +98,11 @@ App giữ đúng như web ở các điểm dưới đây cho tới khi đội we
    `phuong_an_tt_ky` có mã chữ (`genCatalogCode`) → lưu thành `null`. (b) Cấu hình bắt buộc `MaHinhThucTT` / `MaBaoLanh`
    kiểm tra key không có trong form (form dùng `LaChuyenKhoan` / `CoBaoLanh`) → luôn báo thiếu, không lưu được.
    **App làm giống web** ở cả hai; đề xuất web lưu mã chữ / đổi key kiểm tra.
+8. **Trùng khách theo họ tên / tên công ty – app KHÁC web (người dùng quyết 2026-10-02).** Web
+   `CustomerDuplicateService` coi trùng `ten_kh`/`ten_cong_ty` là trùng khách (mặc định block) → người trùng tên bị chặn /
+   bắt gửi yêu cầu. Thực tế nhiều người trùng tên nên **app không kiểm tiêu chí `full_name`** (`duplicateValues` trong
+   `lib/customerRules.ts`), chỉ SĐT/CCCD/email (cá nhân) và MST (doanh nghiệp). Web vẫn kiểm → cùng khách có thể lưu được
+   trên app nhưng bị chặn trên web; đề xuất web bỏ tiêu chí này hoặc công ty đặt "Họ tên / Tên công ty" = Cho phép.
 
 ## 1. Mục tiêu và bối cảnh
 

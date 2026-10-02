@@ -293,6 +293,7 @@ const t = (v: unknown) => String(v ?? '').trim();
 /**
  * Giá trị từng tiêu chí trùng lấy từ form (web duplicateValuesFromPayload đọc DiDong/Email/SoCMND/MaSoThueCT/TenKH|TenCongTy).
  * Tab Doanh nghiệp của web nhập SĐT/email vào DienThoaiCT/EmailCT → web không kiểm SĐT/email/CCCD của doanh nghiệp.
+ * Khác web: KHÔNG kiểm trùng họ tên / tên công ty – nhiều người trùng tên, chỉ tính SĐT/CCCD/email/MST.
  */
 export function duplicateValues(f: CustomerFormValues): Record<DuplicateField, string> {
   return {
@@ -300,7 +301,7 @@ export function duplicateValues(f: CustomerFormValues): Record<DuplicateField, s
     phone: f.isPersonal ? t(f.phone) : '',
     email: f.isPersonal ? t(f.email) : '',
     tax_code: f.isPersonal ? '' : t(f.taxCode),
-    full_name: t(f.name),
+    full_name: '',
   };
 }
 

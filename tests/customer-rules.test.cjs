@@ -85,11 +85,12 @@ test("final mode per match: own duplicates use ownDuplicateMode, others are rais
 
 test("duplicate values come from the form like the web payload", () => {
   assert.deepEqual(plain(r.duplicateValues(form({ name: " Nguyễn A ", phone: "0901", cccd: "0123", taxCode: "999" }))), {
-    cccd: "0123", phone: "0901", email: "", tax_code: "", full_name: "Nguyễn A",
+    cccd: "0123", phone: "0901", email: "", tax_code: "", full_name: "",
   });
+  // Trùng tên không tính là trùng khách (nhiều người trùng họ tên)
   // Web: tab Doanh nghiệp nhập SĐT/email vào DienThoaiCT/EmailCT nên không kiểm DiDong/Email/SoCMND
   const org = plain(r.duplicateValues(form({ isPersonal: false, name: "Cty B", taxCode: "0312", cccd: "x", phone: "0902", email: "b@c.d" })));
-  assert.deepEqual(org, { cccd: "", phone: "", email: "", tax_code: "0312", full_name: "Cty B" });
+  assert.deepEqual(org, { cccd: "", phone: "", email: "", tax_code: "0312", full_name: "" });
 });
 
 test("save payload only sends the fields of the current customer type", () => {
