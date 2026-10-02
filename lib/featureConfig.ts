@@ -14,6 +14,7 @@ export const FEATURE_ROUTES: Record<string, string> = {
   '8': '/contracts',
   '9': '/reports',
   '13': '/deposits',
+  '14': '/signings',
 };
 
 /**
@@ -26,8 +27,17 @@ export function routeForFeature(id: string): string | null {
   return FEATURE_ROUTES[id] ?? null;
 }
 
-/** Tài khoản đại lý chỉ dùng: Dự án, Sản phẩm, Booking, Đặt cọc. */
-export const AGENCY_FEATURE_IDS = ['1', '2', '5', '13'] as const;
+/** Tài khoản đại lý chỉ dùng: Dự án, Sản phẩm, Booking, Đặt cọc, Đặt lịch ký. */
+export const AGENCY_FEATURE_IDS = ['1', '2', '5', '13', '14'] as const;
+
+/** Tính năng CHỈ dành cho đại lý – tài khoản nội bộ không thấy. '14' = Đặt lịch ký (yêu cầu người dùng 2026-10-02). */
+export const AGENCY_ONLY_FEATURE_IDS: readonly string[] = ['14'];
+
+/** Tài khoản (đại lý / nội bộ) có được dùng tính năng này không. */
+export function isFeatureAllowed(id: string, isAgency: boolean): boolean {
+  if (isAgency) return (AGENCY_FEATURE_IDS as readonly string[]).includes(id);
+  return !AGENCY_ONLY_FEATURE_IDS.includes(id);
+}
 
 /**
  * Các tính năng được hiển thị/cho chọn. Luôn ẩn tính năng chưa có màn (quyết định Q4:
@@ -37,12 +47,11 @@ export function visibleFeatureIds(
   allIds: string[],
   opts: { isAgency: boolean; menuOnly: boolean; menuEligible: string[] }
 ): string[] {
-  const agency: readonly string[] = AGENCY_FEATURE_IDS;
   return allIds.filter(
     (id) =>
       routeForFeature(id) !== null &&
       !HIDDEN_FEATURE_IDS.includes(id) &&
-      (!opts.isAgency || agency.includes(id)) &&
+      isFeatureAllowed(id, opts.isAgency) &&
       (!opts.menuOnly || opts.menuEligible.includes(id))
   );
 }

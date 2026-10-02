@@ -324,6 +324,55 @@ async function callBookingListRpc(params: Record<string, any>) {
   }
 }
 
+/**
+ * Tải 1 tệp lên kho của công ty (edge function `upload-file`, như web FileUploadService.uploadFileToCloud
+ * với `folder`); lỗi thì lùi về API upload .NET cũ. Trả về đường dẫn tệp.
+ */
+export async function uploadTenantFile(file: { uri: string; name?: string; type?: string }, folder: string) {
+  const companyCode = (await getCompanyCode()).trim().toLowerCase();
+  const name = file.name || `chung-tu-${Date.now()}.jpg`;
+  const type = file.type || "image/jpeg";
+  const rnFile = { uri: file.uri, name, type } as any;
+
+  if (companyCode) {
+    try {
+      const fd = new FormData();
+      fd.append("file", rnFile);
+      fd.append("ma_ctdk", companyCode);
+      fd.append("folder", folder);
+      const res = await axiosApiSupabase.post("functions/v1/upload-file", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 120000,
+      });
+      const out = res.data ?? {};
+      if (out.error) throw new Error(out.error);
+      const value = out.provider === "DOTNET" ? out.link : out.url || out.link;
+      if (typeof value === "string" && value.trim()) return value.trim();
+      throw new Error("Máy chủ upload không trả về đường dẫn ảnh");
+    } catch (error) {
+      console.log("[uploadTenantFile] upload-file lỗi, lùi về API .NET", error);
+    }
+  }
+
+  const fd = new FormData();
+  fd.append("Image", rnFile);
+  fd.append("TenCTDK", companyCode || "beeland");
+  fd.append("Project", "beeland_admin_web");
+  const res = await fetch("https://upload.beesky.vn/api/Upload", { method: "POST", body: fd });
+  const text = await res.text().catch(() => "");
+  let parsed: any = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    parsed = null;
+  }
+  const link = parsed?.data?.[0];
+  if (!res.ok || parsed?.status !== 2000 || !link) {
+    throw new Error(parsed?.message || `Upload thất bại (HTTP ${res.status})`);
+  }
+  return String(link);
+}
+
 export const BookingService = {
   /** Home: 5 booking gần nhất — RPC fn_booking_list (giống web) */
   listBookingsFromCloud: async ({
@@ -1526,50 +1575,8 @@ export const BookingService = {
    * edge function `upload-file` tự chọn R2/S3/.NET theo upload_configs; lỗi thì lùi về API .NET.
    * Trả về giá trị lưu vào Images: URL tuyệt đối (R2/S3) hoặc link tương đối (.NET).
    */
-  uploadBookingImage: async (file: { uri: string; name?: string; type?: string }) => {
-    const companyCode = (await getCompanyCode()).trim().toLowerCase();
-    const name = file.name || `chung-tu-${Date.now()}.jpg`;
-    const type = file.type || "image/jpeg";
-    const rnFile = { uri: file.uri, name, type } as any;
-
-    if (companyCode) {
-      try {
-        const fd = new FormData();
-        fd.append("file", rnFile);
-        fd.append("ma_ctdk", companyCode);
-        fd.append("folder", "booking");
-        const res = await axiosApiSupabase.post("functions/v1/upload-file", fd, {
-          headers: { "Content-Type": "multipart/form-data" },
-          timeout: 120000,
-        });
-        const out = res.data ?? {};
-        if (out.error) throw new Error(out.error);
-        const value = out.provider === "DOTNET" ? out.link : out.url || out.link;
-        if (typeof value === "string" && value.trim()) return value.trim();
-        throw new Error("Máy chủ upload không trả về đường dẫn ảnh");
-      } catch (error) {
-        console.log("[uploadBookingImage] upload-file lỗi, lùi về API .NET", error);
-      }
-    }
-
-    const fd = new FormData();
-    fd.append("Image", rnFile);
-    fd.append("TenCTDK", companyCode || "beeland");
-    fd.append("Project", "beeland_admin_web");
-    const res = await fetch("https://upload.beesky.vn/api/Upload", { method: "POST", body: fd });
-    const text = await res.text().catch(() => "");
-    let parsed: any = null;
-    try {
-      parsed = text ? JSON.parse(text) : null;
-    } catch {
-      parsed = null;
-    }
-    const link = parsed?.data?.[0];
-    if (!res.ok || parsed?.status !== 2000 || !link) {
-      throw new Error(parsed?.message || `Upload thất bại (HTTP ${res.status})`);
-    }
-    return String(link);
-  },
+  uploadBookingImage: async (file: { uri: string; name?: string; type?: string }) =>
+    uploadTenantFile(file, "booking"),
 
   /**
    * Lưu ảnh chứng từ vào booking — cùng bản ghi web đọc/ghi

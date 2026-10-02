@@ -54,6 +54,7 @@ Test: `tests/*.test.cjs`, nạp TS bằng `tests/helpers/loadTs.cjs` (file thu�
 | Tạo booking, giá theo bảng giá, chi tiết booking, QR thu tiền | `docs/booking-payment.md` |
 | Khách hàng: trùng khách, bắt buộc nhập, sửa/xoá, giao dịch | `docs/customers.md` |
 | Đặt cọc, hợp đồng, lịch thanh toán, phiếu thu | `docs/deposits-contracts.md` |
+| Đặt lịch ký (ca, loại thủ tục, lịch, tệp đính kèm) | `docs/signing.md` |
 | Báo cáo (thu tiền, HĐ, sắp đến hạn, quá hạn) | `docs/reports.md` |
 | Tài liệu / ảnh / video dự án | `docs/media.md` |
 | Token, component UI, quy tắc màn danh sách, lint | `docs/design-system.md` |

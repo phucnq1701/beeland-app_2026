@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { QrCode } from "lucide-react-native";
+import { CalendarCheck, QrCode } from "lucide-react-native";
 
 import { SalesDocDetail } from "@/components/sales/SalesDocDetail";
 import { BottomActionBar, Button } from "@/components/ui";
 import { canCreateDepositQr } from "@/lib/depositQr";
+import { isFeatureAllowed } from "@/lib/featureConfig";
 import { radius } from "@/theme";
 import { formatArea, formatDate, formatVND } from "@/lib/format";
 import { ScheduleRow } from "@/lib/paymentMath";
+import { getTypeAccount } from "@/sevicesSupabase/cloudTenant";
 import { DatCocService } from "@/sevicesSupabase/DatCocService";
 import { Receipt } from "@/sevicesSupabase/PaymentProgressService";
 
@@ -35,6 +37,13 @@ export default function DepositDetailScreen() {
   const [receiptsError, setReceiptsError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Đặt lịch ký chỉ dành cho đại lý (tính năng 14)
+  const [canSign, setCanSign] = useState(false);
+  useEffect(() => {
+    getTypeAccount()
+      .then((t) => setCanSign(isFeatureAllowed("14", t === "AGENCY")))
+      .catch(() => setCanSign(false));
+  }, []);
 
   const load = useCallback(
     async (refresh = false) => {
@@ -70,6 +79,14 @@ export default function DepositDetailScreen() {
   const h = header || {};
   // Như web: chỉ phiếu đặt cọc chờ duyệt (còn tiền cọc phải thu) mới có QR thanh toán
   const canCollect = !loading && canCreateDepositQr(h);
+  // Lịch ký khoá theo uuid PHIẾU GIỮ CHỖ (pgc_id), không phải id phiếu cọc (web openSigningForDeposit)
+  const pgcId = String(h.PhieuGiuChoId ?? "");
+  const goToSigning = () =>
+    router.push({
+      pathname: "/signing/form",
+      // Loại khách (cá nhân / doanh nghiệp) form tự lấy theo khách của phiếu
+      params: { pgcId },
+    });
   const goToPayment = () => {
     returningFromPayment.current = true;
     router.push({ pathname: "/deposit/qr-payment", params: { data: JSON.stringify(h) } });
@@ -109,11 +126,21 @@ export default function DepositDetailScreen() {
       refreshing={refreshing}
       onRefresh={() => void load(true)}
       footer={
-        canCollect ? (
+        loading || (!canCollect && !(pgcId && canSign)) ? undefined : (
           <BottomActionBar>
-            <Button title="Thu tiền cọc QR" icon={QrCode} onPress={goToPayment} style={styles.pill} />
+            {/* Như web (menu dòng đặt cọc "Đặt lịch ký"): luôn cho đặt lịch ký, mở form đã điền sẵn phiếu */}
+            {pgcId && canSign ? (
+              <Button
+                variant={canCollect ? "secondary" : "primary"}
+                title="Đặt lịch ký"
+                icon={CalendarCheck}
+                onPress={goToSigning}
+                style={canCollect ? styles.pillFixed : styles.pill}
+              />
+            ) : null}
+            {canCollect ? <Button title="Thu tiền cọc QR" icon={QrCode} onPress={goToPayment} style={styles.pill} /> : null}
           </BottomActionBar>
-        ) : undefined
+        )
       }
     />
   );
@@ -121,4 +148,5 @@ export default function DepositDetailScreen() {
 
 const styles = StyleSheet.create({
   pill: { flex: 1, borderRadius: radius.full },
+  pillFixed: { borderRadius: radius.full },
 });

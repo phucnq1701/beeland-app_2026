@@ -9,6 +9,9 @@
 
 Mở chi tiết với params `{ id, data: JSON dòng danh sách }` (trang chủ cũng mở chi tiết cọc kiểu này).
 
+Chi tiết đặt cọc có nút **"Đặt lịch ký"** (chỉ tài khoản đại lý – `isFeatureAllowed("14")`) → `signing/form` với `pgcId` = `PhieuGiuChoId`
+(khoá ô chọn phiếu). Còn nút "Thu tiền cọc QR" thì nút lịch ký thu gọn bên trái. Xem `docs/signing.md`.
+
 ## Thu tiền cọc QR (như web `dat-coc/index.tsx` + `BookingVAQRDialog` `module="DATCOC"`)
 
 | Việc | App |

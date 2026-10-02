@@ -95,3 +95,19 @@ test("Lịch hẹn (id 3) is hidden everywhere for now but keeps its route for l
     ["1"]
   );
 });
+
+test("Đặt lịch ký (14): có màn /signings, đại lý được dùng (web có cổng đặt lịch ký đại lý)", () => {
+  assert.equal(f.routeForFeature("14"), "/signings");
+  const all = ["1", "2", "5", "6", "13", "14"];
+  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: true, menuOnly: false, menuEligible: all })), ["1", "2", "5", "13", "14"]);
+});
+
+test("Đặt lịch ký (14) chỉ dành cho đại lý: tài khoản nội bộ không thấy", () => {
+  const all = ["1", "5", "13", "14"];
+  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: false, menuEligible: all })), ["1", "5", "13"]);
+  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: true, menuOnly: true, menuEligible: all })), ["1", "5", "13", "14"]);
+  assert.equal(f.isFeatureAllowed("14", false), false);
+  assert.equal(f.isFeatureAllowed("14", true), true);
+  assert.equal(f.isFeatureAllowed("6", false), true);
+  assert.equal(f.isFeatureAllowed("6", true), false);
+});
