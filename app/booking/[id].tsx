@@ -204,6 +204,10 @@ export default function BookingDetailScreen() {
       allowsMultipleSelection: true,
       selectionLimit: 10,
       quality: 0.8,
+      // iOS: ảnh HEIC mặc định được giữ nguyên định dạng (kể cả khi quality < 1) và không
+      // hiển thị được ở ô chứng từ / web. "compatible" để iOS chuyển sang JPEG khi chọn.
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
     if (!result.canceled) void handleUploadComplete(result.assets);
   };
@@ -299,6 +303,8 @@ export default function BookingDetailScreen() {
   );
   // Hết hạn giữ chỗ thì không thu tiền được nữa (màn QR cũng không cho tạo mã).
   const canCollect = isActiveBooking && !progress.paid && !progress.expired;
+  // Chỉ booking đã huỷ mới khoá tải chứng từ; mọi trạng thái khác đều được tải lên.
+  const canUploadDocs = !progress.cancelled;
 
   // Ưu tiên giá theo bảng giá hiệu lực; không có thì dùng data.price như cũ
   const priceData: Record<string, any> | null = activePrice
@@ -335,7 +341,7 @@ export default function BookingDetailScreen() {
         onRefresh={() => void loadData()}
         footer={
           <BottomActionBar>
-            {isActiveBooking ? (
+            {canUploadDocs ? (
               <Button
                 variant="secondary"
                 icon={Upload}

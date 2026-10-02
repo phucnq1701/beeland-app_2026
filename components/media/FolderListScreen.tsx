@@ -3,8 +3,8 @@ import { FlatList, Image, Pressable, RefreshControl, StyleSheet, View } from "re
 import { Stack } from "expo-router";
 import { ChevronRight, Folder, FolderX, Share2 } from "lucide-react-native";
 
-import { AppHeader, EmptyState, ErrorState, IconButton, Screen, SkeletonList, Text } from "@/components/ui";
-import { colors, radius, space } from "@/theme";
+import { AppHeader, EmptyState, ErrorState, Screen, SkeletonList, Text } from "@/components/ui";
+import { colors, elevation, hitSlop, radius, space } from "@/theme";
 
 export type FolderItem = { id: string; name: string; count?: number | null; cover?: string | null; note?: string | null; raw?: any };
 
@@ -58,7 +58,7 @@ export function FolderListScreen({
       <Screen
         scroll={false}
         padded={false}
-        header={<AppHeader title={title} subtitle={loading ? undefined : `${items.length} thư mục${total ? ` · ${total} ${countUnit}` : ""}`} />}
+        header={<AppHeader variant="soft" title={title} subtitle={loading ? undefined : `${items.length} thư mục${total ? ` · ${total} ${countUnit}` : ""}`} />}
       >
         <FlatList
           data={loading || error ? [] : items}
@@ -86,7 +86,7 @@ export function FolderListScreen({
                 <Image source={{ uri: item.cover }} style={styles.cover} />
               ) : (
                 <View style={[styles.cover, styles.coverIcon]}>
-                  <Folder size={24} color={colors.primary} />
+                  <Folder size={24} color={colors.primary} strokeWidth={2} />
                 </View>
               )}
               <View style={styles.texts}>
@@ -104,8 +104,20 @@ export function FolderListScreen({
                   </Text>
                 ) : null}
               </View>
-              {onShare ? <IconButton icon={Share2} accessibilityLabel={`Chia sẻ thư mục ${item.name}`} onPress={() => onShare(item)} /> : null}
-              <ChevronRight size={18} color={colors.textTertiary} />
+              {onShare ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Chia sẻ thư mục ${item.name}`}
+                  hitSlop={hitSlop}
+                  onPress={() => onShare(item)}
+                  style={({ pressed }) => [styles.roundBtn, pressed ? styles.roundPressed : null]}
+                >
+                  <Share2 size={16} color={colors.inverse} strokeWidth={2.2} />
+                </Pressable>
+              ) : null}
+              <View style={styles.roundBtn}>
+                <ChevronRight size={16} color={colors.textSecondary} strokeWidth={2.5} />
+              </View>
             </Pressable>
           )}
         />
@@ -115,21 +127,31 @@ export function FolderListScreen({
 }
 
 const styles = StyleSheet.create({
-  content: { padding: space.lg, paddingBottom: space.xxl },
-  gap: { height: space.sm },
+  content: { paddingHorizontal: space.xl, paddingTop: space.sm, paddingBottom: space.xxl },
+  gap: { height: space.sm + 2 },
   card: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    padding: space.md,
-    borderRadius: radius.lg,
+    paddingVertical: space.md,
+    paddingLeft: space.md,
+    paddingRight: space.lg,
+    borderRadius: radius.xxl,
     backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    minHeight: 72,
+    minHeight: 80,
+    ...elevation.soft,
   },
-  pressed: { backgroundColor: colors.surfaceMuted },
-  cover: { width: 56, height: 56, borderRadius: radius.md, backgroundColor: colors.surfaceMuted },
+  pressed: { backgroundColor: colors.surfaceMuted, transform: [{ scale: 0.98 }] },
+  cover: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: colors.surfaceMuted },
+  roundBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceMuted,
+  },
+  roundPressed: { opacity: 0.6 },
   coverIcon: { alignItems: "center", justifyContent: "center", backgroundColor: colors.primarySubtle },
   texts: { flex: 1, gap: 2 },
 });

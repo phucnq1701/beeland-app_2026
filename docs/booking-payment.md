@@ -33,6 +33,9 @@ Param `dataBooking` = JSON sản phẩm (`normalizeProduct`). Tạo xong → `ro
 - Dữ liệu: `BookingService.getBookingEditDetail` (booking + phiếu giữ chỗ + giá `price_list_items` + quà + cài đặt).
 - Tiến độ 4 bước: `lib/bookingProgress.ts` (Giữ chỗ → Đã thu tiền → Đặt cọc → Hợp đồng), đếm ngược `lib/countdown.ts`.
 - Ảnh chứng từ: `uploadBookingImage` (edge function `upload-file`) → `addBookingImages`; đọc `getListImageGC`.
+  - Bẫy HEIC (iOS): `expo-image-picker` mặc định (`preferredAssetRepresentationMode: current`) giữ nguyên HEIC
+    kể cả khi `quality < 1` → ảnh lưu dạng `.heic` không hiển thị (ô ↻). Chọn thư viện phải dùng `Compatible`
+    để iOS chuyển sang JPEG. Ảnh HEIC đã lưu trước bản sửa vẫn lỗi hiển thị.
 
 ## Thu tiền QR (`sevicesSupabase/PaymentGatewayService.ts` → edge function `payment-gateway`, dùng chung với web)
 

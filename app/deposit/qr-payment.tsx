@@ -8,6 +8,7 @@
  * Mở lại màn thì hiện QR DATCOC đang hiệu lực (không tạo trùng).
  *
  * Giao diện theo lib/qrPaymentState (requiresDeadline: false). Không bao giờ tự tạo QR.
+ * Kiểu bo tròn như chi tiết đặt cọc: header `soft`, lề 20, card bo `radius.xxl` bóng nhẹ, nút dạng viên.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState, Image, Share, StyleSheet, View } from "react-native";
@@ -40,7 +41,7 @@ import { canCreateDepositQr, depositQrAmount } from "@/lib/depositQr";
 import { formatVND } from "@/lib/format";
 import { hapticSuccess } from "@/lib/haptics";
 import { getQrScreenState, showsQrImage } from "@/lib/qrPaymentState";
-import { colors, radius, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import {
   PaymentGatewayService,
   vietQrUrl,
@@ -328,11 +329,12 @@ export default function DepositQRPaymentScreen() {
   // ── Render ─────────────────────────────────────────────────────────────────
   const header = (
     <AppHeader
+      variant="soft"
       title="Thu tiền cọc"
       subtitle={docCode ? `${docCode}${customerName ? " · " + customerName : ""}` : undefined}
       actions={
         screenState === "active" ? (
-          <IconButton icon={MoreVertical} accessibilityLabel="Tuỳ chọn" onPress={() => setMenuOpen(true)} />
+          <IconButton icon={MoreVertical} variant="soft" accessibilityLabel="Tuỳ chọn" onPress={() => setMenuOpen(true)} />
         ) : null
       }
     />
@@ -345,14 +347,14 @@ export default function DepositQRPaymentScreen() {
       case "paid":
         return (
           <BottomActionBar>
-            <Button size="lg" fullWidth title="Về chi tiết đặt cọc" onPress={() => router.back()} style={styles.flex} />
+            <Button size="lg" fullWidth title="Về chi tiết đặt cọc" onPress={() => router.back()} style={[styles.flex, styles.pill]} />
           </BottomActionBar>
         );
       case "active":
         return (
           <BottomActionBar>
-            <Button variant="secondary" icon={Download} title="Lưu QR" loading={saving} onPress={handleSaveQR} />
-            <Button icon={Send} title="Gửi cho khách" onPress={handleShare} style={styles.flex} />
+            <Button variant="secondary" icon={Download} title="Lưu QR" loading={saving} onPress={handleSaveQR} style={styles.pill} />
+            <Button icon={Send} title="Gửi cho khách" onPress={handleShare} style={[styles.flex, styles.pill]} />
           </BottomActionBar>
         );
       case "needsQr":
@@ -367,7 +369,7 @@ export default function DepositQRPaymentScreen() {
               loading={creating}
               disabled={!canCreate}
               onPress={handleCreate}
-              style={styles.flex}
+              style={[styles.flex, styles.pill]}
             />
           </BottomActionBar>
         );
@@ -402,7 +404,7 @@ export default function DepositQRPaymentScreen() {
       case "active":
         return va && showsQrImage(screenState) ? (
           <>
-            <Card>
+            <Card style={styles.card}>
               <View style={styles.amountBlock}>
                 <Text variant="caption" color="textSecondary">
                   Số tiền cần chuyển
@@ -434,7 +436,7 @@ export default function DepositQRPaymentScreen() {
                 style={styles.checkNow}
               />
             </Card>
-            <Card>
+            <Card style={styles.card}>
               <KeyValueRow label="Ngân hàng" value={va.bank_code || va.provider || "—"} />
               <KeyValueRow label="Số tài khoản" value={va.account_number} copyValue={va.account_number} />
               <KeyValueRow label="Chủ tài khoản" value={va.account_name || "—"} />
@@ -455,7 +457,7 @@ export default function DepositQRPaymentScreen() {
       case "needsNewQr":
         return (
           <>
-            <Card>
+            <Card style={styles.card}>
               <View style={styles.amountBlock}>
                 <Text variant="caption" color="textSecondary">
                   Tiền cọc còn phải thu
@@ -469,7 +471,9 @@ export default function DepositQRPaymentScreen() {
                 )}
               </View>
               <View style={styles.qrPlaceholder}>
-                <QrCode size={56} color={colors.textTertiary} />
+                <View style={styles.qrIcon}>
+                  <QrCode size={32} color={colors.textTertiary} />
+                </View>
                 <Text variant="caption" color="textSecondary" align="center">
                   {screenState === "needsNewQr"
                     ? "Mã QR cũ đã bị huỷ. Bấm “Tạo mã QR mới” để thu tiền."
@@ -492,13 +496,14 @@ export default function DepositQRPaymentScreen() {
                 value={maTk}
                 options={accounts.map((a) => ({ value: a.MaTK, label: a.TenCauHinh, description: a.Provider || undefined }))}
                 onChange={setMaTk}
+                variant="raised"
               />
             ) : (
-              <Card>
+              <Card style={styles.card}>
                 <KeyValueRow label="Tài khoản nhận tiền" value={acc?.TenCauHinh || "—"} last />
               </Card>
             )}
-            <Text variant="caption" color="textTertiary">
+            <Text variant="caption" color="textTertiary" style={styles.note}>
               Khách chuyển đủ tiền cọc vào tài khoản định danh, hệ thống tự tạo phiếu thu và duyệt đặt cọc.
             </Text>
           </>
@@ -511,8 +516,8 @@ export default function DepositQRPaymentScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <Screen header={header} footer={footer} refreshing={refreshing} onRefresh={onRefresh}>
-        {renderBody()}
+      <Screen header={header} footer={footer} padded={false} refreshing={refreshing} onRefresh={onRefresh}>
+        <View style={styles.body}>{renderBody()}</View>
       </Screen>
 
       <BottomSheet
@@ -559,11 +564,15 @@ const QR_SIZE = 200;
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  card: { borderWidth: 0, borderRadius: radius.xxl, paddingHorizontal: space.lg + 2, ...elevation.soft },
+  pill: { borderRadius: radius.full },
+  note: { paddingHorizontal: space.xs },
   amountBlock: { alignItems: "center", gap: 2, marginBottom: space.md },
   qrBox: {
     alignSelf: "center",
-    padding: space.sm,
-    borderRadius: radius.md,
+    padding: space.md,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
@@ -572,12 +581,18 @@ const styles = StyleSheet.create({
   qrPlaceholder: {
     alignItems: "center",
     gap: space.sm,
-    paddingVertical: space.lg,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: colors.borderStrong,
+    paddingVertical: space.xl,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surfaceMuted,
+  },
+  qrIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
   },
   waiting: {
     flexDirection: "row",
@@ -592,6 +607,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: space.sm,
     padding: space.md,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
   },
 });

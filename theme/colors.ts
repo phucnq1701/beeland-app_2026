@@ -45,8 +45,8 @@ export const colors = {
   onInfoSubtle: '#1E40AF',
 
   backdrop: 'rgba(15, 23, 42, 0.45)',
-  /** Kính xanh xám (thanh tab nổi): lớp phủ xanh xám nhạt trên BlurView tint default, phần còn lại do blur. */
-  frosted: 'rgba(90, 110, 148, 0.22)',
+  /** Kính xanh xám (thanh tab nổi): lớp phủ xanh xám rất nhạt trên BlurView tint light (nền sáng), phần còn lại do blur. */
+  frosted: 'rgba(120, 138, 170, 0.1)',
   /** Viền sáng mép kính. */
   frostedBorder: 'rgba(255, 255, 255, 0.45)',
   /** Viên tab đang chọn trên kính. */

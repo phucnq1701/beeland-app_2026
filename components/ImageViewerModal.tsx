@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Animated,
   Modal,
+  Pressable,
   View,
   Text,
   StyleSheet,
@@ -13,6 +15,37 @@ import {
 import { Image } from "expo-image";
 import { ChevronLeft, ChevronRight, X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+/**
+ * Ẩn/hiện phần điều khiển của trình xem ảnh (nút đóng, tiến/lùi, bộ đếm, chú thích):
+ * chạm ảnh → mờ dần rồi ẩn, chạm lần nữa → hiện lại. Mở trình xem lại thì luôn hiện.
+ * Ẩn bằng opacity (không gỡ khỏi cây) để ảnh không bị nhảy bố cục.
+ */
+export function useViewerChrome(open: boolean) {
+  const [shown, setShown] = useState(true);
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (open) {
+      setShown(true);
+      opacity.setValue(1);
+    }
+  }, [open, opacity]);
+
+  const toggle = () => {
+    const next = !shown;
+    setShown(next);
+    Animated.timing(opacity, { toValue: next ? 1 : 0, duration: 180, useNativeDriver: true }).start();
+  };
+
+  /** Style + pointerEvents cho từng khối điều khiển (ẩn thì không bắt chạm). */
+  const chromeProps = {
+    style: { opacity },
+    pointerEvents: (shown ? "box-none" : "none") as "box-none" | "none",
+  };
+
+  return { shown, toggle, chromeProps };
+}
 
 type Props = {
   visible: boolean;
@@ -35,6 +68,7 @@ export default function ImageViewerModal({
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<string>>(null);
   const [index, setIndex] = useState(initialIndex);
+  const chrome = useViewerChrome(visible);
 
   useEffect(() => {
     if (visible) setIndex(initialIndex);
@@ -61,7 +95,7 @@ export default function ImageViewerModal({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" hidden={!chrome.shown} />
       <View style={styles.backdrop}>
         <FlatList
           ref={listRef}
@@ -83,16 +117,25 @@ export default function ImageViewerModal({
               showsHorizontalScrollIndicator={false}
               showsVerticalScrollIndicator={false}
             >
-              <Image
-                source={{ uri: item }}
-                style={{ width, height }}
-                contentFit="contain"
-              />
+              <Pressable
+                onPress={chrome.toggle}
+                accessibilityRole="button"
+                accessibilityLabel={chrome.shown ? "Ẩn nút điều khiển" : "Hiện nút điều khiển"}
+              >
+                <Image
+                  source={{ uri: item }}
+                  style={{ width, height }}
+                  contentFit="contain"
+                />
+              </Pressable>
             </ScrollView>
           )}
         />
 
-        <View style={[styles.topBar, { top: insets.top + 8 }]}>
+        <Animated.View
+          pointerEvents={chrome.chromeProps.pointerEvents}
+          style={[styles.topBar, { top: insets.top + 8 }, chrome.chromeProps.style]}
+        >
           <Text style={styles.counter}>
             {images.length > 0 ? `${index + 1} / ${images.length}` : ""}
           </Text>
@@ -104,8 +147,12 @@ export default function ImageViewerModal({
           >
             <X color="#fff" size={24} />
           </TouchableOpacity>
-        </View>
+        </Animated.View>
 
+        <Animated.View
+          pointerEvents={chrome.chromeProps.pointerEvents}
+          style={[StyleSheet.absoluteFill, chrome.chromeProps.style]}
+        >
         {index > 0 && (
           <TouchableOpacity
             style={[styles.navBtn, { left: 12 }]}
@@ -124,6 +171,7 @@ export default function ImageViewerModal({
             <ChevronRight color="#fff" size={28} />
           </TouchableOpacity>
         )}
+        </Animated.View>
       </View>
     </Modal>
   );

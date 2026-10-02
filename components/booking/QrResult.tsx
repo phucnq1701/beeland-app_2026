@@ -4,7 +4,7 @@ import { StyleSheet, View } from "react-native";
 
 import { Card, Text } from "@/components/ui";
 import { formatDateTime, formatVND } from "@/lib/format";
-import { colors, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 
 type Tone = "success" | "danger" | "neutral";
 
@@ -17,7 +17,7 @@ const TONE: Record<Tone, { bg: string; fg: string }> = {
 function ResultCard({ icon: Icon, tone, title, lines }: { icon: LucideIcon; tone: Tone; title: string; lines: string[] }) {
   const t = TONE[tone];
   return (
-    <Card>
+    <Card style={styles.card}>
       <View style={styles.wrap} accessible accessibilityLiveRegion="polite" accessibilityLabel={[title, ...lines].join(". ")}>
         <View style={[styles.icon, { backgroundColor: t.bg }]}>
           <Icon size={32} color={t.fg} />
@@ -86,6 +86,7 @@ export function QrNoDeadline() {
 }
 
 const styles = StyleSheet.create({
+  card: { borderWidth: 0, borderRadius: radius.xxl, ...elevation.soft },
   wrap: { alignItems: "center", gap: space.xs, paddingVertical: space.md },
   icon: {
     width: 64,

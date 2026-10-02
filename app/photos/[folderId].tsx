@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Animated,
+  Pressable,
   View,
   Text,
   StyleSheet,
@@ -19,6 +21,7 @@ import * as Sharing from "expo-sharing";
 import * as MediaLibrary from "expo-media-library";
 import { DocumentService } from "@/sevicesSupabase/DocumentService";
 import { useToast } from "@/components/ui";
+import { useViewerChrome } from "@/components/ImageViewerModal";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -48,6 +51,8 @@ export default function PhotosScreen() {
 
 
   const flatListRef = useRef<FlatList>(null);
+  // Chạm ảnh → ẩn/hiện nút đóng, tiến/lùi, chú thích
+  const chrome = useViewerChrome(!!selectedPhoto);
 
   const BASE_URL = "https://upload.beesky.vn/";
 
@@ -226,11 +231,14 @@ export default function PhotosScreen() {
         onRequestClose={handleClose}
       >
         <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
+          <Animated.View
+            pointerEvents={chrome.chromeProps.pointerEvents}
+            style={[styles.modalHeader, chrome.chromeProps.style]}
+          >
             <TouchableOpacity onPress={handleClose} accessibilityRole="button" accessibilityLabel="Đóng" hitSlop={12}>
               <X color="white" size={28} />
             </TouchableOpacity>
-          </View>
+          </Animated.View>
 
           <View style={styles.modalImageContainer}>
             <FlatList
@@ -256,27 +264,40 @@ export default function PhotosScreen() {
                 setSelectedPhoto(photos[index]);
               }}
               renderItem={({ item }) => (
-                <View style={styles.slideContainer}>
+                <Pressable
+                  style={styles.slideContainer}
+                  onPress={chrome.toggle}
+                  accessibilityRole="button"
+                  accessibilityLabel={chrome.shown ? "Ẩn nút điều khiển" : "Hiện nút điều khiển"}
+                >
                   <Image
                     source={{ uri: item.url }}
                     style={styles.modalImage}
                     resizeMode="contain"
                   />
-                </View>
+                </Pressable>
               )}
             />
 
-            <TouchableOpacity style={styles.leftNav} onPress={handlePrevPhoto} accessibilityRole="button" accessibilityLabel="Ảnh trước">
-              <ChevronLeft color="white" size={30} />
-            </TouchableOpacity>
+            <Animated.View
+              pointerEvents={chrome.chromeProps.pointerEvents}
+              style={[StyleSheet.absoluteFill, chrome.chromeProps.style]}
+            >
+              <TouchableOpacity style={styles.leftNav} onPress={handlePrevPhoto} accessibilityRole="button" accessibilityLabel="Ảnh trước">
+                <ChevronLeft color="white" size={30} />
+              </TouchableOpacity>
 
-            <TouchableOpacity style={styles.rightNav} onPress={handleNextPhoto} accessibilityRole="button" accessibilityLabel="Ảnh sau">
-              <ChevronRight color="white" size={30} />
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.rightNav} onPress={handleNextPhoto} accessibilityRole="button" accessibilityLabel="Ảnh sau">
+                <ChevronRight color="white" size={30} />
+              </TouchableOpacity>
+            </Animated.View>
           </View>
 
           {selectedPhoto && (
-            <View style={styles.footer}>
+            <Animated.View
+              pointerEvents={chrome.chromeProps.pointerEvents}
+              style={[styles.footer, chrome.chromeProps.style]}
+            >
               <Text style={{ color: "white" }}>
                 {selectedPhotoIndex + 1} / {photos.length}
               </Text>
@@ -284,7 +305,7 @@ export default function PhotosScreen() {
               <Text style={{ color: "#ccc", fontSize: 12 }}>
                 {new Date(selectedPhoto.date).toLocaleDateString("vi-VN")}
               </Text>
-            </View>
+            </Animated.View>
           )}
         </View>
       </Modal>

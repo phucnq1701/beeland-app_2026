@@ -14,13 +14,13 @@ import {
   Card,
   EmptyState,
   IconButton,
-  KeyValueRow,
   SkeletonDetail,
+  StatusBadge,
   Text,
   useToast,
 } from "@/components/ui";
 import { formatCountdown } from "@/lib/countdown";
-import { formatArea, formatVNDShort } from "@/lib/format";
+import { formatVNDShort } from "@/lib/format";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { isOpenForSale, OPEN_FOR_SALE_MESSAGE } from "@/lib/productStatus";
 import { colors, elevation, radius, space } from "@/theme";
@@ -245,9 +245,13 @@ export default function ProductDetailScreen() {
           {/* Khối nội dung bo góc trên trồi đè lên đáy ảnh: tên dự án, ký hiệu căn, giá */}
           <View style={styles.sheet}>
             <View style={styles.hero}>
-              <Text variant="caption" color="textSecondary" numberOfLines={1}>
-                {data?.TenDA || "Dự án"}
-              </Text>
+              <View style={styles.topRow}>
+                <Text variant="caption" color="textSecondary" numberOfLines={1} style={styles.flex}>
+                  {data?.TenDA || "Dự án"}
+                </Text>
+                {/* Tag trạng thái: nền theo color_code của trạng thái, như ô ngoài lưới */}
+                {statusName ? <StatusBadge label={statusName} color={data?.ColorTT || data?.MauNen} /> : null}
+              </View>
               <Text variant="title" accessibilityRole="header" style={styles.code}>
                 {data?.KyHieu ? `Căn ${data.KyHieu}` : "Sản phẩm"}
               </Text>
@@ -265,14 +269,6 @@ export default function ProductDetailScreen() {
             </View>
 
             <View style={styles.content}>
-              <HomeSectionHeader title="Thông tin căn" />
-              <Card style={styles.card}>
-                <KeyValueRow label="Ký hiệu" value={data?.KyHieu || "—"} />
-                <KeyValueRow label="Dự án" value={data?.TenDA || "—"} />
-                <KeyValueRow label="Diện tích thông thủy" value={formatArea(data?.DTThongThuy)} />
-                <KeyValueRow label="Diện tích tim tường" value={formatArea(data?.DienTich)} />
-                <KeyValueRow label="Trạng thái" value={statusName || "—"} last />
-              </Card>
               {!canTransact ? (
                 <Text variant="caption" color="textSecondary">
                   {isLocked
@@ -352,6 +348,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   hero: { gap: space.xs, paddingHorizontal: space.xl },
+  topRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
   code: { fontSize: 26, lineHeight: 34 },
   place: { flexDirection: "row", alignItems: "flex-start", gap: space.xs, marginTop: space.xs },
   content: { paddingHorizontal: space.xl, paddingTop: space.xxl, gap: space.md },

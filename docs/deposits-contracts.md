@@ -15,7 +15,7 @@ Mở chi tiết với params `{ id, data: JSON dòng danh sách }` (trang chủ 
 |---|---|
 | Điều kiện hiện nút "Thu tiền cọc QR" (chi tiết đặt cọc) | `lib/depositQr.canCreateDepositQr`: phiếu **chờ duyệt** (`isPendingDeposit`: tên "Đặt cọc chờ duyệt"/"ĐC chờ duyệt"/"Chờ duyệt"/"Chờ xử lý"/trống, hoặc mã 8 – tên "đã duyệt" luôn thắng) và còn tiền cọc phải thu |
 | Số tiền QR | `depositQrAmount` = `max(0, TienCoc − DaThu)` (dòng `fn_deposit_list`) |
-| Màn QR | `app/deposit/qr-payment.tsx` (params `data` = JSON đầu phiếu): `payment-gateway` `create` với `module: DATCOC`, `expires_at: null`, `pgc_id` = uuid phiếu giữ chỗ; mở lại dùng VA `DATCOC` đang `ACTIVE`; kiểm tra `paid_amount` mỗi 5 giây / khi quay lại app |
+| Màn QR | `app/deposit/qr-payment.tsx` (params `data` = JSON đầu phiếu): `payment-gateway` `create` với `module: DATCOC`, `expires_at: null`, `pgc_id` = uuid phiếu giữ chỗ; mở lại dùng VA `DATCOC` đang `ACTIVE`; kiểm tra `paid_amount` mỗi 5 giây / khi quay lại app. Kiểu bo tròn như chi tiết đặt cọc: header `soft` (nút ⋯ `soft`), lề 20, card bo `radius.xxl` bóng nhẹ, ô chưa có QR nền xám nhạt, chọn tài khoản `SelectField raised`, nút dưới dạng viên; thẻ kết quả `QrResult` bo `radius.xxl` (dùng chung với QR booking) |
 | Sau khi thu | Máy chủ `fn_payment_webhook_apply`: tạo phiếu thu; tổng thu ≥ `tien_coc` → `fn_deposit_approve` (tự duyệt). Quay về chi tiết → nạp lại, trạng thái đọc lại từ `cloud_pgc_phieu_giucho.trang_thai_id` |
 
 - Trạng thái màn: `getQrScreenState` với `requiresDeadline: false` (không hết hạn, không cần hạn giữ chỗ). Web không đối chiếu lại
