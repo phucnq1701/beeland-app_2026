@@ -12,8 +12,8 @@
 
 Lint: file trong `UI_STRICT_FILES` (`eslint.config.js`) cấm literal `#hex`/`rgba()` → thêm màn mới vào danh sách. Màu theo
 dữ liệu (màu trạng thái từ danh mục) dùng `StatusBadge color=…`: nhận hex (nền đặc, chữ tự tính) hoặc tên preset
-antd mà web lưu (`blue`, `green`, `orange`, `red`, `purple`, `magenta`, `gold`, `cyan`, `geekblue`… → nền nhạt + viền + chữ đậm như
-Tag web, bảng màu ở `components/utils/statusColor.ts`); `default`/không hợp lệ → trung tính. `size="sm"` = chữ 11 cho góc card. Test tương phản: `tests/theme-contrast.test.cjs`.
+antd mà web lưu (`blue`, `green`, `orange`, `red`, `purple`, `magenta`, `gold`, `cyan`, `geekblue`… → giữ tông Tag web nhưng
+kiểu soft: nền nhạt cùng độ đậm `*Subtle`, chữ đậm, không viền; bảng màu ở `components/utils/statusColor.ts`); `default`/không hợp lệ → trung tính. `size="sm"` = chữ 11 cho góc card. Test tương phản: `tests/theme-contrast.test.cjs`.
 
 ## Component (`components/ui`, xem trực quan ở `app/dev/ui-gallery.tsx` – chỉ `__DEV__`)
 

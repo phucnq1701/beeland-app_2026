@@ -33,7 +33,7 @@ export function Badge({ label, tone = 'neutral', icon: Icon }: { label: string; 
 /**
  * Trạng thái nghiệp vụ: nền lấy đúng color_code của dữ liệu, chữ tự tính cho đủ tương phản
  * (giữ logic statusTextColorOf hiện có). color_code là tên preset antd (blue, green… – web cài
- * trong Danh mục) → vẽ như Tag web: nền nhạt, viền, chữ đậm. Không có màu hợp lệ → badge trung tính.
+ * trong Danh mục) → nền nhạt + chữ đậm cùng tông, không viền (kiểu soft). Không có màu hợp lệ → badge trung tính.
  * size="sm": chữ 11, pill thấp hơn – dùng ở góc card (vd danh sách khách hàng).
  */
 export function StatusBadge({ label, color, size = 'md' }: { label: string; color?: string | null; size?: 'md' | 'sm' }) {
@@ -46,9 +46,7 @@ export function StatusBadge({ label, color, size = 'md' }: { label: string; colo
       style={[
         styles.pill,
         sm && styles.pillSm,
-        preset && (sm ? styles.outlinedSm : styles.outlined),
         { backgroundColor: bg ?? colors.surfaceMuted },
-        preset && { borderColor: preset.border },
       ]}
     >
       <Text variant="label" color={fg} numberOfLines={1} style={sm ? styles.textSm : undefined}>
@@ -68,13 +66,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: radius.full,
   },
-  // Viền 1px như Tag antd – bớt padding dọc để cao bằng badge thường
-  outlined: {
-    borderWidth: 1,
-    paddingHorizontal: space.sm,
-    paddingVertical: 2,
-  },
   pillSm: { paddingHorizontal: space.sm, paddingVertical: 2 },
-  outlinedSm: { borderWidth: 1, paddingHorizontal: space.sm - 1, paddingVertical: 1 },
   textSm: { fontSize: 11, lineHeight: 14, letterSpacing: 0.2 },
 });

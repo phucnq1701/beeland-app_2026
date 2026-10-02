@@ -29,24 +29,25 @@ export function statusTextColorOf(bg: string): string {
 
 /**
  * Màu preset của Tag antd – web lưu color_code dạng tên (blue, green…) ở Danh mục khách hàng.
- * bg = màu-1, border = màu-3, fg = màu-7 của @ant-design/colors, đúng như Tag trên web.
+ * Giữ tông màu web nhưng vẽ theo kiểu soft của app (không viền, cùng độ đậm với nền *Subtle):
+ * bg = màu-6 (@ant-design/colors) phủ 14% trên trắng, fg = màu-8 (gold/yellow/lime: màu-9 cho đủ tương phản ≥ 4.5).
  */
-const ANTD_TAG_PRESETS: Record<string, { bg: string; fg: string; border: string }> = {
-  red: { bg: "#FFF1F0", fg: "#CF1322", border: "#FFA39E" },
-  volcano: { bg: "#FFF2E8", fg: "#D4380D", border: "#FFBB96" },
-  orange: { bg: "#FFF7E6", fg: "#D46B08", border: "#FFD591" },
-  gold: { bg: "#FFFBE6", fg: "#D48806", border: "#FFE58F" },
-  yellow: { bg: "#FEFFE6", fg: "#D4B106", border: "#FFFB8F" },
-  lime: { bg: "#FCFFE6", fg: "#7CB305", border: "#EAFF8F" },
-  green: { bg: "#F6FFED", fg: "#389E0D", border: "#B7EB8F" },
-  cyan: { bg: "#E6FFFB", fg: "#08979C", border: "#87E8DE" },
-  blue: { bg: "#E6F4FF", fg: "#0958D9", border: "#91CAFF" },
-  geekblue: { bg: "#F0F5FF", fg: "#1D39C4", border: "#ADC6FF" },
-  purple: { bg: "#F9F0FF", fg: "#531DAB", border: "#D3ADF7" },
-  magenta: { bg: "#FFF0F6", fg: "#C41D7F", border: "#FFADD2" },
+const ANTD_TAG_PRESETS: Record<string, { bg: string; fg: string }> = {
+  red: { bg: "#FEE0E2", fg: "#A8071A" },
+  volcano: { bg: "#FEE7DF", fg: "#AD2102" },
+  orange: { bg: "#FEEFDE", fg: "#AD4E00" },
+  gold: { bg: "#FEF4DE", fg: "#874D00" },
+  yellow: { bg: "#FEFADE", fg: "#876800" },
+  lime: { bg: "#F2FADE", fg: "#3F6600" },
+  green: { bg: "#E7F7DF", fg: "#237804" },
+  cyan: { bg: "#DEF6F6", fg: "#006D75" },
+  blue: { bg: "#DEECFF", fg: "#003EB3" },
+  geekblue: { bg: "#E2E7FC", fg: "#10239E" },
+  purple: { bg: "#EBE2F9", fg: "#391085" },
+  magenta: { bg: "#FCE2F0", fg: "#9E1068" },
 };
 
-/** Tên màu preset antd → màu Tag; không phải preset (hex, "default", rỗng) → null. */
-export function antdPresetTagColor(color: unknown): { bg: string; fg: string; border: string } | null {
+/** Tên màu preset antd → màu badge; không phải preset (hex, "default", rỗng) → null. */
+export function antdPresetTagColor(color: unknown): { bg: string; fg: string } | null {
   return ANTD_TAG_PRESETS[String(color ?? "").trim().toLowerCase()] ?? null;
 }

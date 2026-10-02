@@ -110,9 +110,10 @@ export const CustomerListItem = memo(CustomerListItemBase);
 
 const styles = StyleSheet.create({
   card: { marginHorizontal: space.xl, borderRadius: radius.xxl, backgroundColor: colors.surface, ...elevation.soft },
+  // stretch: cột phải cao bằng khối chữ → trạng thái ngang dòng tên, nút ngang dòng cuối
   row: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     borderRadius: radius.xxl,
     overflow: "hidden",
     paddingRight: space.lg,
@@ -128,8 +129,15 @@ const styles = StyleSheet.create({
   },
   pressed: { backgroundColor: colors.surfaceMuted },
   texts: { flex: 1, gap: 2 },
-  trailing: { alignItems: "flex-end", gap: space.sm, marginLeft: space.sm, paddingVertical: space.md },
-  badge: { maxWidth: 140 },
+  trailing: {
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: space.sm,
+    marginLeft: space.sm,
+    paddingVertical: space.md + 2,
+  },
+  // Badge sm cao 18, dòng tên cao 22 → lùi 2 cho cùng tâm
+  badge: { maxWidth: 140, marginTop: 2 },
   actions: { flexDirection: "row", gap: space.sm },
   action: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
   actionPressed: { opacity: 0.6 },
