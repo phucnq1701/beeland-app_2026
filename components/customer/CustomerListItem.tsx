@@ -38,7 +38,7 @@ function RoundAction({
 }
 
 /**
- * Card khách hàng: tên, mã · loại, SĐT đã che (như danh sách web), trạng thái; nút Gọi / Zalo.
+ * Card khách hàng: tên, mã · loại, SĐT đã che (như danh sách web); cột phải: trạng thái trên, nút Gọi / Zalo dưới.
  * Nhận dữ liệu đã chuẩn hoá bởi CustomerService.getCustomers (normalizeCustomerRow).
  */
 function CustomerListItemBase({ item, onPress }: { item: any; onPress: (id: string) => void }) {
@@ -71,29 +71,34 @@ function CustomerListItemBase({ item, onPress }: { item: any; onPress: (id: stri
                 {detail}
               </Text>
             ) : null}
-            {item.status ? (
-              <View style={styles.badge}>
-                <StatusBadge label={item.status} color={item.statusColor} />
-              </View>
-            ) : null}
           </View>
         </Pressable>
-        {phone ? (
-          <View style={styles.actions}>
-            <RoundAction
-              icon={Phone}
-              label={`Gọi ${name}`}
-              color={colors.success}
-              bg={colors.successSubtle}
-              onPress={() => void callPhone(phone)}
-            />
-            <RoundAction
-              icon={MessageCircle}
-              label={`Nhắn Zalo ${name}`}
-              color={colors.info}
-              bg={colors.infoSubtle}
-              onPress={() => void openZalo(phone)}
-            />
+        {item.status || phone ? (
+          // Cột phải: trạng thái trên, nút Gọi / Zalo dưới
+          <View style={styles.trailing}>
+            {item.status ? (
+              <View style={styles.badge}>
+                <StatusBadge label={item.status} color={item.statusColor} size="sm" />
+              </View>
+            ) : null}
+            {phone ? (
+              <View style={styles.actions}>
+                <RoundAction
+                  icon={Phone}
+                  label={`Gọi ${name}`}
+                  color={colors.success}
+                  bg={colors.successSubtle}
+                  onPress={() => void callPhone(phone)}
+                />
+                <RoundAction
+                  icon={MessageCircle}
+                  label={`Nhắn Zalo ${name}`}
+                  color={colors.info}
+                  bg={colors.infoSubtle}
+                  onPress={() => void openZalo(phone)}
+                />
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -123,8 +128,9 @@ const styles = StyleSheet.create({
   },
   pressed: { backgroundColor: colors.surfaceMuted },
   texts: { flex: 1, gap: 2 },
-  badge: { flexDirection: "row", marginTop: space.xs },
-  actions: { flexDirection: "row", gap: space.sm, marginLeft: space.sm },
+  trailing: { alignItems: "flex-end", gap: space.sm, marginLeft: space.sm, paddingVertical: space.md },
+  badge: { maxWidth: 140 },
+  actions: { flexDirection: "row", gap: space.sm },
   action: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
   actionPressed: { opacity: 0.6 },
 });
