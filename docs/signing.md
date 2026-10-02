@@ -2,7 +2,8 @@
 
 Đặt lịch ký hợp đồng / đặt cọc cho phiếu đặt cọc, chọn ca làm việc còn lượt. Như web
 `beeland/src/pages/sales/giao-dich/dat-lich-ky/*` + `services/SigningAppointmentCloudService.ts` +
-`services/SigningShiftConfigService.ts`. Tính năng id **14** (`/signings`), đại lý dùng được (web có cổng đặt lịch ký đại lý).
+`services/SigningShiftConfigService.ts`. Tính năng id **14** (`/signings`), **chỉ dành cho tài khoản đại lý** – nội bộ không thấy ở menu và không có nút ở chi tiết đặt cọc
+(`AGENCY_ONLY_FEATURE_IDS`, yêu cầu người dùng 2026-10-02).
 
 ## Màn
 
@@ -12,7 +13,7 @@
 | Chế độ Lịch: lưới tháng gọn (`SigningCalendar` mode `events`, số lịch ký mỗi ngày) + danh sách của ngày chọn | `components/signing/SigningCalendar.tsx` |
 | Chi tiết: khối navy bo `radius.x3` (giờ ký lớn, thứ ngày, ca · thủ tục, trạng thái); card Thông tin book ký / Khách hàng (+ đồng sở hữu) / Thanh toán / Hồ sơ đính kèm. Nút dưới: "Trạng thái" (sheet chọn 3 trạng thái + ghi chú) và "Sửa lịch ký"; menu ⋯: sửa, xoá (`confirm`) | `app/signing/[id].tsx`, `components/signing/StatusSheet.tsx`, `AttachmentList.tsx` |
 | Thêm / sửa (params `id` \| `kind`, `projectId`, `pgcId`) | `app/signing/form.tsx`, `components/signing/PickerSheets.tsx` |
-| Lối vào từ chi tiết đặt cọc: nút "Đặt lịch ký" (luôn hiện như menu web) → form với `pgcId` = `PhieuGiuChoId`, khoá ô chọn phiếu | `app/deposit/[id].tsx` |
+| Lối vào từ chi tiết đặt cọc: nút "Đặt lịch ký" (chỉ tài khoản đại lý) → form với `pgcId` = `PhieuGiuChoId`, khoá ô chọn phiếu | `app/deposit/[id].tsx` |
 
 ## Dữ liệu (như web, khoá uuid)
 

@@ -6,9 +6,11 @@ import { CalendarCheck, QrCode } from "lucide-react-native";
 import { SalesDocDetail } from "@/components/sales/SalesDocDetail";
 import { BottomActionBar, Button } from "@/components/ui";
 import { canCreateDepositQr } from "@/lib/depositQr";
+import { isFeatureAllowed } from "@/lib/featureConfig";
 import { radius } from "@/theme";
 import { formatArea, formatDate, formatVND } from "@/lib/format";
 import { ScheduleRow } from "@/lib/paymentMath";
+import { getTypeAccount } from "@/sevicesSupabase/cloudTenant";
 import { DatCocService } from "@/sevicesSupabase/DatCocService";
 import { Receipt } from "@/sevicesSupabase/PaymentProgressService";
 
@@ -35,6 +37,13 @@ export default function DepositDetailScreen() {
   const [receiptsError, setReceiptsError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Đặt lịch ký chỉ dành cho đại lý (tính năng 14)
+  const [canSign, setCanSign] = useState(false);
+  useEffect(() => {
+    getTypeAccount()
+      .then((t) => setCanSign(isFeatureAllowed("14", t === "AGENCY")))
+      .catch(() => setCanSign(false));
+  }, []);
 
   const load = useCallback(
     async (refresh = false) => {
@@ -117,10 +126,10 @@ export default function DepositDetailScreen() {
       refreshing={refreshing}
       onRefresh={() => void load(true)}
       footer={
-        loading ? undefined : (
+        loading || (!canCollect && !(pgcId && canSign)) ? undefined : (
           <BottomActionBar>
             {/* Như web (menu dòng đặt cọc "Đặt lịch ký"): luôn cho đặt lịch ký, mở form đã điền sẵn phiếu */}
-            {pgcId ? (
+            {pgcId && canSign ? (
               <Button
                 variant={canCollect ? "secondary" : "primary"}
                 title="Đặt lịch ký"
