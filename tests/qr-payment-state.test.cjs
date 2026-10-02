@@ -35,3 +35,11 @@ test("the QR image is only rendered in the active state (never for a wrong amoun
   }
   assert.equal(q.showsQrImage("active"), true);
 });
+
+test("deposit QR (requiresDeadline false) never expires and needs no deadline", () => {
+  const dep = (o) => s({ remainingSec: null, requiresDeadline: false, ...o });
+  assert.equal(dep({}), "needsQr");
+  assert.equal(dep({ hadPreviousQr: true }), "needsNewQr");
+  assert.equal(dep({ hasActiveVa: true }), "active");
+  assert.equal(dep({ paid: true }), "paid");
+});

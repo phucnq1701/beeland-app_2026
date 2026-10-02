@@ -4,7 +4,7 @@ import { StyleSheet, View } from "react-native";
 
 import { Card, Text } from "@/components/ui";
 import { formatDateTime, formatVND } from "@/lib/format";
-import { colors, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 
 type Tone = "success" | "danger" | "neutral";
 
@@ -17,7 +17,7 @@ const TONE: Record<Tone, { bg: string; fg: string }> = {
 function ResultCard({ icon: Icon, tone, title, lines }: { icon: LucideIcon; tone: Tone; title: string; lines: string[] }) {
   const t = TONE[tone];
   return (
-    <Card>
+    <Card style={styles.card}>
       <View style={styles.wrap} accessible accessibilityLiveRegion="polite" accessibilityLabel={[title, ...lines].join(". ")}>
         <View style={[styles.icon, { backgroundColor: t.bg }]}>
           <Icon size={32} color={t.fg} />
@@ -36,10 +36,25 @@ function ResultCard({ icon: Icon, tone, title, lines }: { icon: LucideIcon; tone
 }
 
 /** Trạng thái "Đã nhận tiền" ngay trên màn QR (thay Alert). */
-export function QrPaid({ amount, paidAt, bookingCode }: { amount: unknown; paidAt?: string | null; bookingCode: string }) {
-  const lines = [paidAt ? `Lúc ${formatDateTime(paidAt)}` : null, bookingCode ? `Booking ${bookingCode}` : null].filter(
-    (x): x is string => !!x
-  );
+export function QrPaid({
+  amount,
+  paidAt,
+  bookingCode,
+  docLabel = "Booking",
+  note,
+}: {
+  amount: unknown;
+  paidAt?: string | null;
+  bookingCode: string;
+  /** Tên loại phiếu đứng trước số phiếu (đặt cọc dùng "Đặt cọc") */
+  docLabel?: string;
+  note?: string;
+}) {
+  const lines = [
+    paidAt ? `Lúc ${formatDateTime(paidAt)}` : null,
+    bookingCode ? `${docLabel} ${bookingCode}` : null,
+    note ?? null,
+  ].filter((x): x is string => !!x);
   return <ResultCard icon={CheckCircle2} tone="success" title={`Đã nhận ${formatVND(amount)}`} lines={lines} />;
 }
 
@@ -71,6 +86,7 @@ export function QrNoDeadline() {
 }
 
 const styles = StyleSheet.create({
+  card: { borderWidth: 0, borderRadius: radius.xxl, ...elevation.soft },
   wrap: { alignItems: "center", gap: space.xs, paddingVertical: space.md },
   icon: {
     width: 64,

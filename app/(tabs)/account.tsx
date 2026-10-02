@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { ChevronRight, Code2, LayoutGrid, LogOut, Trash2, User } from "lucide-react-native";
+import { ChevronRight, LayoutGrid, LogOut, Trash2, User } from "lucide-react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { FeatureGrid } from "@/components/home/FeatureGrid";
@@ -242,17 +242,6 @@ export default function AccountScreen() {
                 onPress={() => void handleDeleteAccount()}
               />
             </View>
-            {__DEV__ ? (
-              // Chỉ có ở bản dev: xem toàn bộ component của design system
-              <View style={styles.divider}>
-                <ListItem
-                  leading={<RowIcon icon={Code2} />}
-                  title="UI Gallery (dev)"
-                  chevron
-                  onPress={() => router.push("/dev/ui-gallery" as never)}
-                />
-              </View>
-            ) : null}
           </View>
         </View>
 

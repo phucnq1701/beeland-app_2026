@@ -44,7 +44,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
           {/* Android cần dimezisBlurView mới nhòe thật; thiếu nó lớp phủ navy sẽ trông loang */}
           <BlurView
             intensity={95}
-            tint="default"
+            tint="light"
             experimentalBlurMethod="dimezisBlurView"
             style={StyleSheet.absoluteFill}
           />

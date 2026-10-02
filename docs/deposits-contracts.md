@@ -9,6 +9,19 @@
 
 Mở chi tiết với params `{ id, data: JSON dòng danh sách }` (trang chủ cũng mở chi tiết cọc kiểu này).
 
+## Thu tiền cọc QR (như web `dat-coc/index.tsx` + `BookingVAQRDialog` `module="DATCOC"`)
+
+| Việc | App |
+|---|---|
+| Điều kiện hiện nút "Thu tiền cọc QR" (chi tiết đặt cọc) | `lib/depositQr.canCreateDepositQr`: phiếu **chờ duyệt** (`isPendingDeposit`: tên "Đặt cọc chờ duyệt"/"ĐC chờ duyệt"/"Chờ duyệt"/"Chờ xử lý"/trống, hoặc mã 8 – tên "đã duyệt" luôn thắng) và còn tiền cọc phải thu |
+| Số tiền QR | `depositQrAmount` = `max(0, TienCoc − DaThu)` (dòng `fn_deposit_list`) |
+| Màn QR | `app/deposit/qr-payment.tsx` (params `data` = JSON đầu phiếu): `payment-gateway` `create` với `module: DATCOC`, `expires_at: null`, `pgc_id` = uuid phiếu giữ chỗ; mở lại dùng VA `DATCOC` đang `ACTIVE`; kiểm tra `paid_amount` mỗi 5 giây / khi quay lại app. Kiểu bo tròn như chi tiết đặt cọc: header `soft` (nút ⋯ `soft`), lề 20, card bo `radius.xxl` bóng nhẹ, ô chưa có QR nền xám nhạt, chọn tài khoản `SelectField raised`, nút dưới dạng viên; thẻ kết quả `QrResult` bo `radius.xxl` (dùng chung với QR booking) |
+| Sau khi thu | Máy chủ `fn_payment_webhook_apply`: tạo phiếu thu; tổng thu ≥ `tien_coc` → `fn_deposit_approve` (tự duyệt). Quay về chi tiết → nạp lại, trạng thái đọc lại từ `cloud_pgc_phieu_giucho.trang_thai_id` |
+
+- Trạng thái màn: `getQrScreenState` với `requiresDeadline: false` (không hết hạn, không cần hạn giữ chỗ). Web không đối chiếu lại
+  số tiền VA đặt cọc đang mở → app cũng không có trạng thái `mismatch` cho đặt cọc.
+- `MaTT` đọc bằng `statusCodeNum` (bỏ ký tự không phải số trong `item_code`, như bộ lọc `fn_deposit_list`); `Number()` ra NaN khi mã lẫn chữ.
+
 ## Dữ liệu (đều như web)
 
 | Việc | App | Máy chủ | Web đối chiếu |

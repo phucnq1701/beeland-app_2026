@@ -25,18 +25,21 @@ export type QrScreenInput = {
   remainingSec: number | null;
   /** Booking từng có mã QR nhưng đã bị huỷ/hết hạn. */
   hadPreviousQr: boolean;
+  /** false = QR không có hạn (đặt cọc, module DATCOC): bỏ qua expired/noDeadline. Mặc định true. */
+  requiresDeadline?: boolean;
 };
 
 export function getQrScreenState(i: QrScreenInput): QrScreenState {
   if (i.loading) return 'loading';
   if (i.loadError) return 'error';
   if (i.paid) return 'paid';
-  if (i.remainingSec !== null && i.remainingSec <= 0) return 'expired';
+  const deadline = i.requiresDeadline !== false;
+  if (deadline && i.remainingSec !== null && i.remainingSec <= 0) return 'expired';
   if (i.hasActiveVa && i.amountMismatch) return 'mismatch';
   // Mã QR đang mở (vd tạo từ web) vẫn hiển thị kể cả khi booking chưa có hạn giữ chỗ.
   if (i.hasActiveVa) return 'active';
   // Không có hạn giữ chỗ thì không tạo được mã mới.
-  if (i.remainingSec === null) return 'noDeadline';
+  if (deadline && i.remainingSec === null) return 'noDeadline';
   if (i.hadPreviousQr) return 'needsNewQr';
   return 'needsQr';
 }

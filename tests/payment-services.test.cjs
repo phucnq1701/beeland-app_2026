@@ -29,6 +29,7 @@ function run(file, map) {
 }
 
 const math = run("lib/paymentMath.ts", {});
+const depositQr = run("lib/depositQr.ts", {});
 
 function harness({ rpc = {}, tables = {}, failRpc = {}, typeAccount = "SYSTEM", scope = [] } = {}) {
   const calls = [];
@@ -60,6 +61,7 @@ function harness({ rpc = {}, tables = {}, failRpc = {}, typeAccount = "SYSTEM", 
     "./axiosApiSupabase": { default: http },
     "./cloudTenant": cloudTenant,
     "../lib/paymentMath": math,
+    "../lib/depositQr": depositQr,
     "./ProjectService": { ProjectService: { getProjects: async () => ({ data: scope }) } },
     "@react-native-async-storage/async-storage": { default: { getItem: async () => null } },
   };

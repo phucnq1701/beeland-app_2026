@@ -2,6 +2,7 @@ import React, { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import {
   AppHeader,
   Avatar,
@@ -13,7 +14,7 @@ import {
   SkeletonDetail,
   Text,
 } from "@/components/ui";
-import { space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import { CloudProfileService, CloudProfile } from "@/sevicesSupabase/CloudProfileService";
 
 export default function ProfileScreen() {
@@ -45,12 +46,17 @@ export default function ProfileScreen() {
   ) : error ? (
     <>
       <ErrorState title="Không tải được hồ sơ" description={error} onRetry={() => setRetry((v) => v + 1)} />
-      <Button variant="ghost" title="Đăng nhập lại" onPress={() => router.push("/login")} style={styles.center} />
+      <Button
+        variant="ghost"
+        title="Đăng nhập lại"
+        onPress={() => router.push("/login")}
+        style={[styles.center, styles.pill]}
+      />
     </>
   ) : (
     <>
       <View style={styles.hero}>
-        <Avatar name={user?.HoTen || "?"} size={56} />
+        <Avatar name={user?.HoTen || "?"} size={56} round />
         <Text variant="title" align="center">
           {user?.HoTen || "Chưa cập nhật họ tên"}
         </Text>
@@ -60,19 +66,22 @@ export default function ProfileScreen() {
           </Text>
         ) : null}
       </View>
-      <Card>
-        <KeyValueRow label="Họ tên" value={user?.HoTen || "Chưa cập nhật"} />
-        <KeyValueRow
-          label="Email"
-          value={user?.Email || "Chưa cập nhật"}
-          copyValue={user?.Email || undefined}
-        />
-        <KeyValueRow
-          label="Số điện thoại"
-          value={user?.DiDong || "Chưa cập nhật"}
-          copyValue={user?.DiDong || undefined}
-          last
-        />
+      <HomeSectionHeader title="Thông tin liên hệ" />
+      <Card style={styles.card} padding={0}>
+        <View style={styles.rows}>
+          <KeyValueRow label="Họ tên" value={user?.HoTen || "Chưa cập nhật"} />
+          <KeyValueRow
+            label="Email"
+            value={user?.Email || "Chưa cập nhật"}
+            copyValue={user?.Email || undefined}
+          />
+          <KeyValueRow
+            label="Số điện thoại"
+            value={user?.DiDong || "Chưa cập nhật"}
+            copyValue={user?.DiDong || undefined}
+            last
+          />
+        </View>
       </Card>
     </>
   );
@@ -80,12 +89,27 @@ export default function ProfileScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <Screen header={<AppHeader title="Thông tin cá nhân" />}>{body}</Screen>
+      <Screen header={<AppHeader variant="soft" title="Thông tin cá nhân" />} padded={false}>
+        <View style={styles.body}>{body}</View>
+      </Screen>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { alignItems: "center", gap: space.xs, paddingVertical: space.lg },
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  hero: {
+    alignItems: "center",
+    gap: space.xs,
+    paddingTop: space.xl,
+    paddingBottom: space.xl,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.x3,
+    backgroundColor: colors.surface,
+    ...elevation.soft,
+  },
+  card: { borderWidth: 0, borderRadius: radius.xxl, ...elevation.soft },
+  rows: { paddingHorizontal: space.lg + 2, paddingVertical: space.xs },
   center: { alignSelf: "center" },
+  pill: { borderRadius: radius.full },
 });

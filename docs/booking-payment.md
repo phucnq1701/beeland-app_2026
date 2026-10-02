@@ -33,6 +33,9 @@ Param `dataBooking` = JSON sản phẩm (`normalizeProduct`). Tạo xong → `ro
 - Dữ liệu: `BookingService.getBookingEditDetail` (booking + phiếu giữ chỗ + giá `price_list_items` + quà + cài đặt).
 - Tiến độ 4 bước: `lib/bookingProgress.ts` (Giữ chỗ → Đã thu tiền → Đặt cọc → Hợp đồng), đếm ngược `lib/countdown.ts`.
 - Ảnh chứng từ: `uploadBookingImage` (edge function `upload-file`) → `addBookingImages`; đọc `getListImageGC`.
+  - Bẫy HEIC (iOS): `expo-image-picker` mặc định (`preferredAssetRepresentationMode: current`) giữ nguyên HEIC
+    kể cả khi `quality < 1` → ảnh lưu dạng `.heic` không hiển thị (ô ↻). Chọn thư viện phải dùng `Compatible`
+    để iOS chuyển sang JPEG. Ảnh HEIC đã lưu trước bản sửa vẫn lỗi hiển thị.
 
 ## Thu tiền QR (`sevicesSupabase/PaymentGatewayService.ts` → edge function `payment-gateway`, dùng chung với web)
 
@@ -42,6 +45,7 @@ Param `dataBooking` = JSON sản phẩm (`normalizeProduct`). Tạo xong → `ro
 4. VA hết hạn: action `expire_sweep`; xoá VA: action `delete`.
 - Trạng thái màn: `lib/qrPaymentState.getQrScreenState` (loading/error/paid/noDeadline/expired/mismatch/active/needsNewQr/needsQr)
   – có test. `mismatch` = số tiền VA khác số tiền cần thu → yêu cầu tạo QR mới.
+- Màn QR đặt cọc dùng chung `getQrScreenState` với `requiresDeadline: false` – xem `docs/deposits-contracts.md`.
 
 ## Bẫy đã gặp
 

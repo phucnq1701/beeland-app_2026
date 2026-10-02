@@ -9,7 +9,7 @@
 | Xem tài liệu (PDF/Office/ảnh/TXT, WebView) | `app/documents/viewer.tsx` | `components/utils/documentLinks.ts` |
 | Thư viện ảnh (album) / ảnh trong album | `app/photo-gallery.tsx`, `app/photos/[folderId].tsx` | `DocumentService.get` (`GALLERY`) |
 | Thư mục video / video trong thư mục | `app/video/[projectId].tsx`, `app/videos/[folderId].tsx`, `app/videos/viewer.tsx` | **API cũ** `sevices/DocumentService.getFolderVideo` / `getDetailVideo` |
-| Khung chung | `components/media/FolderListScreen.tsx`, `FileListScreen.tsx`, `lib/shareText.ts` | |
+| Khung chung (kiểu bo tròn: header/ô tìm/chip `soft`, mỗi thư mục / tệp là card bo `radius.xxl`, icon tệp trong vòng tròn nền nhạt theo loại, nút chia sẻ / › tròn) | `components/media/FolderListScreen.tsx`, `FileListScreen.tsx`, `lib/shareText.ts` | |
 
 Lối vào: chi tiết dự án (`app/project/[id].tsx`) → `/folders/${MaDA}`, `/photo-gallery?projectId=${MaDA}`, `/video/${MaDA}`.
 
@@ -26,6 +26,14 @@ Lối vào: chi tiết dự án (`app/project/[id].tsx`) → `/folders/${MaDA}`,
 - Tài liệu: Office luôn qua `documents/viewer`; PDF/ảnh/TXT trên điện thoại qua viewer; còn lại / web mở link ngoài.
 - Video: web mở tab mới; điện thoại qua viewer (link encode). Chia sẻ: YouTube/video chia sẻ link; tệp → tải về
   `FileSystem.cacheDirectory` rồi `Sharing.shareAsync` (MIME theo đuôi); web không có `navigator.share` → chép link.
+
+### Xem ảnh toàn màn hình
+
+Hai trình xem: `components/ImageViewerModal.tsx` (ảnh căn / dự án qua `ImageCarousel`, ảnh chứng từ booking qua
+`BookingDocuments`) và modal trong `app/photos/[folderId].tsx` (thư viện ảnh). Cả hai dùng `useViewerChrome`
+(export từ `ImageViewerModal.tsx`): chạm ảnh → nút đóng / tiến-lùi / bộ đếm / chú thích mờ dần và ẩn (không bắt chạm),
+chạm lần nữa → hiện lại; mở lại trình xem thì luôn hiện. Ẩn bằng opacity nên ảnh không nhảy bố cục.
+Trình xem thêm mới phải dùng hook này cho đồng bộ.
 
 ## Bẫy
 

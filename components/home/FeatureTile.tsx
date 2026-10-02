@@ -34,7 +34,7 @@ function FeatureTileBase({ feature, onPress, editing, selected, order, compact }
       ]}
     >
       <View style={[styles.icon, compact ? styles.compactIcon : null]}>
-        <Icon size={compact ? 18 : 22} color={colors.brand} strokeWidth={2} />
+        <Icon size={compact ? 18 : 20} color={colors.brand} strokeWidth={2} />
       </View>
       <Text
         variant="caption"
@@ -59,22 +59,23 @@ function FeatureTileBase({ feature, onPress, editing, selected, order, compact }
 export const FeatureTile = memo(FeatureTileBase);
 
 const styles = StyleSheet.create({
+  // Cỡ thường (lưới 3 cột trang chủ): ô hơi dẹt (~110×92) thay vì vuông → nhẹ mắt, cùng tỉ lệ với cỡ compact
   tile: {
     flex: 1,
-    minHeight: 104,
+    minHeight: 92,
     alignItems: "center",
     justifyContent: "center",
-    gap: space.sm + 2,
-    paddingVertical: space.lg + 2,
+    gap: space.sm,
+    paddingVertical: space.md + 2,
     paddingHorizontal: space.xs,
-    borderRadius: radius.xxl,
+    borderRadius: radius.xl,
     borderWidth: 2,
     borderColor: "transparent",
     backgroundColor: colors.surface,
     ...elevation.soft,
   },
   // Lưới 4 cột: ô thấp hơn, icon nhỏ hơn, bo vừa
-  compactTile: { minHeight: 84, gap: space.sm, paddingVertical: space.md + 2, borderRadius: radius.xl },
+  compactTile: { minHeight: 84, paddingVertical: space.md },
   compactIcon: { width: 40, height: 40 },
   compactTitle: { fontSize: 12, lineHeight: 16 },
   selected: { borderColor: colors.primary },
@@ -83,8 +84,8 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.97 }],
   },
   icon: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",

@@ -7,8 +7,8 @@
 | Đăng nhập (Nội bộ / Đại lý) | `app/login.tsx` |
 | Quên mật khẩu → OTP → đặt lại | `app/forgot-password.tsx` → `app/verify-otp.tsx` → `app/reset-password.tsx` |
 | Đăng ký (chỉ hướng dẫn, lối vào đã ẩn) | `app/register.tsx` |
-| Tài khoản, xoá tài khoản | `app/(tabs)/account.tsx` |
-| Hồ sơ | `app/profile.tsx` |
+| Tài khoản, xoá tài khoản. Kiểu bo tròn: tiêu đề 28, card hồ sơ bo `radius.x3` (avatar tròn, nút ›), "Quản lý nhanh" là `FeatureGrid columns={4} compact`, cài đặt trong card bo `radius.xxl`, nút Đăng xuất dạng viên | `app/(tabs)/account.tsx` |
+| Hồ sơ (kiểu bo tròn: header `soft`, card avatar + tên + email bo `radius.x3`, thông tin liên hệ trong card bo `radius.xxl`) | `app/profile.tsx` |
 | Điểm vào | `app/index.tsx` → redirect `/(tabs)/home` |
 
 ## Luồng đăng nhập

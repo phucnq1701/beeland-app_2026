@@ -1,7 +1,7 @@
 import { Image } from "expo-image";
 import { ImageIcon, RotateCcw } from "lucide-react-native";
 import React, { useState } from "react";
-import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { type LayoutChangeEvent, Pressable, StyleSheet, View } from "react-native";
 
 import ImageViewerModal from "@/components/ImageViewerModal";
 import { Button, EmptyState, Skeleton, Text } from "@/components/ui";
@@ -14,20 +14,25 @@ type Props = {
   onRetry: () => void;
 };
 
-/** Lưới ảnh chứng từ 3 cột + xem ảnh toàn màn hình. */
+/** Khung hẹp hơn mức này mới lùi về 2 cột. */
+const MIN_WIDTH_3_COLS = 260;
+
+/** Lưới ảnh chứng từ 3 cột (khung rất hẹp thì 2 cột) + xem ảnh toàn màn hình. */
 export function BookingDocuments({ images, loading, error, onRetry }: Props) {
-  const { width } = useWindowDimensions();
+  const [width, setWidth] = useState(0);
   const [preview, setPreview] = useState<number | null>(null);
   const [failed, setFailed] = useState<Record<string, boolean>>({});
-  // Trừ lề màn (16×2), padding card (16×2), khoảng cách (8×2)
-  const size = Math.floor((width - 32 - 32 - 16) / 3);
+  // Đo chiều rộng thật của khung chứa thay vì đoán padding từ màn hình
+  const cols = width > 0 && width < MIN_WIDTH_3_COLS ? 2 : 3;
+  const size = Math.floor((width - space.sm * (cols - 1)) / cols);
+  const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
   if (loading) {
     return (
-      <View style={styles.grid}>
-        {[0, 1, 2].map((i) => (
-          <Skeleton key={i} width={size} height={size} radius={radius.md} />
-        ))}
+      <View style={styles.grid} onLayout={onLayout}>
+        {width > 0
+          ? [0, 1, 2].map((i) => <Skeleton key={i} width={size} height={size} radius={radius.md} />)
+          : null}
       </View>
     );
   }
@@ -49,8 +54,8 @@ export function BookingDocuments({ images, loading, error, onRetry }: Props) {
 
   return (
     <>
-      <View style={styles.grid}>
-        {images.map((img, index) => {
+      <View style={styles.grid} onLayout={onLayout}>
+        {width > 0 && images.map((img, index) => {
           const key = img.id ?? String(index);
           return (
             <Pressable

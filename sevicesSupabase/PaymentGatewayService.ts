@@ -84,8 +84,9 @@ export const PaymentGatewayService = {
     ma_tk: number;
     ten_cau_hinh?: string;
     provider?: string;
-    module?: "HOPDONG" | "BOOKING";
-    expires_at?: string;
+    module?: "HOPDONG" | "BOOKING" | "DATCOC";
+    /** null = không hạn (đặt cọc) */
+    expires_at?: string | null;
     items: CreateVAItem[];
   }) => call<{ message?: string; results: CreateVAResult[] }>("create", p),
   /** Huỷ VA (DELETE virtual-account bên nội bộ + đánh dấu DELETED) — như nút xoá trên web */

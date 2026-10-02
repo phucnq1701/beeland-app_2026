@@ -1,7 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocalSearchParams } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StyleSheet } from "react-native";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { QrCode } from "lucide-react-native";
 
 import { SalesDocDetail } from "@/components/sales/SalesDocDetail";
+import { BottomActionBar, Button } from "@/components/ui";
+import { canCreateDepositQr } from "@/lib/depositQr";
+import { radius } from "@/theme";
 import { formatArea, formatDate, formatVND } from "@/lib/format";
 import { ScheduleRow } from "@/lib/paymentMath";
 import { DatCocService } from "@/sevicesSupabase/DatCocService";
@@ -12,6 +17,8 @@ import { Receipt } from "@/sevicesSupabase/PaymentProgressService";
  * lịch thanh toán + phiếu thu theo phiếu giữ chỗ (DatCocService.getDepositDetail → PaymentProgressService).
  */
 export default function DepositDetailScreen() {
+  const router = useRouter();
+  const returningFromPayment = useRef(false);
   const { data: dataParam } = useLocalSearchParams<{ id: string; data?: string }>();
   const row = useMemo(() => {
     try {
@@ -51,7 +58,22 @@ export default function DepositDetailScreen() {
     void load();
   }, [load]);
 
+  // Quay lại từ màn QR → nạp lại (webhook có thể đã tạo phiếu thu và duyệt đặt cọc)
+  useFocusEffect(
+    useCallback(() => {
+      if (!returningFromPayment.current) return;
+      returningFromPayment.current = false;
+      void load(true);
+    }, [load])
+  );
+
   const h = header || {};
+  // Như web: chỉ phiếu đặt cọc chờ duyệt (còn tiền cọc phải thu) mới có QR thanh toán
+  const canCollect = !loading && canCreateDepositQr(h);
+  const goToPayment = () => {
+    returningFromPayment.current = true;
+    router.push({ pathname: "/deposit/qr-payment", params: { data: JSON.stringify(h) } });
+  };
   return (
     <SalesDocDetail
       title="Đặt cọc"
@@ -86,6 +108,17 @@ export default function DepositDetailScreen() {
       loading={loading}
       refreshing={refreshing}
       onRefresh={() => void load(true)}
+      footer={
+        canCollect ? (
+          <BottomActionBar>
+            <Button title="Thu tiền cọc QR" icon={QrCode} onPress={goToPayment} style={styles.pill} />
+          </BottomActionBar>
+        ) : undefined
+      }
     />
   );
 }
+
+const styles = StyleSheet.create({
+  pill: { flex: 1, borderRadius: radius.full },
+});

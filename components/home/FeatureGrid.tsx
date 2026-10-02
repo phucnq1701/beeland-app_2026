@@ -24,9 +24,9 @@ export function FeatureGrid({
   const rows: Item[][] = [];
   for (let i = 0; i < items.length; i += columns) rows.push(items.slice(i, i + columns));
   return (
-    <View style={[styles.grid, compact ? styles.compactGap : null]}>
+    <View style={styles.grid}>
       {rows.map((row, r) => (
-        <View key={r} style={[styles.row, compact ? styles.compactGap : null]}>
+        <View key={r} style={styles.row}>
           {row.map(({ key, ...tile }) => (
             <FeatureTile key={key} compact={compact} {...tile} />
           ))}
@@ -40,8 +40,8 @@ export function FeatureGrid({
 }
 
 const styles = StyleSheet.create({
-  grid: { gap: space.md },
-  row: { flexDirection: "row", gap: space.md },
+  // Cùng khoảng cách cho mọi cỡ ô (trang chủ, Tất cả quản lý, Tài khoản)
+  grid: { gap: space.sm + 2 },
+  row: { flexDirection: "row", gap: space.sm + 2 },
   pad: { flex: 1 },
-  compactGap: { gap: space.sm + 2 },
 });
