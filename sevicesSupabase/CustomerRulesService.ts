@@ -277,9 +277,17 @@ export const CustomerRulesService = {
    * Lỗi đọc → không ràng buộc thêm (như web).
    */
   getFormRules: async (isPersonal: boolean): Promise<FormRules> => {
+    const isAgency = (await getTypeAccount()) === "AGENCY";
+    return CustomerRulesService.getRulesForForm(customerFormKey(isPersonal, isAgency));
+  },
+
+  /**
+   * Cấu hình bắt buộc nhập + ẩn/chỉ đọc trường của 1 form theo `form_key` (web RequiredFieldService +
+   * FieldVisibilityService). Lỗi đọc → không ràng buộc thêm.
+   */
+  getRulesForForm: async (formKey: string): Promise<FormRules> => {
     const code = await tenantCode();
-    const [typeAccount, c] = await Promise.all([getTypeAccount(), claims()]);
-    const isAgency = typeAccount === "AGENCY";
+    const c = await claims();
     let required: Record<string, any> = {};
     try {
       const res = await axiosApiSupabase.get("rest/v1/cloud_required_field_configs", {
@@ -290,7 +298,6 @@ export const CustomerRulesService = {
       console.log("ERROR getFormRules required:", e);
       required = {};
     }
-    const formKey = customerFormKey(isPersonal, isAgency);
     const rules = NO_RULES(formKey);
     const cfg = required[formKey];
     if (cfg && cfg.is_active !== false) rules.required = arr(cfg.required_fields);

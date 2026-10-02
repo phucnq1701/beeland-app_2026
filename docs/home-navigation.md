@@ -12,7 +12,7 @@
 
 ## Tính năng và quyền
 
-Danh mục tính năng: `mocks/features.ts` (id 1–13). Logic chung: `lib/featureConfig.ts` (có test `tests/feature-config.test.cjs`).
+Danh mục tính năng: `mocks/features.ts` (id 1–14). Logic chung: `lib/featureConfig.ts` (có test `tests/feature-config.test.cjs`).
 
 | id | Tính năng | Route | Đại lý |
 |---|---|---|---|
@@ -26,6 +26,7 @@ Danh mục tính năng: `mocks/features.ts` (id 1–13). Logic chung: `lib/featu
 | 8 | Hợp đồng | `/contracts` | |
 | 9 | Báo cáo | `/reports` | |
 | 13 | Đặt cọc | `/deposits` | ✓ |
+| 14 | Đặt lịch ký | `/signings` (`docs/signing.md`) | ✓ |
 
 - `visibleFeatureIds`: bỏ id không có route, id trong `HIDDEN_FEATURE_IDS`, id ngoài quyền đại lý (`AGENCY_FEATURE_IDS`).
 - Cấu hình người dùng lưu `@home_features_config` (khoá theo tài khoản qua `getScopedKey`); đọc lại bằng

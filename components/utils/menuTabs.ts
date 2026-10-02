@@ -25,6 +25,7 @@ export const MENU_TAB_FEATURE_IDS: string[] = [
   '8', // Hợp đồng
   '9', // Báo cáo
   '13', // Đặt cọc
+  '14', // Đặt lịch ký
 ];
 
 export const DEFAULT_MENU_TAB_IDS: string[] = features

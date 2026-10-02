@@ -41,6 +41,10 @@ const UI_STRICT_FILES = [
   'app/reports/**/*.{ts,tsx}',
   'components/sales/**/*.{ts,tsx}',
   'components/reports/**/*.{ts,tsx}',
+  // Đặt lịch ký
+  'app/signings.tsx',
+  'app/signing/**/*.{ts,tsx}',
+  'components/signing/**/*.{ts,tsx}',
   // Giai đoạn 6 – đăng nhập, media
   'app/login.tsx',
   'app/register.tsx',

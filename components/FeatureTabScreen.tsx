@@ -19,6 +19,7 @@ import CustomersScreen from '@/app/customers';
 import ContractsScreen from '@/app/contracts';
 import ReportsScreen from '@/app/reports/index';
 import DepositsScreen from '@/app/deposits';
+import SigningsScreen from '@/app/signings';
 
 /** Map feature id → màn hình tương ứng hiển thị trong tab menu */
 const SCREEN_MAP: Record<string, ComponentType<{ embedded?: boolean }>> = {
@@ -31,6 +32,7 @@ const SCREEN_MAP: Record<string, ComponentType<{ embedded?: boolean }>> = {
   '8': ContractsScreen,
   '9': ReportsScreen,
   '13': DepositsScreen,
+  '14': SigningsScreen,
 };
 
 interface FeatureTabScreenProps {

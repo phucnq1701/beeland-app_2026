@@ -14,6 +14,7 @@ export const FEATURE_ROUTES: Record<string, string> = {
   '8': '/contracts',
   '9': '/reports',
   '13': '/deposits',
+  '14': '/signings',
 };
 
 /**
@@ -26,8 +27,8 @@ export function routeForFeature(id: string): string | null {
   return FEATURE_ROUTES[id] ?? null;
 }
 
-/** Tài khoản đại lý chỉ dùng: Dự án, Sản phẩm, Booking, Đặt cọc. */
-export const AGENCY_FEATURE_IDS = ['1', '2', '5', '13'] as const;
+/** Tài khoản đại lý chỉ dùng: Dự án, Sản phẩm, Booking, Đặt cọc, Đặt lịch ký (web có cổng đặt lịch ký đại lý). */
+export const AGENCY_FEATURE_IDS = ['1', '2', '5', '13', '14'] as const;
 
 /**
  * Các tính năng được hiển thị/cho chọn. Luôn ẩn tính năng chưa có màn (quyết định Q4:

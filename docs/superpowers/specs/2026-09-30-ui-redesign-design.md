@@ -90,6 +90,14 @@ App giữ đúng như web ở các điểm dưới đây cho tới khi đội we
    `cloud_global_settings.legacy_api_mode = "on"`; báo cáo khác đã tính hoàn toàn trên Cloud. **App luôn tính trên Cloud**
    (GĐ5 – 5 màn báo cáo bỏ API cũ `api/bao-cao/*`); nếu cờ đang "on" và API cũ còn dữ liệu khác Cloud thì số liệu web/app
    có thể lệch ở màn công nợ – cần đội web chốt tắt API cũ.
+6. **Đặt lịch ký: ô thông tin doanh nghiệp trên form không được lưu.** `EnterpriseForm.tsx` cho nhập Số ĐKKD, ngày/nơi
+   cấp, trụ sở, người đại diện, văn bản uỷ quyền, CCCD người đại diện… nhưng `SigningAppointmentCloudService.toRow`
+   chỉ lưu `khach_hang_id` (thông tin lấy theo hồ sơ khách) → nhập ở đó mất khi lưu. **App không hiện các ô này**, chỉ hiện
+   hồ sơ khách + nút "Sửa hồ sơ" (kết quả lưu như web). Đề xuất web bỏ ô hoặc ghi vào hồ sơ khách.
+7. **Đặt lịch ký: phương án TT và bắt buộc nhập.** (a) `toRow` lưu `ma_phuong_an_tt` bằng `num()` nhưng danh mục ưu tiên
+   `phuong_an_tt_ky` có mã chữ (`genCatalogCode`) → lưu thành `null`. (b) Cấu hình bắt buộc `MaHinhThucTT` / `MaBaoLanh`
+   kiểm tra key không có trong form (form dùng `LaChuyenKhoan` / `CoBaoLanh`) → luôn báo thiếu, không lưu được.
+   **App làm giống web** ở cả hai; đề xuất web lưu mã chữ / đổi key kiểm tra.
 
 ## 1. Mục tiêu và bối cảnh
 
