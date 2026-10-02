@@ -324,6 +324,7 @@ export function customerSavePayload(v: CustomerFormValues, mode: 'create' | 'edi
     taxCode: mode === 'create' && v.isPersonal ? null : n(v.taxCode),
     maTtId: n(v.statusId),
     maNguonId: n(v.sourceId),
+    ghiChu: n(v.notes),
     ...(v.isPersonal
       ? {}
       : {

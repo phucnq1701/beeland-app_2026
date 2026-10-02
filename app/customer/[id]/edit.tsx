@@ -26,6 +26,7 @@ function toFormValues(d: any): Partial<CustomerFormValues> {
     nddDienThoai: d.ndd_dien_thoai || "",
     nddEmail: d.ndd_email || "",
     nddSoCccd: d.ndd_so_cccd || "",
+    notes: d.ghi_chu || "",
   };
 }
 

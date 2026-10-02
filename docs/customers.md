@@ -5,7 +5,7 @@
 | Màn | File |
 |---|---|
 | Danh sách (tìm, Cá nhân/DN, chip trạng thái, Gọi/Zalo, SĐT che). Kiểu bo tròn: header/ô tìm/thanh loại/chip `soft`, mỗi khách là card bo `radius.xxl`, avatar tròn; cột phải cao bằng khối chữ: trạng thái ngang dòng tên (`StatusBadge size="sm"`, màu theo `color_code` danh mục `trang_thai_kh` – web lưu tên preset antd), nút Gọi/Zalo tròn nền nhạt ngang dòng cuối | `app/customers.tsx` + `components/customer/CustomerListItem.tsx` |
-| Chi tiết khách (kiểu bo tròn): card đầu bo `radius.x3` gồm avatar tròn, tên, nhãn, hàng nút tròn Gọi/Zalo/Email; card thông tin + card "Giao dịch" bo `radius.xxl`; header `soft` (Sửa/Xoá nút tròn) | `app/customer/[id]/index.tsx` |
+| Chi tiết khách (kiểu bo tròn): card đầu bo `radius.x3` gồm avatar tròn, tên, nhãn, hàng nút tròn Gọi/Zalo/Email; card thông tin + card "Ghi chú" (`ghi_chu`, ẩn khi trống) + card "Giao dịch" bo `radius.xxl`; header `soft` (Sửa/Xoá nút tròn) | `app/customer/[id]/index.tsx` |
 | Thêm / sửa khách (kiểu bo tròn): `CustomerForm` chia card theo nhóm (Thông tin chung / Phân loại / Người đại diện / Ghi chú), ô nhập + ô chọn `variant="soft"`, nút lưu dạng viên, header `soft` | `app/customer/new.tsx`, `app/customer/[id]/edit.tsx`, `components/customer/CustomerForm.tsx` |
 | Thêm / sửa (form chung). `customer/new` quay về màn gọi khi mở từ tạo booking (`returnToBooking=1` → `booking/create`) hoặc form lịch ký (`returnToSigning=1`, `newCustomerFor`, `signingParams`, `personal=0` để mở sẵn doanh nghiệp → `signing/form`), kèm `newCustomer` | `app/customer/new.tsx`, `app/customer/[id]/edit.tsx` + `components/customer/CustomerForm.tsx` |
 | Hộp trùng khách | `components/customer/DuplicateSheet.tsx` |
@@ -22,7 +22,8 @@
 | Lưu (tạo/sửa) | `CustomerService.saveCustomerCloud` | POST/PATCH `cloud_customers` |
 | Xoá | `CustomerService.deleteCustomer` | DELETE `cloud_customers` (`return=representation`) |
 | Giao dịch | `CustomerService.getHopDong` → `getCustomerTransactions` | `cloud_pgc_phieu_giucho` + tra `bds_products`, `da_projects`, `cloud_catalogs` |
-| Ghi chú ban đầu | `CustomerService.addCustomerActivity` | `cloud_customer_activities` (`ma_ctdk` = mã chữ thường, `nguoi_thuc_hien` = tên) |
+| Ghi chú khách | `customerSavePayload` (`ghiChu`) → `saveCustomerCloud` | cột `cloud_customers.ghi_chu` (text, người dùng thêm 2026-10-02; **chỉ app dùng, web chưa hiển thị**). Ô "Ghi chú" có ở cả tạo và sửa; trống → `null`. Nơi gọi `saveCustomerCloud` không gửi `ghiChu` thì giữ nguyên ghi chú cũ. Trước đây ghi chú lúc tạo khách lưu thành nhật ký chăm sóc – nay không còn |
+| Nhật ký chăm sóc | `CustomerService.addCustomerActivity` | `cloud_customer_activities` (`ma_ctdk` = mã chữ thường, `nguoi_thuc_hien` = tên) |
 | Luật trùng / bắt buộc / ẩn trường / khoá định danh | `sevicesSupabase/CustomerRulesService.ts` | xem dưới |
 
 ## Quy tắc (chép web – logic thuần `lib/customerRules.ts`, test `tests/customer-rules*.test.cjs`)

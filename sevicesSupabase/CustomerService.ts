@@ -19,7 +19,7 @@ const APP_EDIT_COLUMNS = new Set([
   "ma_ctdk", "ma_so_kh", "company_id", "is_personal", "ten_kh", "ten_cong_ty", "di_dong", "dien_thoai", "di_dong2",
   "dien_thoai_ct", "email", "email_ct", "cccd", "so_cmnd", "dia_chi", "dia_chi_ct", "ma_so_thue_ct", "ma_so_ttncn",
   "nguoi_dai_dien_pl", "chuc_vu", "ndd_dien_thoai", "ndd_email", "ndd_so_cccd", "ma_tt_id", "ma_nguon_id",
-  "ngay_sua", "updated_by_id",
+  "ghi_chu", "ngay_sua", "updated_by_id",
 ]);
 
 const escapeIlike = (value: string) => value.replace(/[%,()]/g, "");
@@ -819,6 +819,12 @@ export const CustomerService = {
       ma_nguon_id: UUID_RE.test(rawNguonId) ? rawNguonId : null,
       ngay_sua: nowIso,
     };
+
+    // Ghi chú (cột ghi_chu – app thêm 2026-10-02, web chưa dùng): chỉ ghi khi payload có trường này,
+    // nơi gọi không gửi ghi chú thì giữ nguyên ghi chú đang có.
+    if ("ghiChu" in payload || "ghi_chu" in payload) {
+      input.ghi_chu = String(payload.ghiChu ?? payload.ghi_chu ?? "").trim() || null;
+    }
 
     if (employeeId && UUID_RE.test(employeeId)) {
       if (!payload.id) input.created_by_id = employeeId;

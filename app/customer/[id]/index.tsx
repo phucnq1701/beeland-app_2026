@@ -72,6 +72,7 @@ type Detail = {
   diaChi: string;
   nguoiDaiDienPl: string;
   chucVu: string;
+  notes: string;
 };
 
 function toDetail(d: any): Detail {
@@ -96,6 +97,7 @@ function toDetail(d: any): Detail {
     diaChi: d.diaChi || d.dia_chi || d.thuong_tru || d.dia_chi_ct || "",
     nguoiDaiDienPl: d.nguoi_dai_dien_pl || "",
     chucVu: d.chuc_vu || "",
+    notes: String(d.ghi_chu ?? "").trim(),
   };
 }
 
@@ -277,6 +279,19 @@ export default function CustomerDetailScreen() {
             )}
           </Card>
 
+          {c.notes ? (
+            <Card padding={0} style={styles.card}>
+              <View style={styles.notes}>
+                <Text variant="label" color="textSecondary">
+                  Ghi chú
+                </Text>
+                <Text variant="body" selectable>
+                  {c.notes}
+                </Text>
+              </View>
+            </Card>
+          ) : null}
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Giao dịch của khách"
@@ -334,6 +349,7 @@ const styles = StyleSheet.create({
   card: { borderWidth: 0, borderRadius: radius.xxl, ...elevation.soft },
   rows: { paddingHorizontal: space.lg + 2 },
   empty: { padding: space.lg },
+  notes: { gap: space.xs, paddingHorizontal: space.lg + 2, paddingVertical: space.md + 2 },
   link: {
     flexDirection: "row",
     alignItems: "center",

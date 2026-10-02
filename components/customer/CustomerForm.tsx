@@ -173,16 +173,6 @@ export function CustomerForm({
     };
     const res: any = await CustomerService.saveCustomerCloud(payload);
     if (res?.status === 2000 && res.data) {
-      if (mode === "create" && values.notes.trim() && res.data.id) {
-        try {
-          await CustomerService.addCustomerActivity({
-            customerId: res.data.id,
-            content: values.notes.trim(),
-            title: "Ghi chú ban đầu khi tạo khách",
-            loai: "note",
-          });
-        } catch {}
-      }
       hapticSuccess();
       toast.show({ type: "success", message: mode === "create" ? "Đã thêm khách hàng" : "Đã cập nhật khách hàng" });
       onSaved(res.data);
@@ -356,13 +346,13 @@ export function CustomerForm({
           </>
         ) : null}
 
-        {mode === "create" && shown("notes") ? (
+        {shown("notes") ? (
           <>
             <HomeSectionHeader title="Ghi chú" />
             <View style={styles.card}>
-              {field("notes", "Nhu cầu / ghi chú ban đầu", {
+              {field("notes", "Ghi chú", {
                 multiline: true,
-                placeholder: "Khách quan tâm căn 2PN, ngân sách 3 tỷ…",
+                placeholder: "Nhu cầu, ngân sách, lưu ý về khách…",
               })}
             </View>
           </>

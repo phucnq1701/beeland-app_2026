@@ -106,6 +106,11 @@ test("save payload only sends the fields of the current customer type", () => {
   assert.equal("nguoiDaiDienPl" in personal, false);
 });
 
+test("save payload carries the customer note (cloud_customers.ghi_chu), blank → null", () => {
+  assert.equal(r.customerSavePayload(form({ name: "A", notes: "  Quan tâm căn 2PN  " }), "create").ghiChu, "Quan tâm căn 2PN");
+  assert.equal(r.customerSavePayload(form({ name: "A", notes: "  " }), "edit").ghiChu, null);
+});
+
 // Nguồn web: services/RequiredFieldService.ts + config/requiredFieldCatalog.ts (agencyFormKey)
 test("form key: agency accounts use agency_customer for personal customers (web agencyFormKey)", () => {
   assert.equal(r.customerFormKey(true, false), "customer");

@@ -269,6 +269,19 @@ test("editing only patches the columns the app form manages (web-only data is ke
   assert.equal(body.di_dong, "0901");
 });
 
+test("note is saved to ghi_chu on create and edit; callers without a note keep the existing one", async () => {
+  const existing = { id: uid(1), ma_ctdk: tenant, ma_so_kh: "KH-1", company_id: uid(8), ghi_chu: "cũ" };
+  const h = harness({ cloud_customers: [existing] });
+  const svc = h.customerService();
+  svc.getCustomerDetailCloud = async () => existing;
+  await svc.saveCustomerCloud({ id: uid(1), isPersonal: true, tenKh: "A", diDong: "0901", ghiChu: "Khách VIP" });
+  assert.equal(h.calls.filter((c) => c.method === "patch")[0].body.ghi_chu, "Khách VIP");
+  await svc.saveCustomerCloud({ id: uid(1), isPersonal: true, tenKh: "A", diDong: "0901", ghiChu: null });
+  assert.equal(h.calls.filter((c) => c.method === "patch")[1].body.ghi_chu, null, "clearing the note writes null");
+  await svc.saveCustomerCloud({ id: uid(1), isPersonal: true, tenKh: "A", diDong: "0901" });
+  assert.equal("ghi_chu" in h.calls.filter((c) => c.method === "patch")[2].body, false, "no note in payload → untouched");
+});
+
 test("delete reports success only when a row was really deleted", async () => {
   const ok = harness({}, { deleted: [{ id: uid(1) }] });
   const res = await ok.customerService().deleteCustomer(uid(1));
