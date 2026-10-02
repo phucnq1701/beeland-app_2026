@@ -10,7 +10,7 @@
 | Thêm / sửa (form chung) | `app/customer/new.tsx`, `app/customer/[id]/edit.tsx` + `components/customer/CustomerForm.tsx` |
 | Hộp trùng khách | `components/customer/DuplicateSheet.tsx` |
 | Chi tiết, xoá | `app/customer/[id]/index.tsx` |
-| Giao dịch của khách | `app/customer/[id]/contracts.tsx` |
+| Giao dịch của khách (kiểu bo tròn như danh sách cọc/HĐ): header/ô tìm `soft`, mỗi giao dịch là card bo `radius.xxl`, cột phải `DocTrailing` (trạng thái trên, tiền rút gọn dưới). Chạm → chi tiết theo giai đoạn (`transactionTarget` trong `lib/customerRules.ts`): giữ chỗ → `booking/[id]` (id phiếu giữ chỗ, tra theo `ma_pgc_id`); `DATCOC` → `deposit/[id]`, `HDMB/HDGV/THANHLY` → `contract/[id]` – hai màn này cần dòng danh sách nên tìm trong `fn_deposit_list`/`fn_contract_list` theo số phiếu rồi ký hiệu căn, khớp `PhieuGiuChoId`; không tìm thấy (vd đại lý ngoài phạm vi, HĐ không thuộc danh sách HĐMB) thì mở chi tiết booking |  `app/customer/[id]/contracts.tsx` |
 | Danh bạ chat (dữ liệu mẫu) | `app/contacts.tsx` |
 
 ## Dữ liệu

@@ -159,3 +159,14 @@ test("stage labels and transaction mapping", () => {
   assert.equal(bare.stageLabel, "Giữ chỗ / booking");
   assert.equal(bare.soPhieu, "");
 });
+
+test("transactionTarget: giai đoạn → màn chi tiết (cọc / hợp đồng / còn lại là booking)", () => {
+  assert.equal(r.transactionTarget("DATCOC"), "deposit");
+  assert.equal(r.transactionTarget("datcoc"), "deposit");
+  assert.equal(r.transactionTarget("HDMB"), "contract");
+  assert.equal(r.transactionTarget("HDGV"), "contract");
+  assert.equal(r.transactionTarget("THANHLY"), "contract");
+  assert.equal(r.transactionTarget("GIUCHO"), "booking");
+  assert.equal(r.transactionTarget(""), "booking");
+  assert.equal(r.transactionTarget(null), "booking");
+});

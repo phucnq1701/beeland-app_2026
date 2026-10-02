@@ -4,7 +4,7 @@
 
 | Màn | File |
 |---|---|
-| Đăng nhập (Nội bộ / Đại lý) | `app/login.tsx` |
+| Đăng nhập (Nội bộ / Đại lý). Kiểu bo tròn: form trong card trắng bo `radius.x3`, ô nhập `soft`, chọn Nội bộ/Đại lý `SegmentedControl variant="accent"` (rãnh cam nhạt), nút dạng viên. Tự cuộn ô đang nhập lên trên bàn phím (ScrollView riêng + `Keyboard` show → `scrollTo` vị trí ô); Enter chuyển ô kế tiếp | `app/login.tsx` |
 | Quên mật khẩu → OTP → đặt lại | `app/forgot-password.tsx` → `app/verify-otp.tsx` → `app/reset-password.tsx` |
 | Đăng ký (chỉ hướng dẫn, lối vào đã ẩn) | `app/register.tsx` |
 | Tài khoản, xoá tài khoản. Kiểu bo tròn: tiêu đề 28, card hồ sơ bo `radius.x3` (avatar tròn, nút ›), "Quản lý nhanh" là `FeatureGrid columns={4} compact`, cài đặt trong card bo `radius.xxl`, nút Đăng xuất dạng viên | `app/(tabs)/account.tsx` |

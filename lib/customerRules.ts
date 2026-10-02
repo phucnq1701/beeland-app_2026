@@ -488,6 +488,17 @@ export const stageLabel = (code: unknown): string => {
   return STAGE_LABEL[c] || t(code);
 };
 
+/**
+ * Màn chi tiết mở khi chạm một giao dịch của khách: đặt cọc → chi tiết cọc, HĐ (mua bán / góp vốn / thanh lý)
+ * → chi tiết hợp đồng, còn lại (giữ chỗ) → chi tiết booking.
+ */
+export function transactionTarget(giaiDoan: unknown): 'booking' | 'deposit' | 'contract' {
+  const c = t(giaiDoan).toUpperCase();
+  if (c === 'DATCOC') return 'deposit';
+  if (c === 'HDMB' || c === 'HDGV' || c === 'THANHLY') return 'contract';
+  return 'booking';
+}
+
 export type CustomerTransaction = {
   id: string;
   soPhieu: string;

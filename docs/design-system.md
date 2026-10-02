@@ -18,7 +18,7 @@ dữ liệu (màu trạng thái từ danh mục) dùng `StatusBadge color=…`. 
 `Text` (variant, color token, `numeric`), `Button` (primary/secondary/ghost/danger, `loading` chặn bấm lặp), `IconButton`
 (bắt buộc `accessibilityLabel`; `soft` = tròn trắng bóng nhẹ; `glass` = tròn kính mờ trên ảnh), `Card`, `ListItem` (memo), `KeyValueRow`, `SectionHeader`, `Badge`/`StatusBadge`, `Chip` (`variant="soft"` = không viền, bóng nhẹ),
 `Avatar` (`size` 32/40/44/56, `round` = tròn), `MoneyText` (`short`), `SearchBar` (focus đổi viền/icon sang `primary` có chuyển động, nút xoá mờ dần; `variant="soft"` bo tròn hẳn + bóng nhẹ), `TextField`, `SelectField` (bottom sheet, tìm khi nhiều mục; cả hai có `variant="soft"` = nền xám nhạt không viền, bo 16, focus nền trắng viền `primary` – dùng trong card trắng; `SelectField` thêm `raised` = viên thuốc trắng bóng nhẹ, đặt thẳng trên nền màn), `DateField`,
-`SegmentedControl` (`variant="soft"` = viên thuốc), `BottomSheet` (`onClosed` sau khi đóng hẳn), `BottomActionBar`, `Screen` (`header`, `footer`, `scroll`,
+`SegmentedControl` (`variant="soft"` = viên thuốc; `accent` = viên thuốc rãnh cam nhạt, chữ cam), `BottomSheet` (`onClosed` sau khi đóng hẳn), `BottomActionBar`, `Screen` (`header`, `footer`, `scroll`,
 `keyboardAware`, `tone`), `AppHeader` (light/dark/transparent/`soft` – hoà nền `bg`, nút quay lại tròn, tiêu đề 20; `hideBack`), `EmptyState`, `ErrorState`, `Skeleton*`,
 `CountdownPill`, `ProgressSteps`, `FocusStatusBar`, `Toast` (`useToast`), `confirm()`.
 
