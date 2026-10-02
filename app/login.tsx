@@ -1,5 +1,16 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  Image,
+  Keyboard,
+  LayoutChangeEvent,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Eye, EyeOff, Square, SquareCheck } from "lucide-react-native";
@@ -7,7 +18,7 @@ import { Eye, EyeOff, Square, SquareCheck } from "lucide-react-native";
 import { buildAccountScope, setAccountScope } from "@/components/utils/accountScope";
 import { Button, Screen, SegmentedControl, Text, TextField, useToast } from "@/components/ui";
 import { hapticError } from "@/lib/haptics";
-import { colors, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import {
   cacheCloudProfile,
   PROFILE_KEY,
@@ -214,103 +225,199 @@ export default function LoginScreen() {
   const isAgency = loginType === "AGENCY";
   const Check = rememberMe ? SquareCheck : Square;
 
+  // ── Không để bàn phím che ô đang nhập ────────────────────────────────────
+  // KeyboardAvoidingView (iOS) / adjustResize (Android) thu vùng cuộn lại phía trên bàn phím;
+  // sau khi bàn phím hiện thì cuộn ô đang focus lên gần đầu vùng nhìn thấy.
+  const scrollRef = useRef<ScrollView>(null);
+  const cardY = useRef(0);
+  const fieldY = useRef<Record<string, number>>({});
+  const focused = useRef<string | null>(null);
+  const keyboardShown = useRef(false);
+
+  const scrollToFocused = useCallback(() => {
+    const key = focused.current;
+    if (!key || fieldY.current[key] == null) return;
+    const y = cardY.current + fieldY.current[key] - space.xl;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y), animated: true });
+  }, []);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const show = Keyboard.addListener(showEvt, () => {
+      keyboardShown.current = true;
+      // Chờ KeyboardAvoidingView co lại rồi mới cuộn
+      setTimeout(scrollToFocused, Platform.OS === "ios" ? 280 : 50);
+    });
+    const hide = Keyboard.addListener("keyboardDidHide", () => {
+      keyboardShown.current = false;
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [scrollToFocused]);
+
+  const fieldProps = (key: string) => ({
+    onLayout: (e: LayoutChangeEvent) => {
+      fieldY.current[key] = e.nativeEvent.layout.y;
+    },
+    onFocus: () => {
+      focused.current = key;
+      // Bàn phím đã mở sẵn (chuyển từ ô này sang ô khác) → không có sự kiện show mới
+      if (keyboardShown.current) setTimeout(scrollToFocused, 50);
+    },
+  });
+
+  const company = fieldProps("company");
+  const user = fieldProps("user");
+  const pass = fieldProps("pass");
+  const usernameRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+
   return (
-    <Screen keyboardAware>
-      <View style={styles.brand}>
-        <Image source={require("@/assets/images/beeland-logo.png")} style={styles.logo} resizeMode="contain" />
-        <Text variant="title" accessibilityRole="header">
-          {isAgency ? "Đăng nhập Đại lý" : "Đăng nhập Nội bộ"}
-        </Text>
-        <Text variant="caption" color="textSecondary">
-          Vui lòng nhập thông tin để tiếp tục
-        </Text>
-      </View>
+    <Screen keyboardAware scroll={false} padded={false}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.brand}>
+          <Image source={require("@/assets/images/beeland-logo.png")} style={styles.logo} resizeMode="contain" />
+          <Text variant="title" accessibilityRole="header" style={styles.title}>
+            {isAgency ? "Đăng nhập Đại lý" : "Đăng nhập Nội bộ"}
+          </Text>
+          <Text variant="caption" color="textSecondary">
+            Vui lòng nhập thông tin để tiếp tục
+          </Text>
+        </View>
 
-      <SegmentedControl
-        value={loginType}
-        options={[
-          { value: "INTERNAL", label: "Nội bộ" },
-          { value: "AGENCY", label: "Đại lý" },
-        ]}
-        onChange={setLoginType}
-      />
-
-      <TextField
-        label="Mã công ty"
-        placeholder="Nhập mã công ty"
-        value={companyCode}
-        onChangeText={(t) => {
-          setCompanyCode(t);
-          setFormError(null);
-        }}
-        autoCapitalize="none"
-        autoCorrect={false}
-        required
-      />
-      <TextField
-        label="Tài khoản"
-        placeholder="Nhập tài khoản"
-        value={username}
-        onChangeText={(t) => {
-          setUsername(t);
-          setFormError(null);
-        }}
-        autoCapitalize="none"
-        autoCorrect={false}
-        textContentType="username"
-        required
-      />
-      <TextField
-        label="Mật khẩu"
-        placeholder="Nhập mật khẩu"
-        value={password}
-        onChangeText={(t) => {
-          setPassword(t);
-          setFormError(null);
-        }}
-        secureTextEntry={!showPassword}
-        autoCapitalize="none"
-        autoCorrect={false}
-        textContentType="password"
-        returnKeyType="go"
-        onSubmitEditing={() => void handleLogin()}
-        error={formError}
-        required
-        suffix={
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-            onPress={() => setShowPassword(!showPassword)}
-            hitSlop={12}
-          >
-            {showPassword ? <EyeOff size={20} color={colors.textSecondary} /> : <Eye size={20} color={colors.textSecondary} />}
-          </Pressable>
-        }
-      />
-
-      <View style={styles.row}>
-        <Pressable
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: rememberMe }}
-          onPress={() => setRememberMe(!rememberMe)}
-          style={styles.remember}
-          hitSlop={8}
+        <View
+          style={styles.card}
+          onLayout={(e) => {
+            cardY.current = e.nativeEvent.layout.y;
+          }}
         >
-          <Check size={20} color={rememberMe ? colors.primary : colors.textSecondary} />
-          <Text variant="body">Nhớ mật khẩu</Text>
-        </Pressable>
-        <Button title="Quên mật khẩu?" variant="ghost" onPress={() => router.push("/forgot-password")} />
-      </View>
+          <SegmentedControl
+            variant="accent"
+            value={loginType}
+            options={[
+              { value: "INTERNAL", label: "Nội bộ" },
+              { value: "AGENCY", label: "Đại lý" },
+            ]}
+            onChange={setLoginType}
+          />
 
-      <Button title="Đăng nhập" size="lg" loading={loading} onPress={() => void handleLogin()} />
+          <View onLayout={company.onLayout}>
+            <TextField
+              variant="soft"
+              label="Mã công ty"
+              placeholder="Nhập mã công ty"
+              value={companyCode}
+              onChangeText={(t) => {
+                setCompanyCode(t);
+                setFormError(null);
+              }}
+              onFocus={company.onFocus}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => usernameRef.current?.focus()}
+              required
+            />
+          </View>
+          <View onLayout={user.onLayout}>
+            <TextField
+              ref={usernameRef}
+              variant="soft"
+              label="Tài khoản"
+              placeholder="Nhập tài khoản"
+              value={username}
+              onChangeText={(t) => {
+                setUsername(t);
+                setFormError(null);
+              }}
+              onFocus={user.onFocus}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="username"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              required
+            />
+          </View>
+          <View onLayout={pass.onLayout}>
+            <TextField
+              ref={passwordRef}
+              variant="soft"
+              label="Mật khẩu"
+              placeholder="Nhập mật khẩu"
+              value={password}
+              onChangeText={(t) => {
+                setPassword(t);
+                setFormError(null);
+              }}
+              onFocus={pass.onFocus}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="password"
+              returnKeyType="go"
+              onSubmitEditing={() => void handleLogin()}
+              error={formError}
+              required
+              suffix={
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  onPress={() => setShowPassword(!showPassword)}
+                  hitSlop={12}
+                >
+                  {showPassword ? <EyeOff size={20} color={colors.textSecondary} /> : <Eye size={20} color={colors.textSecondary} />}
+                </Pressable>
+              }
+            />
+          </View>
 
+          <View style={styles.row}>
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: rememberMe }}
+              onPress={() => setRememberMe(!rememberMe)}
+              style={styles.remember}
+              hitSlop={8}
+            >
+              <Check size={20} color={rememberMe ? colors.primary : colors.textSecondary} />
+              <Text variant="body">Nhớ mật khẩu</Text>
+            </Pressable>
+            <Button title="Quên mật khẩu?" variant="ghost" onPress={() => router.push("/forgot-password")} />
+          </View>
+
+          <Button title="Đăng nhập" size="lg" loading={loading} onPress={() => void handleLogin()} style={styles.pill} />
+        </View>
+      </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  brand: { alignItems: "center", gap: space.xs, paddingTop: space.xl, paddingBottom: space.md },
-  logo: { width: 160, height: 64, marginBottom: space.sm },
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  flex: { flex: 1 },
+  // Khoảng trống dưới đủ để cuộn ô cuối lên trên bàn phím
+  content: { flexGrow: 1, paddingHorizontal: space.xl, paddingTop: space.xxl, paddingBottom: space.xxl * 2 },
+  brand: { alignItems: "center", gap: space.xs, paddingBottom: space.xl },
+  logo: { width: 76, height: 76, marginBottom: space.md },
+  title: { fontSize: 24, lineHeight: 32 },
+  card: {
+    gap: space.lg,
+    padding: space.xl,
+    borderRadius: radius.x3,
+    backgroundColor: colors.surface,
+    ...elevation.soft,
+  },
+  pill: { borderRadius: radius.full },
+  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: -space.xs },
   remember: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 44 },
 });
