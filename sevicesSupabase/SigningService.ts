@@ -125,23 +125,6 @@ export const SigningService = {
     }
   },
 
-  /** Đổi trạng thái 1 hoặc nhiều lịch ký. */
-  setState: async (ids: number[], state: SigningState, note: string) => {
-    await requireTenant();
-    const [actorId, actorName] = await Promise.all([getMaNv(), currentUserName()]);
-    try {
-      await axiosApiSupabase.post("rest/v1/rpc/fn_signing_appointment_set_state", {
-        p_ids: ids.map(Number).filter(Number.isFinite),
-        p_state: String(state).toUpperCase(),
-        p_note: note || null,
-        p_actor_id: actorId,
-        p_actor_name: actorName,
-      });
-    } catch (e) {
-      throw new Error(errMsg(e, "Không cập nhật được trạng thái"));
-    }
-  },
-
   remove: async (ids: number[]) => {
     await requireTenant();
     const [actorId, actorName] = await Promise.all([getMaNv(), currentUserName()]);

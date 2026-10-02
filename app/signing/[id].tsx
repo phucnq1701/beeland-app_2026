@@ -1,10 +1,9 @@
 import React, { useCallback, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { CheckCircle2, MoreVertical, Pencil, Trash2 } from "lucide-react-native";
+import { MoreVertical, Pencil, Trash2 } from "lucide-react-native";
 
 import { AttachmentList } from "@/components/signing/AttachmentList";
-import { StatusSheet } from "@/components/signing/StatusSheet";
 import {
   AppHeader,
   Badge,
@@ -23,7 +22,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { dateKey, labelOf, statusMeta, timeOf, weekdayIndex, type SigningState } from "@/lib/signing";
+import { dateKey, labelOf, statusMeta, timeOf, weekdayIndex } from "@/lib/signing";
 import { colors, elevation, radius, space } from "@/theme";
 import { SigningService, type SigningDetail } from "@/sevicesSupabase/SigningService";
 
@@ -43,7 +42,6 @@ export default function SigningDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [statusOpen, setStatusOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const pendingMenu = useRef<"edit" | "delete" | null>(null);
   const deleting = useRef(false);
@@ -106,18 +104,6 @@ export default function SigningDetailScreen() {
     }
   };
 
-  const updateStatus = async (state: SigningState, note: string) => {
-    if (!data) return;
-    try {
-      await SigningService.setState([data.ID], state, note);
-      toast.show({ type: "success", message: "Đã cập nhật trạng thái" });
-      setStatusOpen(false);
-      void load(true);
-    } catch (e: any) {
-      toast.show({ type: "error", message: e?.message || "Không cập nhật được trạng thái" });
-    }
-  };
-
   const header = (
     <AppHeader
       variant="soft"
@@ -171,13 +157,7 @@ export default function SigningDetailScreen() {
         onRefresh={() => void load(true)}
         footer={
           <BottomActionBar>
-            <Button
-              variant="secondary"
-              icon={CheckCircle2}
-              title="Trạng thái"
-              onPress={() => setStatusOpen(true)}
-              style={styles.pill}
-            />
+            {/* App không cập nhật trạng thái lịch ký (xác nhận / từ chối làm trên web) */}
             <Button icon={Pencil} title="Sửa lịch ký" onPress={edit} style={[styles.flex, styles.pill]} />
           </BottomActionBar>
         }
@@ -276,14 +256,6 @@ export default function SigningDetailScreen() {
           ) : null}
         </View>
       </Screen>
-
-      <StatusSheet
-        visible={statusOpen}
-        initialState={data.State}
-        initialNote={data.GhiChu || ""}
-        onClose={() => setStatusOpen(false)}
-        onSubmit={updateStatus}
-      />
 
       <BottomSheet
         visible={menuOpen}
