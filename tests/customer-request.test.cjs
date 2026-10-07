@@ -218,3 +218,39 @@ test("timeOptions + splitDue/joinDue: hạn xử lý ngày + giờ (giờ VN)", 
   assert.equal(r.joinDue("2026-10-08", null), "2026-10-08T17:00:00");
   assert.equal(r.joinDue(null, "10:00"), null);
 });
+
+test("isCustomerSubmitted: created_by 'PORTAL' (fn_portal_request_create); chưa đọc được thì theo nguồn app / website", () => {
+  assert.equal(r.isCustomerSubmitted("PORTAL", null), true);
+  assert.equal(r.isCustomerSubmitted("portal", "hotline"), true);
+  assert.equal(r.isCustomerSubmitted("NV01", "app"), false);
+  assert.equal(r.isCustomerSubmitted(null, "app"), true);
+  assert.equal(r.isCustomerSubmitted(undefined, "website"), true);
+  assert.equal(r.isCustomerSubmitted(null, "hotline"), false);
+});
+
+test("lockedFields: yêu cầu khách gửi giữ nguyên phần khách gửi, chỉ mở phần quản lý", () => {
+  const base = { projectCode: "p-uuid", contractId: "pgc", category: "consult" };
+  const l = plain(r.lockedFields(true, base));
+  assert.deepEqual(l, {
+    customer: true,
+    project: true,
+    contract: true,
+    title: true,
+    content: true,
+    category: true,
+    source: true,
+  });
+  // Khách không gắn căn / không chọn loại → nhân viên được bổ sung (dự án bắt buộc để lưu)
+  const empty = plain(r.lockedFields(true, { projectCode: null, contractId: null, category: null }));
+  assert.equal(empty.project, false);
+  assert.equal(empty.category, false);
+  assert.equal(empty.contract, true);
+  // Nhân viên tự tiếp nhận → sửa tất cả
+  assert.deepEqual(Object.values(plain(r.lockedFields(false, base))), [false, false, false, false, false, false, false]);
+});
+
+test("isLockedAttachment: tệp khách tải lên (drive-files:) không xoá được; tệp nhân viên thêm thì được", () => {
+  assert.equal(r.isLockedAttachment(true, "drive-files:bee/yeu-cau/k1/a.jpg"), true);
+  assert.equal(r.isLockedAttachment(true, "https://upload.beesky.vn/a.jpg"), false);
+  assert.equal(r.isLockedAttachment(false, "drive-files:bee/a.jpg"), false);
+});

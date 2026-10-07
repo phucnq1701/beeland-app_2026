@@ -3,10 +3,11 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "reac
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { Camera, ChevronRight, FileUp, Image as ImageIcon, UserSearch, X } from "lucide-react-native";
+import { Camera, ChevronRight, FileUp, Image as ImageIcon, ShieldCheck, UserSearch, X } from "lucide-react-native";
 
 import { CustomerPickerSheet, type PickedCustomer } from "@/components/signing/PickerSheets";
 import { AttachmentList } from "@/components/signing/AttachmentList";
+import { LockedValue } from "@/components/request/LockedValue";
 import {
   AppHeader,
   BottomActionBar,
@@ -27,12 +28,17 @@ import {
 import {
   DEFAULT_NEW_STATUS,
   DEFAULT_PRIORITY,
+  isCustomerSubmitted,
+  isLockedAttachment,
   joinDue,
+  lockedFields,
   projectSaveCode,
   projectValueOf,
   splitDue,
   timeOptions,
   validateRequestForm,
+  type CustomerRequest,
+  type LockedFields,
   type RequestFormErrors,
   type YcCat,
 } from "@/lib/customerRequest";
@@ -108,12 +114,14 @@ const catOptions = (list: YcCat[], current: string | null, currentName?: string)
 };
 const fromSelect = (v: string) => (v === NONE ? null : v);
 const has = (list: YcCat[], code: string) => list.some((c) => c.ID === code);
+const UNLOCKED: LockedFields = lockedFields(false, { projectCode: null, contractId: null, category: null });
 
 /**
  * Tiếp nhận / sửa yêu cầu – như web RequestFormDrawer (fn_customer_request_save): Dự án *, Hợp đồng, Khách hàng
  * (tên * / SĐT / email), Tiêu đề *, Loại, Nguồn, Hạn xử lý, Ưu tiên, Trạng thái, Người tiếp nhận / xử lý,
  * Nội dung, Ghi chú nội bộ, Hình ảnh / tài liệu. Sửa = lưu đè toàn bộ trường (máy chủ upsert) nên giữ nguyên mọi giá trị cũ.
  * Khác web (mobile): chọn khách từ danh sách khách hàng; hợp đồng chọn trong giao dịch của khách đó.
+ * Yêu cầu KHÁCH tự gửi (created_by 'PORTAL'): giữ nguyên phần khách gửi (`lockedFields`), chỉ sửa phần quản lý.
  */
 export default function RequestFormScreen() {
   const router = useRouter();
@@ -136,6 +144,10 @@ export default function RequestFormScreen() {
   const [attachSheet, setAttachSheet] = useState(false);
   const pendingAttach = useRef<"camera" | "library" | "file" | null>(null);
   const saveLock = useRef(false);
+  /** Bản gốc khi sửa – lưu lại đúng giá trị khách gửi cho các trường bị khoá. */
+  const original = useRef<CustomerRequest | null>(null);
+  const [fromCustomer, setFromCustomer] = useState(false);
+  const [locked, setLocked] = useState<LockedFields>(UNLOCKED);
 
   const patch = (p: Partial<FormState>) => setForm((prev) => ({ ...prev, ...p }));
 
@@ -167,6 +179,10 @@ export default function RequestFormScreen() {
       }
 
       const d = await CustomerRequestService.get(editingId);
+      original.current = d;
+      const byCustomer = isCustomerSubmitted(d.createdBy, d.source);
+      setFromCustomer(byCustomer);
+      setLocked(lockedFields(byCustomer, d));
       const [att, label] = await Promise.all([
         CustomerRequestService.resolveAttachments(d.attachments).catch(() =>
           d.attachments.map((v) => ({ stored: v, url: "", fileName: v.split("/").pop() || "Tệp", image: false })),
@@ -325,19 +341,22 @@ export default function RequestFormScreen() {
     }
     saveLock.current = true;
     setSaving(true);
+    // Trường khoá (khách gửi) luôn gửi lại đúng giá trị gốc – máy chủ lưu đè toàn bộ trường
+    const o = original.current;
+    const keep = <T,>(isLocked: boolean, orig: T, cur: T): T => (isLocked && o ? orig : cur);
     try {
       const saved = await CustomerRequestService.save({
         id: editingId,
-        projectCode,
-        contractId: form.contractId,
-        customerId: form.customerId,
-        customerName: form.customerName,
-        customerPhone: form.customerPhone,
-        customerEmail: form.customerEmail,
-        title: form.title,
-        content: form.content,
-        category: form.category,
-        source: form.source,
+        projectCode: keep(locked.project, o?.projectCode ?? null, projectCode),
+        contractId: keep(locked.contract, o?.contractId ?? null, form.contractId),
+        customerId: keep(locked.customer, o?.customerId ?? null, form.customerId),
+        customerName: keep(locked.customer, o?.customerName ?? "", form.customerName),
+        customerPhone: keep(locked.customer, o?.customerPhone ?? "", form.customerPhone),
+        customerEmail: keep(locked.customer, o?.customerEmail ?? "", form.customerEmail),
+        title: keep(locked.title, o?.title ?? "", form.title),
+        content: keep(locked.content, o?.content ?? "", form.content),
+        category: keep(locked.category, o?.category ?? null, form.category),
+        source: keep(locked.source, o?.source ?? null, form.source),
         priority: form.priority,
         status: form.status,
         dueDate: joinDue(form.dueDay, form.dueTime),
@@ -412,12 +431,36 @@ export default function RequestFormScreen() {
         }
       >
         <View style={styles.body}>
+          {fromCustomer ? (
+            <View style={styles.banner}>
+              <ShieldCheck size={20} color={colors.info} />
+              <View style={styles.flex}>
+                <Text variant="subhead" color="onInfoSubtle">
+                  {names.source ? `Yêu cầu do khách gửi từ ${names.source}` : "Yêu cầu do khách gửi"}
+                </Text>
+                <Text variant="caption" color="onInfoSubtle">
+                  Nội dung khách gửi được giữ nguyên (ô có biểu tượng khoá). Bạn cập nhật phần xử lý: trạng thái, ưu
+                  tiên, hạn, người phụ trách, ghi chú nội bộ và có thể thêm tệp.
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
           {/* ── Khách hàng ── */}
           <Card style={styles.card}>
             <Text variant="subhead" style={styles.cardTitle}>
               Khách hàng
             </Text>
-            {form.customerId ? (
+            {locked.customer ? (
+              <>
+                <LockedValue label="Tên khách hàng" value={form.customerName} />
+                <LockedValue
+                  label="Liên hệ"
+                  value={[form.customerPhone, form.customerEmail].filter(Boolean).join(" · ")}
+                  placeholder="Chưa có SĐT / email"
+                />
+              </>
+            ) : form.customerId ? (
               <View style={styles.picked}>
                 <Pressable
                   accessibilityRole="button"
@@ -493,98 +536,127 @@ export default function RequestFormScreen() {
             <Text variant="subhead" style={styles.cardTitle}>
               Dự án & hợp đồng
             </Text>
-            <SelectField
-              variant="soft"
-              label="Dự án"
-              required
-              placeholder={lostProject ? names.project || names.projectCode : "Chọn dự án"}
-              value={form.projectId}
-              options={projectOptions}
-              error={errors.projectCode}
-              onChange={(v) => {
-                patch({ projectId: v });
-                if (errors.projectCode) setErrors((e) => ({ ...e, projectCode: undefined }));
-              }}
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Chọn hợp đồng / phiếu của khách"
-              disabled={!form.customerId && !form.contractId}
-              onPress={() => setContractOpen(true)}
-              style={({ pressed }) => [
-                styles.picker,
-                !form.customerId && !form.contractId ? styles.disabled : null,
-                pressed ? styles.pressed : null,
-              ]}
-            >
-              <View style={styles.flex}>
-                <Text variant="caption" color="textSecondary">
-                  Hợp đồng / phiếu
-                </Text>
-                <Text
-                  variant="body"
-                  weight="semibold"
-                  color={form.contractId ? "text" : "textTertiary"}
-                  numberOfLines={1}
-                >
-                  {form.contractId
-                    ? form.contractLabel || form.contractId
-                    : form.customerId
-                      ? "Chọn giao dịch của khách (không bắt buộc)"
-                      : "Chọn khách hàng trong danh sách để gắn hợp đồng"}
-                </Text>
-              </View>
-              {form.contractId ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Bỏ hợp đồng"
-                  hitSlop={8}
-                  onPress={() => patch({ contractId: null, contractLabel: null })}
-                  style={styles.clearBtn}
-                >
-                  <X size={16} color={colors.textSecondary} />
-                </Pressable>
-              ) : (
-                <ChevronRight size={20} color={colors.textTertiary} />
-              )}
-            </Pressable>
+            {locked.project ? (
+              <LockedValue
+                label="Dự án"
+                value={
+                  projectOptions.find((o) => o.value === form.projectId)?.label || names.project || names.projectCode || ""
+                }
+              />
+            ) : (
+              <SelectField
+                variant="soft"
+                label="Dự án"
+                required
+                placeholder={lostProject ? names.project || names.projectCode : "Chọn dự án"}
+                value={form.projectId}
+                options={projectOptions}
+                error={errors.projectCode}
+                onChange={(v) => {
+                  patch({ projectId: v });
+                  if (errors.projectCode) setErrors((e) => ({ ...e, projectCode: undefined }));
+                }}
+              />
+            )}
+            {locked.contract ? (
+              <LockedValue
+                label="Hợp đồng / phiếu"
+                value={form.contractId ? form.contractLabel || form.contractId : ""}
+                placeholder="Khách không gắn hợp đồng"
+              />
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Chọn hợp đồng / phiếu của khách"
+                disabled={!form.customerId && !form.contractId}
+                onPress={() => setContractOpen(true)}
+                style={({ pressed }) => [
+                  styles.picker,
+                  !form.customerId && !form.contractId ? styles.disabled : null,
+                  pressed ? styles.pressed : null,
+                ]}
+              >
+                <View style={styles.flex}>
+                  <Text variant="caption" color="textSecondary">
+                    Hợp đồng / phiếu
+                  </Text>
+                  <Text
+                    variant="body"
+                    weight="semibold"
+                    color={form.contractId ? "text" : "textTertiary"}
+                    numberOfLines={1}
+                  >
+                    {form.contractId
+                      ? form.contractLabel || form.contractId
+                      : form.customerId
+                        ? "Chọn giao dịch của khách (không bắt buộc)"
+                        : "Chọn khách hàng trong danh sách để gắn hợp đồng"}
+                  </Text>
+                </View>
+                {form.contractId ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Bỏ hợp đồng"
+                    hitSlop={8}
+                    onPress={() => patch({ contractId: null, contractLabel: null })}
+                    style={styles.clearBtn}
+                  >
+                    <X size={16} color={colors.textSecondary} />
+                  </Pressable>
+                ) : (
+                  <ChevronRight size={20} color={colors.textTertiary} />
+                )}
+              </Pressable>
+            )}
           </Card>
 
           {/* ── Nội dung yêu cầu ── */}
           <Card style={styles.card}>
             <Text variant="subhead" style={styles.cardTitle}>
-              Nội dung yêu cầu
+              {fromCustomer ? "Nội dung khách gửi" : "Nội dung yêu cầu"}
             </Text>
-            <TextField
-              variant="soft"
-              label="Tiêu đề"
-              required
-              value={form.title}
-              onChangeText={(t) => {
-                patch({ title: t });
-                if (errors.title) setErrors((e) => ({ ...e, title: undefined }));
-              }}
-              placeholder="Mô tả ngắn vấn đề khách phản ánh"
-              error={errors.title}
-              maxLength={300}
-            />
-            <SelectField
-              variant="soft"
-              label="Loại / chủ đề"
-              placeholder="Chọn loại"
-              value={form.category}
-              options={catOptions(catalogs.dm_loai_yeu_cau, form.category, names.category)}
-              onChange={(v) => patch({ category: fromSelect(v) })}
-            />
-            <TextField
-              variant="soft"
-              label="Nội dung chi tiết"
-              multiline
-              value={form.content}
-              onChangeText={(t) => patch({ content: t })}
-              placeholder="Mô tả chi tiết yêu cầu / khiếu nại…"
-              style={styles.textarea}
-            />
+            {locked.title ? (
+              <LockedValue label="Tiêu đề" value={form.title} />
+            ) : (
+              <TextField
+                variant="soft"
+                label="Tiêu đề"
+                required
+                value={form.title}
+                onChangeText={(t) => {
+                  patch({ title: t });
+                  if (errors.title) setErrors((e) => ({ ...e, title: undefined }));
+                }}
+                placeholder="Mô tả ngắn vấn đề khách phản ánh"
+                error={errors.title}
+                maxLength={300}
+              />
+            )}
+            {locked.category ? (
+              <LockedValue label="Loại / chủ đề" value={names.category || form.category || ""} />
+            ) : (
+              <SelectField
+                variant="soft"
+                label="Loại / chủ đề"
+                placeholder="Chọn loại"
+                value={form.category}
+                options={catOptions(catalogs.dm_loai_yeu_cau, form.category, names.category)}
+                onChange={(v) => patch({ category: fromSelect(v) })}
+              />
+            )}
+            {locked.content ? (
+              <LockedValue label="Nội dung chi tiết" value={form.content} placeholder="Khách không nhập nội dung" />
+            ) : (
+              <TextField
+                variant="soft"
+                label="Nội dung chi tiết"
+                multiline
+                value={form.content}
+                onChangeText={(t) => patch({ content: t })}
+                placeholder="Mô tả chi tiết yêu cầu / khiếu nại…"
+                style={styles.textarea}
+              />
+            )}
           </Card>
 
           {/* ── Phân loại & phân công ── */}
@@ -594,14 +666,18 @@ export default function RequestFormScreen() {
             </Text>
             <View style={styles.row}>
               <View style={styles.flex}>
-                <SelectField
-                  variant="soft"
-                  label="Nguồn tiếp nhận"
-                  placeholder="Chọn nguồn"
-                  value={form.source}
-                  options={catOptions(catalogs.dm_nguon_yeu_cau, form.source, names.source)}
-                  onChange={(v) => patch({ source: fromSelect(v) })}
-                />
+                {locked.source ? (
+                  <LockedValue label="Nguồn tiếp nhận" value={names.source || form.source || ""} />
+                ) : (
+                  <SelectField
+                    variant="soft"
+                    label="Nguồn tiếp nhận"
+                    placeholder="Chọn nguồn"
+                    value={form.source}
+                    options={catOptions(catalogs.dm_nguon_yeu_cau, form.source, names.source)}
+                    onChange={(v) => patch({ source: fromSelect(v) })}
+                  />
+                )}
               </View>
               <View style={styles.flex}>
                 <SelectField
@@ -694,7 +770,13 @@ export default function RequestFormScreen() {
               uploading={uploading}
               onAdd={() => setAttachSheet(true)}
               onRemove={(i) => patch({ files: form.files.filter((_, j) => j !== i) })}
+              canRemove={(i) => !isLockedAttachment(fromCustomer, form.files[i]?.stored ?? "")}
             />
+            {fromCustomer && form.files.some((f) => isLockedAttachment(true, f.stored)) ? (
+              <Text variant="caption" color="textTertiary">
+                Tệp khách gửi không xoá được; bạn có thể thêm tệp xử lý.
+              </Text>
+            ) : null}
           </Card>
         </View>
       </Screen>
@@ -893,6 +975,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   link: { alignSelf: "flex-start", paddingVertical: space.xs },
+  banner: {
+    flexDirection: "row",
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.xxl,
+    backgroundColor: colors.infoSubtle,
+  },
   textarea: { minHeight: 110, textAlignVertical: "top" },
   textareaSm: { minHeight: 72, textAlignVertical: "top" },
   sheetList: { maxHeight: 440 },

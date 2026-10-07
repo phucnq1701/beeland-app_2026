@@ -109,6 +109,11 @@ App giữ đúng như web ở các điểm dưới đây cho tới khi đội we
    để lưu đúng giờ VN; nếu DB chạy UTC thì hạn web nhập sẽ hiện sớm hơn 7 giờ trên app (và ngược lại trên web hiện đúng).
    Đề xuất web gửi kèm múi giờ. Ngoài ra app khác web ở: tiếp nhận mới **mặc định** trạng thái `new` "Mới tiếp nhận",
    ưu tiên `normal`, người tiếp nhận = người đăng nhập (web để trống; máy chủ vẫn tự gán người tiếp nhận) – xem `docs/requests.md`.
+10. **Yêu cầu khách tự gửi: app KHOÁ nội dung khách gửi, web vẫn cho sửa (người dùng quyết 2026-10-07).** Với yêu cầu
+    `created_by = 'PORTAL'` app không cho sửa thông tin khách, hợp đồng, tiêu đề, nội dung, nguồn, tệp khách gửi (dự án / loại
+    chỉ khi khách đã có) – chỉ sửa phần xử lý. Web `RequestFormDrawer` và máy chủ `fn_customer_request_save` vẫn cho sửa mọi trường
+    → nội dung khách gửi vẫn có thể bị đổi từ web. Đề xuất web khoá tương tự và máy chủ giữ nguyên các cột này khi
+    `created_by = 'PORTAL'`.
 
 ## 1. Mục tiêu và bối cảnh
 

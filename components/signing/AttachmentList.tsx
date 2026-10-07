@@ -18,11 +18,14 @@ export function AttachmentList({
   items,
   onAdd,
   onRemove,
+  canRemove,
   uploading,
 }: {
   items: Attachment[];
   onAdd?: () => void;
   onRemove?: (index: number) => void;
+  /** Có `onRemove` mà tệp này trả false → không hiện nút xoá (vd tệp khách gửi). */
+  canRemove?: (index: number) => boolean;
   uploading?: boolean;
 }) {
   const router = useRouter();
@@ -73,7 +76,7 @@ export function AttachmentList({
                   </View>
                 )}
               </Pressable>
-              {onRemove ? (
+              {onRemove && (canRemove ? canRemove(i) : true) ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Bỏ ${a.fileName || "tệp đính kèm"}`}

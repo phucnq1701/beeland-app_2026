@@ -157,6 +157,8 @@ export type CustomerRequest = {
   attachments: string[];
   createdAt: string | null;
   updatedAt: string | null;
+  /** `created_by` (mã NV hoặc 'PORTAL' = khách tự gửi) – `_ccr_json` không trả, service đọc riêng; null = chưa đọc. */
+  createdBy: string | null;
 };
 
 const s = (v: unknown): string => (v == null ? '' : String(v));
@@ -195,6 +197,7 @@ export function fromApiItem(it: any): CustomerRequest {
     attachments: list.map((a: unknown) => (typeof a === 'string' ? a.trim() : '')).filter(Boolean),
     createdAt: str(it?.NgayTao),
     updatedAt: str(it?.NgayCapNhat),
+    createdBy: str(it?.created_by),
   };
 }
 
@@ -358,4 +361,52 @@ export function splitDue(iso: string | null | undefined): { day: string | null; 
 export function joinDue(day: string | null, time: string | null): string | null {
   if (!day) return null;
   return `${day}T${time || '17:00'}:00`;
+}
+
+/** Nguồn máy chủ tự gán khi khách tự gửi (`fn_portal_request_create` `p_nguon`). */
+const PORTAL_SOURCES = ['app', 'website'];
+
+/**
+ * Yêu cầu do KHÁCH tự gửi (app / web khách hàng): `created_by = 'PORTAL'`. Không đọc được `created_by`
+ * thì xét nguồn `app` / `website` (nghiêng về khoá để không sửa nhầm nội dung khách gửi).
+ */
+export function isCustomerSubmitted(createdBy: string | null | undefined, source: string | null | undefined): boolean {
+  if (createdBy != null && String(createdBy).trim()) return String(createdBy).trim().toUpperCase() === 'PORTAL';
+  return PORTAL_SOURCES.includes(String(source ?? '').trim().toLowerCase());
+}
+
+export type LockedFields = {
+  customer: boolean;
+  project: boolean;
+  contract: boolean;
+  title: boolean;
+  content: boolean;
+  category: boolean;
+  source: boolean;
+};
+
+/**
+ * Trường KHÔNG được sửa với yêu cầu khách gửi – giữ đúng những gì khách gửi (người dùng yêu cầu 2026-10-07):
+ * khách (tên / SĐT / email), hợp đồng, tiêu đề, nội dung, nguồn; dự án và loại chỉ khoá khi khách đã có
+ * (khách không gắn căn / không chọn loại thì nhân viên bổ sung – dự án bắt buộc để lưu).
+ * Phần quản lý luôn sửa được: trạng thái, ưu tiên, hạn, người tiếp nhận / xử lý, ghi chú nội bộ, thêm tệp.
+ */
+export function lockedFields(
+  fromCustomer: boolean,
+  v: { projectCode: string | null; contractId: string | null; category: string | null },
+): LockedFields {
+  return {
+    customer: fromCustomer,
+    project: fromCustomer && !!str(v.projectCode),
+    contract: fromCustomer,
+    title: fromCustomer,
+    content: fromCustomer,
+    category: fromCustomer && !!str(v.category),
+    source: fromCustomer,
+  };
+}
+
+/** Tệp khách tải lên (kho riêng `drive-files:`) của yêu cầu khách gửi → không cho xoá. */
+export function isLockedAttachment(fromCustomer: boolean, stored: string): boolean {
+  return fromCustomer && isStoredFile(stored);
 }

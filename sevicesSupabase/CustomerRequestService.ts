@@ -106,11 +106,18 @@ export const CustomerRequestService = {
     return { rows: rows.map(fromApiItem), total: Number(res?.total ?? rows.length) };
   },
 
+  /** Chi tiết + `created_by` (đọc bảng – RLS cho nhân viên cùng công ty) để biết yêu cầu khách tự gửi. */
   get: async (id: string): Promise<CustomerRequest> => {
-    const res = await rpc<any>("fn_customer_request_get", { p_id: id }, "Không tải được yêu cầu");
+    const [res, createdBy] = await Promise.all([
+      rpc<any>("fn_customer_request_get", { p_id: id }, "Không tải được yêu cầu"),
+      axiosApiSupabase
+        .get("rest/v1/cloud_customer_requests", { params: { select: "created_by", id: `eq.${id}`, limit: "1" } })
+        .then((r) => (Array.isArray(r.data) && r.data[0]?.created_by ? String(r.data[0].created_by) : null))
+        .catch(() => null),
+    ]);
     const d = Array.isArray(res) ? res[0] : res;
     if (!d) throw new Error("Không tìm thấy yêu cầu");
-    return fromApiItem(d);
+    return { ...fromApiItem(d), createdBy };
   },
 
   /** Thêm (không `id`) hoặc sửa – máy chủ ghi đè toàn bộ trường, tự cấp số phiếu, người tiếp nhận mặc định = người đăng nhập. */

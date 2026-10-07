@@ -38,6 +38,13 @@ Tenant và người thao tác do máy chủ lấy từ JWT (`company_id`, `ma_nv
 - Bắt buộc như web: Dự án, Tên khách hàng, Tiêu đề. Ô chọn danh mục có "Không chọn"; mã đang lưu không còn trong danh mục vẫn hiện để lưu lại không mất.
 - Dự án: ô chọn dùng uuid; mở yêu cầu cũ đổi `MaDA` (mã hoặc uuid) → uuid (`projectValueOf`, như web `projectCodeOf`); lưu gửi `ma_da_code`
   (thiếu thì uuid). Dự án cũ không còn trong danh sách → vẫn lưu giá trị cũ, ô hiện tên cũ làm gợi ý.
+- **Yêu cầu khách tự gửi – giữ nguyên nội dung khách gửi** (người dùng yêu cầu 2026-10-07): nhận biết bằng `created_by = 'PORTAL'`
+  (service đọc riêng cột này ở `cloud_customer_requests`, RLS cho nhân viên cùng công ty; không đọc được → nguồn `app`/`website`).
+  Form sửa hiện băng "Yêu cầu do khách gửi…" và ô khoá (`LockedValue`, viền nét đứt + biểu tượng khoá) cho: tên / SĐT / email khách,
+  hợp đồng, tiêu đề, nội dung, nguồn; dự án và loại chỉ khoá khi khách đã có (trống thì nhân viên bổ sung – dự án bắt buộc).
+  Tệp khách tải lên (`drive-files:`) không xoá được, nhân viên vẫn thêm / xoá tệp của mình. Khi lưu, các trường khoá luôn gửi lại
+  **giá trị gốc** (không lấy từ form) vì máy chủ ghi đè toàn bộ trường (`lockedFields`, `isLockedAttachment`). Sửa được: trạng thái,
+  ưu tiên, hạn, người tiếp nhận / xử lý, ghi chú nội bộ. Chi tiết hiện nhãn "Khách tự gửi", card "Nội dung khách gửi".
 - Hợp đồng chỉ chọn được khi khách được chọn từ danh sách (cần uuid khách); đổi khách → bỏ hợp đồng; chọn hợp đồng → tự đặt dự án của phiếu.
 - Hạn xử lý: ngày + giờ (30 phút, mặc định 17:00; chọn giờ khi chưa có ngày → hôm nay); lưu `…+07:00`, đọc ra giờ VN (`splitDue`).
 - Quá hạn: có hạn, đã qua, trạng thái không phải `completed`/`closed`/`cancelled` (như báo cáo web).
@@ -53,6 +60,8 @@ Tenant và người thao tác do máy chủ lấy từ JWT (`company_id`, `ma_nv
 - `DateField` có `variant="soft"` (thêm cho form này); `CustomerPickerSheet` trả thêm `email`, `onAddNew` không bắt buộc (không truyền → ẩn nút thêm khách).
 
 ## Tồn đọng
+
+- Khoá nội dung khách gửi mới làm ở app; web và máy chủ (`fn_customer_request_save`) vẫn cho sửa (spec 0.2 mục 10).
 
 - Chưa có Báo cáo yêu cầu (web `bao-cao-yeu-cau`), màn Danh mục / Cấu hình tổng đài – làm trên web.
 - Chưa báo (push) cho nhân viên khi khách gửi yêu cầu mới (web cũng chưa có).

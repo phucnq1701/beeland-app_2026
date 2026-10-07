@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { AlarmClock, ClipboardCheck, MoreVertical, Pencil, Phone, Trash2 } from "lucide-react-native";
+import { AlarmClock, ClipboardCheck, MoreVertical, Pencil, Phone, ShieldCheck, Trash2 } from "lucide-react-native";
 
 import { AttachmentList } from "@/components/signing/AttachmentList";
 import { catMeta } from "@/components/request/RequestRowItem";
@@ -24,7 +24,7 @@ import {
   Text,
   useToast,
 } from "@/components/ui";
-import { isOverdue, mapCatalog, type CustomerRequest, type RequestLog } from "@/lib/customerRequest";
+import { isCustomerSubmitted, isOverdue, mapCatalog, type CustomerRequest, type RequestLog } from "@/lib/customerRequest";
 import { formatDateTime } from "@/lib/format";
 import { colors, elevation, radius, space } from "@/theme";
 import {
@@ -168,6 +168,7 @@ export default function RequestDetailScreen() {
   const category = catMeta(cats.dm_loai_yeu_cau, data.category, data.categoryName);
   const source = catMeta(cats.dm_nguon_yeu_cau, data.source, data.sourceName);
   const overdue = isOverdue(data, Date.now());
+  const fromCustomer = isCustomerSubmitted(data.createdBy, data.source);
   const phone = data.customerPhone.trim();
 
   return (
@@ -200,6 +201,7 @@ export default function RequestDetailScreen() {
               Tiếp nhận {data.createdAt ? formatDateTime(data.createdAt) : "—"}
             </Text>
             <View style={styles.heroTags}>
+              {fromCustomer ? <Badge label="Khách tự gửi" tone="brand" icon={ShieldCheck} /> : null}
               {data.dueDate ? (
                 <Badge
                   label={`${overdue ? "Quá hạn" : "Hạn"} ${formatDateTime(data.dueDate)}`}
@@ -248,7 +250,7 @@ export default function RequestDetailScreen() {
 
           <Card style={styles.card}>
             <Text variant="subhead" style={styles.cardTitle}>
-              Nội dung
+              {fromCustomer ? "Nội dung khách gửi" : "Nội dung"}
             </Text>
             <Text variant="body" color={data.content ? "text" : "textSecondary"}>
               {data.content || "Không có nội dung chi tiết."}
