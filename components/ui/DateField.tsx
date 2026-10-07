@@ -17,13 +17,23 @@ export type DateFieldProps = {
   placeholder?: string;
   minimumDate?: Date;
   maximumDate?: Date;
+  /** `soft`: cùng kiểu TextField / SelectField soft (nền xám nhạt, không viền, bo lớn) – đặt trong card trắng. */
+  variant?: 'default' | 'soft';
 };
 
 /**
  * Ô chọn ngày. Android: hộp chọn ngày của hệ thống; iOS: bánh xe trong BottomSheet + nút "Xong"
  * (chỉ áp dụng khi bấm Xong). Picker luôn nền sáng (spec: DateTimePicker sáng).
  */
-export function DateField({ label, value, onChange, placeholder = 'Chọn ngày', minimumDate, maximumDate }: DateFieldProps) {
+export function DateField({
+  label,
+  value,
+  onChange,
+  placeholder = 'Chọn ngày',
+  minimumDate,
+  maximumDate,
+  variant = 'default',
+}: DateFieldProps) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<Date>(value ?? new Date());
 
@@ -41,7 +51,7 @@ export function DateField({ label, value, onChange, placeholder = 'Chọn ngày'
         accessibilityRole="button"
         accessibilityLabel={`${label}: ${value ? formatDate(value) : placeholder}`}
         onPress={show}
-        style={({ pressed }) => [styles.box, pressed ? styles.pressed : null]}
+        style={({ pressed }) => [styles.box, variant === 'soft' ? styles.soft : null, pressed ? styles.pressed : null]}
       >
         <Text variant="body" color={value ? 'text' : 'textTertiary'} style={styles.value}>
           {value ? formatDate(value) : placeholder}
@@ -101,6 +111,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderStrong,
     backgroundColor: colors.surface,
+  },
+  soft: {
+    minHeight: 50,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    backgroundColor: colors.surfaceMuted,
   },
   pressed: { backgroundColor: colors.surfaceMuted },
   value: { flex: 1 },

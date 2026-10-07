@@ -45,6 +45,10 @@ const UI_STRICT_FILES = [
   'app/signings.tsx',
   'app/signing/**/*.{ts,tsx}',
   'components/signing/**/*.{ts,tsx}',
+  // Yêu cầu khách hàng
+  'app/requests.tsx',
+  'app/request/**/*.{ts,tsx}',
+  'components/request/**/*.{ts,tsx}',
   // Giai đoạn 6 – đăng nhập, media
   'app/login.tsx',
   'app/register.tsx',

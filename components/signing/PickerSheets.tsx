@@ -101,7 +101,14 @@ export function DepositPickerSheet({
   );
 }
 
-export type PickedCustomer = { id: string; name: string; phone: string; idNo: string; isPersonal: boolean };
+export type PickedCustomer = {
+  id: string;
+  name: string;
+  phone: string;
+  idNo: string;
+  isPersonal: boolean;
+  email: string;
+};
 
 /** Chọn khách hàng từ danh mục (tên / SĐT / CCCD); có nút thêm khách mới cá nhân / doanh nghiệp. */
 export function CustomerPickerSheet({
@@ -117,7 +124,8 @@ export function CustomerPickerSheet({
   excludeIds: string[];
   onClose: () => void;
   onPick: (c: PickedCustomer) => void;
-  onAddNew: (personal: boolean) => void;
+  /** Không truyền → ẩn 2 nút thêm khách mới. */
+  onAddNew?: (personal: boolean) => void;
 }) {
   const [query, setQuery] = useState("");
   const debounced = useDebouncedValue(query, 350);
@@ -139,6 +147,7 @@ export function CustomerPickerSheet({
             phone: c.dien_thoai || "",
             idNo: c.cccd || c.ma_so_thue_ct || "",
             isPersonal: c.is_personal !== false,
+            email: c.email || "",
           })),
         );
       })
@@ -152,6 +161,7 @@ export function CustomerPickerSheet({
     <BottomSheet visible={visible} onClose={onClose} title={title}>
       <View style={styles.body}>
         <SearchBar value={query} onChangeText={setQuery} placeholder="Tên / SĐT / CCCD" variant="soft" />
+        {onAddNew ? (
         <View style={styles.addRow}>
           <Button
             variant="secondary"
@@ -168,6 +178,7 @@ export function CustomerPickerSheet({
             style={styles.addBtn}
           />
         </View>
+        ) : null}
         <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
           {shown.map((c) => (
             <Row

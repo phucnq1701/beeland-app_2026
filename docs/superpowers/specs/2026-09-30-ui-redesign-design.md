@@ -103,6 +103,12 @@ App giữ đúng như web ở các điểm dưới đây cho tới khi đội we
    bắt gửi yêu cầu. Thực tế nhiều người trùng tên nên **app không kiểm tiêu chí `full_name`** (`duplicateValues` trong
    `lib/customerRules.ts`), chỉ SĐT/CCCD/email (cá nhân) và MST (doanh nghiệp). Web vẫn kiểm → cùng khách có thể lưu được
    trên app nhưng bị chặn trên web; đề xuất web bỏ tiêu chí này hoặc công ty đặt "Họ tên / Tên công ty" = Cho phép.
+9. **Yêu cầu khách hàng: hạn xử lý gửi không kèm múi giờ (chưa kiểm chứng trên DB).** Web `RequestFormDrawer` gửi
+   `ThoiHan` dạng `YYYY-MM-DDTHH:mm:ss` (không múi) → `fn_customer_request_save` ép `::timestamptz` theo múi giờ phiên DB
+   (mặc định Supabase là UTC) → có thể lệch 7 giờ khi đọc lại. **App gửi kèm `+07:00`** (`lib/customerRequest.ts` `toApiPayload`)
+   để lưu đúng giờ VN; nếu DB chạy UTC thì hạn web nhập sẽ hiện sớm hơn 7 giờ trên app (và ngược lại trên web hiện đúng).
+   Đề xuất web gửi kèm múi giờ. Ngoài ra app khác web ở: tiếp nhận mới **mặc định** trạng thái `new` "Mới tiếp nhận",
+   ưu tiên `normal`, người tiếp nhận = người đăng nhập (web để trống; máy chủ vẫn tự gán người tiếp nhận) – xem `docs/requests.md`.
 
 ## 1. Mục tiêu và bối cảnh
 

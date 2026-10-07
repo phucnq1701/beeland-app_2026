@@ -55,6 +55,7 @@ Test: `tests/*.test.cjs`, nạp TS bằng `tests/helpers/loadTs.cjs` (file thu�
 | Khách hàng: trùng khách, bắt buộc nhập, sửa/xoá, giao dịch | `docs/customers.md` |
 | Đặt cọc, hợp đồng, lịch thanh toán, phiếu thu | `docs/deposits-contracts.md` |
 | Đặt lịch ký (ca, loại thủ tục, lịch, tệp đính kèm) | `docs/signing.md` |
+| Yêu cầu khách hàng (tiếp nhận, xử lý, lịch sử, tệp khách gửi) | `docs/requests.md` |
 | Báo cáo (thu tiền, HĐ, sắp đến hạn, quá hạn) | `docs/reports.md` |
 | Tài liệu / ảnh / video dự án | `docs/media.md` |
 | Token, component UI, quy tắc màn danh sách, lint | `docs/design-system.md` |
@@ -66,7 +67,7 @@ Test: `tests/*.test.cjs`, nạp TS bằng `tests/helpers/loadTs.cjs` (file thu�
 |---|---|
 | `app/` | Màn (expo-router). `(tabs)/` = tab bar; `[id]` = tham số route |
 | `components/ui/` | Bộ component dùng chung (design system) |
-| `components/<module>/` | Khối dùng chung theo module (booking, product, customer, sales, reports, media, home) |
+| `components/<module>/` | Khối dùng chung theo module (booking, product, customer, sales, reports, media, home, signing, request) |
 | `lib/` | Logic thuần có test (trạng thái căn, giá, tiền, luật khách, định dạng…) |
 | `sevicesSupabase/` | Service gọi Supabase (REST/RPC/edge function) – nơi chính |
 | `sevices/` | Service gọi API .NET cũ – chỉ còn vài màn dùng (xem `docs/data-access.md`) |

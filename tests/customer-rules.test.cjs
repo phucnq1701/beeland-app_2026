@@ -157,13 +157,14 @@ test("stage labels and transaction mapping", () => {
     { products: { s1: { ky_hieu: "B2-608", ma_sp: "SP1" } }, projects: { d1: { ten_da: "Dự án A" } }, statuses: { t1: { item_name: "Đã cọc", color_code: "#123456" } } }
   );
   assert.deepEqual(plain(t), {
-    id: "p1", soPhieu: "BK-1", giaiDoan: "DATCOC", stageLabel: "Đặt cọc", tenDA: "Dự án A", kyHieu: "B2-608",
+    id: "p1", soPhieu: "BK-1", giaiDoan: "DATCOC", stageLabel: "Đặt cọc", tenDA: "Dự án A", projectId: "d1", kyHieu: "B2-608",
     giaTri: 800, tienCoc: 50, daThu: 20, status: "Đã cọc", statusColor: "#123456", createdAt: "2026-09-01T00:00:00Z",
   });
   const bare = r.mapCustomerTransaction({ id: "p2", gia_tri_hd: 700 }, { products: {}, projects: {}, statuses: {} });
   assert.equal(bare.giaTri, 700);
   assert.equal(bare.stageLabel, "Giữ chỗ / booking");
   assert.equal(bare.soPhieu, "");
+  assert.equal(bare.projectId, null);
 });
 
 test("transactionTarget: giai đoạn → màn chi tiết (cọc / hợp đồng / còn lại là booking)", () => {

@@ -1,4 +1,4 @@
-import { LucideIcon, Building2, DoorOpen, Calendar, CalendarCheck, Lock, BookOpen, Users, DollarSign, FileText, BarChart3, Landmark } from 'lucide-react-native';
+import { LucideIcon, Building2, DoorOpen, Calendar, CalendarCheck, Lock, BookOpen, Users, DollarSign, FileText, BarChart3, Landmark, MessageSquareText } from 'lucide-react-native';
 
 export interface Feature {
   id: string;
@@ -86,5 +86,12 @@ export const features: Feature[] = [
     icon: CalendarCheck,
     backgroundColor: 'rgba(99, 102, 241, 0.2)',
     iconColor: '#6366F1',
+  },
+  {
+    id: '15',
+    title: 'Yêu cầu KH',
+    icon: MessageSquareText,
+    backgroundColor: 'rgba(20, 184, 166, 0.2)',
+    iconColor: '#14B8A6',
   },
 ];

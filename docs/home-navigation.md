@@ -27,6 +27,7 @@ Danh mục tính năng: `mocks/features.ts` (id 1–14). Logic chung: `lib/featu
 | 9 | Báo cáo | `/reports` | |
 | 13 | Đặt cọc | `/deposits` | ✓ |
 | 14 | Đặt lịch ký | `/signings` (`docs/signing.md`) | ✓ **chỉ đại lý** – nội bộ ẩn (`AGENCY_ONLY_FEATURE_IDS`) |
+| 15 | Yêu cầu KH | `/requests` (`docs/requests.md`) | |
 
 - `visibleFeatureIds`: bỏ id không có route, id trong `HIDDEN_FEATURE_IDS`, id ngoài quyền đại lý (`AGENCY_FEATURE_IDS`),
   và với tài khoản nội bộ bỏ id chỉ dành cho đại lý (`AGENCY_ONLY_FEATURE_IDS` = `14`). Kiểm 1 id: `isFeatureAllowed(id, isAgency)`.

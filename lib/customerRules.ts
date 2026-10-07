@@ -507,6 +507,8 @@ export type CustomerTransaction = {
   giaiDoan: string;
   stageLabel: string;
   tenDA: string;
+  /** uuid dự án (da_projects.id). */
+  projectId: string | null;
   kyHieu: string;
   giaTri: number | null;
   tienCoc: number | null;
@@ -537,6 +539,7 @@ export function mapCustomerTransaction(
     giaiDoan,
     stageLabel: stageLabel(giaiDoan),
     tenDA: t(da.ten_da),
+    projectId: t(row?.project_id) || null,
     kyHieu: t(sp.ky_hieu) || t(sp.ma_sp),
     giaTri: num(row?.gia_tri_hd_sau_ck) ?? num(row?.gia_tri_hd),
     tienCoc: num(row?.tien_coc),

@@ -15,6 +15,7 @@ export const FEATURE_ROUTES: Record<string, string> = {
   '9': '/reports',
   '13': '/deposits',
   '14': '/signings',
+  '15': '/requests',
 };
 
 /**
