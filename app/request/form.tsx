@@ -431,7 +431,7 @@ export default function RequestFormScreen() {
         }
       >
         <View style={styles.body}>
-          {fromCustomer ? (
+          {/* {fromCustomer ? (
             <View style={styles.banner}>
               <ShieldCheck size={20} color={colors.info} />
               <View style={styles.flex}>
@@ -444,7 +444,7 @@ export default function RequestFormScreen() {
                 </Text>
               </View>
             </View>
-          ) : null}
+          ) : null} */}
 
           {/* ── Khách hàng ── */}
           <Card style={styles.card}>
