@@ -1,4 +1,4 @@
-import { LucideIcon, Building2, DoorOpen, Calendar, CalendarCheck, Lock, BookOpen, Users, DollarSign, FileText, BarChart3, Landmark, MessageSquareText } from 'lucide-react-native';
+import { LucideIcon, Building2, DoorOpen, Calendar, CalendarCheck, Lock, BookOpen, Users, DollarSign, FileText, BarChart3, Landmark, MessageSquareText, MessagesSquare } from 'lucide-react-native';
 
 export interface Feature {
   id: string;
@@ -93,5 +93,13 @@ export const features: Feature[] = [
     icon: MessageSquareText,
     backgroundColor: 'rgba(20, 184, 166, 0.2)',
     iconColor: '#14B8A6',
+  },
+  {
+    // Tin nhắn: BeeChat khách hàng + chat nội bộ / đại lý (app/chat/index.tsx). Không làm tab menu (màn không nhúng được).
+    id: '16',
+    title: 'Tin nhắn',
+    icon: MessagesSquare,
+    backgroundColor: 'rgba(14, 165, 233, 0.2)',
+    iconColor: '#0EA5E9',
   },
 ];

@@ -12,7 +12,7 @@
 
 ## Tính năng và quyền
 
-Danh mục tính năng: `mocks/features.ts` (id 1–14). Logic chung: `lib/featureConfig.ts` (có test `tests/feature-config.test.cjs`).
+Danh mục tính năng: `mocks/features.ts` (id 1–16). Logic chung: `lib/featureConfig.ts` (có test `tests/feature-config.test.cjs`).
 
 | id | Tính năng | Route | Đại lý |
 |---|---|---|---|
@@ -28,6 +28,7 @@ Danh mục tính năng: `mocks/features.ts` (id 1–14). Logic chung: `lib/featu
 | 13 | Đặt cọc | `/deposits` | ✓ |
 | 14 | Đặt lịch ký | `/signings` (`docs/signing.md`) | ✓ **chỉ đại lý** – nội bộ ẩn (`AGENCY_ONLY_FEATURE_IDS`) |
 | 15 | Yêu cầu KH | `/requests` (`docs/requests.md`) | |
+| 16 | Tin nhắn | `/chat` (`docs/chat.md`) – không làm tab menu (màn không nhúng được) | ✓ (khu chat Đại lý) |
 
 - `visibleFeatureIds`: bỏ id không có route, id trong `HIDDEN_FEATURE_IDS`, id ngoài quyền đại lý (`AGENCY_FEATURE_IDS`),
   và với tài khoản nội bộ bỏ id chỉ dành cho đại lý (`AGENCY_ONLY_FEATURE_IDS` = `14`). Kiểm 1 id: `isFeatureAllowed(id, isAgency)`.

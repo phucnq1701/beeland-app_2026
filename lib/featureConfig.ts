@@ -16,6 +16,7 @@ export const FEATURE_ROUTES: Record<string, string> = {
   '13': '/deposits',
   '14': '/signings',
   '15': '/requests',
+  '16': '/chat',
 };
 
 /**
@@ -28,8 +29,8 @@ export function routeForFeature(id: string): string | null {
   return FEATURE_ROUTES[id] ?? null;
 }
 
-/** Tài khoản đại lý chỉ dùng: Dự án, Sản phẩm, Booking, Đặt cọc, Đặt lịch ký. */
-export const AGENCY_FEATURE_IDS = ['1', '2', '5', '13', '14'] as const;
+/** Tài khoản đại lý chỉ dùng: Dự án, Sản phẩm, Booking, Đặt cọc, Đặt lịch ký, Tin nhắn (khu chat Đại lý). */
+export const AGENCY_FEATURE_IDS = ['1', '2', '5', '13', '14', '16'] as const;
 
 /** Tính năng CHỈ dành cho đại lý – tài khoản nội bộ không thấy. '14' = Đặt lịch ký (yêu cầu người dùng 2026-10-02). */
 export const AGENCY_ONLY_FEATURE_IDS: readonly string[] = ['14'];
