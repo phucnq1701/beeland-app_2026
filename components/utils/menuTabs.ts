@@ -27,6 +27,7 @@ export const MENU_TAB_FEATURE_IDS: string[] = [
   '13', // Đặt cọc
   '14', // Đặt lịch ký
   '15', // Yêu cầu khách hàng
+  '16', // Tin nhắn
 ];
 
 export const DEFAULT_MENU_TAB_IDS: string[] = features

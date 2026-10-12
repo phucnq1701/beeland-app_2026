@@ -21,6 +21,7 @@ import ReportsScreen from '@/app/reports/index';
 import DepositsScreen from '@/app/deposits';
 import SigningsScreen from '@/app/signings';
 import RequestsScreen from '@/app/requests';
+import ChatInboxScreen from '@/app/chat/index';
 
 /** Map feature id → màn hình tương ứng hiển thị trong tab menu */
 const SCREEN_MAP: Record<string, ComponentType<{ embedded?: boolean }>> = {
@@ -35,6 +36,7 @@ const SCREEN_MAP: Record<string, ComponentType<{ embedded?: boolean }>> = {
   '13': DepositsScreen,
   '14': SigningsScreen,
   '15': RequestsScreen,
+  '16': ChatInboxScreen,
 };
 
 interface FeatureTabScreenProps {

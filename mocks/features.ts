@@ -95,7 +95,7 @@ export const features: Feature[] = [
     iconColor: '#14B8A6',
   },
   {
-    // Tin nhắn: BeeChat khách hàng + chat nội bộ / đại lý (app/chat/index.tsx). Không làm tab menu (màn không nhúng được).
+    // Tin nhắn: BeeChat khách hàng + chat nội bộ / đại lý (app/chat/index.tsx, nhúng được vào tab menu – prop `embedded`).
     id: '16',
     title: 'Tin nhắn',
     icon: MessagesSquare,

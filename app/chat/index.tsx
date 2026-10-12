@@ -12,6 +12,9 @@ import type { ChatKhu } from "@/lib/chat";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, space } from "@/theme";
 
+/** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
+const TAB_BAR_SPACE = 100;
+
 const KHU_LABEL: Record<"beechat" | "noi_bo" | "dai_ly", string> = { beechat: "Khách hàng", noi_bo: "Nội bộ", dai_ly: "Đại lý" };
 const EMPTY_TEXT: Record<"beechat" | "noi_bo" | "dai_ly", string> = {
   beechat: "Tin nhắn khách gửi từ app khách hàng và widget website sẽ hiện ở đây.",
@@ -25,7 +28,7 @@ const EMPTY_TEXT: Record<"beechat" | "noi_bo" | "dai_ly", string> = {
  * dai_ly; BeeChat khách chỉ cho nội bộ).
  * Hội thoại khách kênh app: mọi NV có quyền BeeChat đều thấy (server lọc), bấm vào để "Tham gia" rồi trả lời.
  */
-export default function ChatInboxScreen() {
+export default function ChatInboxScreen({ embedded }: { embedded?: boolean }) {
   const router = useRouter();
   const session = useChatSession();
   const me = session.me;
@@ -44,6 +47,7 @@ export default function ChatInboxScreen() {
     <AppHeader
       variant="soft"
       title="Tin nhắn"
+      hideBack={embedded}
       actions={
         <View style={styles.actions}>
           <IconButton icon={UsersRound} variant="soft" accessibilityLabel="Tạo nhóm" onPress={() => router.push("/chat/create-group")} />
@@ -69,7 +73,7 @@ export default function ChatInboxScreen() {
         data={inbox.loading ? [] : inbox.items}
         keyExtractor={(it) => it.conversation.id}
         renderItem={({ item }) => <ConversationRow item={item} onPress={open} />}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, embedded && { paddingBottom: TAB_BAR_SPACE + space.lg }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={inbox.refreshing} onRefresh={() => void inbox.refresh()} tintColor={colors.primary} />}
         onEndReached={() => void inbox.loadMore()}

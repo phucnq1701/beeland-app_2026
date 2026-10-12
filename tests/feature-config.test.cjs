@@ -121,7 +121,7 @@ test("Yêu cầu khách hàng (15): có màn /requests, chỉ tài khoản nội
   assert.equal(f.isFeatureAllowed("15", true), false);
 });
 
-test("Tin nhắn (16): có màn /chat, nội bộ và đại lý đều dùng, không làm tab menu", () => {
+test("Tin nhắn (16): có màn /chat, nội bộ và đại lý đều dùng", () => {
   assert.equal(f.routeForFeature("16"), "/chat");
   assert.equal(f.isFeatureAllowed("16", false), true);
   assert.equal(f.isFeatureAllowed("16", true), true);
