@@ -33,6 +33,10 @@ const UI_STRICT_FILES = [
   'app/customer/**/*.{ts,tsx}',
   'app/contacts.tsx',
   'components/customer/**/*.{ts,tsx}',
+  // Chat (BeeChat khách + nội bộ / đại lý)
+  'app/chat/**/*.{ts,tsx}',
+  'app/(tabs)/ai-chat.tsx',
+  'components/chat/**/*.{ts,tsx}',
   // Giai đoạn 5 – cọc, hợp đồng, báo cáo
   'app/deposits.tsx',
   'app/deposit/**/*.{ts,tsx}',

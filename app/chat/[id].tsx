@@ -1,779 +1,202 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TextInput,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  Image,
-  Alert,
-} from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  ArrowLeft,
-  Send,
-  Paperclip,
-  Image as ImageIcon,
-  File,
-  X,
-  Smile,
-  Users,
-} from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
-import { colors } from "@/theme";
-import {
-  chatGroups,
-  chatMessages,
-  ChatMessage,
-  currentUserId,
-} from '@/mocks/chatGroups';
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { CheckCircle2, LogIn, RotateCcw, Smartphone, Users } from "lucide-react-native";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, FlatList, StyleSheet, View } from "react-native";
 
-const MessageItem = React.memo(
-  ({ item, isGroup }: { item: ChatMessage; isGroup: boolean }) => {
-    const isMyMessage = item.senderId === currentUserId;
+import { ChatComposer } from "@/components/chat/ChatComposer";
+import { MessageRow } from "@/components/chat/MessageRow";
+import { useChatThread } from "@/components/chat/useChat";
+import { AppHeader, Button, ErrorState, IconButton, Screen, Skeleton, Text, confirm, useToast } from "@/components/ui";
+import { canJoinCustomer, chatRows, detailTitle, NGUON_LABEL, type ChatRow } from "@/lib/chat";
+import { ChatService } from "@/sevicesSupabase/ChatService";
+import { colors, radius, space } from "@/theme";
 
-    const formatFileSize = (bytes?: number): string => {
-      if (!bytes) return '';
-      if (bytes < 1024) return `${bytes} B`;
-      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    };
-
-    return (
-      <View
-        style={[
-          styles.messageContainer,
-          isMyMessage ? styles.myMessageContainer : styles.otherMessageContainer,
-        ]}
-      >
-        {!isMyMessage && isGroup && (
-          <Text style={styles.senderNameLabel}>{item.senderName}</Text>
-        )}
-
-        <View
-          style={[
-            styles.messageBubble,
-            isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble,
-          ]}
-        >
-          {item.attachments && item.attachments.length > 0 && (
-            <View style={styles.attachmentContainer}>
-              {item.attachments.map((attachment) => {
-                if (attachment.type.startsWith('image/')) {
-                  return (
-                    <Image
-                      key={attachment.id}
-                      source={{ uri: attachment.uri }}
-                      style={styles.imageAttachment}
-                      resizeMode="cover"
-                    />
-                  );
-                } else {
-                  return (
-                    <View key={attachment.id} style={styles.documentAttachment}>
-                      <File color={colors.primary} size={24} />
-                      <View style={styles.documentInfo}>
-                        <Text style={styles.documentName} numberOfLines={1}>
-                          {attachment.name}
-                        </Text>
-                        <Text style={styles.documentSize}>
-                          {formatFileSize(attachment.size)}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                }
-              })}
-            </View>
-          )}
-
-          {item.content ? (
-            <Text
-              style={[
-                styles.messageText,
-                isMyMessage ? styles.myMessageText : styles.otherMessageText,
-              ]}
-            >
-              {item.content}
-            </Text>
-          ) : null}
-
-          <Text
-            style={[
-              styles.messageTime,
-              isMyMessage ? styles.myMessageTime : styles.otherMessageTime,
-            ]}
-          >
-            {item.timestamp.toLocaleTimeString('vi-VN', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </Text>
-        </View>
-      </View>
-    );
-  },
-  (prevProps, nextProps) => {
-    return (
-      prevProps.item.id === nextProps.item.id &&
-      prevProps.item.status === nextProps.item.status &&
-      prevProps.isGroup === nextProps.isGroup
-    );
-  }
-);
-
-MessageItem.displayName = 'MessageItem';
-
-export default function ChatConversationScreen() {
+/**
+ * Một cuộc trò chuyện (BeeChat khách / nội bộ / đại lý) – cùng RPC web (fn_chat_conversation_get / messages / send / join /
+ * customer_status). Hội thoại khách mình chưa là thành viên: chỉ xem + nút "Tham gia" (admin, hoặc kênh app – web
+ * pages/customers/quan-ly/beechat/index.tsx). Thành viên hội thoại khách: Đóng / Mở lại ngay trên header.
+ */
+export default function ChatThreadScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const flatListRef = useRef<FlatList>(null);
+  const toast = useToast();
+  const t = useChatThread(String(id));
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
 
-  const group = chatGroups.find((g) => g.id === id);
-  const [messages, setMessages] = useState<ChatMessage[]>(
-    chatMessages[id] || []
+  const d = t.detail;
+  const me = t.me;
+  const c = d?.conversation;
+  const isMember = !!d?.me;
+  const customer = c?.loai === "customer";
+  const joinable = !!me && !!c && !isMember && canJoinCustomer(me, c);
+
+  const names = useMemo(() => new Map((d?.members ?? []).map((m) => [m.employee_id, m.ho_ten])), [d?.members]);
+  const nameOf = useCallback(
+    (eid: string) => (eid === me?.employee_id ? "Bạn" : names.get(eid) ?? "Nhân viên"),
+    [me?.employee_id, names],
   );
-  const [inputText, setInputText] = useState<string>('');
-  const [attachments, setAttachments] = useState<{
-    id: string;
-    name: string;
-    type: string;
-    uri: string;
-    size?: number;
-  }[]>([]);
-  const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
+  // FlatList đảo ngược: dòng mới nhất ở đầu mảng.
+  const rows = useMemo(() => (me ? chatRows(t.messages, me.employee_id, t.readAt).reverse() : []), [t.messages, t.readAt, me]);
 
-  const emojis = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓'];
-  
-  const stickers = [
-    { emoji: '❤️', name: 'love' },
-    { emoji: '🔥', name: 'fire' },
-    { emoji: '👍', name: 'thumbs up' },
-    { emoji: '👏', name: 'clap' },
-    { emoji: '🎉', name: 'party' },
-    { emoji: '🎊', name: 'celebrate' },
-    { emoji: '✨', name: 'sparkles' },
-    { emoji: '⭐', name: 'star' },
-    { emoji: '💯', name: '100' },
-    { emoji: '💪', name: 'strong' },
-    { emoji: '🙏', name: 'pray' },
-    { emoji: '👌', name: 'ok' },
-    { emoji: '✌️', name: 'peace' },
-    { emoji: '🤝', name: 'handshake' },
-    { emoji: '🎯', name: 'target' },
-    { emoji: '🚀', name: 'rocket' },
-    { emoji: '💎', name: 'gem' },
-    { emoji: '🏆', name: 'trophy' },
-    { emoji: '🎁', name: 'gift' },
-    { emoji: '🌟', name: 'glowing star' },
-    { emoji: '💫', name: 'dizzy' },
-    { emoji: '🌈', name: 'rainbow' },
-    { emoji: '☀️', name: 'sun' },
-    { emoji: '🌙', name: 'moon' },
-    { emoji: '⚡', name: 'lightning' },
-    { emoji: '🌸', name: 'blossom' },
-    { emoji: '🌺', name: 'flower' },
-    { emoji: '🌹', name: 'rose' },
-    { emoji: '🍀', name: 'clover' },
-    { emoji: '🎈', name: 'balloon' },
-    { emoji: '🎀', name: 'ribbon' },
-    { emoji: '💝', name: 'gift heart' },
-    { emoji: '💖', name: 'sparkling heart' },
-    { emoji: '💗', name: 'growing heart' },
-    { emoji: '💓', name: 'beating heart' },
-    { emoji: '💞', name: 'revolving hearts' },
-    { emoji: '💕', name: 'two hearts' },
-    { emoji: '💌', name: 'love letter' },
-    { emoji: '🎶', name: 'music' },
-    { emoji: '🎵', name: 'note' },
-  ];
+  const run = async (fn: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await fn();
+    } catch (e) {
+      toast.show({ type: "error", message: e instanceof Error ? e.message : "Thao tác thất bại" });
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
 
-  const renderMessage = useCallback(
-    ({ item }: { item: ChatMessage }) => (
-      <MessageItem item={item} isGroup={group?.type === 'group'} />
+  const join = () => run(async () => {
+    t.setDetail(await ChatService.join(String(id)));
+    toast.show({ type: "success", message: "Đã tham gia cuộc trò chuyện" });
+  });
+
+  const toggleStatus = async () => {
+    if (!c) return;
+    const closing = c.trang_thai !== "closed";
+    if (closing && !(await confirm({ title: "Đóng hội thoại?", message: "Khách nhắn lại thì hội thoại tự mở lại.", confirmText: "Đóng hội thoại" }))) return;
+    await run(async () => {
+      t.setDetail(await ChatService.customerStatus(String(id), closing ? "closed" : "open"));
+      toast.show({ type: "success", message: closing ? "Đã đóng hội thoại" : "Đã mở lại hội thoại" });
+    });
+  };
+
+  const kenh = c?.kenh ?? d?.contact?.nguon ?? "";
+  const subtitle = !c
+    ? undefined
+    : customer
+      ? [NGUON_LABEL[kenh] ?? kenh, c.trang_thai === "closed" ? "Đã đóng" : "Đang mở"].filter(Boolean).join(" · ")
+      : c.loai === "group"
+        ? `${d?.members.length ?? 0} thành viên`
+        : undefined;
+
+  const header = (
+    <AppHeader
+      variant="soft"
+      title={d && me ? detailTitle(d, me.employee_id) : "Tin nhắn"}
+      subtitle={subtitle}
+      actions={
+        c ? (
+          <View style={styles.actions}>
+            {customer && isMember ? (
+              <IconButton
+                icon={c.trang_thai === "closed" ? RotateCcw : CheckCircle2}
+                variant="soft"
+                accessibilityLabel={c.trang_thai === "closed" ? "Mở lại hội thoại" : "Đóng hội thoại"}
+                onPress={() => void toggleStatus()}
+                disabled={busy}
+              />
+            ) : null}
+            {c.loai !== "direct" ? (
+              <IconButton
+                icon={Users}
+                variant="soft"
+                accessibilityLabel={customer ? "Thông tin khách và nhân viên xử lý" : "Thành viên nhóm"}
+                onPress={() => router.push({ pathname: "/chat/manage-members/[groupId]", params: { groupId: String(id) } })}
+              />
+            ) : null}
+          </View>
+        ) : null
+      }
+    />
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: ChatRow }) => (
+      <MessageRow
+        row={item}
+        showNames={c?.loai !== "direct"}
+        nameOf={nameOf}
+        onRetry={(mid) => void t.retry(mid).then((err) => err && toast.show({ type: "error", message: err }))}
+        onDiscard={t.discard}
+      />
     ),
-    [group?.type]
+    [c?.loai, nameOf, t, toast],
   );
 
-  const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
-
-  const getItemLayout = useCallback(
-    (_: any, index: number) => ({
-      length: 80,
-      offset: 80 * index,
-      index,
-    }),
-    []
-  );
-
-  useEffect(() => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-  }, [messages]);
-
-  if (!group) {
-    return (
-      <View style={styles.container}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <Text>Không tìm thấy cuộc trò chuyện</Text>
-      </View>
-    );
+  let footer: React.ReactNode = null;
+  if (d && me) {
+    if (isMember) footer = <ChatComposer onSend={t.send} />;
+    else if (joinable) {
+      footer = (
+        <View style={styles.joinBar}>
+          <Text variant="caption" color="textSecondary" align="center">
+            {kenh === "app" ? "Khách nhắn từ app khách hàng. Tham gia để trả lời." : "Bạn đang xem hội thoại chưa tham gia."}
+          </Text>
+          <Button title="Tham gia để trả lời" icon={LogIn} onPress={() => void join()} loading={busy} fullWidth />
+        </View>
+      );
+    } else {
+      footer = (
+        <View style={styles.joinBar}>
+          <Text variant="caption" color="textSecondary" align="center">
+            Bạn không còn trong cuộc trò chuyện này.
+          </Text>
+        </View>
+      );
+    }
   }
 
-  const handleSend = () => {
-    if (!inputText.trim() && attachments.length === 0) return;
-
-    const newMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      senderId: currentUserId,
-      senderName: 'Nguyễn Văn A',
-      content: inputText.trim(),
-      timestamp: new Date(),
-      type: attachments.length > 0
-        ? attachments[0].type.startsWith('image/')
-          ? 'image'
-          : 'document'
-        : 'text',
-      attachments: attachments.length > 0 ? attachments : undefined,
-      status: 'sent',
-    };
-
-    setMessages((prev) => [...prev, newMessage]);
-    setInputText('');
-    setAttachments([]);
-    setShowEmojiPicker(false);
-
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-  };
-
-  const handleSelectEmoji = (emoji: string) => {
-    setInputText((prev) => prev + emoji);
-  };
-
-  const handlePickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Thông báo', 'Cần cấp quyền truy cập thư viện ảnh');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: false,
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      setAttachments([
-        {
-          id: `attach-${Date.now()}`,
-          name: asset.fileName || `image-${Date.now()}.jpg`,
-          type: 'image/jpeg',
-          uri: asset.uri,
-        },
-      ]);
-    }
-  };
-
-  const handlePickDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        copyToCacheDirectory: true,
-      });
-
-      if (result.canceled === false && result.assets[0]) {
-        const asset = result.assets[0];
-        setAttachments([
-          {
-            id: `attach-${Date.now()}`,
-            name: asset.name,
-            type: asset.mimeType || 'application/octet-stream',
-            uri: asset.uri,
-            size: asset.size,
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error('Error picking document:', error);
-    }
-  };
-
-  const handleRemoveAttachment = (id: string) => {
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
-  };
-
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-    >
+    <Screen header={header} footer={footer} scroll={false} padded={false} keyboardAware>
       <Stack.Screen options={{ headerShown: false }} />
-
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <ArrowLeft color={colors.text} size={24} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.headerInfo}
-          onPress={() => {
-            if (group.type === 'group') {
-              router.push(`/chat/manage-members/${group.id}`);
-            }
-          }}
-          disabled={group.type !== 'group'}
-        >
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {group.name}
-          </Text>
-          {group.type === 'group' && (
-            <Text style={styles.headerSubtitle}>
-              {group.members.length} thành viên
-            </Text>
-          )}
-        </TouchableOpacity>
-        {group.type === 'group' && (
-          <TouchableOpacity
-            style={styles.manageMembersButton}
-            onPress={() => router.push(`/chat/manage-members/${group.id}`)}
-          >
-            <Users color={colors.primary} size={22} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={keyExtractor}
-        getItemLayout={getItemLayout}
-        contentContainerStyle={styles.messagesContent}
-        showsVerticalScrollIndicator={false}
-        initialNumToRender={20}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-        removeClippedSubviews={true}
-        onContentSizeChange={() =>
-          flatListRef.current?.scrollToEnd({ animated: true })
-        }
-      />
-
-      {showEmojiPicker && (
-        <View style={styles.emojiPickerContainer}>
-          <View style={styles.emojiPickerHeader}>
-            <Text style={styles.emojiPickerTitle}>Emoji & Stickers</Text>
-            <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
-              <X color={colors.textSecondary} size={20} />
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.emojiSection}>
-            <Text style={styles.emojiSectionTitle}>😊 Emoji</Text>
-            <View style={styles.emojiGrid}>
-              {emojis.map((emoji, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.emojiButton}
-                  onPress={() => handleSelectEmoji(emoji)}
-                >
-                  <Text style={styles.emojiText}>{emoji}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.emojiSection}>
-            <Text style={styles.emojiSectionTitle}>✨ Stickers</Text>
-            <View style={styles.emojiGrid}>
-              {stickers.map((sticker, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.stickerButton}
-                  onPress={() => handleSelectEmoji(sticker.emoji)}
-                >
-                  <Text style={styles.stickerText}>{sticker.emoji}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+      {t.loading ? (
+        <View style={styles.skeleton}>
+          <Skeleton width="62%" height={56} radius={radius.xl} />
+          <Skeleton width="48%" height={44} radius={radius.xl} style={styles.skelMine} />
+          <Skeleton width="70%" height={64} radius={radius.xl} />
         </View>
+      ) : t.error && !d ? (
+        <ErrorState description={t.error} onRetry={() => void t.reload()} />
+      ) : (
+        <FlatList
+          inverted
+          data={rows}
+          keyExtractor={(r) => r.key}
+          renderItem={renderItem}
+          onEndReached={() => void t.loadOlder()}
+          onEndReachedThreshold={0.3}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          contentContainerStyle={styles.list}
+          ListFooterComponent={
+            t.loadingOlder ? (
+              <ActivityIndicator color={colors.primary} style={styles.older} />
+            ) : customer && !t.hasMore && kenh === "app" ? (
+              <View style={styles.channelNote}>
+                <Smartphone size={14} color={colors.success} />
+                <Text variant="label" color="textSecondary">
+                  Khách nhắn từ app khách hàng
+                </Text>
+              </View>
+            ) : null
+          }
+        />
       )}
-
-      {attachments.length > 0 && (
-        <View style={styles.attachmentPreview}>
-          {attachments.map((attachment) => {
-            if (attachment.type.startsWith('image/')) {
-              return (
-                <View key={attachment.id} style={styles.previewImageContainer}>
-                  <Image
-                    source={{ uri: attachment.uri }}
-                    style={styles.previewImage}
-                    resizeMode="cover"
-                  />
-                  <TouchableOpacity
-                    style={styles.removeAttachmentButton}
-                    onPress={() => handleRemoveAttachment(attachment.id)}
-                  >
-                    <X color={colors.surface} size={16} />
-                  </TouchableOpacity>
-                </View>
-              );
-            } else {
-              return (
-                <View key={attachment.id} style={styles.previewDocument}>
-                  <File color={colors.primary} size={20} />
-                  <Text style={styles.previewDocumentName} numberOfLines={1}>
-                    {attachment.name}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => handleRemoveAttachment(attachment.id)}
-                  >
-                    <X color={colors.textTertiary} size={18} />
-                  </TouchableOpacity>
-                </View>
-              );
-            }
-          })}
-        </View>
-      )}
-
-      <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 8 }]}>
-        <View style={styles.attachmentButtons}>
-          <TouchableOpacity
-            style={styles.attachButton}
-            onPress={handlePickImage}
-          >
-            <ImageIcon color={colors.primary} size={22} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.attachButton}
-            onPress={handlePickDocument}
-          >
-            <Paperclip color={colors.primary} size={22} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.attachButton, showEmojiPicker && styles.attachButtonActive]}
-            onPress={() => setShowEmojiPicker(!showEmojiPicker)}
-          >
-            <Smile color={showEmojiPicker ? colors.surface : colors.primary} size={22} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.input}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="Nhập tin nhắn..."
-            placeholderTextColor={colors.textTertiary}
-            multiline
-            maxLength={1000}
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              (!inputText.trim() && attachments.length === 0) &&
-                styles.sendButtonDisabled,
-            ]}
-            onPress={handleSend}
-            disabled={!inputText.trim() && attachments.length === 0}
-          >
-            <Send color={colors.surface} size={20} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  actions: { flexDirection: "row", gap: space.sm },
+  list: { paddingHorizontal: space.lg, paddingVertical: space.md },
+  skeleton: { gap: space.md, padding: space.lg },
+  skelMine: { alignSelf: "flex-end" },
+  older: { marginVertical: space.md },
+  channelNote: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xs, marginTop: space.sm },
+  joinBar: {
+    gap: space.sm,
+    padding: space.lg,
+    paddingBottom: space.x3,
     backgroundColor: colors.surface,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerInfo: {
-    flex: 1,
-    paddingVertical: 4,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: colors.text,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  manageMembersButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  messagesContent: {
-    padding: 16,
-    gap: 12,
-  },
-  messageContainer: {
-    maxWidth: '80%',
-  },
-  myMessageContainer: {
-    alignSelf: 'flex-end',
-  },
-  otherMessageContainer: {
-    alignSelf: 'flex-start',
-  },
-  senderNameLabel: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginBottom: 4,
-    marginLeft: 12,
-  },
-  messageBubble: {
-    borderRadius: 16,
-    padding: 12,
-  },
-  myMessageBubble: {
-    backgroundColor: colors.primary,
-    borderBottomRightRadius: 4,
-  },
-  otherMessageBubble: {
-    backgroundColor: colors.surface,
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  myMessageText: {
-    color: colors.surface,
-  },
-  otherMessageText: {
-    color: colors.text,
-  },
-  messageTime: {
-    fontSize: 11,
-    marginTop: 4,
-  },
-  myMessageTime: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'right',
-  },
-  otherMessageTime: {
-    color: colors.textTertiary,
-  },
-  attachmentContainer: {
-    marginBottom: 8,
-  },
-  imageAttachment: {
-    width: 200,
-    height: 200,
-    borderRadius: 8,
-  },
-  documentAttachment: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 12,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-  },
-  documentInfo: {
-    flex: 1,
-  },
-  documentName: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.text,
-  },
-  documentSize: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  attachmentPreview: {
-    flexDirection: 'row',
-    padding: 12,
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    gap: 8,
-  },
-  previewImageContainer: {
-    position: 'relative',
-  },
-  previewImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-  },
-  removeAttachmentButton: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#EF4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  previewDocument: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 8,
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    maxWidth: 200,
-  },
-  previewDocumentName: {
-    flex: 1,
-    fontSize: 13,
-    color: colors.text,
-  },
-  inputContainer: {
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  attachmentButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  attachButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF4ED',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-    backgroundColor: colors.surface,
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.text,
-    maxHeight: 100,
-    paddingVertical: 8,
-  },
-  sendButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sendButtonDisabled: {
-    backgroundColor: colors.textTertiary,
-    opacity: 0.5,
-  },
-  attachButtonActive: {
-    backgroundColor: colors.primary,
-  },
-  emojiPickerContainer: {
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    maxHeight: 360,
-  },
-  emojiPickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  emojiPickerTitle: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: colors.text,
-  },
-  emojiSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  emojiSectionTitle: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.textSecondary,
-    marginBottom: 12,
-  },
-  emojiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  emojiButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 8,
-    backgroundColor: colors.surface,
-  },
-  emojiText: {
-    fontSize: 28,
-  },
-  stickerButton: {
-    width: 52,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  stickerText: {
-    fontSize: 32,
+    borderTopLeftRadius: radius.x3,
+    borderTopRightRadius: radius.x3,
   },
 });

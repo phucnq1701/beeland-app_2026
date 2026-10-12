@@ -40,5 +40,5 @@ kiểu soft: nền nhạt cùng độ đậm `*Subtle`, chữ đậm, không vi�
 
 ## Tồn đọng
 
-- Màn mẫu (chat, phiếu thu, bàn giao, AI chat, tính giá) chỉ đổi sang token, chưa thiết kế lại; chữ trắng trên nền màu ở đó
+- Màn mẫu (phiếu thu, bàn giao, tính giá) chỉ đổi sang token, chưa thiết kế lại; chữ trắng trên nền màu ở đó
   đang dùng `colors.surface` thay vì `colors.onPrimary` (cùng giá trị).

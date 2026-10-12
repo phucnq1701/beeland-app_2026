@@ -1,582 +1,256 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-} from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  ArrowLeft,
-  Search,
-  UserPlus,
-  UserX,
-  Shield,
-  User,
-  Check,
-  X as XIcon,
-} from 'lucide-react-native';
-import { colors } from "@/theme";
-import { chatGroups, ChatMember, currentUserId } from '@/mocks/chatGroups';
-import { contacts } from '@/mocks/contacts';
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { LogOut, Mail, Phone, Smartphone, UserPlus, UserRound, UserX } from "lucide-react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
-export default function ManageGroupMembersScreen() {
+import { ContactPicker } from "@/components/chat/ContactPicker";
+import { loadChatMe } from "@/components/chat/useChat";
+import {
+  AppHeader, Avatar, BottomActionBar, Button, Card, ErrorState, Screen, SkeletonDetail, Text, confirm, useToast,
+} from "@/components/ui";
+import { detailTitle, NGUON_LABEL, type ChatContact, type ChatConversationDetail, type ChatMe, type ChatMember } from "@/lib/chat";
+import { ChatService } from "@/sevicesSupabase/ChatService";
+import { colors, elevation, radius, space } from "@/theme";
+
+const ROLE_LABEL: Record<string, string> = { owner: "Trưởng nhóm", admin: "Quản trị", member: "" };
+
+/**
+ * Thành viên / thông tin cuộc trò chuyện (nhóm hoặc khách). Quyền theo _chat_can (server kiểm lại):
+ * nhóm – thêm / xoá người khi mình là owner/admin (không xoá owner); hội thoại khách – thành viên thêm được NV xử lý,
+ * chỉ xoá người thêm tay (`nguon_them = thu_cong`); ai cũng rời được (owner rời → server chuyển owner).
+ */
+export default function ChatMembersScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const id = String(groupId);
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const toast = useToast();
+  const [me, setMe] = useState<ChatMe | null>(null);
+  const [d, setD] = useState<ChatConversationDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
 
-  const group = chatGroups.find((g) => g.id === groupId);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [showAddMember, setShowAddMember] = useState<boolean>(false);
-  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const [m, detail] = await Promise.all([loadChatMe(), ChatService.conversationGet(id)]);
+      setMe(m);
+      setD(detail);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không tải được thông tin");
+    }
+  }, [id]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  if (!group) {
+  const run = async (fn: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await fn();
+    } catch (e) {
+      toast.show({ type: "error", message: e instanceof Error ? e.message : "Thao tác thất bại" });
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+
+  const c = d?.conversation;
+  const customer = c?.loai === "customer";
+  const myRole = d?.me?.vai_tro ?? null;
+  const isMember = !!d?.me;
+  const canManage = isMember && (customer || myRole === "owner" || myRole === "admin");
+  const canRemove = (m: ChatMember) =>
+    canManage && m.employee_id !== me?.employee_id && (customer ? m.nguon_them === "thu_cong" : m.vai_tro !== "owner");
+
+  const remove = async (m: ChatMember) => {
+    if (!(await confirm({ title: `Xoá ${m.ho_ten} khỏi cuộc trò chuyện?`, confirmText: "Xoá", destructive: true }))) return;
+    await run(async () => {
+      setD(await ChatService.membersRemove(id, [m.employee_id]));
+      toast.show({ type: "success", message: `Đã xoá ${m.ho_ten}` });
+    });
+  };
+
+  const leave = async () => {
+    if (!(await confirm({ title: "Rời cuộc trò chuyện?", message: "Bạn sẽ không nhận tin nhắn mới của cuộc trò chuyện này.", confirmText: "Rời", destructive: true }))) return;
+    await run(async () => {
+      await ChatService.leave(id);
+      toast.show({ type: "success", message: "Đã rời cuộc trò chuyện" });
+      router.dismissTo("/chat");
+    });
+  };
+
+  const addPicked = () => run(async () => {
+    setD(await ChatService.membersAdd(id, [...picked]));
+    toast.show({ type: "success", message: `Đã thêm ${picked.size} người` });
+    setPicked(new Set());
+    setAdding(false);
+  });
+
+  const toggle = (ct: ChatContact) =>
+    setPicked((cur) => {
+      const next = new Set(cur);
+      if (next.has(ct.employee_id)) next.delete(ct.employee_id);
+      else next.add(ct.employee_id);
+      return next;
+    });
+
+  if (adding && me && d) {
     return (
-      <View style={styles.container}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <Text>Không tìm thấy nhóm</Text>
-      </View>
-    );
-  }
-
-  const isAdmin = group.members.find(
-    (m) => m.id === currentUserId && m.role === 'admin'
-  );
-
-  const availableContacts = contacts.filter(
-    (contact) => !group.members.some((member) => member.id === contact.id)
-  );
-
-  const filteredMembers = group.members.filter((member) =>
-    member.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const filteredContacts = availableContacts.filter((contact) =>
-    contact.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const handleRemoveMember = (memberId: string, memberName: string) => {
-    if (!isAdmin) {
-      Alert.alert('Thông báo', 'Chỉ quản trị viên mới có thể xóa thành viên');
-      return;
-    }
-
-    if (memberId === currentUserId) {
-      Alert.alert('Thông báo', 'Bạn không thể xóa chính mình khỏi nhóm');
-      return;
-    }
-
-    Alert.alert(
-      'Xác nhận',
-      `Bạn có chắc chắn muốn xóa "${memberName}" khỏi nhóm?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert('Thành công', `Đã xóa ${memberName} khỏi nhóm`);
-          },
-        },
-      ]
-    );
-  };
-
-  const handleToggleAdmin = (memberId: string, memberName: string, isCurrentlyAdmin: boolean) => {
-    if (!isAdmin) {
-      Alert.alert('Thông báo', 'Chỉ quản trị viên mới có thể thay đổi quyền');
-      return;
-    }
-
-    const action = isCurrentlyAdmin ? 'gỡ quyền quản trị viên' : 'cấp quyền quản trị viên';
-    Alert.alert(
-      'Xác nhận',
-      `Bạn có chắc chắn muốn ${action} cho "${memberName}"?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xác nhận',
-          onPress: () => {
-            Alert.alert('Thành công', `Đã ${action} cho ${memberName}`);
-          },
-        },
-      ]
-    );
-  };
-
-  const toggleContactSelection = (contactId: string) => {
-    setSelectedContacts((prev) =>
-      prev.includes(contactId)
-        ? prev.filter((id) => id !== contactId)
-        : [...prev, contactId]
-    );
-  };
-
-  const handleAddMembers = () => {
-    if (selectedContacts.length === 0) {
-      Alert.alert('Thông báo', 'Vui lòng chọn ít nhất một thành viên');
-      return;
-    }
-
-    Alert.alert(
-      'Thành công',
-      `Đã thêm ${selectedContacts.length} thành viên vào nhóm`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            setSelectedContacts([]);
-            setShowAddMember(false);
-          },
-        },
-      ]
-    );
-  };
-
-  const renderMemberItem = ({ item }: { item: ChatMember }) => {
-    const isCurrentUser = item.id === currentUserId;
-    const isMemberAdmin = item.role === 'admin';
-
-    return (
-      <View style={styles.memberItem}>
-        <View style={styles.memberAvatar}>
-          <Text style={styles.memberAvatarText}>
-            {item.name.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-        
-        <View style={styles.memberInfo}>
-          <View style={styles.memberNameRow}>
-            <Text style={styles.memberName}>
-              {item.name}
-              {isCurrentUser && ' (Bạn)'}
-            </Text>
-            {isMemberAdmin && (
-              <View style={styles.adminBadge}>
-                <Shield size={12} color={colors.primary} />
-                <Text style={styles.adminBadgeText}>Admin</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {isAdmin && !isCurrentUser && (
-          <View style={styles.memberActions}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => handleToggleAdmin(item.id, item.name, isMemberAdmin)}
-            >
-              {isMemberAdmin ? (
-                <Shield size={20} color={colors.textSecondary} />
-              ) : (
-                <Shield size={20} color={colors.textTertiary} />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.removeButton]}
-              onPress={() => handleRemoveMember(item.id, item.name)}
-            >
-              <UserX size={20} color="#EF4444" />
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  const renderContactItem = ({ item }: { item: typeof contacts[0] }) => {
-    const isSelected = selectedContacts.includes(item.id);
-
-    return (
-      <TouchableOpacity
-        style={styles.contactItem}
-        onPress={() => toggleContactSelection(item.id)}
+      <Screen
+        header={<AppHeader variant="soft" title={customer ? "Thêm nhân viên xử lý" : "Thêm thành viên"} onBack={() => setAdding(false)} />}
+        footer={
+          <BottomActionBar>
+            <Button title={picked.size ? `Thêm ${picked.size} người` : "Chọn người để thêm"} onPress={() => void addPicked()} disabled={!picked.size} loading={busy} fullWidth />
+          </BottomActionBar>
+        }
+        scroll={false}
+        padded={false}
       >
-        <View style={styles.contactAvatar}>
-          <Text style={styles.contactAvatarText}>
-            {item.name.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-        <View style={styles.contactInfo}>
-          <Text style={styles.contactName}>{item.name}</Text>
-          <Text style={styles.contactRole}>{item.role || 'Thành viên'}</Text>
-        </View>
-        <View
-          style={[
-            styles.checkbox,
-            isSelected && styles.checkboxSelected,
-          ]}
-        >
-          {isSelected && <Check color={colors.surface} size={16} />}
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  if (showAddMember) {
-    return (
-      <View style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
-
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => {
-              setShowAddMember(false);
-              setSelectedContacts([]);
-            }}
-          >
-            <ArrowLeft color={colors.text} size={24} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Thêm thành viên</Text>
-          <TouchableOpacity
-            style={[
-              styles.addButton,
-              selectedContacts.length === 0 && styles.addButtonDisabled,
-            ]}
-            onPress={handleAddMembers}
-            disabled={selectedContacts.length === 0}
-          >
-            <Text
-              style={[
-                styles.addButtonText,
-                selectedContacts.length === 0 && styles.addButtonTextDisabled,
-              ]}
-            >
-              Thêm
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.searchContainer}>
-          <View style={styles.searchBox}>
-            <Search size={20} color={colors.textTertiary} />
-            <TextInput
-              style={styles.searchInput}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Tìm kiếm..."
-              placeholderTextColor={colors.textTertiary}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <XIcon size={20} color={colors.textTertiary} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        <View style={styles.selectedCount}>
-          <Text style={styles.selectedCountText}>
-            Đã chọn {selectedContacts.length} người
-          </Text>
-        </View>
-
-        <FlatList
-          data={filteredContacts}
-          renderItem={renderContactItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: insets.bottom + 20 },
-          ]}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <User size={48} color={colors.textTertiary} />
-              <Text style={styles.emptyText}>
-                {searchQuery ? 'Không tìm thấy thành viên' : 'Không có thành viên để thêm'}
-              </Text>
-            </View>
-          }
-        />
-      </View>
+        <ContactPicker me={me} selected={picked} onToggle={toggle} excludeIds={d.members.map((m) => m.employee_id)} />
+      </Screen>
     );
   }
+
+  const title = customer ? "Thông tin hội thoại" : "Thành viên nhóm";
+  const header = <AppHeader variant="soft" title={title} subtitle={d && me ? detailTitle(d, me.employee_id) : undefined} />;
+  if (error && !d) {
+    return (
+      <Screen header={header} scroll={false}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ErrorState description={error} onRetry={() => void load()} />
+      </Screen>
+    );
+  }
+  if (!d || !me) {
+    return (
+      <Screen header={header} scroll={false} padded={false}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SkeletonDetail />
+      </Screen>
+    );
+  }
+
+  const ct = d.contact;
+  const kenh = c?.kenh ?? ct?.nguon ?? "";
 
   return (
-    <View style={styles.container}>
+    <Screen header={header} scroll={false} padded={false}>
       <Stack.Screen options={{ headerShown: false }} />
+      <ScrollView contentContainerStyle={styles.content}>
+        {customer && ct ? (
+          <Card style={styles.card}>
+            <View style={styles.contactHead}>
+              <Avatar name={ct.ho_ten || "Khách"} size={56} round />
+              <View style={styles.flex}>
+                <Text variant="heading" numberOfLines={2}>
+                  {ct.ho_ten || "Khách vãng lai"}
+                </Text>
+                <View style={styles.kenhRow}>
+                  {kenh === "app" ? <Smartphone size={14} color={colors.success} /> : null}
+                  <Text variant="caption" color="textSecondary">
+                    {NGUON_LABEL[kenh] ?? kenh}
+                  </Text>
+                </View>
+              </View>
+            </View>
+            {ct.customer ? (
+              <InfoRow icon={<UserRound size={18} color={colors.textSecondary} />} label="Hồ sơ khách hàng"
+                value={[ct.customer.ten_kh, ct.customer.ma_so_kh].filter(Boolean).join(" · ")}
+                onPress={() => router.push({ pathname: "/customer/[id]", params: { id: ct.customer!.id } })} />
+            ) : null}
+            {ct.dien_thoai ? <InfoRow icon={<Phone size={18} color={colors.textSecondary} />} label="Điện thoại" value={ct.dien_thoai} /> : null}
+            {ct.email ? <InfoRow icon={<Mail size={18} color={colors.textSecondary} />} label="Email" value={ct.email} /> : null}
+          </Card>
+        ) : null}
 
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <ArrowLeft color={colors.text} size={24} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Quản lý thành viên</Text>
-        {isAdmin && (
-          <TouchableOpacity
-            style={styles.addMemberButton}
-            onPress={() => setShowAddMember(true)}
-          >
-            <UserPlus size={22} color={colors.primary} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBox}>
-          <Search size={20} color={colors.textTertiary} />
-          <TextInput
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Tìm kiếm thành viên..."
-            placeholderTextColor={colors.textTertiary}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <XIcon size={20} color={colors.textTertiary} />
-            </TouchableOpacity>
-          )}
+        <View style={styles.sectionHead}>
+          <Text variant="heading">{customer ? "Nhân viên xử lý" : "Thành viên"}</Text>
+          <Text variant="caption" color="textTertiary">
+            {d.members.length}
+          </Text>
         </View>
-      </View>
+        <Card style={styles.list}>
+          {d.members.length === 0 ? (
+            <Text variant="caption" color="textSecondary">
+              Chưa có nhân viên nào tham gia.
+            </Text>
+          ) : (
+            d.members.map((m, i) => {
+              const role = customer ? (m.nguon_them === "tiep_nhan" ? "Tiếp nhận" : "") : ROLE_LABEL[m.vai_tro];
+              return (
+                <View key={m.employee_id} style={[styles.member, i > 0 && styles.divider]}>
+                  <Avatar name={m.ho_ten} uri={m.anh} size={40} round />
+                  <View style={styles.flex}>
+                    <Text variant="subhead" numberOfLines={1}>
+                      {m.ho_ten}
+                      {m.employee_id === me.employee_id ? <Text variant="caption" color="textTertiary"> · bạn</Text> : null}
+                    </Text>
+                    {role || m.is_dai_ly ? (
+                      <Text variant="label" color="textTertiary">
+                        {[role, m.is_dai_ly ? "Đại lý" : ""].filter(Boolean).join(" · ")}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {canRemove(m) ? (
+                    <Pressable onPress={() => void remove(m)} accessibilityRole="button" accessibilityLabel={`Xoá ${m.ho_ten}`} style={styles.iconBtn}>
+                      <UserX size={20} color={colors.danger} />
+                    </Pressable>
+                  ) : null}
+                </View>
+              );
+            })
+          )}
+        </Card>
 
-      <View style={styles.memberCount}>
-        <Text style={styles.memberCountText}>
-          {group.members.length} thành viên
-        </Text>
-      </View>
-
-      <FlatList
-        data={filteredMembers}
-        renderItem={renderMemberItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: insets.bottom + 20 },
-        ]}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <User size={48} color={colors.textTertiary} />
-            <Text style={styles.emptyText}>Không tìm thấy thành viên</Text>
-          </View>
-        }
-      />
-    </View>
+        {canManage ? (
+          <Button title={customer ? "Thêm nhân viên xử lý" : "Thêm thành viên"} icon={UserPlus} variant="secondary" onPress={() => setAdding(true)} fullWidth />
+        ) : null}
+        {isMember ? (
+          <Button title="Rời cuộc trò chuyện" icon={LogOut} variant="ghost" onPress={() => void leave()} loading={busy} fullWidth />
+        ) : null}
+      </ScrollView>
+    </Screen>
   );
 }
 
+function InfoRow({ icon, label, value, onPress }: { icon: React.ReactNode; label: string; value: string; onPress?: () => void }) {
+  const body = (
+    <View style={styles.info}>
+      {icon}
+      <View style={styles.flex}>
+        <Text variant="label" color="textTertiary">
+          {label}
+        </Text>
+        <Text variant="body" color={onPress ? "primary" : "text"} selectable={!onPress}>
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+  return onPress ? (
+    <Pressable onPress={onPress} accessibilityRole="link" accessibilityLabel={`${label}: ${value}`}>
+      {body}
+    </Pressable>
+  ) : body;
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.surface,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: colors.text,
-    textAlign: 'center',
-    marginHorizontal: 8,
-  },
-  addMemberButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  addButtonDisabled: {
-    opacity: 0.5,
-  },
-  addButtonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: colors.primary,
-  },
-  addButtonTextDisabled: {
-    color: colors.textTertiary,
-  },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: colors.surface,
-  },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.text,
-  },
-  memberCount: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: colors.surface,
-  },
-  memberCountText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.textSecondary,
-  },
-  selectedCount: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: colors.surface,
-  },
-  selectedCountText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.primary,
-  },
-  listContent: {
-    backgroundColor: colors.surface,
-  },
-  memberItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  memberAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  memberAvatarText: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: colors.surface,
-  },
-  memberInfo: {
-    flex: 1,
-  },
-  memberNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  memberName: {
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: colors.text,
-  },
-  adminBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#FFF4ED',
-    borderRadius: 8,
-  },
-  adminBadgeText: {
-    fontSize: 11,
-    fontWeight: '600' as const,
-    color: colors.primary,
-  },
-  memberActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-  },
-  removeButton: {
-    backgroundColor: '#FEE2E2',
-  },
-  contactItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  contactAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  contactAvatarText: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: colors.surface,
-  },
-  contactInfo: {
-    flex: 1,
-  },
-  contactName: {
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: colors.text,
-  },
-  contactRole: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  checkbox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginLeft: 76,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    marginTop: 12,
-  },
+  content: { padding: space.xl, gap: space.md, paddingBottom: space.x4 },
+  card: { gap: space.md, borderRadius: radius.xxl, ...elevation.soft },
+  contactHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  kenhRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  flex: { flex: 1, minWidth: 0 },
+  info: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 44 },
+  sectionHead: { flexDirection: "row", alignItems: "baseline", gap: space.sm, marginTop: space.sm },
+  list: { borderRadius: radius.xxl, ...elevation.soft },
+  member: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.sm },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
 });

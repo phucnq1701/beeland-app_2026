@@ -44,7 +44,10 @@ Danh mục tính năng: `mocks/features.ts` (id 1–14). Logic chung: `lib/featu
 
 ## Màn mẫu / chưa có API (không redesign, chỉ dùng token theme)
 
-`app/(tabs)/ai-chat.tsx`, `app/chat/*`, `app/contacts.tsx` (danh bạ chat), `app/receipts.tsx`, `app/receipt/[id].tsx`,
+Chat (`app/chat/*`, `app/contacts.tsx`) đã nối dữ liệu thật từ 2026-10-12 – xem `docs/chat.md`; lối vào: nút Tin nhắn ở header Trang chủ.
+
+
+`app/receipts.tsx`, `app/receipt/[id].tsx`,
 `app/handovers.tsx`, `app/handover/[id].tsx`, `app/price-calculator/[id].tsx` (nút "Tính giá" ở chi tiết căn đã ẩn),
 `app/appointments.tsx` (thật nhưng đang ẩn, gọi API cũ). Dữ liệu mẫu ở `mocks/`.
 

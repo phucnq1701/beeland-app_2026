@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { FeatureGrid } from "@/components/home/FeatureGrid";
+import { useChatUnreadCount } from "@/components/chat/useChat";
 import { HomeHeader } from "@/components/home/HomeHeader";
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import { ProjectCarousel } from "@/components/home/ProjectCarousel";
@@ -43,6 +44,7 @@ const errText = (error: unknown) => (error instanceof Error ? error.message : St
 
 export default function HomeScreen() {
   const router = useRouter();
+  const chatUnread = useChatUnreadCount();
   const [displayedFeatures, setDisplayedFeatures] = useState<Feature[]>([]);
   const [isAgency, setIsAgency] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -238,7 +240,12 @@ export default function HomeScreen() {
       refreshing={refreshing}
       onRefresh={onRefresh}
       header={
-        <HomeHeader onSearchPress={() => router.push("/products")} onBellPress={() => router.push("/notifications")} />
+        <HomeHeader
+          onSearchPress={() => router.push("/products")}
+          onBellPress={() => router.push("/notifications")}
+          onChatPress={() => router.push("/chat")}
+          chatUnread={chatUnread}
+        />
       }
     >
       <View style={styles.sections}>

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react-native";
-import { Bell, Search } from "lucide-react-native";
+import { Bell, MessageCircle, Search } from "lucide-react-native";
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -10,9 +10,12 @@ type Props = {
   name?: string | null;
   onSearchPress: () => void;
   onBellPress: () => void;
+  onChatPress: () => void;
+  /** Có hội thoại chưa đọc (chat thật – fn_chat_inbox) → chấm cam trên nút tin nhắn. */
+  chatUnread?: number;
 };
 
-function RoundButton({ icon: Icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
+function RoundButton({ icon: Icon, label, onPress, dot }: { icon: LucideIcon; label: string; onPress: () => void; dot?: boolean }) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -22,6 +25,7 @@ function RoundButton({ icon: Icon, label, onPress }: { icon: LucideIcon; label: 
       style={({ pressed }) => [styles.round, pressed ? styles.pressed : null]}
     >
       <Icon size={20} color={colors.inverse} strokeWidth={2} />
+      {dot ? <View style={styles.dot} /> : null}
     </Pressable>
   );
 }
@@ -30,7 +34,7 @@ function RoundButton({ icon: Icon, label, onPress }: { icon: LucideIcon; label: 
  * Đầu trang chủ. Chuông không hiển thị số chưa đọc: màn Thông báo đang dùng dữ liệu mẫu
  * (quyết định Q1 – GĐ2), hiện số sẽ là số giả.
  */
-export function HomeHeader({ name, onSearchPress, onBellPress }: Props) {
+export function HomeHeader({ name, onSearchPress, onBellPress, onChatPress, chatUnread = 0 }: Props) {
   return (
     <View style={styles.row}>
       <View style={styles.texts}>
@@ -42,6 +46,12 @@ export function HomeHeader({ name, onSearchPress, onBellPress }: Props) {
         </Text>
       </View>
       <RoundButton icon={Search} label="Tìm sản phẩm" onPress={onSearchPress} />
+      <RoundButton
+        icon={MessageCircle}
+        label={chatUnread > 0 ? `Tin nhắn, ${chatUnread} cuộc trò chuyện chưa đọc` : "Tin nhắn"}
+        onPress={onChatPress}
+        dot={chatUnread > 0}
+      />
       <RoundButton icon={Bell} label="Thông báo" onPress={onBellPress} />
     </View>
   );
@@ -69,4 +79,15 @@ const styles = StyleSheet.create({
     ...elevation.soft,
   },
   pressed: { opacity: 0.6 },
+  dot: {
+    position: "absolute",
+    top: 9,
+    right: 10,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
+  },
 });

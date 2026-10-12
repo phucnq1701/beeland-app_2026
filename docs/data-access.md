@@ -58,4 +58,5 @@ Mỗi bảng lọc tenant **khác nhau** – làm theo web (`../beeland/src/serv
 `fn_contract_payment_schedule`, `fn_cash_vouchers_by_pgc`, `fn_cash_voucher_list`, `fn_get_current_price_lists`,
 `fn_get_sales_policies`, `fn_get_price_list_item_by_product`, `get_active_price_for_product`. Tham số lấy theo code web gọi;
 kết quả trả về **chưa kiểm chứng trực tiếp** cho các hàm không có migration trong `../beeland/supabase/migrations`.
-Edge function: `cloud-auth`, `payment-gateway`, `upload-file`.
+Edge function: `cloud-auth`, `payment-gateway`, `upload-file`, `chat-files` (JWT ứng dụng, gọi bằng `fetch` riêng – xem `docs/chat.md`).
+Chat: RPC `fn_chat_*` (có migration ở web `supabase/migrations/20261011100*`, `20261013120000_chat_kenh_app`).
