@@ -1,16 +1,17 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { LogOut, Mail, Phone, Smartphone, UserPlus, UserRound, UserX } from "lucide-react-native";
+import { BellOff, ClipboardList, Link2, LogOut, Mail, Phone, Pin, Plus, Smartphone, Unlink, UserPlus, UserRound, UserX, X } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from "react-native";
 
 import { ContactPicker } from "@/components/chat/ContactPicker";
+import { CustomerLinkSheet } from "@/components/chat/CustomerLinkSheet";
 import { loadChatMe } from "@/components/chat/useChat";
 import {
-  AppHeader, Avatar, BottomActionBar, Button, Card, ErrorState, Screen, SkeletonDetail, Text, confirm, useToast,
+  AppHeader, Avatar, BottomActionBar, Button, Card, ErrorState, Screen, SkeletonDetail, Text, confirm, useFontsLoaded, useToast,
 } from "@/components/ui";
-import { detailTitle, NGUON_LABEL, type ChatContact, type ChatConversationDetail, type ChatMe, type ChatMember } from "@/lib/chat";
+import { addTag, CHAT_TAG_LEN, CHAT_TAGS_MAX, detailTitle, NGUON_LABEL, type ChatContact, type ChatConversationDetail, type ChatMe, type ChatMember } from "@/lib/chat";
 import { ChatService } from "@/sevicesSupabase/ChatService";
-import { colors, elevation, radius, space } from "@/theme";
+import { colors, elevation, fontStyleFor, MAX_FONT_SCALE, radius, space } from "@/theme";
 
 const ROLE_LABEL: Record<string, string> = { owner: "Trưởng nhóm", admin: "Quản trị", member: "" };
 
@@ -31,6 +32,9 @@ export default function ChatMembersScreen() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const [linking, setLinking] = useState(false);
+  const [tagDraft, setTagDraft] = useState<string | null>(null);
+  const fontsLoaded = useFontsLoaded();
 
   const load = useCallback(async () => {
     setError(null);
@@ -84,6 +88,30 @@ export default function ChatMembersScreen() {
       router.dismissTo("/chat");
     });
   };
+
+  const setPref = (patch: { pinned?: boolean; muted?: boolean }) => run(async () => {
+    setD(await ChatService.pref(id, patch));
+  });
+  const saveTags = (tags: string[]) => run(async () => {
+    setD(await ChatService.customerTags(id, tags));
+  });
+  const commitTag = () => {
+    const v = tagDraft ?? "";
+    setTagDraft(null);
+    const next = addTag(c?.tags ?? [], v);
+    if (next) void saveTags(next);
+  };
+  const unlink = async () => {
+    if (!(await confirm({ title: "Bỏ gắn hồ sơ khách hàng?", confirmText: "Bỏ gắn", destructive: true }))) return;
+    await run(async () => {
+      setD(await ChatService.customerLink(id, null));
+      toast.show({ type: "success", message: "Đã bỏ gắn hồ sơ khách hàng" });
+    });
+  };
+  const requestInfo = () => run(async () => {
+    await ChatService.requestInfo(id);
+    toast.show({ type: "success", message: "Đã gửi yêu cầu khách để lại thông tin" });
+  });
 
   const addPicked = () => run(async () => {
     setD(await ChatService.membersAdd(id, [...picked]));
@@ -161,15 +189,87 @@ export default function ChatMembersScreen() {
               </View>
             </View>
             {ct.customer ? (
-              <InfoRow icon={<UserRound size={18} color={colors.textSecondary} />} label="Hồ sơ khách hàng"
-                value={[ct.customer.ten_kh, ct.customer.ma_so_kh].filter(Boolean).join(" · ")}
-                onPress={() => router.push({ pathname: "/customer/[id]", params: { id: ct.customer!.id } })} />
-            ) : null}
+              <View style={styles.linkRow}>
+                <View style={styles.flex}>
+                  <InfoRow icon={<UserRound size={18} color={colors.textSecondary} />} label="Hồ sơ khách hàng"
+                    value={[ct.customer.ten_kh, ct.customer.ma_so_kh].filter(Boolean).join(" · ")}
+                    onPress={() => router.push({ pathname: "/customer/[id]", params: { id: ct.customer!.id } })} />
+                </View>
+                {isMember && kenh !== "app" ? (
+                  <Pressable onPress={() => void unlink()} accessibilityRole="button" accessibilityLabel="Bỏ gắn hồ sơ khách hàng" style={styles.iconBtn}>
+                    <Unlink size={18} color={colors.danger} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : isMember ? (
+              <Button title="Gắn hồ sơ khách hàng" icon={Link2} variant="secondary" onPress={() => setLinking(true)} fullWidth />
+            ) : (
+              <Text variant="caption" color="textTertiary">Chưa gắn hồ sơ khách hàng</Text>
+            )}
             {ct.dien_thoai ? <InfoRow icon={<Phone size={18} color={colors.textSecondary} />} label="Điện thoại" value={ct.dien_thoai} /> : null}
             {ct.email ? <InfoRow icon={<Mail size={18} color={colors.textSecondary} />} label="Email" value={ct.email} /> : null}
+            {isMember && !ct.dien_thoai && !ct.email ? (
+              <Button title="Xin thông tin liên hệ của khách" icon={ClipboardList} variant="ghost" onPress={() => void requestInfo()} loading={busy} fullWidth />
+            ) : null}
           </Card>
         ) : null}
 
+        {customer && c ? (
+          <>
+            <View style={styles.sectionHead}>
+              <Text variant="heading">Nhãn</Text>
+            </View>
+            <Card style={styles.card}>
+              <View style={styles.tags}>
+                {(c.tags ?? []).map((tag) => (
+                  <View key={tag} style={styles.tag}>
+                    <Text variant="caption" numberOfLines={1} style={styles.tagText}>{tag}</Text>
+                    {isMember ? (
+                      <Pressable onPress={() => void saveTags(c.tags.filter((x) => x !== tag))} accessibilityRole="button" accessibilityLabel={`Bỏ nhãn ${tag}`} hitSlop={8} style={styles.tagX}>
+                        <X size={12} color={colors.textSecondary} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ))}
+                {!c.tags?.length && !isMember ? <Text variant="caption" color="textTertiary">Chưa có nhãn</Text> : null}
+                {isMember && (c.tags?.length ?? 0) < CHAT_TAGS_MAX ? (
+                  tagDraft !== null ? (
+                    <TextInput
+                      autoFocus
+                      value={tagDraft}
+                      onChangeText={setTagDraft}
+                      onSubmitEditing={commitTag}
+                      onBlur={commitTag}
+                      maxLength={CHAT_TAG_LEN}
+                      placeholder="Tên nhãn"
+                      placeholderTextColor={colors.textTertiary}
+                      accessibilityLabel="Tên nhãn mới"
+                      returnKeyType="done"
+                      maxFontSizeMultiplier={MAX_FONT_SCALE}
+                      style={[styles.tagInput, fontStyleFor("regular", fontsLoaded)]}
+                    />
+                  ) : (
+                    <Pressable onPress={() => setTagDraft("")} accessibilityRole="button" accessibilityLabel="Thêm nhãn" style={[styles.tag, styles.tagAdd]}>
+                      <Plus size={14} color={colors.primary} />
+                      <Text variant="caption" color="primary">Thêm nhãn</Text>
+                    </Pressable>
+                  )
+                ) : null}
+              </View>
+            </Card>
+          </>
+        ) : null}
+
+        {isMember && d.me ? (
+          <Card style={styles.card}>
+            <ToggleRow icon={<Pin size={18} color={colors.textSecondary} />} label="Ghim cuộc trò chuyện" value={d.me.pinned} disabled={busy} onChange={(v) => void setPref({ pinned: v })} />
+            <ToggleRow icon={<BellOff size={18} color={colors.textSecondary} />} label="Tắt thông báo" value={d.me.muted} disabled={busy} onChange={(v) => void setPref({ muted: v })} />
+          </Card>
+        ) : null}
+
+
+        {c?.loai !== "direct" ? (
+        <>
         <View style={styles.sectionHead}>
           <Text variant="heading">{customer ? "Nhân viên xử lý" : "Thành viên"}</Text>
           <Text variant="caption" color="textTertiary">
@@ -208,15 +308,47 @@ export default function ChatMembersScreen() {
             })
           )}
         </Card>
-
-        {canManage ? (
+        </>
+        ) : null}
+        {canManage && c?.loai !== "direct" ? (
           <Button title={customer ? "Thêm nhân viên xử lý" : "Thêm thành viên"} icon={UserPlus} variant="secondary" onPress={() => setAdding(true)} fullWidth />
         ) : null}
-        {isMember ? (
+        {isMember && c?.loai !== "direct" ? (
           <Button title="Rời cuộc trò chuyện" icon={LogOut} variant="ghost" onPress={() => void leave()} loading={busy} fullWidth />
         ) : null}
       </ScrollView>
+      {customer ? (
+        <CustomerLinkSheet
+          visible={linking}
+          conversationId={id}
+          suggestions={d.goi_y_khach_hang ?? []}
+          initialQuery={ct?.dien_thoai ?? ct?.ho_ten ?? ""}
+          onClose={() => setLinking(false)}
+          onLinked={(next) => {
+            setLinking(false);
+            setD(next);
+            toast.show({ type: "success", message: "Đã gắn hồ sơ khách hàng" });
+          }}
+        />
+      ) : null}
     </Screen>
+  );
+}
+
+function ToggleRow({ icon, label, value, disabled, onChange }: { icon: React.ReactNode; label: string; value: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <View style={styles.info}>
+      {icon}
+      <Text variant="body" style={styles.flex}>{label}</Text>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        disabled={disabled}
+        accessibilityLabel={label}
+        trackColor={{ true: colors.primary, false: colors.borderStrong }}
+        thumbColor={colors.surface}
+      />
+    </View>
   );
 }
 
@@ -253,4 +385,11 @@ const styles = StyleSheet.create({
   member: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.sm },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  linkRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  tags: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, alignItems: "center" },
+  tag: { flexDirection: "row", alignItems: "center", gap: space.xs, height: 32, paddingLeft: space.md, paddingRight: space.sm, borderRadius: radius.full, backgroundColor: colors.surfaceMuted, maxWidth: "100%" },
+  tagText: { flexShrink: 1 },
+  tagX: { width: 20, height: 20, alignItems: "center", justifyContent: "center" },
+  tagAdd: { backgroundColor: colors.primarySubtle, paddingRight: space.md },
+  tagInput: { minWidth: 140, height: 36, paddingHorizontal: space.md, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.primary, color: colors.text, fontSize: 14 },
 });

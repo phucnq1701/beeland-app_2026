@@ -50,7 +50,35 @@ trái, card trắng, avatar ở tin cuối cụm, tên ở tin đầu cụm (nh�
 ≤ 5 phút, cùng ngày. Vạch ngày "Hôm nay / Hôm qua / Thứ…, dd/MM/yyyy"; tin hệ thống chữ nhỏ căn giữa (`systemText`).
 Hội thoại khách kênh app: chip **App** xanh lá + huy hiệu điện thoại ở avatar (giống web BeeChat).
 
+## Thao tác trên tin (giống menu web MessageItem)
+
+Nhấn giữ bong bóng (chỉ khi là thành viên) → sheet: **Trả lời** (thanh "Đang trả lời …" trên ô soạn, gửi `reply_to_id`;
+bong bóng hiện khung trích dẫn `reply_to`) · **Sao chép** (`expo-clipboard`) · **Sửa** (ô soạn điền sẵn, nút gửi = lưu,
+`fn_chat_edit`) · **Thu hồi** (`confirm`, `fn_chat_recall`). Sửa / thu hồi: tin của mình, đã lên máy chủ, chưa thu hồi,
+≤ 24 giờ (`canModifyMessage`, server kiểm lại). Tin đã sửa ghi "(đã sửa)", đã thu hồi "Tin nhắn đã được thu hồi".
+
+**@nhắc tên** (nhóm / hội thoại khách có NV khác): gõ `@` → gợi ý thành viên phía trên ô soạn (lọc không dấu), chọn → chèn
+"@Tên "; khi gửi, `mentions` = người đã chọn mà "@Tên" còn trong nội dung (như web Composer).
+
+**Đang gõ:** hội thoại khách – kênh công khai `chatv:<channel_key>` (nghe `from: 'visitor'`, mình gõ phát `from: 'agent'` →
+app khách / widget hiện "đang soạn tin"); nội bộ / nhóm – kênh private `chat:c:<id>` (`{employee_id}`), ≤ 1 lần / 3 s,
+ẩn sau 4 s. Dòng "<Tên> đang gõ…" ngay trên ô soạn ("Khách đang gõ…" với hội thoại khách).
+
+## Màn thông tin (`manage-members/[groupId]`, mở từ nút người ở header – mọi loại hội thoại)
+
+- **Ghim / Tắt thông báo** (công tắc, `fn_chat_pref`) – thành viên.
+- Hội thoại khách: **Gắn hồ sơ khách hàng** (`CustomerLinkSheet`: gợi ý `goi_y_khach_hang` khớp SĐT/email + tìm qua
+  `CustomerService.getCustomers` → `fn_chat_customer_link`), **Bỏ gắn** (confirm). **Kênh app không đổi / bỏ gắn được**
+  (hồ sơ là khoá nhận diện khách đăng nhập – server chặn, migration web `20261013130000_chat_app_khong_doi_kh`).
+  **Nhãn** (thêm / bỏ, ≤ 20 × 50 ký tự, `fn_chat_customer_tags`). **Xin thông tin liên hệ** khi khách chưa có SĐT / email
+  (`fn_chat_request_info`).
+- Nhóm / khách: thành viên, thêm / xoá / rời như trên. Hội thoại 1-1: chỉ ghim / tắt thông báo.
+
+Hội thoại khách: mọi tin NV nằm bên phải (như web BeeChat – thấy NV nào trả lời khách), tin đồng nghiệp ghi tên.
+
+Chấm chưa đọc ở Trang chủ: tải khi về Trang chủ + tải lại ngầm khi có sự kiện realtime `chat:u` (debounce 600 ms).
+
 ## Tồn đọng
 
-- Chưa có: trả lời / sửa / thu hồi tin, ghim / tắt tiếng, gắn hồ sơ KH, nhãn, xin thông tin khách (web có). Đang gõ (typing).
-- Đếm chưa đọc ở Trang chủ không realtime (làm mới khi quay về Trang chủ).
+- Chưa có (web có): tìm trong tin nhắn (`fn_chat_search`), đổi tên / ảnh nhóm, đổi vai trò thành viên, tạo hồ sơ khách mới
+  từ hội thoại, trạng thái online (presence).

@@ -117,8 +117,11 @@ export interface ChatConversationDetail {
     dien_thoai: string | null;
     email: string | null;
     last_seen_at: string | null;
+    channel_key?: string | null;
     customer: { id: string; ten_kh: string; ma_so_kh: string | null } | null;
   } | null;
+  /** ≤ 5 hồ sơ khách khớp SĐT / email (chỉ khi chưa gắn). */
+  goi_y_khach_hang?: { id: string; ten_kh: string; dien_thoai: string | null; email: string | null }[];
 }
 
 export interface ChatMessagesPage {
@@ -142,6 +145,11 @@ export const CHAT_FILES_MAX = 10;
 export const CHAT_FILE_MAX_MB = 20;
 /** Tin liền nhau cùng người gửi trong khoảng này → một cụm (ẩn tên / giờ lặp lại). */
 export const CHAT_GROUP_GAP_MS = 5 * 60 * 1000;
+/** Sửa / thu hồi tin của mình trong 24 giờ (server kiểm lại – web components/Chat/constants.ts). */
+export const CHAT_EDIT_WINDOW_MS = 24 * 3600 * 1000;
+/** Nhãn hội thoại khách (web TagEditor): tối đa 20 nhãn × 50 ký tự. */
+export const CHAT_TAGS_MAX = 20;
+export const CHAT_TAG_LEN = 50;
 
 /** MIME bucket `chat-files` cho phép (spec chat 1.7 – không SVG/HTML/JS). */
 export const CHAT_ALLOWED_MIME = [
@@ -362,4 +370,40 @@ export function formatFileSize(bytes: number | null | undefined): string {
   const kb = bytes / 1024;
   if (kb < 1024) return `${Math.max(1, Math.round(kb))} KB`;
   return `${(Math.round((kb / 1024) * 10) / 10).toString().replace(".", ",")} MB`;
+}
+
+/** Được sửa / thu hồi: tin của mình, đã lên máy chủ, chưa thu hồi, trong 24 giờ. Sửa thêm điều kiện có chữ. */
+export function canModifyMessage(m: ChatMessage, meId: string, now: number = Date.now()): { edit: boolean; recall: boolean } {
+  const ok = m.sender_type === "employee" && m.sender?.id === meId && !m.recalled_at && !m.local_status &&
+    !m.id.startsWith("local-") && now - new Date(m.created_at).getTime() < CHAT_EDIT_WINDOW_MS;
+  return { edit: ok && !!m.noi_dung, recall: ok };
+}
+
+/** Tin nhân viên đặt bên phải: hội thoại khách – mọi NV (như web BeeChat "support"); còn lại – chỉ tin của mình. */
+export function isOutgoing(m: ChatMessage, meId: string, customer: boolean): boolean {
+  if (m.sender_type !== "employee") return false;
+  return customer || m.sender?.id === meId;
+}
+
+/** Đang gõ "@abc" ở cuối đoạn trước con trỏ → "abc" (rỗng khi vừa gõ "@"); không phải → null. */
+export function mentionQuery(textBeforeCaret: string): string | null {
+  const m = /(?:^|\s)@([^\s@]*)$/.exec(textBeforeCaret);
+  return m ? m[1] : null;
+}
+
+/** Thay "@abc" cuối cùng bằng "@Tên " (chọn người trong gợi ý). */
+export function applyMention(text: string, name: string): string {
+  return text.replace(/(^|\s)@[^\s@]*$/, `$1@${name} `);
+}
+
+/** id người được nhắc = người đã chọn mà tên "@Tên" còn trong nội dung (như web Composer). */
+export function mentionIds(text: string, picked: { id: string; ten: string }[]): string[] {
+  return [...new Set(picked.filter((p) => text.includes("@" + p.ten)).map((p) => p.id))];
+}
+
+/** Thêm nhãn: bỏ khoảng trắng, bỏ trùng, ≤ 50 ký tự, tối đa 20 nhãn. null = không thêm được. */
+export function addTag(tags: string[], value: string): string[] | null {
+  const t = value.trim().slice(0, CHAT_TAG_LEN);
+  if (!t || tags.includes(t) || tags.length >= CHAT_TAGS_MAX) return null;
+  return [...tags, t];
 }

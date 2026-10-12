@@ -5,7 +5,7 @@ import React, { memo, useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { Avatar, Skeleton, Text, useToast } from "@/components/ui";
-import { formatFileSize, isImageMime, systemText, type ChatAttachment, type ChatRow } from "@/lib/chat";
+import { formatFileSize, isImageMime, isOutgoing, systemText, type ChatAttachment, type ChatMessage, type ChatRow } from "@/lib/chat";
 import { ChatService } from "@/sevicesSupabase/ChatService";
 import { colors, elevation, radius, space } from "@/theme";
 
@@ -86,16 +86,35 @@ type Props = {
   /** Hội thoại nhiều người (nhóm / khách) → hiện tên người gửi ở tin đầu cụm. */
   showNames: boolean;
   nameOf: (employeeId: string) => string;
+  meId: string;
+  /** Hội thoại khách: mọi tin NV nằm bên phải (như web BeeChat) – tin đồng nghiệp ghi tên. */
+  customer: boolean;
   onRetry: (id: string) => void;
   onDiscard: (id: string) => void;
+  /** Nhấn giữ tin → thao tác (Trả lời · Sao chép · Sửa · Thu hồi). */
+  onLongPress?: (m: ChatMessage) => void;
 };
+
+/** Khung trích dẫn tin được trả lời (web ReplyQuote): vạch dọc + tên + 1–2 dòng nội dung. */
+function ReplyQuote({ name, text, outgoing }: { name: string | null; text: string | null; outgoing: boolean }) {
+  return (
+    <View style={[styles.quote, outgoing ? styles.quoteOut : styles.quoteIn]}>
+      <Text variant="label" color={outgoing ? colors.onPrimary : "primary"} numberOfLines={1}>
+        {name || "Tin nhắn"}
+      </Text>
+      <Text variant="caption" color={outgoing ? colors.primarySubtle : "textSecondary"} numberOfLines={2}>
+        {text || "Tệp đính kèm"}
+      </Text>
+    </View>
+  );
+}
 
 /**
  * Một dòng trong khung chat (kiểu Messenger theo token app): tin của mình bên phải nền cam `primary` chữ trắng; người khác
  * bên trái card trắng bóng nhẹ, avatar ở tin cuối cụm, tên ở tin đầu cụm (nhóm / hội thoại khách). Bo 20, góc phía người gửi
  * thu nhỏ giữa các tin cùng cụm. Tin hệ thống / vạch ngày: chữ nhỏ căn giữa.
  */
-export const MessageRow = memo(function MessageRow({ row, showNames, nameOf, onRetry, onDiscard }: Props) {
+export const MessageRow = memo(function MessageRow({ row, showNames, nameOf, meId, customer: customerConv, onRetry, onDiscard, onLongPress }: Props) {
   const toast = useToast();
   const onError = (message: string) => toast.show({ type: "error", message });
 
@@ -118,7 +137,9 @@ export const MessageRow = memo(function MessageRow({ row, showNames, nameOf, onR
     );
   }
 
-  const { message: m, mine, first, last, footer } = row;
+  const { message: m, first, last, footer } = row;
+  const mine = isOutgoing(m, meId, customerConv);
+  const fromMe = m.sender_type === "employee" && m.sender?.id === meId;
   const recalled = !!m.recalled_at;
   const images = recalled ? [] : m.attachments.filter((a) => isImageMime(a.mime));
   const files = recalled ? [] : m.attachments.filter((a) => !isImageMime(a.mime));
@@ -134,7 +155,7 @@ export const MessageRow = memo(function MessageRow({ row, showNames, nameOf, onR
     <View style={[styles.row, mine ? styles.rowMine : styles.rowOther, first ? styles.gapCluster : styles.gapTight]}>
       {!mine ? <View style={styles.avatarSlot}>{last ? <Avatar name={senderName} uri={m.sender?.anh} size={32} round /> : null}</View> : null}
       <View style={[styles.col, mine ? styles.colMine : styles.colOther]}>
-        {!mine && first && showNames ? (
+        {first && showNames && !fromMe ? (
           <Text variant="label" color="textTertiary" numberOfLines={1} style={styles.sender}>
             {customer ? `${senderName} · Khách hàng` : senderName}
           </Text>
@@ -154,8 +175,14 @@ export const MessageRow = memo(function MessageRow({ row, showNames, nameOf, onR
                 ))}
               </View>
             ) : null}
-            {text || files.length ? (
-              <View style={[styles.bubble, mine ? styles.mine : styles.other, corner, failed && styles.failed]}>
+            {text || files.length || m.reply_to ? (
+              <Pressable
+                onLongPress={onLongPress && !m.local_status ? () => onLongPress(m) : undefined}
+                delayLongPress={300}
+                accessibilityHint={onLongPress ? "Nhấn giữ để trả lời, sao chép, sửa hoặc thu hồi" : undefined}
+                style={[styles.bubble, mine ? styles.mine : styles.other, corner, failed && styles.failed]}
+              >
+                {m.reply_to ? <ReplyQuote name={m.reply_to.sender_ten} text={m.reply_to.noi_dung} outgoing={mine} /> : null}
                 {files.map((a) => (
                   <ChatFile key={a.id} a={a} mine={mine} onError={onError} />
                 ))}
@@ -169,7 +196,7 @@ export const MessageRow = memo(function MessageRow({ row, showNames, nameOf, onR
                     ) : null}
                   </Text>
                 ) : null}
-              </View>
+              </Pressable>
             ) : null}
           </>
         )}
@@ -222,6 +249,9 @@ const styles = StyleSheet.create({
   mine: { backgroundColor: colors.primary },
   other: { backgroundColor: colors.surface, ...elevation.soft },
   failed: { opacity: 0.75 },
+  quote: { borderLeftWidth: 3, paddingLeft: space.sm, paddingVertical: 2, borderRadius: radius.sm },
+  quoteOut: { borderLeftColor: colors.primarySubtle },
+  quoteIn: { borderLeftColor: colors.primary, backgroundColor: colors.surfaceMuted, paddingRight: space.sm },
   recalled: { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   italic: { fontStyle: "italic" },
   images: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },

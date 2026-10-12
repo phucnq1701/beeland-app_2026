@@ -98,8 +98,19 @@ export const ChatService = {
     chatRpc<ChatMessagesPage>("fn_chat_messages", {
       p_id: id, p_before: opts.before ?? null, p_after: opts.after ?? null, p_limit: opts.limit ?? 50,
     }),
-  send: (id: string, msg: { client_msg_id: string; noi_dung: string | null; attachment_ids?: string[] }) =>
-    chatRpc<ChatMessage>("fn_chat_send", { p_id: id, p_msg: msg }, "Gửi tin nhắn thất bại"),
+  send: (
+    id: string,
+    msg: { client_msg_id: string; noi_dung: string | null; attachment_ids?: string[]; reply_to_id?: string | null; mentions?: string[] },
+  ) => chatRpc<ChatMessage>("fn_chat_send", { p_id: id, p_msg: msg }, "Gửi tin nhắn thất bại"),
+  edit: (messageId: string, noiDung: string) =>
+    chatRpc<ChatMessage>("fn_chat_edit", { p_message_id: messageId, p_noi_dung: noiDung }, "Không sửa được tin nhắn"),
+  recall: (messageId: string) => chatRpc<ChatMessage>("fn_chat_recall", { p_message_id: messageId }, "Không thu hồi được tin nhắn"),
+  pref: (id: string, patch: { pinned?: boolean; muted?: boolean }) =>
+    chatRpc<ChatConversationDetail>("fn_chat_pref", { p_id: id, p_patch: patch }),
+  customerTags: (id: string, tags: string[]) => chatRpc<ChatConversationDetail>("fn_chat_customer_tags", { p_id: id, p_tags: tags }),
+  customerLink: (id: string, customerId: string | null) =>
+    chatRpc<ChatConversationDetail>("fn_chat_customer_link", { p_id: id, p_customer_id: customerId }),
+  requestInfo: (id: string) => chatRpc<ChatMessage>("fn_chat_request_info", { p_id: id }),
   markRead: (id: string) => chatRpc<{ last_read_at: string | null }>("fn_chat_mark_read", { p_id: id }),
   directOpen: (employeeId: string) => chatRpc<ChatConversationDetail>("fn_chat_direct_open", { p_employee_id: employeeId }),
   groupCreate: (ten: string, ids: string[]) =>
@@ -168,5 +179,62 @@ export function subscribeChatUser(employeeId: string, onEvent: (e: ChatEvent) =>
     closed = true;
     if (ch) void realtime().removeChannel(ch);
     ch = null;
+  };
+}
+
+/* ---------------- Đang gõ ---------------- */
+
+const TYPING_GAP_MS = 3000;
+
+/**
+ * "Đang gõ" của một hội thoại (như web hooks/chat/useChatTyping.ts):
+ * - hội thoại khách (có `channelKey`): kênh công khai `chatv:<key>` – nghe khách gõ (`from: 'visitor'`), mình gõ phát
+ *   `from: 'agent'` (app khách / widget hiện "đang soạn tin");
+ * - nội bộ / nhóm: kênh private `chat:c:<id>` (chỉ thành viên, JWT) – payload `{employee_id}`.
+ * `onTyping(id)`: 'visitor' hoặc employee_id. `ping()` phát tối đa 1 lần / 3 s.
+ */
+export function subscribeTyping(
+  opts: { conversationId: string; meId: string; channelKey?: string | null },
+  onTyping: (who: string) => void,
+): { ping: () => void; close: () => void } {
+  let ch: RealtimeChannel | null = null;
+  let closed = false;
+  let last = 0;
+  void (async () => {
+    const client = realtime();
+    if (opts.channelKey) {
+      const c = client.channel(`chatv:${opts.channelKey}`, { config: { broadcast: { self: false } } });
+      c.on("broadcast", { event: "typing" }, (msg: { payload?: { from?: string } }) => {
+        if (msg?.payload?.from === "visitor") onTyping("visitor");
+      });
+      ch = c;
+      c.subscribe();
+      return;
+    }
+    const jwt = await getValidSupabaseJwt();
+    if (!jwt || closed) return;
+    await client.setAuth(jwt);
+    if (closed) return;
+    const c = client.channel(`chat:c:${opts.conversationId}`, { config: { private: true, broadcast: { self: false } } });
+    c.on("broadcast", { event: "typing" }, (msg: { payload?: { employee_id?: string } }) => {
+      const who = msg?.payload?.employee_id;
+      if (who && who !== opts.meId) onTyping(who);
+    });
+    ch = c;
+    c.subscribe();
+  })().catch(() => undefined);
+  return {
+    ping() {
+      const now = Date.now();
+      if (!ch || now - last < TYPING_GAP_MS) return;
+      last = now;
+      const payload = opts.channelKey ? { t: "typing", from: "agent" } : { employee_id: opts.meId };
+      void ch.send({ type: "broadcast", event: "typing", payload });
+    },
+    close() {
+      closed = true;
+      if (ch) void realtime().removeChannel(ch);
+      ch = null;
+    },
   };
 }

@@ -6,7 +6,7 @@ import {
   chatFileMime, latestServerTime, mergeMessages, newClientId, othersReadAt,
   type ChatConversationDetail, type ChatInboxItem, type ChatKhu, type ChatMe, type ChatMessage,
 } from "@/lib/chat";
-import { ChatService, subscribeChatUser, type ChatEvent } from "@/sevicesSupabase/ChatService";
+import { ChatService, subscribeChatUser, subscribeTyping, type ChatEvent } from "@/sevicesSupabase/ChatService";
 
 /** Realtime chưa nối được → làm mới định kỳ khi màn đang mở. */
 const POLL_MS = 15_000;
@@ -199,22 +199,55 @@ export function useChatInbox(khu: ChatKhu, q: string, enabled: boolean) {
   return { items, loading, refreshing, error, hasMore: !!cursor, loadingMore, refresh: () => load("refresh"), reload: () => load("load"), loadMore };
 }
 
-/** Số hội thoại có tin chưa đọc (chấm ở Trang chủ). Lỗi / chưa có hồ sơ chat → 0. */
+/**
+ * Số hội thoại có tin chưa đọc (chấm ở Trang chủ): tải khi màn được mở lại + tải lại ngầm mỗi khi có sự kiện realtime
+ * `chat:u` (tin mới / đã đọc ở thiết bị khác). Lỗi / chưa có hồ sơ chat → 0.
+ */
 export function useChatUnreadCount(): number {
   const [n, setN] = useState(0);
-  useFocusEffect(
-    useCallback(() => {
-      let alive = true;
-      loadChatMe()
-        .then(() => ChatService.inbox({ khu: "tat_ca", chua_doc: true, limit: 50 }))
-        .then((p) => alive && setN(p.items.filter((x) => x.unread > 0 && !x.muted).length))
-        .catch(() => alive && setN(0));
-      return () => {
-        alive = false;
-      };
-    }, []),
-  );
+  const req = useRef(0);
+  const fetchCount = useCallback(() => {
+    const id = ++req.current;
+    loadChatMe()
+      .then(() => ChatService.inbox({ khu: "tat_ca", chua_doc: true, limit: 50 }))
+      .then((p) => id === req.current && setN(p.items.filter((x) => x.unread > 0 && !x.muted).length))
+      .catch(() => id === req.current && setN(0));
+  }, []);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounced = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(fetchCount, 600);
+  }, [fetchCount]);
+  useChatSession(debounced, debounced);
+  useFocusEffect(useCallback(() => fetchCount(), [fetchCount]));
   return n;
+}
+
+/** "Đang gõ" của một hội thoại: danh sách người đang gõ ('visitor' = khách) + `ping()` khi mình gõ. */
+export function useChatTyping(conversationId: string, meId: string | undefined, channelKey: string | null | undefined, enabled: boolean) {
+  const [ids, setIds] = useState<string[]>([]);
+  const pingRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    setIds([]);
+    if (!enabled || !meId) return;
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    const sub = subscribeTyping({ conversationId, meId, channelKey }, (who) => {
+      setIds((cur) => (cur.includes(who) ? cur : [...cur, who]));
+      clearTimeout(timers.get(who));
+      timers.set(who, setTimeout(() => {
+        timers.delete(who);
+        setIds((cur) => cur.filter((x) => x !== who));
+      }, 4000));
+    });
+    pingRef.current = sub.ping;
+    return () => {
+      sub.close();
+      pingRef.current = () => undefined;
+      timers.forEach(clearTimeout);
+    };
+  }, [conversationId, meId, channelKey, enabled]);
+  const ping = useCallback(() => pingRef.current(), []);
+  return { typingIds: ids, ping };
 }
 
 /* ---------------- Một hội thoại ---------------- */
@@ -232,7 +265,7 @@ export function useChatThread(id: string) {
   const [focused, setFocused] = useState(false);
   const listRef = useRef(messages);
   listRef.current = messages;
-  const pending = useRef(new Map<string, { text: string; files: PickedChatFile[]; uploaded: string[] }>());
+  const pending = useRef(new Map<string, { text: string; files: PickedChatFile[]; uploaded: string[]; replyToId: string | null; mentions: string[] }>());
   const meRef = useRef<ChatMe | null>(null);
   const lastRead = useRef<string | null>(null);
 
@@ -360,6 +393,8 @@ export function useChatThread(id: string) {
           client_msg_id: clientId,
           noi_dung: job.text.trim() || null,
           attachment_ids: job.uploaded,
+          ...(job.replyToId ? { reply_to_id: job.replyToId } : {}),
+          ...(job.mentions.length ? { mentions: job.mentions } : {}),
         });
         pending.current.delete(clientId);
         // Giữ ảnh cục bộ để khỏi xin link ký ngay sau khi gửi.
@@ -377,10 +412,11 @@ export function useChatThread(id: string) {
   );
 
   const send = useCallback(
-    (text: string, files: PickedChatFile[]) => {
+    (text: string, files: PickedChatFile[], opts: { replyTo?: ChatMessage | null; mentions?: string[] } = {}) => {
       const me = meRef.current;
       const clientId = newClientId();
-      pending.current.set(clientId, { text, files, uploaded: [] });
+      const replyTo = opts.replyTo ?? null;
+      pending.current.set(clientId, { text, files, uploaded: [], replyToId: replyTo?.id ?? null, mentions: opts.mentions ?? [] });
       const local: ChatMessage = {
         id: `local-${clientId}`,
         conversation_id: id,
@@ -388,8 +424,8 @@ export function useChatThread(id: string) {
         sender: { id: me?.employee_id ?? null, ten: me?.ho_ten ?? null, anh: me?.anh ?? null, loai: "employee" },
         loai: files.length ? "file" : "text",
         noi_dung: text.trim() || null,
-        reply_to: null,
-        mentions: null,
+        reply_to: replyTo ? { id: replyTo.id, noi_dung: replyTo.noi_dung, sender_ten: replyTo.sender?.ten ?? null } : null,
+        mentions: opts.mentions ?? null,
         system_event: null,
         edited_at: null,
         recalled_at: null,
@@ -422,8 +458,18 @@ export function useChatThread(id: string) {
     setMessages((cur) => cur.filter((x) => x.id !== messageId));
   }, []);
 
+  /** Sửa / thu hồi tin của mình (server kiểm ≤ 24 giờ) – kết quả thay ngay trong danh sách. */
+  const edit = useCallback(async (messageId: string, text: string) => {
+    const m = await ChatService.edit(messageId, text.trim());
+    setMessages((cur) => mergeMessages(cur, [m]));
+  }, []);
+  const recall = useCallback(async (messageId: string) => {
+    const m = await ChatService.recall(messageId);
+    setMessages((cur) => mergeMessages(cur, [m]));
+  }, []);
+
   return {
     me: session.me, detail, setDetail, messages, readAt, hasMore, loading, error, loadingOlder,
-    reload, loadOlder, send, retry, discard,
+    reload, loadOlder, send, retry, discard, edit, recall,
   };
 }

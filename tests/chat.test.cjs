@@ -110,3 +110,38 @@ test("kiểm tệp: MIME theo đuôi, chặn định dạng lạ / quá 20 MB / 
   assert.match(m.newClientId(), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.equal(m.formatFileSize(1536 * 1024), "1,5 MB");
 });
+
+test("canModifyMessage: tin của mình, trong 24 giờ, chưa thu hồi, đã lên máy chủ", () => {
+  const now = new Date("2026-10-12T10:00:00Z").getTime();
+  const mine = msg({ sender: { id: "e1", ten: "Tôi", anh: null, loai: "employee" }, created_at: "2026-10-12T09:00:00Z" });
+  assert.deepEqual(plain(m.canModifyMessage(mine, "e1", now)), { edit: true, recall: true });
+  assert.deepEqual(plain(m.canModifyMessage({ ...mine, noi_dung: null }, "e1", now)), { edit: false, recall: true });
+  assert.deepEqual(plain(m.canModifyMessage({ ...mine, created_at: "2026-10-11T09:00:00Z" }, "e1", now)), { edit: false, recall: false });
+  assert.deepEqual(plain(m.canModifyMessage({ ...mine, recalled_at: "x" }, "e1", now)), { edit: false, recall: false });
+  assert.deepEqual(plain(m.canModifyMessage({ ...mine, local_status: "failed" }, "e1", now)), { edit: false, recall: false });
+  assert.deepEqual(plain(m.canModifyMessage(mine, "e2", now)), { edit: false, recall: false });
+});
+
+test("isOutgoing: hội thoại khách mọi NV bên phải; nội bộ chỉ tin của mình", () => {
+  const other = msg();
+  assert.equal(m.isOutgoing(other, "e1", true), true);
+  assert.equal(m.isOutgoing(other, "e1", false), false);
+  assert.equal(m.isOutgoing(msg({ sender_type: "contact", sender: null }), "e1", true), false);
+});
+
+test("@nhắc tên: tìm truy vấn, chèn tên, lấy id còn trong nội dung", () => {
+  assert.equal(m.mentionQuery("chào @La"), "La");
+  assert.equal(m.mentionQuery("chào @"), "");
+  assert.equal(m.mentionQuery("email a@b"), null);
+  assert.equal(m.applyMention("chào @La", "Lan Anh"), "chào @Lan Anh ");
+  const picked = [{ id: "e2", ten: "Lan Anh" }, { id: "e3", ten: "Hà" }];
+  assert.deepEqual(plain(m.mentionIds("chào @Lan Anh nhé", picked)), ["e2"]);
+});
+
+test("addTag: bỏ trùng / rỗng, cắt 50 ký tự, tối đa 20", () => {
+  assert.deepEqual(plain(m.addTag(["VIP"], "  Quan tâm ")), ["VIP", "Quan tâm"]);
+  assert.equal(m.addTag(["VIP"], "VIP"), null);
+  assert.equal(m.addTag([], "   "), null);
+  assert.equal(m.addTag(Array.from({ length: 20 }, (_, i) => `t${i}`), "x"), null);
+  assert.equal(m.addTag([], "x".repeat(60))[0].length, 50);
+});
