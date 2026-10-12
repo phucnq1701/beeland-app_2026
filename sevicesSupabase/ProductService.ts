@@ -85,13 +85,12 @@ export function normalizeProduct(r: any) {
     MaLCH: v(r?.ma_lch),
     GhiChu: v(r?.ghi_chu),
     MauNen: v(r?.mau_nen),
-    STT: v(r?.stt),
     Huong: v(r?.huong),
     LoaiBDS: v(r?.loai_bds),
     IsView: r?.is_view ?? null,
     ThoiGianConLai: r?.thoi_gian_con_lai ?? null,
-    NgayNhap: r?.ngay_nhap ?? r?.created_at ?? null,
-    NgaySua: r?.ngay_sua ?? r?.updated_at ?? r?.created_at ?? null,
+    NgayNhap: r?.created_at ?? null,
+    NgaySua: r?.updated_at ?? r?.created_at ?? null,
     // Thấp tầng / phân lô
     Khu: v(r?.khu),
     SoO: v(r?.so_o),
@@ -118,7 +117,8 @@ const DEFAULT_BANNER = {
  * Columns cần select từ bds_products — chỉ lấy những cột UI mobile cần dùng
  * để giảm payload (bảng bds_products có ~80 cột).
  */
-// Chỉ cột THẬT trong bds_products (87 cột). Cột ten_* chỉ có qua join.
+// Chỉ cột THẬT trong bds_products. Cột ten_* chỉ có qua join. Chọn cột không tồn tại → PostgREST 400, cả danh sách rỗng:
+// 2026-10-14 bảng đã bỏ stt / ngay_nhap / ngay_sua (ngày nhập / sửa lấy created_at / updated_at).
 const PRODUCT_SELECT = [
   "id",
   "ma_sp",
@@ -142,7 +142,6 @@ const PRODUCT_SELECT = [
   "hinh_anh",
   "mau_nen",
   "is_view",
-  "stt",
   "huong_cua",
   "huong_bc",
   "view_id",
@@ -151,8 +150,6 @@ const PRODUCT_SELECT = [
   "khach_hang",
   "ma_lch",
   "ma_mau_nha",
-  "ngay_nhap",
-  "ngay_sua",
   "ty_le_vat",
   "tien_vat",
   "ty_le_phi_bao_tri",
