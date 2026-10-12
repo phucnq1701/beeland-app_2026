@@ -1,4 +1,4 @@
-# Beeland Sales – app mobile (beeland-app_2026)
+# Beeland Admin – app mobile (beeland-app_2026)
 
 App bán hàng bất động sản cho **nhân viên kinh doanh nội bộ và đại lý**: xem dự án/căn, lock căn, tạo booking,
 thu tiền booking qua QR, theo dõi khách hàng, đặt cọc, hợp đồng, báo cáo. Đăng nhập theo mã công ty (đa công ty).

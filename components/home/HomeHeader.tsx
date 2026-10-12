@@ -42,7 +42,7 @@ export function HomeHeader({ name, onSearchPress, onBellPress, onChatPress, chat
           Xin chào 👋
         </Text>
         <Text variant="title" numberOfLines={1} accessibilityRole="header" style={styles.name}>
-          {name || "Beeland Sales"}
+          {name || "Beeland Admin"}
         </Text>
       </View>
       <RoundButton icon={Search} label="Tìm sản phẩm" onPress={onSearchPress} />
