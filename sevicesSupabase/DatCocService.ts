@@ -3,6 +3,7 @@ import { getCompanyId, getValidSupabaseJwt, getTypeAccount } from "./cloudTenant
 import { ProjectService } from "./ProjectService";
 import { PaymentProgressService } from "./PaymentProgressService";
 import { statusCodeNum } from "../lib/depositQr";
+import { formatDirections } from "../lib/format";
 
 
 const UUID_RE =
@@ -330,10 +331,11 @@ export const DatCocService = {
             // Sản phẩm (loại căn, hướng)
             if (pgc.san_pham_id) {
               try {
+                // bds_products không có cột ten_*: loại căn (ma_lch → danh mục loai_ch) và hướng (huong_cua / huong_bc →
+                // danh mục phuong_huong) là uuid cloud_catalogs → tra tên bằng id=in.(…) (không embed FK – docs/data-access.md).
                 const sp = await axiosApiSupabase.get("rest/v1/bds_products", {
                   params: {
-                    select:
-                      "id,ma_sp,ky_hieu,ten_loai_can_ho,huong_cua,huong_bc,ten_huong_cua,ten_huong_bc",
+                    select: "id,ma_sp,ky_hieu,ma_lch,huong_cua,huong_bc",
                     id: `eq.${pgc.san_pham_id}`,
                     limit: "1",
                   },
@@ -342,13 +344,18 @@ export const DatCocService = {
                 if (prod) {
                   header.MaSP = header.MaSP || prod.ma_sp || "";
                   header.MaSanPham = header.MaSanPham || prod.ky_hieu || "";
-                  header.LoaiCanHo = prod.ten_loai_can_ho || "";
-                  header.Huong =
-                    prod.ten_huong_cua ||
-                    prod.huong_cua ||
-                    prod.ten_huong_bc ||
-                    prod.huong_bc ||
-                    "";
+                  const ids = [prod.ma_lch, prod.huong_cua, prod.huong_bc].filter(
+                    (x: unknown): x is string => typeof x === "string" && UUID_RE.test(x),
+                  );
+                  const names = new Map<string, string>();
+                  if (ids.length) {
+                    const cat = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
+                      params: { select: "id,item_name", id: `in.(${[...new Set(ids)].join(",")})` },
+                    });
+                    for (const r of Array.isArray(cat.data) ? cat.data : []) names.set(String(r.id), String(r.item_name ?? ""));
+                  }
+                  header.LoaiCanHo = names.get(prod.ma_lch) || "";
+                  header.Huong = formatDirections(names.get(prod.huong_cua), names.get(prod.huong_bc));
                 }
               } catch (e) {
                 console.log("ERROR deposit product:", e);

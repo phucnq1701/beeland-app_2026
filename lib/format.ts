@@ -119,3 +119,15 @@ export function formatArea(value: unknown, digits = 2): string {
   const factor = 10 ** digits;
   return `${String(Math.round(n * factor) / factor).replace('.', ',')} m²`;
 }
+
+/**
+ * Hướng căn từ tên danh mục `phuong_huong` (bds_products.huong_cua / huong_bc là uuid → cloud_catalogs):
+ * có cả hai và khác nhau → "Cửa X · Ban công Y"; một hướng (hoặc trùng nhau) → tên hướng đó; không có → "".
+ */
+export function formatDirections(cua: string | null | undefined, banCong: string | null | undefined): string {
+  const a = (cua ?? "").trim();
+  const b = (banCong ?? "").trim();
+  if (a && b && a !== b) return `Cửa ${a} · Ban công ${b}`;
+  if (a) return a;
+  return b ? `Ban công ${b}` : "";
+}

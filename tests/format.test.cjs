@@ -82,3 +82,11 @@ test("formatArea keeps up to 2 decimals with a Vietnamese comma", () => {
   assert.equal(f.formatArea(73.456), "73,46 m²");
   for (const bad of [null, undefined, "", "abc"]) assert.equal(f.formatArea(bad), "—");
 });
+
+test("formatDirections: hướng cửa + ban công (tên danh mục phuong_huong)", () => {
+  assert.equal(f.formatDirections("Đông Nam", "Tây Bắc"), "Cửa Đông Nam · Ban công Tây Bắc");
+  assert.equal(f.formatDirections("Đông Nam", null), "Đông Nam");
+  assert.equal(f.formatDirections(null, " Tây Bắc "), "Ban công Tây Bắc");
+  assert.equal(f.formatDirections("Nam", "Nam"), "Nam");
+  assert.equal(f.formatDirections("", undefined), "");
+});
