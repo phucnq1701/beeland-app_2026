@@ -50,8 +50,8 @@ Chat (`app/chat/*`, `app/contacts.tsx`) đã nối dữ liệu thật từ 2026-
 
 
 `app/receipts.tsx`, `app/receipt/[id].tsx`,
-`app/handovers.tsx`, `app/handover/[id].tsx`, `app/price-calculator/[id].tsx` (nút "Tính giá" ở chi tiết căn đã ẩn; phiếu tính giá thật
-là tính năng 17 – `docs/price-sheets.md`),
+`app/handovers.tsx`, `app/handover/[id].tsx` (màn mẫu `price-calculator` đã xoá 2026-10-13 – thay bằng phiếu tính giá thật,
+tính năng 17 – `docs/price-sheets.md`),
 `app/appointments.tsx` (thật nhưng đang ẩn, gọi API cũ). Dữ liệu mẫu ở `mocks/`.
 
 ## Tồn đọng

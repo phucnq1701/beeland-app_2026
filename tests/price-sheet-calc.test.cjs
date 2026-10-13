@@ -96,7 +96,6 @@ test("phiếu thật BRG: các vòng chiết khấu ra đúng số web đã lưu
   assert.equal(c.tongGiaTriHD, 5742156850.328437);
   assert.equal(c.tienChietKhau, 563084879.9872);
   assert.equal(c.totalDiscountPercent, 9.99);
-  assert.equal(c.warnings.length, 0);
 });
 
 test("phiếu thật BRG: lịch thanh toán 4 đợt ra đúng số web đã lưu", () => {
@@ -123,14 +122,17 @@ test("không chọn chính sách: giá sau CSBH = giá sản phẩm", () => {
   assert.equal(c.phiBaoTri, FORM.rawTienPhiBaoTri);
 });
 
-test("vòng tắt giữ nguyên giá vòng trước; công thức hỏng → fallback + cảnh báo", () => {
+test("vòng tắt giữ nguyên giá vòng trước; vòng không cài công thức ⇒ 0 (không dự phòng – như web)", () => {
   const rounds = brgRounds();
   rounds[0].enabled = false;
-  rounds[1].formulas = { ...rounds[1].formulas, tongChuaVAT: "KhongCo * 2" };
   const c = calcLib.computePriceSheet(FORM, rounds);
   assert.equal(c.roundResults[0].tongCK, 0);
   assert.equal(c.roundResults[0].tongGomVAT, FORM.rawTongGiaDaVAT);
-  assert.ok(c.warnings.some((w) => w.includes("CSBH Lần 2") && w.includes("KhongCo")));
+  const broken = brgRounds();
+  broken[0].formulas = { tongCK: "", evalOrder: broken[0].formulas.evalOrder };
+  const c2 = calcLib.computePriceSheet(FORM, broken.slice(0, 1));
+  assert.equal(c2.roundResults[0].tongCK, 0);
+  assert.equal(c2.roundResults[0].tongChuaVAT, 0);
 });
 
 test("thấp tầng: vòng CK theo công thức đất / xây dựng", () => {
@@ -195,4 +197,48 @@ test("lịch thanh toán app == web helpers.ts (nhiều cấu hình)", { skip: !
       plain(web.recalcPaymentScheduleSequential(rows, ctx))
     );
   }
+});
+
+test("tính giá app == web ContractForm/calculations.ts (2.000 bộ dữ liệu ngẫu nhiên)", { skip: !hasWeb && "không có repo web" }, () => {
+  const webFormulas = runWeb("components/Products/ContractForm/formulas.ts", {});
+  const web = runWeb("components/Products/ContractForm/calculations.ts", { "./formulas": webFormulas, "./helpers": {} });
+  let s = 12345;
+  const r = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const money = () => (r() < 0.15 ? null : Math.round(r() * 1e10) / 100);
+  const HIGH = ["TienCKTienMat + GiaGocGomVAT * TyLeCK / 100", "TienCK", "", "GiaGoc - TongCK", "TongChuaVAT_Prev - TongCK", "TongChuaVAT * TyLeVAT / 100",
+    "TongChuaVAT + VAT", "TongGomVAT_Prev - TongCK", "(TongGomVAT+DienTichThongThuy * DGDatPB*10/100)*100/110", "ROUND(TongChuaVAT * 2 / 100, 3)", "KhongCo + 1"];
+  const LOW = ["TongGiaTriHDMB_Goc * TyLeCK / 100", "GiaDatChuaVAT_Prev - TongCK", "GiaDatChuaVAT * 10 / 100", "GiaDatChuaVAT + VATDat",
+    "TienXDChuaVAT_Prev", "TienXDChuaVAT * TyLeVATXayDung / 100", "TienXDChuaVAT + VATXD", "TongGiaDat + TienXDGomVAT", "VATXD_Goc", "", "TienXDGomVAT_Prev"];
+  const pick = (a) => a[Math.floor(r() * a.length)];
+  for (let i = 0; i < 2000; i++) {
+    const low = r() < 0.4;
+    const form = {
+      isLowRise: low, tyLeVAT: pick([0, 8, 10]), tyLePBT: pick([0, 2]), tienCoc: pick([0, 50000000]),
+      dienTichThongThuy: pick([0, 54.8, 120]), donGiaSuDungDat: money() || 0, donGiaDatPhanBo: pick([0, 2971006]),
+      dienTichDat: pick([0, 100]), donGiaDat: money() || 0, dienTichXD: pick([0, 80]), tongDTSanXD: pick([0, 240]), donGiaXD: money() || 0,
+      rawTongGiaChuaVAT: money(), rawTongGiaDaVAT: money(), rawTienVAT: money(), rawTienPhiBaoTri: money(), rawTongGomPBT: money(),
+      rawTongGiaTriHDMB: money(), rawTienDatChuaVAT: money(), rawTienVATDat: money(), rawTongTienDatVAT: money(), rawTienSDDat: money(),
+      rawThanhTienXD: money(), rawTienVATXD: money(), rawTongGiaXDVAT: money(),
+    };
+    const n = Math.floor(r() * 4);
+    const rounds = Array.from({ length: n }, (_, k) => {
+      const keys = low
+        ? ["tongCK", "giaDatChuaVAT", "vatDat", "tongGiaDat", "tienXDChuaVAT", "vatXD", "tienXDGomVAT", "tongGiaTriHDMB"]
+        : ["tongCK", "tongChuaVAT", "vat", "tongGomVAT", "phiBaoTri", "tongGiaTriHD"];
+      const formulasObj = { evalOrder: keys };
+      keys.forEach((key) => (formulasObj[key] = pick(low ? LOW : HIGH)));
+      return { key: `r${k}`, name: `CK${k}`, discountPercent: pick([0, 1, 2.5]), tienCK: pick([0, 10000000]), heSo: pick([1, 2]), enabled: r() < 0.85, formulas: formulasObj };
+    });
+    assert.deepEqual(plain(calcLib.computePriceSheet(form, rounds)), plain(web.computeSalesCalculations(form, rounds)), `lệch ở bộ ${i}`);
+  }
+});
+
+test("dòng lịch từ mẫu tiến độ app == web helpers.scheduleRowsFromTemplate (tên đợt theo TenDot)", { skip: !hasWeb && "không có repo web" }, () => {
+  const webFormulas = runWeb("components/Products/ContractForm/formulas.ts", {});
+  const web = runWeb("components/Products/ContractForm/helpers.ts", { "./formulas": webFormulas });
+  const tpl = [...TEMPLATE.map((t, i) => ({ ...t, TenDot: i === 1 ? "Ký HĐMB" : undefined })), { DotTT: 5, VATDat: "X", TienXayDung: "Y", TyLeXD: 3 }];
+  for (const low of [false, true]) {
+    assert.deepEqual(plain(sched.scheduleRowsFromTemplate(tpl, low, 10)), plain(web.scheduleRowsFromTemplate(tpl, low, 10)));
+  }
+  assert.equal(sched.scheduleRowsFromTemplate(tpl, false, 10)[1].kieuThanhToan, "Ký HĐMB");
 });

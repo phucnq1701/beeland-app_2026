@@ -208,7 +208,7 @@ test("sửa phiếu: formFromSheet + roundsFromSheet tính lại ra đúng số 
   const { payload, snapshot } = P.buildPayload(draft, calc);
   const sheet = { id: "s-1", status: "draft", payload, snapshot };
   assert.equal(P.appEditBlockReason(sheet), null);
-  const f = P.formFromSheet(sheet, snapshot.product);
+  const f = P.formFromSheet(sheet);
   const tpl = formulas.buildRoundTemplate(
     [1, 2, 3].map((i) => ({ ID: `r${i}`, Name: `CK${i}`, Details: draft.rounds[i - 1].formulas ? [] : [] })),
     false
@@ -256,4 +256,24 @@ test("trạng thái + in phiếu: nhãn như web, HTML có số liệu và thoá
   const legacy = print.printInputFromSheet({ product_code: "X", base_price: 1100, vat_rate: 10, maintenance_rate: 2, area: 10 });
   assert.ok(Math.abs(legacy.totalNoVAT - 1000) < 1e-9);
   assert.ok(Math.abs(legacy.maintenanceFee - 20) < 1e-9);
+});
+
+test("productFromSavedSheet app == web (giá đã lưu ưu tiên giá căn lúc lập)", { skip: !require("node:fs").existsSync(require("node:path").join(__dirname, "..", "..", "beeland", "src")) && "không có repo web" }, () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const ts = require("typescript");
+  const vm = require("node:vm");
+  const src = fs.readFileSync(path.join(__dirname, "..", "..", "beeland", "src", "components", "PriceSheet", "productFromSavedSheet.ts"), "utf8");
+  const out = ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const m = { exports: {} };
+  vm.runInNewContext(out, { module: m, exports: m.exports, require: () => ({}) });
+  const { calc, draft } = brgDraft();
+  const { payload, snapshot } = P.buildPayload(draft, calc);
+  const cases = [
+    { payload, snapshot, product_code: "A1-12B09" },
+    { payload: { TTHopDong: { GiaTriHopDong: { DienTichThongThuy: 10, TongChuaVAT: 1000, TienXDChuaVAT: 5 } } }, snapshot: { product: { DienTichTT: 9 } } },
+    { snapshot: { area: 33, product: {} }, payload: {} },
+    {},
+  ];
+  for (const c of cases) assert.deepEqual(plain(P.productFromSavedSheet(c)), plain(m.exports.productFromSavedSheet(c)));
 });

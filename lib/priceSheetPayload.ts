@@ -724,17 +724,65 @@ export function appEditBlockReason(sheet: any): string | null {
   return null;
 }
 
+const has = (v: unknown) => v !== null && v !== undefined && v !== "";
+const pickV = (v: unknown, fb: unknown) => (has(v) ? v : fb);
+const divV = (a: unknown, b: unknown) => (Number(a) && Number(b) ? Number(a) / Number(b) : undefined);
+
 /**
- * Phiếu đã lưu → form (giá gốc lấy đúng GiaTriHopDong đã lưu để tính lại ra cùng số).
- * Khác web (web nạp lại giá sản phẩm lúc tạo phiếu, bỏ giá bảng giá) – ghi ở spec 0.2.
+ * Sản phẩm dựng lại khi SỬA phiếu – bản sao web src/components/PriceSheet/productFromSavedSheet.ts (test so trực tiếp):
+ * giá lấy đúng GiaTriHopDong đã lưu (đầu vào thật của lần tính), thiếu mới về giá căn trong snapshot.product.
  */
-export function formFromSheet(sheet: any, product: any): SheetForm {
+export function productFromSavedSheet(full: any): any {
+  const sheet = full || {};
+  const snap: any = sheet.snapshot || sheet.payload?._snapshot || {};
+  const tt: any = sheet.payload?.TTHopDong || {};
+  const g: any = tt.GiaTriHopDong || {};
+  const saved: any = snap.product || {};
+  const area = pickV(g.DienTichThongThuy, saved.DienTichThongThuy ?? saved.DienTichTT ?? snap.area ?? sheet.area);
+  return {
+    ...saved,
+    MaSP: saved.MaSP ?? tt.MaSP ?? null,
+    MaDA: saved.MaDA ?? tt.MaDA ?? null,
+    code: saved.code || sheet.product_code,
+    KyHieu: saved.KyHieu || sheet.product_code || snap.productCode,
+    TenDA: saved.TenDA || snap.projectName,
+    project_name: saved.project_name || sheet.project_name || sheet.projects?.name || snap.projectName,
+    TenLoaiBDS: saved.TenLoaiBDS || snap.productType || sheet.product_name,
+    product_type: saved.product_type || sheet.product_type,
+    TenView: saved.TenView || snap.view,
+    area: saved.area ?? sheet.area ?? area,
+    DienTichThongThuy: area,
+    DTTimDuong: saved.DTTimDuong ?? saved.DTTimTuong ?? undefined,
+    TyLeVAT: pickV(g.TyLeVAT, saved.TyLeVAT),
+    TyLePhiBaoTri: pickV(g.TyLePhiBaoTri, saved.TyLePhiBaoTri),
+    DonGiaChuaVAT: pickV(g.DonGiaChuaVAT, saved.DonGiaChuaVAT ?? divV(g.TongChuaVAT, area)),
+    DonGiaDaVAT: pickV(g.DonGiaGomVAT, saved.DonGiaDaVAT ?? divV(g.TongGomVAT, area)),
+    TongGiaChuaVAT: pickV(g.TongChuaVAT, saved.TongGiaChuaVAT),
+    TongGiaDaVAT: pickV(g.TongGomVAT, saved.TongGiaDaVAT),
+    TienVAT: pickV(g.TienVAT, saved.TienVAT),
+    TienPhiBaoTri: pickV(g.TienPhiBaoTri, saved.TienPhiBaoTri),
+    TongGomPBT: pickV(g.TongGiaGomVATPBT, saved.TongGomPBT),
+    DGDatPB: pickV(g.DGDatPB, saved.DGDatPB),
+    DonGiaDat: pickV(g.DonGiaDat, saved.DonGiaDat),
+    DonGiaXD: pickV(g.DonGiaXD, saved.DonGiaXD ?? saved.DonGiaXayDung),
+    rawTienDatChuaVAT: pickV(g.TienDatChuaVAT, saved.rawTienDatChuaVAT),
+    rawTienVATDat: pickV(g.TienVATDat, saved.rawTienVATDat),
+    rawTongTienDatVAT: pickV(g.TongTienVATDat, saved.rawTongTienDatVAT),
+    rawThanhTienXD: pickV(g.TienXDChuaVAT, saved.rawThanhTienXD),
+    rawTienVATXD: pickV(g.TienVATXD, saved.rawTienVATXD),
+    rawTongGiaXDVAT: pickV(g.TongTienXDGomVAT, saved.rawTongGiaXDVAT),
+  };
+}
+
+/**
+ * Phiếu đã lưu → form, đúng đường web: productFromSavedSheet → state ban đầu của form → effect "nạp lại phiếu"
+ * (số phiếu, ngày ký, tiền cọc, ghi chú…; diện tích = diện tích của lần tính đã lưu).
+ */
+export function formFromSheet(sheet: any): SheetForm {
   const payload = sheet?.payload || {};
   const snap = sheet?.snapshot || payload._snapshot || {};
   const tt = payload.TTHopDong || {};
-  const g = tt.GiaTriHopDong || {};
-  const base = formFromProduct(product);
-  const pickN = (v: any, fb: any) => (v === null || v === undefined || v === "" ? fb : Number(v));
+  const base = formFromProduct(productFromSavedSheet(sheet));
   const toDate = (v: any) => (v ? new Date(v) : null);
   return {
     ...base,
@@ -748,25 +796,7 @@ export function formFromSheet(sheet: any, product: any): SheetForm {
     ghiChu: tt.GhiChu || "",
     duAn: snap.projectName || base.duAn,
     loaiSP: snap.productType || base.loaiSP,
-    dienTichThongThuy: pickN(g.DienTichThongThuy, base.dienTichThongThuy),
-    tyLeVAT: pickN(g.TyLeVAT, base.tyLeVAT),
-    tyLePBT: pickN(g.TyLePhiBaoTri, base.tyLePBT),
-    donGiaDatPhanBo: pickN(g.DGDatPB, base.donGiaDatPhanBo),
-    donGiaDat: pickN(g.DonGiaDat, base.donGiaDat),
-    donGiaXD: pickN(g.DonGiaXD, base.donGiaXD),
-    rawDonGiaDaVAT: pickN(g.DonGiaGomVAT, base.rawDonGiaDaVAT),
-    rawDonGiaChuaVAT: pickN(g.DonGiaChuaVAT, base.rawDonGiaChuaVAT),
-    rawTongGiaChuaVAT: pickN(g.TongChuaVAT, base.rawTongGiaChuaVAT),
-    rawTongGiaDaVAT: pickN(g.TongGomVAT, base.rawTongGiaDaVAT),
-    rawTienVAT: pickN(g.TienVAT, base.rawTienVAT),
-    rawTienPhiBaoTri: pickN(g.TienPhiBaoTri, base.rawTienPhiBaoTri),
-    rawTongGomPBT: pickN(g.TongGiaGomVATPBT, base.rawTongGomPBT),
-    rawTienDatChuaVAT: pickN(g.TienDatChuaVAT, base.rawTienDatChuaVAT),
-    rawTienVATDat: pickN(g.TienVATDat, base.rawTienVATDat),
-    rawTongTienDatVAT: pickN(g.TongTienVATDat, base.rawTongTienDatVAT),
-    rawThanhTienXD: pickN(g.TienXDChuaVAT, base.rawThanhTienXD),
-    rawTienVATXD: pickN(g.TienVATXD, base.rawTienVATXD),
-    rawTongGiaXDVAT: pickN(g.TongTienXDGomVAT, base.rawTongGiaXDVAT),
+    dienTichThongThuy: tt.GiaTriHopDong?.DienTichThongThuy ?? (Number(snap.area) || base.dienTichThongThuy),
   };
 }
 

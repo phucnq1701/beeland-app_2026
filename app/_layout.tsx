@@ -33,7 +33,6 @@ function RootLayoutNav() {
       <Stack.Screen name="register" options={{ headerShown: false }} />
       <Stack.Screen name="project/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="product/[id]" options={{ title: 'Chi tiết sản phẩm' }} />
-      <Stack.Screen name="price-calculator/[id]" options={{ title: 'Tính giá sản phẩm' }} />
       <Stack.Screen name="customer/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="contract/[id]" options={{ headerShown: true, title: 'Chi tiết hợp đồng' }} />
       <Stack.Screen name="deposits" options={{ headerShown: true, title: 'Đặt cọc' }} />

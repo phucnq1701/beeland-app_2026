@@ -12,7 +12,7 @@ ghi phiên bản + giá gốc căn). App **không sửa máy chủ**.
 | Danh sách | `app/price-sheets.tsx` | `fn_price_sheet_list`: tìm (mã phiếu / mã căn / sản phẩm), lọc dự án (uuid, 1 dự án), loại (Cao tầng / Thấp tầng), chip trạng thái kèm số đếm (`stats` máy chủ), cuộn tải thêm 20. Nút + chỉ hiện khi có quyền ADD. Nhúng được làm tab menu (`embedded`). |
 | Chi tiết | `app/price-sheet/[id].tsx` | `fn_price_sheet_get`; hiện **số đã lưu** (snapshot / payload – không tính lại). Chia sẻ PDF, menu: Duyệt / Từ chối (APPROVE, từ chối bắt buộc lý do), Sửa (EDIT + `appEditBlockReason`), Xoá mềm (DELETE). |
 | Lịch sử | `app/price-sheet/history/[id].tsx` | `fn_price_sheet_versions` – chỉ xem (khôi phục phiên bản làm trên web). |
-| Lập / sửa | `app/price-sheet/new.tsx` | Wizard 4 bước: Căn hộ → Chính sách → Thanh toán → Khách & quà. Params `productId` (căn có sẵn) / `sheetId` (sửa). Không param ⇒ chọn căn ngay ở bước 1 (`ProductPicker`: dự án + loại + tìm). |
+| Lập / sửa | `app/price-sheet/new.tsx` | Wizard 4 bước: Căn hộ → Chính sách → Thanh toán → Khách & quà. Params `productId` (căn có sẵn) / `sheetId` (sửa). Không param ⇒ chọn căn ngay ở bước 1 (`ProductPicker`: dự án + loại + tìm). Lối vào khác: chi tiết căn (`app/product/[id].tsx`) nút "Lập phiếu tính giá" ở khối Chi tiết giá – chỉ nội bộ có quyền ADD. |
 
 Khối dùng chung: `components/priceSheet/` (`usePriceSheetDraft` điều phối, `PriceSheetBlocks`, `RoundEditor`, `ProductPicker`,
 `CustomerPicker`, `sharePriceSheetPdf`). Service: `sevicesSupabase/PriceSheetService.ts`.
@@ -43,8 +43,8 @@ Người dùng sửa được: bảng giá, chính sách, từng vòng (bật/t�
 |---|---|---|
 | `lib/formulaEval.ts` | thay `new Function` (Hermes + an toàn) – giữ hành vi JS strict (`--`, số 0 đứng đầu, dấu phẩy) | `tests/price-sheet-formulas.test.cjs` |
 | `lib/priceSheetFormulas.ts` | `ContractForm/formulas.ts` (ROUND, evaluateRoundFormula), `helpers.mapApiDetailsToFormulas`, `utils/pricingEngine.ts` | so trực tiếp code web, 5.000 biểu thức ngẫu nhiên |
-| `lib/priceSheetCalc.ts` | `PriceSheetForm` useMemo `calculations` (cao tầng nhiều pass + fallback, thấp tầng, không chính sách) | `tests/price-sheet-calc.test.cjs` – phiếu thật BRG PTG-0006 ra đúng từng số |
-| `lib/priceSheetSchedule.ts` | `helpers.ts` lịch thanh toán + `handleTemplateSelect` + NgayTT | so trực tiếp `helpers.ts` web |
+| `lib/priceSheetCalc.ts` | **bản sao** web `ContractForm/calculations.ts` (dùng chung form Phiếu tính giá + Đặt cọc / Hợp đồng): không công thức dự phòng, thấp tầng % VAT XD /100 | `tests/price-sheet-calc.test.cjs` – so trực tiếp tệp web trên 2.000 bộ ngẫu nhiên + phiếu thật BRG |
+| `lib/priceSheetSchedule.ts` | `helpers.ts` lịch thanh toán + `scheduleRowsFromTemplate` (tên đợt MoTa → TenDot) + NgayTT | so trực tiếp `helpers.ts` web |
 | `lib/priceSheetPayload.ts` | `handleSave`, `handlePriceSheetSaved`, `mapBdsProduct`, `getSPByBG`/`handleBG`, `PRICE_FIELD_MAP` | `tests/price-sheet-payload.test.cjs` |
 | `lib/priceSheetPrint.ts` | `printPriceSheetRecord` + `printPriceSheetHighRise` (mẫu Excel PTG) | như trên |
 | `lib/priceSheetStatus.ts` | nhãn / màu Tag trạng thái, điều kiện Duyệt / Từ chối | như trên |
@@ -60,24 +60,23 @@ khớp 100% GiaTriHopDong / totals / 4 đợt (cả NgayTT); tham số app gửi
 - **Sửa trên app** chỉ phiếu nháp "đơn giản" (`appEditBlockReason`): không xoá, `status = draft`, không gắn phiếu giữ chỗ,
   không đồng sở hữu / ưu đãi lãi suất / 360 khách, có dữ liệu sản phẩm. Còn lại báo "sửa trên web" (app không quản các khối đó,
   lưu đè sẽ làm mất). Web cho sửa mọi trạng thái.
-- **Sửa phiếu:** giá gốc lấy đúng `GiaTriHopDong` đã lưu, vòng CK từ `snapshot.policyRounds` + công thức cấu hình hiện tại
+- **Sửa phiếu:** giá gốc lấy đúng `GiaTriHopDong` đã lưu (`productFromSavedSheet` – bản sao web, web cùng cách từ 2026-10-13), vòng CK từ `snapshot.policyRounds` + công thức cấu hình hiện tại
   (`roundsFromSheet` theo `key`). Tính lại lệch số đã lưu > 1đ ⇒ hiện cảnh báo (cấu hình / chính sách đã đổi).
-- Công thức vòng trả 0 ⇒ dùng công thức dự phòng như web, hiện cảnh báo ở bước Chính sách và hỏi lại khi lưu.
+- Vòng không cài công thức cho trường nào ⇒ trường đó = 0 (như web cả 2 form, không công thức dự phòng – web PT5).
 - Danh sách / chi tiết luôn hiện số đã lưu, không tính lại.
 - Chia sẻ PDF: `expo-print` → `expo-sharing` (không có chia sẻ ⇒ hộp in hệ thống).
 
-## Bẫy / dữ liệu (13/10/2026)
+## Bẫy / dữ liệu
 
-- Chính sách "Chính sách bán hàng tháng 9" (BRG, `3aa15d44…`) có 5 dòng CK nhưng `pricing_config_id` trỏ cấu hình **CAOTANG**
-  (tính giá sản phẩm, 0 vòng) thay vì CSCAOTANG ⇒ web và app đều không áp chiết khấu nào (khung vòng rỗng). Cần sửa cấu hình
-  trên web (Chính sách bán hàng → chọn cấu hình CSBH).
-- Bảng giá "06/2026" (dự án `3329abf7…`, căn B2-701): `total_after_vat` = `vat_amount` (122.358.048,4) và `vat_rate` = 0 ⇒
-  "Tổng giá gồm VAT" hiện sai trên cả web và app. Cần sửa dữ liệu bảng giá.
+- 13/10/2026 tìm thấy và sửa (migration web `20261015020100_fix_brg_price_data`, backup `~/backups/20261015_brg_price_fix_*`):
+  chính sách "Chính sách bán hàng tháng 9" (BRG) gắn nhầm cấu hình CAOTANG (0 vòng) ⇒ chuyển sang CSCAOTANG `fa70cbbe` (5 vòng);
+  bảng giá 06/2026, 8/2026 (import ghép nhầm cột) chép lại cột từ căn; CT01 % VAT = 0, % PBT chứa số tiền ⇒ 10 / 2.
+  Nguyên nhân gốc (web, đã sửa): ghép cột import dạng chuỗi con + 1 cột cho nhiều trường; import ghi % = 0 khi thiếu.
+- Căn B2-809 (BRG, dự án `3329abf7…`): dữ liệu căn tự lệch (tổng gồm VAT + PBT ≠ tổng thanh toán ~61.000đ) – chưa sửa, cần
+  người phụ trách kiểm tra.
 - Mẫu chung cấu hình tính giá (`la_mau_chung`) của công ty khác bị RLS chặn đọc – app (như web) chỉ thấy cấu hình của công ty mình.
 
 ## Tồn đọng
 
-- Màn mẫu cũ `app/price-calculator/[id].tsx` (dữ liệu mock) vẫn còn; nút "Tính giá" ở chi tiết căn đang ẩn. Đề xuất: nút ở chi tiết
-  căn mở `/price-sheet/new?productId=<uuid>` rồi xoá màn mẫu – **chưa làm** (sửa màn cũ, chờ người dùng duyệt).
-- Thấp tầng chưa có phiếu thật để đối chiếu (DB chỉ có phiếu cũ không đủ dữ liệu) – mới kiểm bằng test tự dựng.
+- Thấp tầng chưa có phiếu thật để đối chiếu – kiểm bằng test tự dựng + so trực tiếp code web.
 - Chưa chạy thử trên máy thật (lưu phiếu ghi dữ liệu thật – không có môi trường test).

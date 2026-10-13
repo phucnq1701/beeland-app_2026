@@ -1,9 +1,8 @@
 /**
- * Tính giá sau chính sách bán hàng (các vòng chiết khấu nối tiếp) – bản thuần của `calculations`
- * trong beeland/src/components/PriceSheet/PriceSheetForm.tsx (useMemo, ~dòng 764–1438).
- * Giữ đúng thứ tự tính, biến công thức, fallback và số pass của web. Khác web:
- *  - không có nhánh "khôi phục số liệu đã lưu" (restoredChinhSachSnapshot) – app luôn tính lại;
- *  - cảnh báo fallback trả qua `warnings` thay vì toast.
+ * Tính giá sau chính sách bán hàng – BẢN SAO của web beeland/src/components/Products/ContractForm/calculations.ts
+ * (dùng chung form Phiếu tính giá + Đặt cọc / Hợp đồng trên web). Sửa logic thì sửa web trước rồi chép lại;
+ * tests/price-sheet-calc.test.cjs so trực tiếp 2 tệp trên dữ liệu ngẫu nhiên + phiếu thật.
+ * Quy tắc: vòng không cài công thức ⇒ 0 (không công thức dự phòng); thấp tầng % VAT XD dự phòng tính /100.
  */
 import {
   DEFAULT_EVAL_ORDER,
@@ -13,8 +12,8 @@ import {
   type PolicyDiscountRound,
 } from "./priceSheetFormulas";
 
-/** Các trường của form web mà phép tính đọc (tên giữ nguyên formData của web) */
-export interface PriceForm {
+/** Trường form mà phép tính đọc (tên giữ như formData của 2 form) */
+export interface SalesPriceForm {
   isLowRise: boolean;
   /** % (vd 10) */
   tyLeVAT: number;
@@ -44,71 +43,43 @@ export interface PriceForm {
   rawTongGiaXDVAT?: number | null;
 }
 
-export interface PriceCalc {
-  tongChuaVAT: number;
-  tienChietKhau: number;
-  giaTriSauCK: number;
-  tienVAT: number;
-  tongGomVAT: number;
-  phiBaoTri: number;
-  tongGiaTriHD: number;
-  tongGiaTriHDMB: number;
-  conPhaiThanhToan: number;
-  totalDiscountPercent: number;
-  roundResults: any[];
-  thanhTienDat: number;
-  donGiaDatPhanBo?: number;
-  tienDatChuaVAT?: number;
-  tienVATDat?: number;
-  tongTienDatVAT?: number;
-  thanhTienXD: number;
-  thanhTienXDSauCK: number;
-  tienVATXD: number;
-  tongGiaXDVAT: number;
-  baseTienVAT?: number;
-  baseGomVAT?: number;
-  basePhiBaoTri?: number;
-  baseTongGiaTriHD?: number;
-  /** Vòng có công thức trả 0 phải dùng công thức dự phòng (web hiện toast cảnh báo) */
-  warnings: string[];
-}
+const n = (v: unknown) => Number(v) || 0;
 
-const n = (v: any) => Number(v) || 0;
+/** Kết quả 1 vòng (số liệu + biến công thức để bảng giải thích hiển thị) */
+export type RoundResult = Record<string, number | Record<string, number> | Record<string, string>>;
 
-export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountRound[]): PriceCalc {
+export type SalesCalculations = { [k: string]: any; roundResults: RoundResult[] };
+
+export function computeSalesCalculations(form: SalesPriceForm, policyRounds: PolicyDiscountRound[]): SalesCalculations {
   const fd = form;
   const isLowRise = !!fd.isLowRise;
   const tyLeVAT = n(fd.tyLeVAT) / 100;
   const tyLePBT = n(fd.tyLePBT) / 100;
   const tienCoc = n(fd.tienCoc);
-  const warnings: string[] = [];
 
-  // Chưa chọn chính sách (không vòng nào bật) ⇒ giá sau CSBH = giá sản phẩm
+  // Chưa chọn chính sách (không vòng nào bật) ⇒ "Sản phẩm sau CSBH" = "Thông tin sản phẩm"
   if (!policyRounds || policyRounds.length === 0 || !policyRounds.some((r) => r.enabled)) {
     const rawTongChuaVAT = n(fd.rawTongGiaChuaVAT);
     const rawTongGomVAT = n(fd.rawTongGiaDaVAT);
-    const rawTienVATRaw =
-      n(fd.rawTienVAT) || (rawTongGomVAT && rawTongChuaVAT ? rawTongGomVAT - rawTongChuaVAT : 0);
+    const rawTienVATRaw = n(fd.rawTienVAT) || (rawTongGomVAT && rawTongChuaVAT ? rawTongGomVAT - rawTongChuaVAT : 0);
     const rawPhiBaoTri = n(fd.rawTienPhiBaoTri) || n(fd.rawTongGomPBT) - rawTongGomVAT || 0;
     const rawTongGiaTri = n(fd.rawTongGomPBT) || n(fd.rawTongGiaTriHDMB) || rawTongGomVAT + rawPhiBaoTri;
 
     if (isLowRise) {
       const rawTienDatChuaVAT = n(fd.rawTienDatChuaVAT);
-      const rawTienVATDat = n(fd.rawTienVATDat);
       const rawTongTienDatVAT = n(fd.rawTongTienDatVAT);
       const rawThanhTienXD = n(fd.rawThanhTienXD);
-      const rawTienVATXD = n(fd.rawTienVATXD);
       const rawTongGiaXDVAT = n(fd.rawTongGiaXDVAT);
       const rawTongGiaTriHDMB = n(fd.rawTongGiaTriHDMB) || rawTongTienDatVAT + rawTongGiaXDVAT;
       return {
         thanhTienDat: rawTienDatChuaVAT,
         donGiaDatPhanBo: (fd.dienTichDat || 0) > 0 ? rawTienDatChuaVAT / (fd.dienTichDat || 1) : fd.donGiaDat || 0,
         tienDatChuaVAT: rawTienDatChuaVAT,
-        tienVATDat: rawTienVATDat,
+        tienVATDat: n(fd.rawTienVATDat),
         tongTienDatVAT: rawTongTienDatVAT,
         thanhTienXD: rawThanhTienXD,
         thanhTienXDSauCK: rawThanhTienXD,
-        tienVATXD: rawTienVATXD,
+        tienVATXD: n(fd.rawTienVATXD),
         tongGiaXDVAT: rawTongGiaXDVAT,
         tongGiaTriHDMB: rawTongGiaTriHDMB,
         conPhaiThanhToan: rawTongGiaTriHDMB - tienCoc,
@@ -121,7 +92,6 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
         phiBaoTri: rawPhiBaoTri,
         tongGiaTriHD: rawTongGiaTriHDMB,
         roundResults: [],
-        warnings,
       };
     }
 
@@ -146,7 +116,6 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
       tienVATXD: 0,
       tongGiaXDVAT: 0,
       tongGiaTriHDMB: rawTongGiaTri,
-      warnings,
     };
   }
 
@@ -155,7 +124,9 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
     const donGiaDat = fd.donGiaDat || 0;
     const dienTichXD = fd.tongDTSanXD || fd.dienTichXD || 0;
     const donGiaXD = fd.donGiaXD || 0;
-    const tyLeVATXD = fd.tyLeVAT; // web dùng chung % VAT (giữ nguyên dạng %, không chia 100)
+    // % VAT xây dựng dùng chung % VAT: biến công thức là % (vd 10), giá trị dự phòng dùng tỷ lệ
+    const tyLeVATXD = fd.tyLeVAT;
+    const rateVATXD = n(tyLeVATXD) / 100;
 
     const rawGiaDatKoVAT = n(fd.rawTienDatChuaVAT);
     const rawVATDat = n(fd.rawTienVATDat);
@@ -171,7 +142,7 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
     const tienSDDat = rawTienSDDat;
     const thanhTienXD = rawThanhTienXD || dienTichXD * donGiaXD;
     const tongGiaDatGoc = rawTongGiaDat || giaDatKoVAT + vatDat + tienSDDat;
-    const tongGiaXDVATGoc = rawTongGiaXDVAT || thanhTienXD * (1 + tyLeVATXD);
+    const tongGiaXDVATGoc = rawTongGiaXDVAT || thanhTienXD * (1 + rateVATXD);
     const tongGiaTriHDMBGoc = rawTongGiaTriHDMB || tongGiaDatGoc + tongGiaXDVATGoc;
 
     let prevGiaDatChuaVAT = giaDatKoVAT;
@@ -181,7 +152,7 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
     let prevTienXDGomVAT = tongGiaXDVATGoc;
     let prevTongGiaTriHDMB = tongGiaTriHDMBGoc;
     let totalCKAmount = 0;
-    const roundResults: any[] = [];
+    const roundResults: RoundResult[] = [];
 
     for (const round of policyRounds) {
       if (!round.enabled) {
@@ -225,7 +196,7 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
         ThanhTienXD_Goc: thanhTienXD,
         TienXDChuaVAT_Goc: thanhTienXD,
         TongXDChuaVAT_Goc: thanhTienXD,
-        VATXD_Goc: rawVATXD || thanhTienXD * tyLeVATXD,
+        VATXD_Goc: rawVATXD || thanhTienXD * rateVATXD,
         TienXDGomVAT_Goc: tongGiaXDVATGoc,
         TongXDVAT_Goc: tongGiaXDVATGoc,
         TongGiaTriHDMB_Goc: tongGiaTriHDMBGoc,
@@ -246,8 +217,8 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
         TongGiaTriHDMB_Prev: prevTongGiaTriHDMB,
       };
 
-      const tongCKFormula = (round.formulas.tongCK || "").trim() || "0";
-      const tongCKVal = evaluateRoundFormula(tongCKFormula, vars);
+      // Không cài công thức ⇒ 0
+      const tongCKVal = evaluateRoundFormula((round.formulas.tongCK || "").trim() || "0", vars);
       vars["TongCK"] = tongCKVal;
 
       const varNameMap: Partial<Record<FormulaFieldKey, string[]>> = {
@@ -260,6 +231,7 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
         tienXDGomVAT: ["TienXDGomVAT", "TongXDVAT"],
         tongGiaTriHDMB: ["TongGiaTriHDMB"],
       };
+      // Mọi trường trong varNameMap đều được tính (kể cả evalOrder không liệt kê) — không cài công thức ⇒ 0
       const baseOrder = round.formulas.evalOrder || LOW_EVAL_ORDER;
       const evalOrder: FormulaFieldKey[] = [
         ...baseOrder,
@@ -268,8 +240,7 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
       const results: Record<string, number> = { tongCK: tongCKVal };
       for (const fieldKey of evalOrder) {
         if (fieldKey === "tongCK") continue;
-        const formula = ((round.formulas as any)[fieldKey] || "").trim() || "0";
-        const val = evaluateRoundFormula(formula, vars);
+        const val = evaluateRoundFormula((round.formulas[fieldKey as keyof typeof round.formulas] as string | undefined || "").trim() || "0", vars);
         (varNameMap[fieldKey] || []).forEach((name) => {
           vars[name] = val;
         });
@@ -298,7 +269,7 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
       prevTongGiaTriHDMB = r.tongGiaTriHDMB;
     }
 
-    const last = roundResults.length > 0 ? roundResults[roundResults.length - 1] : null;
+    const last = (roundResults.length > 0 ? roundResults[roundResults.length - 1] : null) as Record<string, number> | null;
     const tongGiaTriHDMB = last?.tongGiaTriHDMB ?? prevTongGiaTriHDMB;
     return {
       thanhTienDat: last?.giaDatChuaVAT ?? giaDatKoVAT,
@@ -321,13 +292,13 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
       phiBaoTri: 0,
       tongGiaTriHD: tongGiaTriHDMB,
       roundResults,
-      warnings,
     };
   }
 
   // Cao tầng — vòng chiết khấu theo công thức, nhiều pass cho công thức tham chiếu chéo
   const dienTich = fd.dienTichThongThuy || 0;
-  const donGia = fd.donGiaSuDungDat || 0;
+  const donGia = fd.donGiaSuDungDat || 0; // đơn giá gồm VAT
+  // Ưu tiên giá gốc từ lưới / bảng giá; thiếu mới tính DT × ĐG
   const rawGomVAT = n(fd.rawTongGiaDaVAT);
   const rawChuaVAT = n(fd.rawTongGiaChuaVAT);
   const giaGocVAT = rawGomVAT > 0 ? rawGomVAT : dienTich * donGia;
@@ -338,7 +309,7 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
   let prevTongGomVAT = giaGocVAT;
   let prevTongGiaTriHD = giaGocVAT + giaGoc * tyLePBT;
   let totalCKAmount = 0;
-  const roundResults: any[] = [];
+  const roundResults: RoundResult[] = [];
 
   for (const round of policyRounds) {
     if (!round.enabled) {
@@ -355,6 +326,7 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
       continue;
     }
 
+    const seedFromPrev = roundResults.length === 0 ? "Giá gốc (round 1)" : `Kết quả round ${roundResults.length}`;
     const vars: Record<string, number> = {
       GiaGoc: giaGoc,
       GiaGocGomVAT: giaGocVAT,
@@ -370,26 +342,43 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
       TyLePBT: fd.tyLePBT,
       DienTichThongThuy: dienTich,
       DGDatPB: fd.donGiaDatPhanBo || 0,
+      // Seed biến kết quả bằng vòng trước (hoặc giá gốc) cho công thức tham chiếu chéo
       TongChuaVAT: prevTongChuaVAT,
       TongGomVAT: prevTongGomVAT,
       VAT: prevTongChuaVAT * tyLeVAT,
       PhiBaoTri: prevTongChuaVAT * tyLePBT,
       TongGiaTriHD: prevTongGiaTriHD,
     };
+    // Nguồn gốc từng biến – hiển thị ở bảng giải thích công thức
+    const varSources: Record<string, string> = {
+      GiaGoc: "Giá gốc chưa VAT (raw API hoặc DT × ĐG)",
+      GiaGocGomVAT: "Giá gốc gồm VAT (raw API hoặc DT × ĐG)",
+      GiaTruocCK: `Tổng chưa VAT trước CK (${seedFromPrev})`,
+      TongChuaVAT_Prev: seedFromPrev,
+      TongGomVAT_Prev: seedFromPrev,
+      TongGiaTriHD_Prev: seedFromPrev,
+      TyLeCK: `Cấu hình CSBH lần ${roundResults.length + 1}`,
+      TienCKTienMat: `CK Tiền nhập tay - lần ${roundResults.length + 1}`,
+      TienCK: "TienCKTienMat + TongChuaVAT_Prev × TyLeCK% × HeSo",
+      HeSo: `Cấu hình CSBH lần ${roundResults.length + 1}`,
+      TyLeVAT: "Form: % VAT",
+      TyLePBT: "Form: % Phí bảo trì",
+      DienTichThongThuy: "Form: DT thông thủy",
+      DGDatPB: "Form: ĐG đất phân bổ",
+      TongChuaVAT: `Seed = ${seedFromPrev} (chưa qua công thức)`,
+      TongGomVAT: `Seed = ${seedFromPrev} (chưa qua công thức)`,
+      VAT: "Seed = TongChuaVAT_Prev × TyLeVAT (chưa qua công thức)",
+      PhiBaoTri: "Seed = TongChuaVAT_Prev × TyLePBT (chưa qua công thức)",
+      TongGiaTriHD: `Seed = ${seedFromPrev} (chưa qua công thức)`,
+    };
 
-    const tongCKVal = evaluateRoundFormula(round.formulas.tongCK || "TienCK", vars);
+    // Không cài công thức ⇒ 0
+    const tongCKFormula = (round.formulas.tongCK || "").trim() || "0";
+    const tongCKVal = evaluateRoundFormula(tongCKFormula, vars);
     vars["TongCK"] = tongCKVal;
+    varSources["TongCK"] = `Tính từ công thức: ${tongCKFormula}`;
 
     const evalOrder = round.formulas.evalOrder || DEFAULT_EVAL_ORDER;
-    const isFirstRound = roundResults.length === 0;
-    const fallbacks: Partial<Record<FormulaFieldKey, string>> = {
-      tongCK: "TienCK",
-      tongChuaVAT: isFirstRound ? "GiaGoc - TongCK" : "TongChuaVAT_Prev - TongCK",
-      vat: "TongChuaVAT * TyLeVAT / 100",
-      tongGomVAT: "TongChuaVAT + VAT",
-      phiBaoTri: "TongChuaVAT * TyLePBT / 100",
-      tongGiaTriHD: "TongGomVAT + PhiBaoTri",
-    };
     const varNameMap: Partial<Record<FormulaFieldKey, string>> = {
       tongCK: "TongCK",
       tongChuaVAT: "TongChuaVAT",
@@ -399,31 +388,19 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
       tongGiaTriHD: "TongGiaTriHD",
     };
     const results: Record<string, number> = {};
-    const roundIndex = roundResults.length + 1;
 
+    // Nhiều pass để công thức tham chiếu chéo hội tụ
+    // (vd tongChuaVAT = TongGomVAT*100/110 và tongGomVAT = GiaGocGomVAT - TongCK)
     for (let pass = 0; pass < 5; pass++) {
       let changed = false;
       for (const fieldKey of evalOrder) {
-        const formula = (round.formulas as any)[fieldKey] || fallbacks[fieldKey] || "0";
-        let val = evaluateRoundFormula(formula, vars);
-        if (val === 0 && (prevTongChuaVAT > 0 || prevTongGomVAT > 0) && fallbacks[fieldKey]) {
-          if (pass === 0) {
-            const referenced = (formula.match(/[A-Za-z_][A-Za-z0-9_]*/g) || []).filter(
-              (id: string) => !["round", "floor", "ceil"].includes(id)
-            );
-            const missing = referenced.filter((id: string) => !(id in vars) || vars[id] === undefined);
-            warnings.push(
-              `CSBH Lần ${roundIndex}: công thức "${formula}" ${
-                missing.length ? `thiếu biến (${missing.join(", ")})` : "trả về 0"
-              }, đang dùng fallback`
-            );
-          }
-          val = evaluateRoundFormula(fallbacks[fieldKey] as string, vars);
-        }
+        const formula = ((round.formulas[fieldKey as keyof typeof round.formulas] as string | undefined) || "").trim() || "0";
+        const val = evaluateRoundFormula(formula, vars);
         const varName = varNameMap[fieldKey];
         if (varName) {
           if (vars[varName] !== val) changed = true;
           vars[varName] = val;
+          varSources[varName] = `Tính từ công thức: ${formula}`;
         }
         results[fieldKey] = val;
       }
@@ -440,13 +417,14 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
       tongGiaTriHD: results.tongGiaTriHD ?? 0,
       tienCK: results.tongCK ?? tongCKVal,
       vars: { ...vars },
+      varSources: { ...varSources },
     });
     prevTongChuaVAT = results.tongChuaVAT ?? 0;
     prevTongGomVAT = results.tongGomVAT ?? 0;
     prevTongGiaTriHD = results.tongGiaTriHD ?? 0;
   }
 
-  const lastResult = roundResults.length > 0 ? roundResults[roundResults.length - 1] : null;
+  const lastResult = (roundResults.length > 0 ? roundResults[roundResults.length - 1] : null) as Record<string, number> | null;
   const giaTriSauCK = lastResult?.tongChuaVAT ?? giaGoc;
   const tienVAT = lastResult?.vat ?? giaGoc * tyLeVAT;
   const tongGomVAT = lastResult?.tongGomVAT ?? giaGoc + giaGoc * tyLeVAT;
@@ -474,6 +452,10 @@ export function computePriceSheet(form: PriceForm, policyRounds: PolicyDiscountR
     tienVATXD: 0,
     tongGiaXDVAT: 0,
     tongGiaTriHDMB: tongGiaTriHD,
-    warnings,
   };
 }
+
+/** Tên cũ dùng trong app */
+export type PriceForm = SalesPriceForm;
+export type PriceCalc = SalesCalculations;
+export const computePriceSheet = computeSalesCalculations;

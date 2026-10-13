@@ -114,18 +114,12 @@ App giữ đúng như web ở các điểm dưới đây cho tới khi đội we
     chỉ khi khách đã có) – chỉ sửa phần xử lý. Web `RequestFormDrawer` và máy chủ `fn_customer_request_save` vẫn cho sửa mọi trường
     → nội dung khách gửi vẫn có thể bị đổi từ web. Đề xuất web khoá tương tự và máy chủ giữ nguyên các cột này khi
     `created_by = 'PORTAL'`.
-11. **Phiếu tính giá: thứ tự "cấu hình tính giá sản phẩm" và "bảng giá" phụ thuộc mạng.** `PriceSheetForm` tính lại giá theo
-    cấu hình CAOTANG/THAPTANG (`useProductPriceConfig.recomputeFrom`) và nạp giá bảng giá (`handleBG`) ở 2 effect song song;
-    bên nào về sau thắng ở các trường cả hai cùng ghi (thấp tầng: các trường chỉ cấu hình ghi thì luôn giữ). **App cố định**
-    cấu hình trước, bảng giá sau (đường web hay gặp) – `docs/price-sheets.md`. Đề xuất web nối tiếp 2 bước.
-12. **Phiếu tính giá thấp tầng: VAT xây dựng dùng % chưa chia 100.** `calculations` (thấp tầng) lấy `tyLeVATXD = formData.tyLeVAT`
-    (vd 10) rồi tính `thanhTienXD * (1 + tyLeVATXD)` khi lưới không có giá gốc XD gồm VAT → gấp 11 lần. **App giữ như web**
-    (`lib/priceSheetCalc.ts`); chỉ xảy ra khi thiếu `ThanhTienVATXayDung` / `TienVATXayDung`. Đề xuất web chia 100.
-13. **Phiếu tính giá: sửa phiếu trên web nạp lại giá sản phẩm lúc tạo, bỏ giá bảng giá – app KHÁC web.** `handleEdit` dựng
-    sản phẩm từ `snapshot.product` (giá căn, không phải giá bảng giá đã áp) → bấm sửa rồi đổi chiết khấu là số tiền đổi theo giá căn.
-    **App lấy đúng `GiaTriHopDong` đã lưu** (`formFromSheet`) để tính lại ra cùng số; sửa trên web và app có thể ra số khác nhau.
-14. **Tiến độ thanh toán: tên đợt luôn "Đợt n".** `handleTemplateSelect` lấy tên đợt từ `MoTa`, nhưng chi tiết tiến độ
-    (`DaPaymentScheduleService.normalizeDetails`) chỉ có `TenDot` → tên đặt trong mẫu bị bỏ. **App giữ như web**.
+11–14. **Phiếu tính giá – ĐÃ SỬA Ở WEB VÀ ĐỒNG BỘ APP (2026-10-13, web `docs-claude/09-decisions.md` PT5–PT10).**
+    Trước đây: thứ tự cấu hình / bảng giá phụ thuộc mạng; thấp tầng nhân thẳng % VAT XD; sửa phiếu web nạp lại giá căn;
+    tên đợt luôn "Đợt n"; form phiếu tính giá dùng công thức dự phòng còn form Đặt cọc / Hợp đồng thì không.
+    Nay web dùng chung `ContractForm/calculations.ts`, `helpers.scheduleRowsFromTemplate`, `PriceSheet/productFromSavedSheet.ts`,
+    `usePriceConfigThenPriceList`; app chép đúng các tệp này (`lib/priceSheetCalc.ts`, `lib/priceSheetSchedule.ts`,
+    `lib/priceSheetPayload.productFromSavedSheet`) và test so trực tiếp với code web.
 
 ## 1. Mục tiêu và bối cảnh
 

@@ -22,9 +22,12 @@ import {
 import { formatCountdown } from "@/lib/countdown";
 import { formatVNDShort } from "@/lib/format";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
+import { isFeatureAllowed } from "@/lib/featureConfig";
 import { isOpenForSale, OPEN_FOR_SALE_MESSAGE } from "@/lib/productStatus";
 import { colors, elevation, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
+import { getTypeAccount } from "@/sevicesSupabase/cloudTenant";
+import { PriceSheetService } from "@/sevicesSupabase/PriceSheetService";
 import { ProductService } from "@/sevicesSupabase/ProductService";
 import { PriceServices, ActivePriceListItem } from "@/sevicesSupabase/PriceServices";
 
@@ -49,6 +52,14 @@ export default function ProductDetailScreen() {
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [data, setData] = useState<any>(null);
+  // Lập phiếu tính giá (tính năng 17): chỉ tài khoản nội bộ có quyền ADD
+  const [canPriceSheet, setCanPriceSheet] = useState(false);
+  useEffect(() => {
+    getTypeAccount()
+      .then((t) => (isFeatureAllowed("17", t === "AGENCY") ? PriceSheetService.hasPerm("ADD") : false))
+      .then(setCanPriceSheet)
+      .catch(() => setCanPriceSheet(false));
+  }, []);
   const [bannerProduct, setBannerProduct] = useState<{ HinhAnh?: string }[]>([]);
   // Bảng giá đang hiệu lực (price_list_items qua RPC get_active_price_for_product)
   const [activePrice, setActivePrice] = useState<ActivePriceListItem | null>(null);
@@ -277,7 +288,11 @@ export default function ProductDetailScreen() {
                 </Text>
               ) : null}
 
-              <HomeSectionHeader title="Chi tiết giá" />
+              <HomeSectionHeader
+                title="Chi tiết giá"
+                actionLabel={canPriceSheet && data?.ID ? "Lập phiếu tính giá" : undefined}
+                onAction={() => router.push({ pathname: "/price-sheet/new", params: { productId: String(data?.ID) } })}
+              />
               <Card style={styles.card}>
                 <PriceBreakdown activePrice={activePrice} data={data} loading={priceLoading} />
               </Card>

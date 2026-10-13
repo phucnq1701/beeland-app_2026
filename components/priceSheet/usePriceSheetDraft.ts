@@ -262,7 +262,8 @@ export function usePriceSheetDraft() {
       const tt = sheet.payload?.TTHopDong || {};
       const p = snap.product || (sheet.san_pham_id ? await PriceSheetService.getProduct(sheet.san_pham_id) : null);
       if (!p) return { blocked: "Phiếu thiếu dữ liệu sản phẩm – sửa trên web" };
-      const f = formFromSheet(sheet, p);
+      // Phiếu cũ thiếu snapshot.product ⇒ dùng căn nạp lại làm nguồn giá dự phòng
+      const f = formFromSheet(snap.product ? sheet : { ...sheet, snapshot: { ...snap, product: p } });
       const configId = tt.CauHinhTinhGiaID ? String(tt.CauHinhTinhGiaID) : null;
       const scheduleId = (sheet.payload?.LichThanhToan || []).find((l: any) => l?.MaTH)?.MaTH ?? null;
       const [cfg, cfgRounds, policy, sched] = await Promise.all([

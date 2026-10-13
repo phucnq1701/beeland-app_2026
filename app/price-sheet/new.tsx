@@ -128,14 +128,6 @@ export default function PriceSheetEditorScreen() {
       setStep(0);
       return;
     }
-    if (c.warnings.length) {
-      const ok = await confirm({
-        title: "Công thức chiết khấu đang dùng dự phòng",
-        message: `${c.warnings[0]}\nVẫn lưu phiếu?`,
-        confirmText: "Lưu",
-      });
-      if (!ok) return;
-    }
     savingRef.current = true;
     setSaving(true);
     try {
@@ -354,15 +346,6 @@ export default function PriceSheetEditorScreen() {
                 <Text variant="caption" color="textSecondary">
                   Cấu hình tính giá: {configName}
                 </Text>
-              ) : null}
-              {c.warnings.length ? (
-                <View style={[styles.notice, styles.warn]}>
-                  {c.warnings.map((w) => (
-                    <Text key={w} variant="caption" color="onWarningSubtle">
-                      {w}
-                    </Text>
-                  ))}
-                </View>
               ) : null}
               {d.rounds.length ? (
                 <>

@@ -217,7 +217,7 @@ export function recalcPaymentScheduleSequential(rows: ScheduleRow[], ctx: Schedu
 /**
  * Dòng mẫu tiến độ (da_payment_schedules.details đã chuẩn hoá như DaPaymentScheduleService.normalizeDetails)
  * → dòng lịch chưa tính – PriceSheetForm.handleTemplateSelect. Cao tầng: TienVAT/PhiBaoTri; thấp tầng:
- * VATDat/TienXayDung. Tên đợt lấy `MoTa` như web (chi tiết mẫu không có MoTa ⇒ "Đợt n").
+ * VATDat/TienXayDung. Tên đợt: MoTa → TenDot → "Đợt n" (= web ContractForm/helpers.scheduleRowsFromTemplate).
  */
 export function scheduleRowsFromTemplate(details: any[], isLowRise: boolean, formTyLeVAT: number): ScheduleRow[] {
   const asFormula = (v: any) => (typeof v === "string" ? v : "");
@@ -229,7 +229,7 @@ export function scheduleRowsFromTemplate(details: any[], isLowRise: boolean, for
       return {
         id: index + 1,
         dot: inst.DotTT || index + 1,
-        kieuThanhToan: inst.MoTa || `Đợt ${inst.DotTT || index + 1}`,
+        kieuThanhToan: inst.MoTa || inst.TenDot || `Đợt ${inst.DotTT || index + 1}`,
         tuongUngFormula: asFormula(inst.TuongUng),
         tienVATFormula: asFormula(isLowRise ? inst.VATDat : inst.TienVAT),
         phiBaoTriFormula: asFormula(isLowRise ? inst.TienXayDung : inst.PhiBaoTri),
