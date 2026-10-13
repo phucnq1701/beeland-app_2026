@@ -4,6 +4,7 @@ import { CheckCircle2, Copy, LogIn, Pencil, Reply, RotateCcw, Smartphone, Undo2,
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, View } from "react-native";
 
+import { useActiveChat } from "@/components/chat/ChatNotifier";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { MessageRow } from "@/components/chat/MessageRow";
 import { useChatThread, useChatTyping } from "@/components/chat/useChat";
@@ -22,6 +23,7 @@ export default function ChatThreadScreen() {
   const router = useRouter();
   const toast = useToast();
   const t = useChatThread(String(id));
+  useActiveChat(id ? String(id) : null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);

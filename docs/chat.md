@@ -82,3 +82,21 @@ Chấm chưa đọc ở Trang chủ: tải khi về Trang chủ + tải lại ng
 
 - Chưa có (web có): tìm trong tin nhắn (`fn_chat_search`), đổi tên / ảnh nhóm, đổi vai trò thành viên, tạo hồ sơ khách mới
   từ hội thoại, trạng thái online (presence).
+
+## Thông báo (banner + push) – 2026-10-13
+
+Máy chủ: beeland migration `20261013150000_chat_push` + edge `chat-push` (spec `beeland/docs/superpowers/specs/2026-10-13-chat-push-design.md`).
+
+- **Đăng ký push** (`components/chat/chatPush.ts`): mở app / đăng nhập / quay lại app → xin quyền (lần đầu) → Expo push token
+  (`projectId` EAS) → `fn_chat_push_dang_ky` (máy chủ chụp quyền BeeChat / admin lúc này). Đăng xuất / xoá tài khoản →
+  `fn_chat_push_huy` **trước** khi rời phiên (`account.tsx`). Đăng nhập xong → `resetChatSession()` + `chatAuthChanged(true)`.
+  Android: kênh `chat` ("Tin nhắn", HIGH). `expo-notifications` nạp có điều kiện (bản build cũ / web → chỉ banner realtime).
+- **Ai nhận push** (máy chủ quyết định): thành viên hội thoại trừ người gửi; tắt tiếng thì chỉ nhận khi được @nhắc; hội thoại
+  khách chưa ai tham gia → NV có quyền BeeChat (kênh app) / admin (kênh khác).
+- **Banner trong app** (`components/chat/ChatNotifier.tsx`, gắn ở `app/_layout.tsx`): realtime `chat:u` `message_new`
+  (kênh dùng chung `useChatSession`, sống suốt phiên) + push nhận lúc đang mở (ẩn thông báo hệ thống). Khử trùng theo id tin,
+  không hiện cho hội thoại đang mở (`useActiveChat` trong `app/chat/[id].tsx`), tự ẩn 4,5 s. Logic thuần: `lib/chatNotify.ts`
+  (test `tests/chatNotify.test.cjs`).
+- **Bấm banner / push** (kể cả mở app từ push khi app đã tắt) → `/chat/<conversation_id>`.
+- Bản build **10.6** (thêm native module + plugin `expo-notifications` trong `app.json`). Android cần `google-services.json`
+  (Firebase) + khoá FCM V1 trên EAS mới lấy được token.

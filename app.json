@@ -2,7 +2,7 @@
   "expo": {
     "name": "BeeLand App",
     "slug": "beeland-app",
-    "version": "10.5",
+    "version": "10.6",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
@@ -92,7 +92,14 @@
           "iCloudContainerEnvironment": "Production"
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "color": "#E86F25",
+          "defaultChannel": "chat"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

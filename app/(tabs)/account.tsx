@@ -5,6 +5,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { ChevronRight, LayoutGrid, LogOut, Trash2, User } from "lucide-react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { chatAuthChanged, unregisterChatPush } from "@/components/chat/chatPush";
 import { FeatureGrid } from "@/components/home/FeatureGrid";
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import {
@@ -56,6 +57,9 @@ export default function AccountScreen() {
       return;
     }
     loggingOut.current = true;
+    // Gỡ máy khỏi push của tài khoản này (JWT cũ còn) rồi ngắt banner tin nhắn.
+    void unregisterChatPush();
+    chatAuthChanged(false);
     router.push("/login");
   };
 
@@ -91,6 +95,8 @@ export default function AccountScreen() {
         setEmployeeDeleted(true);
         setData(null);
       }
+      await unregisterChatPush();
+      chatAuthChanged(false);
       await clearDeletedEmployeeSession(deletedSession.current);
       queryClient.clear();
       if (router.canDismiss()) router.dismissAll();

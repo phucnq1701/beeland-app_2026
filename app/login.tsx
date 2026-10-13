@@ -23,6 +23,8 @@ import {
   cacheCloudProfile,
   PROFILE_KEY,
 } from "@/sevicesSupabase/CloudProfileService";
+import { chatAuthChanged } from "@/components/chat/chatPush";
+import { resetChatSession } from "@/components/chat/useChat";
 import { AuthSupabaseService } from "@/sevicesSupabase/AuthService";
 import {
   persistTenantFromJwt,
@@ -200,6 +202,9 @@ export default function LoginScreen() {
               return;
             }
           } catch {}
+          // Phiên mới → bỏ hồ sơ chat cũ, nối lại kênh tin nhắn + đăng ký push cho tài khoản này.
+          resetChatSession();
+          chatAuthChanged(true);
           router.replace("/(tabs)/home");
         } else {
           console.log("[Login] WARN response 200 nhưng không có token/jwt nào");

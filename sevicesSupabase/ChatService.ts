@@ -122,6 +122,10 @@ export const ChatService = {
   join: (id: string) => chatRpc<ChatConversationDetail>("fn_chat_join", { p_id: id }),
   customerStatus: (id: string, s: "open" | "closed") =>
     chatRpc<ChatConversationDetail>("fn_chat_customer_status", { p_id: id, p_trang_thai: s }),
+  /** Push (beeland migration 20261013150000_chat_push): gắn máy này với NV đang đăng nhập / gỡ khi đăng xuất. */
+  pushRegister: (pushToken: string, platform: "ios" | "android") =>
+    chatRpc<{ ok: boolean }>("fn_chat_push_dang_ky", { p_push_token: pushToken, p_nen_tang: platform }),
+  pushUnregister: (pushToken: string) => chatRpc<{ so: number }>("fn_chat_push_huy", { p_push_token: pushToken }),
 
   /** Tải một tệp lên kho `chat-files` của hội thoại → id tệp để gửi kèm tin. */
   async upload(conversationId: string, file: { uri: string; name: string; mime: string; size: number }): Promise<string> {

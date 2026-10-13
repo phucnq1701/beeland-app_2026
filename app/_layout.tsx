@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import UpdateManager from "@/components/UpdateManager";
+import { ChatNotifier } from "@/components/chat/ChatNotifier";
 import { FontStatusProvider } from "@/components/ui/FontStatus";
 import { ToastProvider } from "@/components/ui/Toast";
 import { applyWebFont } from "@/constants/webFont";
@@ -92,6 +93,7 @@ export default function RootLayout() {
           <ToastProvider>
             <StatusBar style="dark" />
             <RootLayoutNav />
+            <ChatNotifier />
           </ToastProvider>
         </FontStatusProvider>
       </GestureHandlerRootView>
