@@ -12,7 +12,7 @@
 
 ## Tính năng và quyền
 
-Danh mục tính năng: `mocks/features.ts` (id 1–16). Logic chung: `lib/featureConfig.ts` (có test `tests/feature-config.test.cjs`).
+Danh mục tính năng: `mocks/features.ts` (id 1–17). Logic chung: `lib/featureConfig.ts` (có test `tests/feature-config.test.cjs`).
 
 | id | Tính năng | Route | Đại lý |
 |---|---|---|---|
@@ -29,6 +29,7 @@ Danh mục tính năng: `mocks/features.ts` (id 1–16). Logic chung: `lib/featu
 | 14 | Đặt lịch ký | `/signings` (`docs/signing.md`) | ✓ **chỉ đại lý** – nội bộ ẩn (`AGENCY_ONLY_FEATURE_IDS`) |
 | 15 | Yêu cầu KH | `/requests` (`docs/requests.md`) | |
 | 16 | Tin nhắn | `/chat` (`docs/chat.md`) – chọn được làm tab menu (`embedded`: ẩn nút quay lại, chừa thanh tab) | ✓ (khu chat Đại lý) |
+| 17 | Phiếu tính giá | `/price-sheets` (`docs/price-sheets.md`) – chọn được làm tab menu | – (chỉ nội bộ) |
 
 - `visibleFeatureIds`: bỏ id không có route, id trong `HIDDEN_FEATURE_IDS`, id ngoài quyền đại lý (`AGENCY_FEATURE_IDS`),
   và với tài khoản nội bộ bỏ id chỉ dành cho đại lý (`AGENCY_ONLY_FEATURE_IDS` = `14`). Kiểm 1 id: `isFeatureAllowed(id, isAgency)`.
@@ -49,7 +50,8 @@ Chat (`app/chat/*`, `app/contacts.tsx`) đã nối dữ liệu thật từ 2026-
 
 
 `app/receipts.tsx`, `app/receipt/[id].tsx`,
-`app/handovers.tsx`, `app/handover/[id].tsx`, `app/price-calculator/[id].tsx` (nút "Tính giá" ở chi tiết căn đã ẩn),
+`app/handovers.tsx`, `app/handover/[id].tsx`, `app/price-calculator/[id].tsx` (nút "Tính giá" ở chi tiết căn đã ẩn; phiếu tính giá thật
+là tính năng 17 – `docs/price-sheets.md`),
 `app/appointments.tsx` (thật nhưng đang ẩn, gọi API cũ). Dữ liệu mẫu ở `mocks/`.
 
 ## Tồn đọng

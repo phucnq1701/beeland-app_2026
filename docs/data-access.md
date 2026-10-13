@@ -59,4 +59,8 @@ Mỗi bảng lọc tenant **khác nhau** – làm theo web (`../beeland/src/serv
 `fn_get_sales_policies`, `fn_get_price_list_item_by_product`, `get_active_price_for_product`. Tham số lấy theo code web gọi;
 kết quả trả về **chưa kiểm chứng trực tiếp** cho các hàm không có migration trong `../beeland/supabase/migrations`.
 Edge function: `cloud-auth`, `payment-gateway`, `upload-file`, `chat-files` (JWT ứng dụng, gọi bằng `fetch` riêng – xem `docs/chat.md`).
+Phiếu tính giá (`docs/price-sheets.md`): `fn_price_sheet_list/get/save/set_status/delete/versions` (migration web
+`20261014130000_price_sheet_rpc`), `fn_get_product_by_id`, `fn_get_byid_sales_policy`, `fn_get_byid_payment_schedule`,
+`fn_get_payment_schedules`, `fn_get_promotions`, `app_has_perm_any` (quyền ẩn/hiện nút); REST `price_list_items`,
+`cloud_pricing_configs`, `cloud_pricing_config_rounds` (RLS theo công ty).
 Chat: RPC `fn_chat_*` (có migration ở web `supabase/migrations/20261011100*`, `20261013120000_chat_kenh_app`).

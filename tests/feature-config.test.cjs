@@ -129,3 +129,12 @@ test("Tin nhắn (16): có màn /chat, nội bộ và đại lý đều dùng", 
   assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: true, menuOnly: false, menuEligible: ["1"] })), ["1", "16"]);
   assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: true, menuEligible: ["1"] })), ["1"]);
 });
+
+test("phiếu tính giá (17): có route, chỉ tài khoản nội bộ", () => {
+  assert.equal(f.routeForFeature("17"), "/price-sheets");
+  assert.equal(f.isFeatureAllowed("17", false), true);
+  assert.equal(f.isFeatureAllowed("17", true), false);
+  const ids = ["1", "2", "5", "13", "17"];
+  assert.deepEqual(plain(f.visibleFeatureIds(ids, { isAgency: true, menuOnly: false, menuEligible: ids })), ["1", "2", "5", "13"]);
+  assert.deepEqual(plain(f.visibleFeatureIds(ids, { isAgency: false, menuOnly: false, menuEligible: ids })), ids);
+});

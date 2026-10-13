@@ -58,6 +58,7 @@ Test: `tests/*.test.cjs`, nạp TS bằng `tests/helpers/loadTs.cjs` (file thu�
 | Yêu cầu khách hàng (tiếp nhận, xử lý, lịch sử, tệp khách gửi) | `docs/requests.md` |
 | Tin nhắn: BeeChat khách (kể cả kênh app khách hàng), chat nội bộ / đại lý, tệp, realtime | `docs/chat.md` |
 | Báo cáo (thu tiền, HĐ, sắp đến hạn, quá hạn) | `docs/reports.md` |
+| Phiếu tính giá (lập / sửa / duyệt / PDF, công thức chiết khấu, lịch thanh toán) | `docs/price-sheets.md` |
 | Tài liệu / ảnh / video dự án | `docs/media.md` |
 | Token, component UI, quy tắc màn danh sách, lint | `docs/design-system.md` |
 | Lịch sử redesign, quyết định D1–D11, mâu thuẫn web (0.2) | `docs/superpowers/specs/2026-09-30-ui-redesign-design.md` |

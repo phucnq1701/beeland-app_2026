@@ -1,4 +1,4 @@
-import { LucideIcon, Building2, DoorOpen, Calendar, CalendarCheck, Lock, BookOpen, Users, DollarSign, FileText, BarChart3, Landmark, MessageSquareText, MessagesSquare } from 'lucide-react-native';
+import { LucideIcon, Building2, DoorOpen, Calendar, CalendarCheck, Lock, BookOpen, Users, DollarSign, FileText, BarChart3, Landmark, MessageSquareText, MessagesSquare, Calculator } from 'lucide-react-native';
 
 export interface Feature {
   id: string;
@@ -101,5 +101,13 @@ export const features: Feature[] = [
     icon: MessagesSquare,
     backgroundColor: 'rgba(14, 165, 233, 0.2)',
     iconColor: '#0EA5E9',
+  },
+  {
+    // Phiếu tính giá (app/price-sheets.tsx) – chỉ tài khoản nội bộ (không có trong AGENCY_FEATURE_IDS).
+    id: '17',
+    title: 'Phiếu tính giá',
+    icon: Calculator,
+    backgroundColor: 'rgba(201, 80, 26, 0.15)',
+    iconColor: '#C9501A',
   },
 ];

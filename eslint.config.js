@@ -53,6 +53,10 @@ const UI_STRICT_FILES = [
   'app/requests.tsx',
   'app/request/**/*.{ts,tsx}',
   'components/request/**/*.{ts,tsx}',
+  // Phiếu tính giá
+  'app/price-sheets.tsx',
+  'app/price-sheet/**/*.{ts,tsx}',
+  'components/priceSheet/**/*.{ts,tsx}',
   // Giai đoạn 6 – đăng nhập, media
   'app/login.tsx',
   'app/register.tsx',
