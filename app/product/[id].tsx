@@ -248,7 +248,7 @@ export default function ProductDetailScreen() {
             <ImageCarousel
               images={images}
               fallback={DEFAULT_IMAGE}
-              height={340 + insets.top}
+              height={HERO_HEIGHT + insets.top}
               bottomInset={SHEET_OVERLAP}
             />
           </View>
@@ -347,6 +347,8 @@ export default function ProductDetailScreen() {
 }
 
 /** Khối nội dung bo góc trên, trồi đè lên đáy ảnh. */
+// Ảnh đầu trang (chưa tính status bar) — 2/3 bản cũ 340 (2026-10-16)
+const HERO_HEIGHT = 227;
 const SHEET_OVERLAP = radius.x3;
 
 const styles = StyleSheet.create({

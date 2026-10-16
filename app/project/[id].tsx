@@ -73,7 +73,7 @@ export default function ProjectOptionsScreen() {
       {/* Màn trưng bày: ảnh tràn lên vùng status bar, tên dự án đè lên ảnh, nút quay lại kính mờ */}
       <View style={styles.root}>
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + space.xxl }}>
-          <ImageCarousel images={[projectData.icon]} fallback={DEFAULT_PROJECT_IMAGE} height={320 + insets.top}>
+          <ImageCarousel images={[projectData.icon]} fallback={DEFAULT_PROJECT_IMAGE} height={HERO_HEIGHT + insets.top}>
             <LinearGradient
               colors={colors.showcase.scrim}
               locations={[0, 0.5, 1]}
@@ -140,6 +140,9 @@ export default function ProjectOptionsScreen() {
     </>
   );
 }
+
+// Ảnh đầu trang (chưa tính status bar) — 2/3 bản cũ 320 (2026-10-16)
+const HERO_HEIGHT = 213;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
