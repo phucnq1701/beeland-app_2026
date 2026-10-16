@@ -33,8 +33,14 @@ migration `20261014121500_da_project_scope_agency`, `20261014100000_bds_product_
   Danh sách sản phẩm = chỉ căn trong **giỏ hàng** đang hiệu lực có cả đại lý lẫn nhân viên đó — không theo dự án.
 - **Nhân viên nội bộ:** dự án được gán (`dm_employee_projects`); nhóm full access / admin ⇒ mọi dự án công ty.
   Danh sách sản phẩm = căn thuộc các dự án đó.
-- Lưới / Tổng quan (`PriceServices.getBlock`) vẫn đọc REST `bds_products` như sơ đồ tổng quan web (`so-do-tong-quan`):
-  RLS REST của đại lý cho xem cả căn đại lý từng giao dịch, nên lưới có thể rộng hơn danh sách — giống web.
+- Lưới / Tổng quan (`PriceServices.getBlock`) đọc REST `bds_products`. Với **đại lý**, RLS REST còn trả cả căn sàn từng
+  giao dịch (rộng hơn danh sách) ⇒ app lọc lại bằng RPC `app_agency_product_ids(p_include_docs := false)` — đúng tập
+  `fn_bds_product_list` dùng — để cả 3 chế độ Danh sách / Lưới / Tổng quan chỉ hiện căn trong giỏ hàng (chủ dự án chốt
+  2026-10-16). RPC trả `null` cho nội bộ ⇒ không lọc; lỗi gọi + tài khoản AGENCY ⇒ không hiện căn nào.
+  (Sơ đồ tổng quan web `so-do-tong-quan` chưa lọc như vậy — đại lý trên web vẫn thấy căn sàn đã giao dịch.)
+- Đại lý muốn thấy căn của giỏ: trên web **Sản phẩm › Giỏ hàng › Quản lý nhân viên** phải thêm **từng nhân viên đại lý**.
+  Dialog "Sản phẩm của đại lý" (Danh sách đại lý) liệt kê mọi căn giỏ có đại lý, **không** xét nhân viên ⇒ có thể nhiều hơn
+  những gì một nhân viên đại lý thấy.
 
 ## Quy tắc trạng thái căn (web là chuẩn – có test `tests/product-status.test.cjs`, `product-realtime.test.cjs`)
 

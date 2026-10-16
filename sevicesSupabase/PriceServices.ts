@@ -1,5 +1,23 @@
 import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyId, getValidSupabaseJwt } from "./cloudTenant";
+import { getCompanyId, getTypeAccount, getValidSupabaseJwt } from "./cloudTenant";
+import { agencyScopeFromRpc, filterByAgencyScope } from "../lib/projectScope";
+
+/**
+ * Phạm vi căn của nhân viên đại lý — cùng tập `fn_bds_product_list` (danh sách) dùng: RPC
+ * `app_agency_product_ids(false)` = căn trong giỏ hàng hợp lệ có nhân viên đó. `null` = nội bộ ⇒ không lọc.
+ * Lỗi gọi: tài khoản đăng nhập AGENCY ⇒ không cho xem căn nào (fail-closed); còn lại giữ như cũ.
+ */
+async function getAgencyCartScope(): Promise<string[] | null> {
+  try {
+    const res = await axiosApiSupabase.post("rest/v1/rpc/app_agency_product_ids", {
+      p_include_docs: false,
+    });
+    return agencyScopeFromRpc(res?.data);
+  } catch (error) {
+    console.log("ERROR getAgencyCartScope (app_agency_product_ids):", error);
+    return (await getTypeAccount()) === "AGENCY" ? [] : null;
+  }
+}
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -207,10 +225,13 @@ export const PriceServices = {
         params.ma_ctdk = `eq.${companyId}`;
       }
 
-      const res = await axiosApiSupabase.get("rest/v1/bds_products", {
-        params,
-      });
-      const rows = Array.isArray(res.data) ? res.data : [];
+      const [res, agencyScope] = await Promise.all([
+        axiosApiSupabase.get("rest/v1/bds_products", { params }),
+        getAgencyCartScope(),
+      ]);
+      // Đại lý: Lưới / Tổng quan chỉ hiện căn trong giỏ hàng như Danh sách. REST của đại lý (RLS) còn trả cả căn
+      // sàn từng giao dịch nên phải lọc lại; nội bộ (agencyScope = null) giữ nguyên.
+      const rows = filterByAgencyScope(Array.isArray(res.data) ? res.data : [], agencyScope);
 
       // Trục lưới: tầng (catalog tang) + cột (catalog vi_tri) theo dự án
       const catalogBase: Record<string, string> = {

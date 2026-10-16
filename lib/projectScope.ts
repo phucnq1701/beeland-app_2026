@@ -70,3 +70,20 @@ export function orderByIds<T extends { id?: any }>(ids: string[], rows: T[]): T[
   });
   return ids.map((id) => byId.get(id)).filter((r): r is T => !!r);
 }
+
+/**
+ * Kết quả RPC `app_agency_product_ids(p_include_docs := false)` — đúng tập căn `fn_bds_product_list` dùng cho đại lý:
+ * căn trong giỏ hàng đang bật, còn hạn, có đại lý trong `dai_ly` và nhân viên trong "Quản lý nhân viên" của giỏ.
+ * `null` = không phải nhân viên đại lý (nội bộ / super) ⇒ không giới hạn; mảng = chỉ các căn đó (rỗng ⇒ không có căn).
+ */
+export function agencyScopeFromRpc(res: unknown): string[] | null {
+  if (!Array.isArray(res)) return null;
+  return res.map((v) => uuidOrNull(v)).filter((v): v is string => !!v);
+}
+
+/** Lọc dòng sản phẩm theo phạm vi đại lý; `null` (nội bộ) trả nguyên mảng. */
+export function filterByAgencyScope<T extends { id?: any }>(rows: T[], scope: string[] | null): T[] {
+  if (scope == null) return rows;
+  const allowed = new Set(scope);
+  return (rows || []).filter((r) => r && allowed.has(String(r.id)));
+}

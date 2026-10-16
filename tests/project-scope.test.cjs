@@ -78,3 +78,18 @@ test("orderByIds: xếp dòng REST theo thứ tự của hàm web, bỏ dòng kh
   const rows = [{ id: U1, n: 1 }, { id: U3, n: 3 }, { id: U2, n: 2 }];
   assert.deepEqual(plain(s.orderByIds([U2, U1], rows)).map((r) => r.n), [2, 1]);
 });
+
+test("agencyScopeFromRpc: null (không phải đại lý) giữ null; mảng → uuid hợp lệ; dạng lạ → null", () => {
+  assert.equal(s.agencyScopeFromRpc(null), null);
+  assert.equal(s.agencyScopeFromRpc(undefined), null);
+  assert.equal(s.agencyScopeFromRpc("x"), null);
+  assert.deepEqual(plain(s.agencyScopeFromRpc([])), []);
+  assert.deepEqual(plain(s.agencyScopeFromRpc([U1, "bad", U2])), [U1, U2]);
+});
+
+test("filterByAgencyScope: nội bộ (null) giữ nguyên; đại lý chỉ giữ căn trong giỏ, giỏ rỗng → rỗng", () => {
+  const rows = [{ id: U1 }, { id: U2 }, { id: U3 }];
+  assert.equal(s.filterByAgencyScope(rows, null), rows);
+  assert.deepEqual(plain(s.filterByAgencyScope(rows, [U3, U1])).map((r) => r.id), [U1, U3]);
+  assert.deepEqual(plain(s.filterByAgencyScope(rows, [])), []);
+});
