@@ -1,6 +1,6 @@
 import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyId, getValidSupabaseJwt, getTypeAccount, getEmployeeId, getMaNv, getCompanyCode } from "./cloudTenant";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getCompanyId, getValidSupabaseJwt } from "./cloudTenant";
+import { projectRowsFromRpc } from "../lib/projectScope";
 
 // Máy chủ file upload của web (POST multipart Image, TenCTDK, Project=beeland_admin_web).
 const FILE_SERVER = "https://upload.beesky.vn/";
@@ -72,142 +72,6 @@ function normalizeProjectImages(catalog: any) {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * Lấy tập MaDA/uuid dự án được gán cho đại lý (Agency Scope) y hệt logic web (agencyScope.ts).
- */
-async function getAgencyProjectScope(companyId: string): Promise<{ ids: string[]; names: string[] }> {
-  try {
-    const typeAccount = await getTypeAccount();
-    if (typeAccount !== "AGENCY") return { ids: [], names: [] };
-
-    const aliases = new Set<string>();
-    const addAlias = (v?: any) => {
-      if (v != null && String(v).trim() !== "") {
-        aliases.add(String(v).trim().toLowerCase());
-      }
-    };
-
-    addAlias(await getCompanyCode());
-    addAlias(await getMaNv());
-    const empId = await getEmployeeId();
-    
-    const storedAgencyName = await AsyncStorage.getItem("agency_name");
-    addAlias(storedAgencyName);
-    const storedCompanyCode = await AsyncStorage.getItem("agency_company_code");
-    addAlias(storedCompanyCode);
-
-    // 1. Truy vấn dm_employees
-    try {
-      const empParams: Record<string, string> = {
-        select: "id,ma_nv,ma_so,tai_khoan,email,ma_ct",
-        ma_ctdk: `eq.${companyId}`,
-      };
-      if (empId && UUID_RE.test(empId)) {
-        empParams.id = `eq.${empId}`;
-      }
-      const empRes = await axiosApiSupabase.get("rest/v1/dm_employees", { params: empParams });
-      const empRows = Array.isArray(empRes.data) ? empRes.data : [];
-      empRows.forEach((e: any) => {
-        addAlias(e?.ma_nv);
-        addAlias(e?.ma_so);
-        addAlias(e?.tai_khoan);
-        addAlias(e?.email);
-        addAlias(e?.ma_ct);
-      });
-    } catch (e) {
-      console.log("ERROR getAgencyProjectScope dm_employees:", e);
-    }
-
-    // 2. Truy vấn dm_companies (is_san = true)
-    try {
-      const compParams: Record<string, string> = {
-        select: "id,ma_dl,ten_ct,ten_ct_vt",
-        tenant_company_id: `eq.${companyId}`,
-        is_san: "is.true",
-      };
-      const compRes = await axiosApiSupabase.get("rest/v1/dm_companies", { params: compParams });
-      const compRows = Array.isArray(compRes.data) ? compRes.data : [];
-      compRows.forEach((c: any) => {
-        addAlias(c?.id);
-        addAlias(c?.ma_dl);
-        addAlias(c?.ten_ct);
-        addAlias(c?.ten_ct_vt);
-      });
-    } catch (e) {
-      console.log("ERROR getAgencyProjectScope dm_companies:", e);
-    }
-
-    console.log("[AgencyScope] Aliases:", Array.from(aliases));
-
-    // 3. Truy vấn cloud_generic_records với endpoint admin/du-an/dai-ly
-    const recordsParams: Record<string, string> = {
-      select: "payload",
-      ma_ctdk: `eq.${companyId}`,
-      endpoint: "eq.admin/du-an/dai-ly",
-      is_deleted: "eq.false",
-    };
-    const recRes = await axiosApiSupabase.get("rest/v1/cloud_generic_records", { params: recordsParams });
-    const recRows = Array.isArray(recRes.data) ? recRes.data : [];
-    console.log("[AgencyScope] cloud_generic_records count:", recRows.length);
-
-    const matchedDaCodes = new Set<string>();
-    recRows.forEach((r: any) => {
-      const p = r?.payload || {};
-      const maCT = p.MaCT || p.ma_ct || p.MaDL || p.ma_dl || "";
-      const tenCT = p.TenCT || p.ten_ct || p.TenCTVT || p.ten_ct_vt || "";
-      const maDA = p.MaDA || p.ma_da || p.ma_da_code || "";
-
-      if (maDA) {
-        const match =
-          (maCT && aliases.has(String(maCT).trim().toLowerCase())) ||
-          (tenCT && aliases.has(String(tenCT).trim().toLowerCase())) ||
-          aliases.size === 0;
-        if (match) {
-          matchedDaCodes.add(String(maDA).trim());
-        }
-      }
-    });
-
-    console.log("[AgencyScope] matchedDaCodes:", Array.from(matchedDaCodes));
-
-    if (matchedDaCodes.size === 0) {
-      return { ids: [], names: [] };
-    }
-
-    // 4. Đối chiếu da_projects
-    const projParams: Record<string, string> = {
-      select: "id,ma_da_code,ten_da",
-      ma_ctdk: `eq.${companyId}`,
-    };
-    const projRes = await axiosApiSupabase.get("rest/v1/da_projects", { params: projParams });
-    const projRows = Array.isArray(projRes.data) ? projRes.data : [];
-
-    const ids: string[] = [];
-    const names: string[] = [];
-
-    projRows.forEach((proj: any) => {
-      const pId = proj?.id;
-      const pCode = proj?.ma_da_code != null ? String(proj.ma_da_code).trim() : "";
-      const pName = proj?.ten_da != null ? String(proj.ten_da).trim() : "";
-
-      if (
-        (pCode && matchedDaCodes.has(pCode)) ||
-        (pId && matchedDaCodes.has(pId)) ||
-        matchedDaCodes.has(pName)
-      ) {
-        if (pId) ids.push(pId);
-        if (pCode) ids.push(pCode);
-        if (pName) names.push(pName);
-      }
-    });
-
-    return { ids: Array.from(new Set(ids)), names: Array.from(new Set(names)) };
-  } catch (e) {
-    console.log("ERROR getAgencyProjectScope:", e);
-    return { ids: [], names: [] };
-  }
-}
-
 async function fetchDuAnAnhMap(
   maDaCodes: Array<string | number>
 ): Promise<Record<string, DuAnAnhRaw>> {
@@ -242,63 +106,29 @@ async function fetchDuAnAnhMap(
 }
 
 export const ProjectService = {
+  /**
+   * Danh sách dự án người đăng nhập được xem — cùng hàm web dùng cho mọi ô chọn dự án
+   * (`fn_da_project_list`, web `src/services/ProjectDaCloudService.ts` listManagedProjects).
+   * Máy chủ tự áp công ty (JWT) + phạm vi: nhân viên đại lý ⇒ dự án gán cho đại lý ở tab Đại lý của dự án;
+   * nội bộ ⇒ dự án được gán cho nhân viên (full access / admin ⇒ mọi dự án). App không tự lọc phạm vi nữa
+   * (bản cũ đọc `cloud_generic_records` endpoint `admin/du-an/dai-ly` — web đã xoá 2026-10-14 ⇒ đại lý luôn rỗng).
+   */
   getProjects: async (payload: any = {}) => {
-    const companyId = await getCompanyId();
     const validJwt = await getValidSupabaseJwt();
     if (!validJwt) {
-      console.log("[Project] chưa có cloud_jwt hợp lệ, bỏ qua gọi da_projects (cần đăng nhập lại)");
+      console.log("[Project] chưa có cloud_jwt hợp lệ, bỏ qua fn_da_project_list (cần đăng nhập lại)");
       return { data: [] };
     }
-    const limit = payload?.limit ?? payload?.Limit ?? 50;
+    const limit = Math.max(1, Number(payload?.limit ?? payload?.Limit ?? 50) || 50);
+    const keyword = String(payload?.keyword ?? payload?.InputSearch ?? "").trim();
 
     try {
-      const typeAccount = await getTypeAccount();
-      let agencyScopeIds: string[] = [];
-      let agencyScopeNames: string[] = [];
-      if (typeAccount === "AGENCY" && companyId && UUID_RE.test(companyId)) {
-        const scope = await getAgencyProjectScope(companyId);
-        agencyScopeIds = scope.ids;
-        agencyScopeNames = scope.names;
-        console.log("[Project] Agency scope resolved:", { agencyScopeIds, agencyScopeNames });
-        if (agencyScopeIds.length === 0 && agencyScopeNames.length === 0) {
-          return { data: [] };
-        }
-      }
-
-      const params: Record<string, string> = {
-        select:
-          "id,ma_da_code,ten_da,ten_viet_tat,dia_chi,ma_tt,ten_tt,image_url,ap_dung,created_at,updated_at",
-        order: "ten_da.asc",
-        limit: String(limit),
-      };
-      if (companyId && UUID_RE.test(companyId)) {
-        params.ma_ctdk = `eq.${companyId}`;
-        params.ap_dung = "is.true";
-      } else if (companyId) {
-        console.log(
-          `[Project] bỏ filter ma_ctdk vì không phải UUID (đang là "${companyId}")`
-        );
-      }
-
-      const res = await axiosApiSupabase.get("rest/v1/da_projects", {
-        params,
-        headers: { Prefer: "count=exact" },
+      const res = await axiosApiSupabase.post("rest/v1/rpc/fn_da_project_list", {
+        p_keyword: keyword || null,
+        p_page: 1,
+        p_size: limit,
       });
-
-      let rows = Array.isArray(res.data) ? res.data : [];
-
-      if (typeAccount === "AGENCY") {
-        rows = rows.filter((r: any) => {
-          const rId = r?.id;
-          const rCode = r?.ma_da_code != null ? String(r.ma_da_code).trim() : "";
-          const rName = r?.ten_da != null ? String(r.ten_da).trim() : "";
-          return (
-            agencyScopeIds.includes(rId) ||
-            agencyScopeIds.includes(rCode) ||
-            agencyScopeNames.includes(rName)
-          );
-        });
-      }
+      const rows = projectRowsFromRpc(res?.data);
 
       const anhMap = await fetchDuAnAnhMap(rows.map((r: any) => r?.ma_da_code));
       const data = rows.map((r: any) =>
@@ -307,7 +137,7 @@ export const ProjectService = {
 
       return { data };
     } catch (error) {
-      console.log("ERROR getProjects (da_projects):", error);
+      console.log("ERROR getProjects (fn_da_project_list):", error);
       return { data: [] };
     }
   },

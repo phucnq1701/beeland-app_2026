@@ -2,6 +2,7 @@ import axiosApiSupabase from "./axiosApiSupabase";
 import axiosApi from "./axiosApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getCompanyId, getValidSupabaseJwt } from "./cloudTenant";
+import { orderByIds, productIdsFromRpc, productListRpcArgs } from "../lib/projectScope";
 
 /**
  * Chuẩn hoá 1 row bds_products (snake_case) → shape UI cũ (PascalCase).
@@ -194,101 +195,44 @@ export const ProductService = {
    * Payload tương thích shape cũ: { MaDA, MaKhu, MaPK, MaTT, KyHieu, Limit, offSet }
    */
   getProducts: async (payload: any = {}) => {
-    const companyId = await getCompanyId();
     const validJwt = await getValidSupabaseJwt();
     if (!validJwt) {
-      console.log("[Product] chưa có cloud_jwt, bỏ qua bds_products");
+      console.log("[Product] chưa có cloud_jwt, bỏ qua fn_bds_product_list");
       return { data: [] };
     }
 
     try {
-      const limit = payload?.Limit ?? payload?.limit ?? 50;
-      const offset = payload?.offSet ?? payload?.offset ?? 0;
-
-      // Web AI: order created_at desc (không dùng stt), phân trang offset/limit
-      const params: Record<string, string> = {
-        select: PRODUCT_SELECT,
-        // order: "created_at.desc",
-        order: "ky_hieu.asc,created_at.desc",
-        limit: String(limit),
-        offset: String(Math.max(0, Number(offset) - 1)), // legacy offSet is 1-based
-      };
-
-      // ma_ctdk filter (tenant isolation)
-      if (companyId && UUID_RE.test(companyId)) {
-        params.ma_ctdk = `eq.${companyId}`;
-      }
-
-      // Project filter — ma_da là UUID nên resolve ma_da_code trước
+      // Dự án: ma_da là UUID nên resolve ma_da_code trước
+      let projectUuid: string | null = null;
       const maDA = payload?.MaDA ?? payload?.maDA;
       if (maDA != null && maDA !== "" && maDA !== -1) {
-        const projectUuid = await ProductService.resolveProjectUuid(maDA);
+        projectUuid = await ProductService.resolveProjectUuid(maDA);
         if (!projectUuid) {
           console.log(`[Product] không tìm thấy dự án với ma_da_code=${maDA}`);
           return { data: [], total: 0 };
         }
-        params.ma_da = `eq.${projectUuid}`;
       }
 
-      // Web AI: filter MaKhu/MaPK/MaTT chỉ áp khi là uuid ("-1"/"all"/rỗng bị bỏ qua)
-      const isUuid = (val: any) => val && UUID_RE.test(String(val).trim());
+      // 1) Tập căn + thứ tự + tổng: cùng hàm web màn Cao tầng / Thấp tầng (fn_bds_product_list). Máy chủ tự áp
+      //    công ty + phạm vi: nhân viên đại lý ⇒ chỉ căn trong giỏ hàng hợp lệ; người khác ⇒ dự án được gán.
+      //    Không đọc thẳng REST: RLS REST của đại lý cho xem cả căn đại lý từng giao dịch (rộng hơn danh sách web).
+      const rpc = await axiosApiSupabase.post(
+        "rest/v1/rpc/fn_bds_product_list",
+        productListRpcArgs(payload, projectUuid)
+      );
+      const { ids, total } = productIdsFromRpc(rpc?.data);
+      if (ids.length === 0) return { data: [], total };
 
-      // Block/area filter
-      const maKhu = payload?.MaKhu ?? payload?.maKhu;
-      if (isUuid(maKhu)) {
-        params.ma_khu = `eq.${String(maKhu).trim()}`;
-      }
-
-      // Sub-block filter
-      const maPK = payload?.MaPK ?? payload?.maPK;
-      if (isUuid(maPK)) {
-        params.ma_pk = `eq.${String(maPK).trim()}`;
-      }
-
-      // Status filter — ma_tt là FK uuid
-      const maTT = payload?.MaTT ?? payload?.maTT;
-      if (isUuid(maTT)) {
-        params.ma_tt = `eq.${String(maTT).trim()}`;
-      }
-
-      // Web AI: form_code chỉ có 'CAOTANG' | 'THAPTANG' | null
-      const formCode = payload?.FormCode ?? payload?.formCode;
-      if (formCode && String(formCode).trim()) {
-        params.form_code = `eq.${String(formCode).trim()}`;
-      }
-
-      // Web AI: search or=(ky_hieu,ma_sp,so_can_ho) ilike
-      const keyword =
-        payload?.InputSearch ??
-        payload?.KyHieu ??
-        payload?.kyHieu ??
-        payload?.keyword;
-      const kw = String(keyword ?? "").trim();
-      if (kw) {
-        const safe = kw.replace(/[,()]/g, "");
-        // BẮT BUỘC bọc ngoặc đơn quanh giá trị or=: gateway phía trước PostgREST
-        // làm hỏng or= không ngoặc (dính thành tên cột "orky_hieu" → lỗi 400 →
-        // kết quả rỗng). Đã test thật: or=(ky_hieu.ilike.*2009*,...) → 200 OK.
-        params.or = `(ky_hieu.ilike.*${safe}*,ma_sp.ilike.*${safe}*,so_can_ho.ilike.*${safe}*)`;
-      }
-
+      // 2) Đọc đủ cột app cần (dòng của hàm web thiếu mã khu/tầng, màu nền, ảnh…) theo đúng danh sách id
       const res = await axiosApiSupabase.get("rest/v1/bds_products", {
-        params,
-        headers: { Prefer: "count=exact" },
+        params: { select: PRODUCT_SELECT, id: `in.(${ids.join(",")})` },
       });
-
       const rows = Array.isArray(res.data) ? res.data : [];
-      const data = rows.map(normalizeProduct);
-
-      // Parse total count from Content-Range header
-      const range = res.headers?.["content-range"] || "";
-      const total = range.includes("/")
-        ? Number(range.split("/").pop()) || data.length
-        : data.length;
+      const data = orderByIds(ids, rows).map(normalizeProduct);
 
       return { data, total };
     } catch (error) {
-      console.log("ERROR getProducts (bds_products):", error);
+      console.log("ERROR getProducts (fn_bds_product_list):", error);
       return { data: [] };
     }
   },

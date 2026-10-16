@@ -51,7 +51,7 @@
   quay về nạp lại), "Đổi khách" / "Thêm người đồng sở hữu" (`CustomerPickerSheet`, tìm `CustomerService.getCustomers`),
   thêm khách mới → `customer/new` với `returnToSigning=1`, `newCustomerFor` (main | owner), `signingParams`;
   lưu xong `dismissTo('/signing/form')` kèm `newCustomer`.
-- Đại lý: danh sách / tìm phiếu chỉ giữ dự án được gán (`ProjectService.getProjects`), dòng không rõ dự án vẫn giữ (như web).
+- Đại lý: danh sách / tìm phiếu chỉ giữ dự án được gán (`ProjectService.getProjects` = `fn_da_project_list`, phạm vi máy chủ), dòng không rõ dự án vẫn giữ (như web).
 
 ## Bẫy
 

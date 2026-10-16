@@ -15,12 +15,26 @@
 
 | Việc | Service | Nguồn |
 |---|---|---|
-| Dự án | `ProjectService.getProjects` | `da_projects` (MaDA = `ma_da_code`, thiếu thì uuid) |
-| Sản phẩm, chi tiết, ảnh | `ProductService.getProducts / getDetailProducts / getBannerProduct` → `normalizeProduct` | `bds_products` |
+| Dự án (dùng chung cho mọi ô chọn dự án trong app) | `ProjectService.getProjects` | RPC `fn_da_project_list` (như web `listManagedProjects`), app giữ thêm lọc `ap_dung = true`; MaDA = `ma_da_code`, thiếu thì uuid |
+| Danh sách sản phẩm (màn Sản phẩm, chọn căn ở Đặt lịch / Phiếu tính giá) | `ProductService.getProducts` → `normalizeProduct` | RPC `fn_bds_product_list` (như web Cao tầng / Thấp tầng) lấy id + thứ tự + tổng, rồi REST `bds_products?id=in.(…)` đọc đủ cột |
+| Chi tiết, ảnh sản phẩm | `ProductService.getDetailProducts / getBannerProduct` | `bds_products` (REST) |
 | Danh mục trạng thái căn | `FilterService.getStatusSP` | `cloud_catalogs` `bds_trang_thai`, `ma_ctdk=global` (MaTT = uuid, `_raw.item_code` = mã số) |
 | Lưới khu/tầng/vị trí | `PriceServices.getBlock` | `bds_products` + `cloud_catalogs` |
 | Giá theo bảng giá (chi tiết căn) | `PriceServices.getActivePriceForProduct` | RPC `get_active_price_for_product` |
 | Realtime | SignalR `https://api-beeland.beesky.vn/signalr-beeland`, sự kiện `ChangeTable` (`app/products.tsx`) | cập nhật ô bằng `lib/productRealtime.applyRealtimeChange` |
+
+## Phạm vi dự án / sản phẩm (máy chủ quyết định, app không tự lọc)
+
+Logic thuần + test: `lib/projectScope.ts`, `tests/project-scope.test.cjs`. Nguồn web: `docs-claude/08-features/projects.md` mục 1b,
+migration `20261014121500_da_project_scope_agency`, `20261014100000_bds_product_rpc`.
+
+- **Nhân viên đại lý** (công ty của nhân viên là `dm_companies` `is_san`): dự án = dự án gán cho **đại lý** ở tab **Đại lý**
+  trong chi tiết dự án web (bảng `da_project_agencies`). Thêm nhân viên đại lý vào "Quản lý nhân viên" của dự án **không** có tác dụng.
+  Danh sách sản phẩm = chỉ căn trong **giỏ hàng** đang hiệu lực có cả đại lý lẫn nhân viên đó — không theo dự án.
+- **Nhân viên nội bộ:** dự án được gán (`dm_employee_projects`); nhóm full access / admin ⇒ mọi dự án công ty.
+  Danh sách sản phẩm = căn thuộc các dự án đó.
+- Lưới / Tổng quan (`PriceServices.getBlock`) vẫn đọc REST `bds_products` như sơ đồ tổng quan web (`so-do-tong-quan`):
+  RLS REST của đại lý cho xem cả căn đại lý từng giao dịch, nên lưới có thể rộng hơn danh sách — giống web.
 
 ## Quy tắc trạng thái căn (web là chuẩn – có test `tests/product-status.test.cjs`, `product-realtime.test.cjs`)
 
@@ -46,6 +60,11 @@
 - Màn chi tiết căn/lock: chặn bấm lặp bằng ref; đếm ngược về 0 → sweep đúng một lần rồi tải lại.
 
 ## Bẫy đã gặp
+
+- Phạm vi dự án đại lý từng đọc `cloud_generic_records` endpoint `admin/du-an/dai-ly`. Web chuyển sang `da_project_agencies`
+  và **xoá** endpoint này 2026-10-14 ⇒ mọi tài khoản đại lý thấy 0 dự án. Đã chuyển sang `fn_da_project_list` (2026-10-16).
+- Danh sách sản phẩm từng đọc thẳng REST `bds_products`: đại lý chưa ở giỏ nào vẫn thấy các căn sàn đã giao dịch
+  (RLS REST rộng hơn danh sách web), nhân viên nội bộ chưa gán dự án thấy mọi căn công ty. Đã chuyển sang `fn_bds_product_list`.
 
 - Cột diện tích tim tường là **`dt_tim_tuong`** (app từng đọc `dt_tim_duong` không tồn tại → luôn trống). Field app: `DTTimDuong`.
 - uuid sản phẩm nằm ở **`ID`** của `normalizeProduct`, không phải `id`.
