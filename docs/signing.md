@@ -19,7 +19,7 @@
 
 | Việc | App (`sevicesSupabase/SigningService.ts`) | Máy chủ |
 |---|---|---|
-| Danh sách | `list` | RPC `fn_signing_appointment_list` (`p_is_personal`, `p_state`, `p_input_search`, `p_project_id`, limit 500) |
+| Danh sách | `list` | RPC `fn_signing_appointment_list` bản mới (`p_is_personal`, `p_state`, `p_search`, `p_project_id`, `p_page` 1, `p_size` 500; công ty từ JWT) |
 | Chi tiết | `get(uuid \| seq)` | RPC `fn_signing_appointment_get` |
 | Thêm / sửa | `upsert` → `p_payload` = `lib/signing.buildUpsertPayload` (web `toRow` + `upcert`) | RPC `fn_signing_appointment_upsert` (máy chủ kiểm tra ca + ghi nhật ký) |
 | Xoá | `remove` | RPC `fn_signing_appointment_delete` (kèm `actor_id` = mã NV, `actor_name`). Đổi trạng thái (`fn_signing_appointment_set_state`) chỉ có trên web |

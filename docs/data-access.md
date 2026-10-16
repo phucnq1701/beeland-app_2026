@@ -64,3 +64,21 @@ Phiếu tính giá (`docs/price-sheets.md`): `fn_price_sheet_list/get/save/set_s
 `fn_get_payment_schedules`, `fn_get_promotions`, `app_has_perm_any` (quyền ẩn/hiện nút); REST `price_list_items`,
 `cloud_pricing_configs`, `cloud_pricing_config_rounds` (RLS theo công ty).
 Chat: RPC `fn_chat_*` (có migration ở web `supabase/migrations/20261011100*`, `20261013120000_chat_kenh_app`).
+
+### Hàm danh sách bản mới (web đổi 2026-10-14) – bẫy đã gặp 2026-10-16
+
+Web chuyển hàng loạt hàm danh sách sang bản mới và **xoá bản cũ** trên máy chủ ⇒ app gửi tham số cũ bị lỗi, màn hiện
+rỗng (lỗi chỉ ghi `console.log`, không báo người dùng). Bản mới: công ty + phạm vi dự án lấy từ **JWT** (không gửi
+`p_ma_ctdk_uid`), `p_project_id` = **1 uuid**, `p_search`, `p_page`, `p_size`; trả `{ rows, total }`. Đọc kết quả bằng
+`lib/listRpc.ts` (`listResult`, `pageArgs`; chọn nhiều dự án ⇒ gọi từng dự án rồi `mergeProjectPages`).
+
+| Hàm | App | Ghi chú |
+|---|---|---|
+| `fn_booking_list` | `BookingService.listBookings / listBookingsFromCloud` | dòng không còn `booking_id` ⇒ mở chi tiết bằng id phiếu giữ chỗ |
+| `fn_deposit_list` | `DatCocService.get` | phạm vi đại lý do máy chủ áp, app bỏ tự lọc |
+| `fn_signing_appointment_list` | `SigningService.list` | |
+| `fn_da_project_list`, `fn_bds_product_list` | `ProjectService.getProjects`, `ProductService.getProducts` | xem `docs/products-lock.md` |
+
+Vẫn còn bản cũ (chưa đổi): `fn_contract_list`, `fn_customer_list` (2 bản), `fn_signing_appointment_get` / `fn_signing_deposit_search`
+(2 bản), `fn_cash_vouchers_by_pgc`, `fn_contract_payment_schedule`. Khi web dọn tiếp, kiểm lại bằng cách so tên tham số
+`pg_get_function_identity_arguments` trên máy chủ với tham số app gửi.

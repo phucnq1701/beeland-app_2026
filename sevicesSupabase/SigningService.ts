@@ -70,17 +70,18 @@ export const SigningService = {
     projectId?: string | null;
     limit?: number;
   }): Promise<SigningRow[]> => {
-    const tenant = await requireTenant();
+    await requireTenant();
     const scope = await agencyProjectIds();
     if (scope && filter.projectId && !scope.has(String(filter.projectId))) return [];
+    // Bản mới (migration 20261014181500): công ty + phạm vi dự án từ JWT; p_search, p_page, p_size; trả { rows, total }.
+    // Bản cũ (p_ma_ctdk_uid, p_input_search, p_offset, p_limit) đã bị xoá trên máy chủ.
     const res = await axiosApiSupabase.post("rest/v1/rpc/fn_signing_appointment_list", {
-      p_ma_ctdk_uid: tenant,
       p_project_id: uid(filter.projectId),
-      p_input_search: String(filter.search || "").trim() || null,
+      p_search: String(filter.search || "").trim() || null,
       p_state: filter.state ? String(filter.state).toUpperCase() : null,
-      p_is_personal: filter.isPersonal,
-      p_offset: 0,
-      p_limit: filter.limit ?? 500,
+      p_is_personal: filter.isPersonal ?? null,
+      p_page: 1,
+      p_size: filter.limit ?? 500,
     });
     const rows = rpcRows(res.data).rows.map(mapListRow);
     // Không xác định được dự án → giữ lại (như web)

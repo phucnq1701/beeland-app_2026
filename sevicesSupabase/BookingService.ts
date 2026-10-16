@@ -1,6 +1,7 @@
 import axiosApi from "./axiosApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axiosApiSupabase from "./axiosApiSupabase";
+import { listResult, mergeProjectPages, pageArgs } from "../lib/listRpc";
 import {
   getCompanyCode,
   getCompanyId,
@@ -272,7 +273,8 @@ function normalizeBookingRow(r: any) {
   const tongGia = r?.gia_tri_hd_sau_ck ?? r?.gia_tri_hd ?? null;
   return {
     ...r,
-    // id booking để mở chi tiết; không có booking thì dùng id phiếu giữ chỗ
+    // Bản mới fn_booking_list không trả booking_id: mở chi tiết bằng id phiếu giữ chỗ
+    // (getBookingDetail tra cloud_bookings theo ma_pgc_id, lấy booking mới nhất)
     id: r?.booking_id || r?.id,
     maPGC: r?.id,
     ma_pgc_id: r?.id,
@@ -293,31 +295,38 @@ function normalizeBookingRow(r: any) {
   };
 }
 
-/** Gọi RPC fn_booking_list; tự thêm p_ma_ctdk_uid, trả { data, total } */
-async function callBookingListRpc(params: Record<string, any>) {
-  const companyId = await getCompanyId();
+/**
+ * Gọi RPC fn_booking_list bản mới (web `src/services/sales/booking-list` listBookings, migration 20261014140000):
+ * công ty + phạm vi dự án lấy từ JWT ở máy chủ; tham số p_project_id (1 uuid), p_search, p_tu_ngay, p_den_ngay,
+ * p_ma_tt, p_states, p_page, p_size; trả { rows, total }. Bản cũ (p_ma_ctdk_uid, p_offset, p_limit…) đã bị xoá
+ * trên máy chủ ⇒ app từng nhận lỗi và hiện danh sách rỗng.
+ */
+async function callBookingListRpc(params: {
+  projectId?: string | null;
+  search?: string | null;
+  tuNgay?: string | null;
+  denNgay?: string | null;
+  maTT?: number | null;
+  page?: number;
+  size?: number;
+}) {
   const validJwt = await getValidSupabaseJwt();
-  if (!validJwt || !companyId || !UUID_RE.test(companyId)) {
-    console.log("[Booking] chưa có cloud_jwt/company_id hợp lệ");
+  if (!validJwt) {
+    console.log("[Booking] chưa có cloud_jwt hợp lệ");
     return { data: [] as any[], total: 0 };
   }
   try {
     const res = await axiosApiSupabase.post("rest/v1/rpc/fn_booking_list", {
-      p_ma_ctdk_uid: companyId,
-      p_project_id: null,
-      p_ma_tt: null,
-      p_tu_ngay: null,
-      p_den_ngay: null,
-      p_input_search: null,
-      p_limit: 100,
-      p_offset: 0,
-      ...params,
+      p_project_id: params.projectId || null,
+      p_search: params.search || null,
+      p_tu_ngay: params.tuNgay || null,
+      p_den_ngay: params.denNgay || null,
+      p_ma_tt: params.maTT ?? null,
+      p_states: null,
+      ...pageArgs(params.page, params.size),
     });
-    const rows = Array.isArray(res.data) ? res.data : [];
-    return {
-      data: rows.map(normalizeBookingRow),
-      total: Number(rows[0]?.total_count) || rows.length,
-    };
+    const { rows, total } = listResult(res.data);
+    return { data: rows.map(normalizeBookingRow), total };
   } catch (error) {
     console.log("ERROR fn_booking_list:", error);
     return { data: [] as any[], total: 0 };
@@ -379,7 +388,8 @@ export const BookingService = {
     limit = 5,
     offset = 0,
   }: { limit?: number; offset?: number } = {}) => {
-    const res = await callBookingListRpc({ p_limit: limit, p_offset: offset });
+    const size = Math.max(1, limit);
+    const res = await callBookingListRpc({ page: Math.floor(Math.max(0, offset) / size) + 1, size });
     return { data: res.data, total: res.total };
   },
 
@@ -446,14 +456,27 @@ export const BookingService = {
       const pageSize = Math.max(1, Number(payload?.pageSize ?? payload?.Limit ?? 50));
       const pageIndex = Math.max(1, Number(payload?.pageIndex ?? 1));
 
+      const base = { search: kw || null, tuNgay: effTu, denNgay: effDen, maTT: maTTCode };
+      // Chọn nhiều dự án: hàm mới chỉ nhận 1 dự án ⇒ gọi từng dự án rồi gộp đúng trang (lib/listRpc)
+      if (uids.length > 1) {
+        const pages = await Promise.all(
+          uids.map((projectId) =>
+            callBookingListRpc({ ...base, projectId, page: 1, size: pageIndex * pageSize })
+          )
+        );
+        const merged = mergeProjectPages(
+          pages.map((p) => ({ rows: p.data, total: p.total })),
+          pageIndex,
+          pageSize,
+          (r: any) => r?.ngay_giu_cho ?? r?.ngay_nhap
+        );
+        return { data: merged.rows, total: merged.total };
+      }
       return await callBookingListRpc({
-        p_project_id: uids.length > 0 ? uids.join(",") : null,
-        p_ma_tt: maTTCode,
-        p_tu_ngay: effTu,
-        p_den_ngay: effDen,
-        p_input_search: kw || null,
-        p_limit: pageSize,
-        p_offset: (pageIndex - 1) * pageSize,
+        ...base,
+        projectId: uids[0] ?? null,
+        page: pageIndex,
+        size: pageSize,
       });
     } catch (error) {
       console.log("ERROR listBookings:", error);
@@ -784,7 +807,8 @@ export const BookingService = {
 
       // Fallback tìm theo ma_pgc_id nếu idStr là ma_pgc_id uuid
       if (isUid) {
-        let pgcQuery = `rest/v1/cloud_bookings?select=${BOOKING_SELECT_FULL}&loai_ct=eq.BOOKING&ma_pgc_id=eq.${idStr}&limit=1`;
+        // 1 phiếu giữ chỗ có thể có nhiều booking (booking cũ đã huỷ + booking mới) ⇒ lấy mới nhất như web
+        let pgcQuery = `rest/v1/cloud_bookings?select=${BOOKING_SELECT_FULL}&loai_ct=eq.BOOKING&ma_pgc_id=eq.${idStr}&order=created_at.desc&limit=1`;
         if (companyId && UUID_RE.test(companyId)) {
           pgcQuery += `&ma_ctdk_id=eq.${companyId}`;
         }

@@ -1,6 +1,6 @@
 import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyId, getValidSupabaseJwt, getTypeAccount } from "./cloudTenant";
-import { ProjectService } from "./ProjectService";
+import { getValidSupabaseJwt } from "./cloudTenant";
+import { listResult, mergeProjectPages, pageArgs } from "../lib/listRpc";
 import { PaymentProgressService } from "./PaymentProgressService";
 import { statusCodeNum } from "../lib/depositQr";
 import { formatDirections } from "../lib/format";
@@ -65,7 +65,8 @@ export function rpcRows(data: any): { rows: any[]; total: number | null } {
     return { rows: data, total: Number.isFinite(t) && t > 0 ? t : null };
   }
   const rows = Array.isArray(data?.rows) ? data.rows : [];
-  const t = Number(data?.total_count);
+  // Hàm danh sách bản mới (2026-10-14) trả { rows, total }; bản trước { rows, total_count }
+  const t = Number(data?.total_count ?? data?.total);
   return { rows, total: Number.isFinite(t) ? t : null };
 }
 
@@ -144,34 +145,18 @@ export const DatCocService = {
     }
 
     try {
-      const tenantId = await getCompanyId();
       const limit = Math.max(1, Number(filter?.Limit ?? filter?.limit ?? 20));
       const page = Math.max(1, Number(filter?.Offset ?? filter?.offset ?? 1));
-      const offset = (page - 1) * limit;
 
-      // Dự án: resolve ma_da_code -> uuid, nối dấu phẩy (null = tất cả)
-      let projectIds = parseProjectIds(
+      // Dự án: resolve ma_da_code -> uuid. Phạm vi (nội bộ: dự án được gán; đại lý: dự án của đại lý) do máy chủ
+      // áp theo JWT (_da_project_scope) ⇒ không tự lọc phía app nữa.
+      const projectIds = parseProjectIds(
         filter?.DuAn ?? filter?.duAn ?? filter?.projectId
       );
-
-      // Đại lý: chỉ dự án được gán; không đọc được phạm vi / chọn ngoài phạm vi → không có dữ liệu
-      // (không bao giờ để p_project_id = null = mọi dự án)
-      const typeAccount = await getTypeAccount();
-      if (typeAccount === "AGENCY") {
-        const scope = await ProjectService.getProjects({});
-        const allowedIds = (scope?.data ?? []).map((p: any) => p.id);
-        const allowedCodes = (scope?.data ?? []).map((p: any) => p.ma_da_code);
-        projectIds = projectIds.length === 0
-          ? allowedIds
-          : projectIds.filter((id) => allowedIds.includes(id) || allowedCodes.includes(id));
-        if (projectIds.length === 0) return { data: [], totalRows: 0 };
-      }
-
       const projectUuids =
         projectIds.length > 0 ? await resolveProjectUuids(projectIds) : [];
       // Có chọn dự án nhưng không đổi ra uuid nào → không có dữ liệu hợp lệ (web DepositListService)
       if (projectIds.length > 0 && projectUuids.length === 0) return { data: [], totalRows: 0 };
-      const pProjectId = projectUuids.length > 0 ? projectUuids.join(",") : null;
 
       const search = String(
         filter?.inputSearch ?? filter?.keyword ?? ""
@@ -181,23 +166,33 @@ export const DatCocService = {
       const pMaTT =
         Number.isFinite(maTTNum) && maTTNum > 0 ? maTTNum : null;
 
-      // Như web DepositListService.listDeposits: ngày theo giờ VN, không lọc → null
-      const body = {
-        p_ma_ctdk_uid: tenantId || null,
-        p_project_id: pProjectId,
+      // fn_deposit_list bản mới (web DepositListService, migration 20261014171500): công ty từ JWT,
+      // p_project_id 1 uuid, p_search, p_page, p_size; trả { rows, total }. Ngày theo giờ VN, không lọc → null.
+      const base = {
+        p_search: search || null,
         p_tu_ngay: vnDayBound(filter?.TuNgay ?? filter?.tuNgay, false),
         p_den_ngay: vnDayBound(filter?.DenNgay ?? filter?.denNgay, true),
-        p_input_search: search || null,
         p_ma_tt: pMaTT,
-        p_offset: offset,
-        p_limit: limit,
+      };
+      const call = async (projectId: string | null, p: number, size: number) => {
+        const res = await axiosApiSupabase.post("rest/v1/rpc/fn_deposit_list", {
+          ...base,
+          p_project_id: projectId,
+          ...pageArgs(p, size),
+        });
+        return listResult(res.data);
       };
 
-      const res = await axiosApiSupabase.post("rest/v1/rpc/fn_deposit_list", body);
-      // Hàm máy chủ trả { rows, total_count }; vẫn nhận mảng bản cũ
-      const { rows, total } = rpcRows(res.data);
-      const mapped = rows.map(mapDepositRow);
-      return { data: mapped, totalRows: total ?? mapped.length };
+      let result: { rows: any[]; total: number };
+      if (projectUuids.length > 1) {
+        // Chọn nhiều dự án: hàm chỉ nhận 1 dự án ⇒ gọi từng dự án rồi gộp đúng trang
+        const pages = await Promise.all(projectUuids.map((id) => call(id, 1, page * limit)));
+        result = mergeProjectPages(pages, page, limit, (r: any) => r?.ngay_coc ?? r?.ngay_nhap);
+      } else {
+        result = await call(projectUuids[0] ?? null, page, limit);
+      }
+      const mapped = result.rows.map(mapDepositRow);
+      return { data: mapped, totalRows: result.total };
     } catch (error) {
       console.log("ERROR DatCocService.get (fn_deposit_list):", error);
       return { data: [], totalRows: 0, error: true };

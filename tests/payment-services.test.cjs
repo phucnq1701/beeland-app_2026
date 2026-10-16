@@ -30,6 +30,7 @@ function run(file, map) {
 
 const math = run("lib/paymentMath.ts", {});
 const depositQr = run("lib/depositQr.ts", {});
+const listRpc = run("lib/listRpc.ts", {});
 
 function harness({ rpc = {}, tables = {}, failRpc = {}, typeAccount = "SYSTEM", scope = [] } = {}) {
   const calls = [];
@@ -62,6 +63,7 @@ function harness({ rpc = {}, tables = {}, failRpc = {}, typeAccount = "SYSTEM", 
     "./cloudTenant": cloudTenant,
     "../lib/paymentMath": math,
     "../lib/depositQr": depositQr,
+    "../lib/listRpc": listRpc,
     "./ProjectService": { ProjectService: { getProjects: async () => ({ data: scope }) } },
     "@react-native-async-storage/async-storage": { default: { getItem: async () => null } },
   };
@@ -82,15 +84,18 @@ function harness({ rpc = {}, tables = {}, failRpc = {}, typeAccount = "SYSTEM", 
 
 test("deposit list: fn_deposit_list like the web, both response shapes", async () => {
   const row = { id: "dc1", pgc_id: "pgc1", so_phieu: "DC-1", ten_kh: "Khách", ky_hieu: "A-1", gia_tri_hd: 900, tien_coc: 50, da_thu: 20, total_count: 7 };
-  for (const shape of [{ rows: [row], total_count: 7 }, [row]]) {
+  for (const shape of [{ rows: [row], total: 7 }, { rows: [row], total_count: 7 }, [row]]) {
     const h = harness({ rpc: { fn_deposit_list: shape } });
-    const res = await h.deposits().get({ Offset: 2, Limit: 10 });
+    const res = await h.deposits().get({ Offset: 2, Limit: 10, inputSearch: " DC " });
     const body = h.calls.find((c) => c.fn === "fn_deposit_list").body;
-    assert.equal(body.p_ma_ctdk_uid, tenant);
+    // Bản mới (2026-10-14): công ty từ JWT, trang/kích thước thay offset/limit
+    assert.equal("p_ma_ctdk_uid" in body, false);
+    assert.equal(body.p_search, "DC");
+    assert.equal(body.p_project_id, null);
     assert.equal(body.p_tu_ngay, null, "no date filter → null like the web");
     assert.equal(body.p_den_ngay, null);
-    assert.equal(body.p_offset, 10);
-    assert.equal(body.p_limit, 10);
+    assert.equal(body.p_page, 2);
+    assert.equal(body.p_size, 10);
     assert.equal(res.totalRows, 7);
     const d = res.data[0];
     assert.equal(d.MaPGC, "pgc1");
@@ -230,15 +235,25 @@ test("receipt report counts original contracts only (web Phiếu thu default GOC
   assert.equal(h.calls.find((c) => c.fn === "fn_cash_voucher_list").body.p_contract_type, "GOC");
 });
 
-test("agency deposits: empty scope or a selection outside it returns nothing (never all projects)", async () => {
-  const none = harness({ typeAccount: "AGENCY", scope: [], rpc: { fn_deposit_list: [{ id: "x" }] } });
-  assert.equal((await none.deposits().get({})).data.length, 0);
-  assert.equal(none.calls.some((c) => c.fn === "fn_deposit_list"), false);
-  const outside = harness({ typeAccount: "AGENCY", scope: [{ id: uid(4), ma_da_code: "DA4" }], rpc: { fn_deposit_list: [{ id: "x" }] } });
-  assert.equal((await outside.deposits().get({ DuAn: uid(5) })).data.length, 0);
-  const inside = harness({ typeAccount: "AGENCY", scope: [{ id: uid(4), ma_da_code: "DA4" }], rpc: { fn_deposit_list: [{ id: "x" }] } });
-  await inside.deposits().get({});
-  assert.equal(inside.calls.find((c) => c.fn === "fn_deposit_list").body.p_project_id, uid(4));
+test("deposits: project scope is enforced by the server; one project → p_project_id, several → one call each, merged", async () => {
+  // Đại lý không còn tự lọc phía app: fn_deposit_list bản mới áp _da_project_scope() theo JWT
+  const agency = harness({ typeAccount: "AGENCY", scope: [], rpc: { fn_deposit_list: { rows: [], total: 0 } } });
+  await agency.deposits().get({});
+  assert.equal(agency.calls.find((c) => c.fn === "fn_deposit_list").body.p_project_id, null);
+
+  const one = harness({ rpc: { fn_deposit_list: { rows: [], total: 0 } } });
+  await one.deposits().get({ DuAn: uid(4) });
+  assert.equal(one.calls.find((c) => c.fn === "fn_deposit_list").body.p_project_id, uid(4));
+
+  const many = harness({
+    rpc: { fn_deposit_list: { rows: [{ id: "d1", ngay_coc: "2026-10-02T00:00:00Z" }, { id: "d2", ngay_coc: "2026-10-01T00:00:00Z" }], total: 2 } },
+  });
+  const res = await many.deposits().get({ DuAn: [uid(4), uid(5)], Offset: 1, Limit: 3 });
+  const calls = many.calls.filter((c) => c.fn === "fn_deposit_list");
+  assert.deepEqual(plain(calls.map((c) => c.body.p_project_id)), [uid(4), uid(5)]);
+  assert.deepEqual(plain(calls.map((c) => [c.body.p_page, c.body.p_size])), [[1, 3], [1, 3]]);
+  assert.equal(res.totalRows, 4);
+  assert.deepEqual(plain(res.data.map((d) => d.ID)), ["d1", "d2"], "same rows from both calls are de-duplicated");
 });
 
 test("schedule fallback like the web: company code filter, PBT only from PhaiThuPBT, raw rows when receipts fail", async () => {
