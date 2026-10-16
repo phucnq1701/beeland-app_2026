@@ -532,8 +532,9 @@ export function buildPayload(d: SheetDraft, calc: PriceCalc): { payload: any; sn
     TyLePBT: isLow ? 0 : num(row.tyLePBT),
     PhiBT: isLow ? 0 : num(row.tienBaoTri),
     SoTien: num(row.tongGiaTri),
-    TyLePXD: isLow ? num((row as any).tyLeVATXD) : 0,
-    TienXD: isLow ? num((row as any).tienVATXD) : 0,
+    // Thấp tầng: cột "Tiền XD" = tienBaoTri / tyLeXD (= web helpers.toSavedScheduleItem)
+    TyLePXD: isLow ? num(row.tyLeXD) : 0,
+    TienXD: isLow ? num(row.tienBaoTri) : 0,
     TyLeVATDat: isLow ? num(row.tyLeVAT) : 0,
     TienVATDat: isLow ? num(row.tienVAT) : 0,
     DienGiai: row.dienGiai ?? row.ghiChu ?? "",

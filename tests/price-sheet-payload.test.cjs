@@ -277,3 +277,27 @@ test("productFromSavedSheet app == web (giá đã lưu ưu tiên giá căn lúc 
   ];
   for (const c of cases) assert.deepEqual(plain(P.productFromSavedSheet(c)), plain(m.exports.productFromSavedSheet(c)));
 });
+
+test("LichThanhToan app == web helpers.toSavedScheduleItem (cao tầng + thấp tầng)", { skip: !require("node:fs").existsSync(require("node:path").join(__dirname, "..", "..", "beeland", "src")) && "không có repo web" }, () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const ts = require("typescript");
+  const vm = require("node:vm");
+  const load = (rel, mods) => {
+    const src = fs.readFileSync(path.join(__dirname, "..", "..", "beeland", "src", rel), "utf8");
+    const out = ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+    const m = { exports: {} };
+    vm.runInNewContext(out, { module: m, exports: m.exports, require: (n) => mods[n] ?? {} });
+    return m.exports;
+  };
+  const web = load("components/Products/ContractForm/helpers.ts", { "./formulas": load("components/Products/ContractForm/formulas.ts", {}) });
+  const { calc, draft } = brgDraft();
+  for (const isLowRise of [false, true]) {
+    const d = { ...draft, form: { ...draft.form, isLowRise }, schedule: draft.schedule.map((r) => ({ ...r, tyLeXD: 5, tienBaoTri: r.tienBaoTri || 7 })) };
+    const { payload } = P.buildPayload(d, calc);
+    payload.LichThanhToan.forEach((item, i) => {
+      const expected = web.toSavedScheduleItem(d.schedule[i], isLowRise, { MaPGC: null, MaTH: "tpl-1", NgayTT: item.NgayTT });
+      assert.deepEqual(plain(item), plain(expected));
+    });
+  }
+});
