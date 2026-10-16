@@ -131,6 +131,11 @@ App giữ đúng như web ở các điểm dưới đây cho tới khi đội we
     (`dm_companies`) ⇒ không khớp nhân viên nào, vô tác dụng. `fn_cart_employee_add` hiện đã chặn kiểu ghi này. Cần xoá
     các dòng đó trên web và thêm đúng nhân viên đại lý.
 
+13. **Tạo booking: máy chủ không ép sàn cho đại lý (2026-10-16).** `fn_booking_create` ghi `san_id` theo payload client;
+    `fn_signing_appointment_upsert` thì tự ép về sàn của nhân viên đại lý. Web và app đều ép ở client (web
+    `enforceAgencySan`, app `lib/agencySan.bookingSan`), nhưng gọi thẳng RPC vẫn ghi được sàn khác ⇒ đề xuất đội web
+    ép trong `fn_booking_create` như lịch ký.
+
 ## 1. Mục tiêu và bối cảnh
 
 **Người dùng:** nhân viên kinh doanh / đại lý bất động sản, dùng app hằng ngày trên điện thoại, thường khi đang

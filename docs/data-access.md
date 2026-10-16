@@ -52,6 +52,22 @@ Mỗi bảng lọc tenant **khác nhau** – làm theo web (`../beeland/src/serv
 - Mã sản phẩm: `normalizeProduct` (`ProductService.ts`) trả uuid ở **`ID`** (không phải `id`/`Id`); `MaSP` = `ma_sp`.
 - Mã dự án ở màn = `MaDA` = `ma_da_code` (mã cũ), thiếu thì uuid (`ProjectService.ts`). Service tự đổi sang uuid khi cần.
 
+## Phạm vi dữ liệu – máy chủ quyết định (web cấu trúc lại 2026-10-15/17, chưa có trong repo web)
+
+Migration `ds_*` (đợt 2a, 2b, 3) chỉ có trên máy chủ (`supabase_migrations.schema_migrations`), đọc định nghĩa bằng
+`pg_get_functiondef`. Hàm danh sách / chi tiết chứng từ áp 3 lớp qua `_ds_txn_scope(form, p_company_ids)`:
+1. **Trần công ty** `_ds_company_ceiling()`: nhân viên đại lý ⇒ **chỉ sàn của mình** (kể cả nhóm full access / admin);
+   nội bộ ⇒ công ty + công ty con được gán; full access / admin chưa tick form ⇒ không giới hạn.
+   Dòng được xem khi `company_id` (công ty người nhập, trigger `_ds_stamp_company` tự đóng dấu) **hoặc** `san_id` thuộc trần.
+2. **Chỉ dữ liệu của tôi** `_ds_owner(form)`: nhóm quyền đặt form `type_code = EMPLOYEE` ⇒ chỉ dòng `nguoi_nhap_id` = mình.
+3. Bộ lọc công ty người dùng chọn (`p_company_ids`, app không gửi).
+Cộng thêm phạm vi dự án `_da_project_scope()` (đại lý: dự án gán cho đại lý; nội bộ: dự án được gán).
+Khách hàng: `_customer_scope_ids()` (đại lý ⇒ khách có `company_id` = sàn). Sản phẩm đại lý: giỏ hàng (`docs/products-lock.md`).
+
+⇒ App **không tự lọc phạm vi** phía client; chỉ cần gọi đúng hàm. Đã kiểm (2026-10-16, tài khoản đại lý thật): booking,
+đặt cọc, lịch ký, tìm phiếu cọc (cả bản cũ `p_ma_ctdk_uid`), khách hàng (cả bản cũ) đều chỉ trả dữ liệu của sàn.
+`fn_ds_scope_info(form)` trả `{scope: EMPLOYEE|COMPANY, full, ceiling_count}` nếu cần hiển thị.
+
 ## Hàm máy chủ app đang gọi (chỉ có trên server, không có trong repo web)
 
 `fn_booking_list`, `fn_booking_create`, `fn_product_transaction`, `fn_customer_list`, `fn_deposit_list`, `fn_contract_list`,

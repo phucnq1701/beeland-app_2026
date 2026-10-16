@@ -21,12 +21,14 @@ import {
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { formatVND, formatVNDShort, maskPhone } from "@/lib/format";
 import { buildBookingPayload } from "@/lib/bookingPayload";
+import { agencySanId, bookingSan } from "@/lib/agencySan";
 import { BookingSalesConfig, pickPrice, policyBookingAmount } from "@/lib/bookingPrice";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, elevation, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
 import { CustomerService as CustomerSupabaseService } from "@/sevicesSupabase/CustomerService";
 import { ProductService } from "@/sevicesSupabase/ProductService";
+import { getBranchId, getTypeAccount } from "@/sevicesSupabase/cloudTenant";
 
 type BookingCustomer = {
   id?: string;
@@ -121,6 +123,9 @@ export default function CreateBookingScreen() {
   const [loading, setLoading] = useState(false);
   const [loadingSan, setLoadingSan] = useState(false);
   const [creatingBooking, setCreatingBooking] = useState(false);
+  // Đại lý: sàn = sàn của tài khoản (branch_id), ô Sàn khoá – như web BookingFormDialog (useAgencySan)
+  const [isAgency, setIsAgency] = useState(false);
+  const [agencySan, setAgencySan] = useState<string | null>(null);
   const [customerError, setCustomerError] = useState<string | null>(null);
   // Chặn gửi trùng ngay cả khi người dùng bấm 2 lần trước khi màn kịp vẽ lại
   const submitting = useRef(false);
@@ -154,9 +159,18 @@ export default function CreateBookingScreen() {
   const loadSanList = async () => {
     setLoadingSan(true);
     try {
-      const res = await ProductService.getSanGiaoDichAPI();
+      const [res, typeAccount, branchId] = await Promise.all([
+        ProductService.getSanGiaoDichAPI(),
+        getTypeAccount().catch(() => ""),
+        getBranchId().catch(() => ""),
+      ]);
       const list: SanGiaoDich[] = Array.isArray(res?.data) ? res.data : [];
       setSanList(list);
+      const agency = String(typeAccount).toUpperCase() === "AGENCY";
+      setIsAgency(agency);
+      setAgencySan(agencySanId(typeAccount, branchId));
+      // Đại lý không chọn sàn – bỏ qua sàn gợi ý từ sản phẩm
+      if (agency) return;
 
       // Nếu sản phẩm hoặc bookingData đã chỉ định sàn thì auto select
       const spMaSan = bookingData?.MaSan || bookingData?.ma_san || bookingData?.san_giao_dich;
@@ -205,9 +219,17 @@ export default function CreateBookingScreen() {
       submitting.current = true;
       setCreatingBooking(true);
 
+      // Đại lý luôn ghi sàn của mình (web enforceAgencySan); không xác định được sàn ⇒ không tạo
+      const san = bookingSan({ isAgency, agencySan, selected: selectedSan, sanList });
+      if (!san.ok) {
+        hapticError();
+        toast.show({ type: "error", message: san.message });
+        return;
+      }
+
       // Payload theo chuẩn BookingService.createBooking (trường giá như web)
       const sales = salesConfig ?? (await loadSalesConfig());
-      const initDataBooking = buildBookingPayload(bookingData, selectedCustomer, selectedSan, sales);
+      const initDataBooking = buildBookingPayload(bookingData, selectedCustomer, san.san, sales);
 
       const resultBooking = await BookingService.createBooking(initDataBooking);
 
@@ -422,9 +444,10 @@ export default function CreateBookingScreen() {
           <SelectField
             label="Sàn giao dịch"
             sheetTitle="Chọn sàn giao dịch"
-            value={selectedSan ? selectedSan.ID || selectedSan.MaSan : NO_SAN}
-            options={sanOptions}
+            value={isAgency ? agencySan ?? NO_SAN : selectedSan ? selectedSan.ID || selectedSan.MaSan : NO_SAN}
+            options={isAgencyOptions(isAgency, agencySan, sanOptions)}
             loading={loadingSan}
+            disabled={isAgency}
             onChange={(v) =>
               handleSelectSan(v === NO_SAN ? null : sanList.find((s) => (s.ID || s.MaSan) === v) ?? null)
             }
@@ -434,6 +457,18 @@ export default function CreateBookingScreen() {
       </Screen>
     </>
   );
+}
+
+/** Đại lý: ô Sàn khoá, chỉ hiện sàn của tài khoản (chưa xác định được ⇒ nhãn báo lỗi thay vì "Không qua sàn"). */
+function isAgencyOptions(
+  isAgency: boolean,
+  agencySan: string | null,
+  sanOptions: { value: string; label: string; description?: string }[]
+) {
+  if (!isAgency) return sanOptions;
+  if (!agencySan) return [{ value: NO_SAN, label: "Chưa xác định được sàn của tài khoản" }];
+  const own = sanOptions.find((o) => o.value === agencySan);
+  return [own ?? { value: agencySan, label: "Sàn của tài khoản" }];
 }
 
 function CustomerOption({

@@ -19,6 +19,7 @@ import {
 } from "./cloudTenant";
 import { currentUserName } from "./CustomerRulesService";
 import { rpcRows } from "./DatCocService";
+import { agencySanId } from "../lib/agencySan";
 import { ProductService } from "./ProductService";
 import { ProjectService } from "./ProjectService";
 import {
@@ -298,10 +299,8 @@ export const SigningService = {
   },
 
   /** Sàn của tài khoản đại lý = chi nhánh trong token (web agencySanIdSync); null với tài khoản hệ thống. */
-  agencySanId: async (): Promise<string | null> => {
-    if (!(await isAgency())) return null;
-    return uid(await getBranchId());
-  },
+  /** Sàn của tài khoản đại lý (branch_id) – quy tắc chung `lib/agencySan` (dùng cả ở form tạo booking). */
+  agencySanId: async (): Promise<string | null> => agencySanId(await getTypeAccount(), await getBranchId()),
 
   /** Thông tin hiển thị của các khách (đồng đứng tên) theo uuid. */
   customersByIds: async (ids: string[]) => {

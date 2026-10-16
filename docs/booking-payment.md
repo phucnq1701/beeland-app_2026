@@ -28,6 +28,19 @@ Param `dataBooking` = JSON sản phẩm (`normalizeProduct`). Tạo xong → `ro
 4. Tạo khách mới từ màn này: `customer/new?returnToBooking=1` → lưu xong `router.dismissTo('/booking/create', { newCustomer })`
    → `create.tsx` chuẩn hoá bằng `normalizeCustomer` và chọn sẵn.
 
+## Tài khoản đại lý (2026-10-16)
+
+- **Sàn giao dịch** khi tạo booking = sàn của tài khoản (claim `branch_id` = công ty của nhân viên, sàn `is_san`),
+  ô Sàn **khoá** (`SelectField disabled`), không có "Không qua sàn" – như web `BookingFormDialog` (`useAgencySan`).
+  Lúc gửi luôn ép lại sàn của tài khoản (web `enforceAgencySan`); không xác định được sàn ⇒ **chặn tạo** + toast.
+  Quy tắc thuần: `lib/agencySan.ts` (`agencySanId`, `bookingSan`, test `tests/agency-san.test.cjs`), dùng chung với
+  `SigningService.agencySanId` (form lịch ký đã khoá ô Đại lý phụ trách từ trước).
+- Máy chủ `fn_booking_create` **không** tự ép sàn cho đại lý (khác `fn_signing_appointment_upsert`) – spec 0.2 #13.
+- Ô chọn khách: `fn_customer_list` – máy chủ chỉ trả khách của sàn (`_customer_scope_ids`). Khách đại lý thêm mới
+  gắn công ty = `branch_id` (sàn) nên vẫn nằm trong phạm vi.
+- Chi tiết booking của app chỉ có Thu tiền QR (chờ duyệt + còn hạn) và chứng từ – tập con của menu đại lý web
+  (QR / sửa / xoá khi chờ duyệt còn hạn, tạo đặt cọc khi đã duyệt); không có duyệt / xoá nên không thừa quyền.
+
 ## Chi tiết booking
 
 - Dữ liệu: `BookingService.getBookingEditDetail` (booking + phiếu giữ chỗ + giá `price_list_items` + quà + cài đặt).
