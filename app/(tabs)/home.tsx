@@ -10,7 +10,8 @@ import { HomeHeader } from "@/components/home/HomeHeader";
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import { ProjectCarousel } from "@/components/home/ProjectCarousel";
 import { RecentSection } from "@/components/home/RecentSection";
-import { Avatar, ListItem, MoneyText, Screen, StatusBadge } from "@/components/ui";
+import { Avatar, Badge, ListItem, MoneyText, Screen, StatusBadge } from "@/components/ui";
+import { bookingStateBadge } from "@/lib/bookingState";
 import { getScopedKey } from "@/components/utils/accountScope";
 import { MENU_TAB_FEATURE_IDS } from "@/components/utils/menuTabs";
 import { formatDate, maskPhone } from "@/lib/format";
@@ -294,7 +295,7 @@ export default function HomeScreen() {
               trailing={
                 <>
                   <MoneyText value={b.tongGiaGomVAT ?? b.tong_gia} short />
-                  {b.tenTT ? <StatusBadge label={b.tenTT} color={b.colorCode} /> : null}
+                  <Badge {...bookingStateBadge(b.state)} />
                 </>
               }
               onPress={() =>

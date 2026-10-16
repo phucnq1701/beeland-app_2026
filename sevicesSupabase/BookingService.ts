@@ -307,6 +307,8 @@ async function callBookingListRpc(params: {
   tuNgay?: string | null;
   denNgay?: string | null;
   maTT?: number | null;
+  /** Trạng thái booking (cloud_bookings.state) – lib/bookingState.statesForTab */
+  states?: string[] | null;
   page?: number;
   size?: number;
 }) {
@@ -322,7 +324,7 @@ async function callBookingListRpc(params: {
       p_tu_ngay: params.tuNgay || null,
       p_den_ngay: params.denNgay || null,
       p_ma_tt: params.maTT ?? null,
-      p_states: null,
+      p_states: params.states && params.states.length ? params.states : null,
       ...pageArgs(params.page, params.size),
     });
     const { rows, total } = listResult(res.data);
@@ -456,7 +458,8 @@ export const BookingService = {
       const pageSize = Math.max(1, Number(payload?.pageSize ?? payload?.Limit ?? 50));
       const pageIndex = Math.max(1, Number(payload?.pageIndex ?? 1));
 
-      const base = { search: kw || null, tuNgay: effTu, denNgay: effDen, maTT: maTTCode };
+      const states: string[] | null = Array.isArray(payload?.states) && payload.states.length ? payload.states : null;
+      const base = { search: kw || null, tuNgay: effTu, denNgay: effDen, maTT: maTTCode, states };
       // Chọn nhiều dự án: hàm mới chỉ nhận 1 dự án ⇒ gọi từng dự án rồi gộp đúng trang (lib/listRpc)
       if (uids.length > 1) {
         const pages = await Promise.all(

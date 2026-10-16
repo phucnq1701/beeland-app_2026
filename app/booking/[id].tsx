@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { bookingStateBadge } from "@/lib/bookingState";
 import { Camera, FileSearch, Image as ImageIcon, QrCode, Upload } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 
 import {
   AppHeader,
   Badge,
-  BadgeTone,
   BottomActionBar,
   BottomSheet,
   Button,
@@ -21,7 +21,6 @@ import {
   Screen,
   SheetOption,
   SkeletonDetail,
-  StatusBadge,
   Text,
   useToast,
 } from "@/components/ui";
@@ -38,20 +37,6 @@ import {
 } from "@/sevicesSupabase/PriceServices";
 
 type Section = "policy" | "price" | "gift" | "docs";
-
-/** Dự phòng khi trạng thái không có color_code từ catalog. */
-const STATE_TONE: Record<string, BadgeTone> = {
-  PENDING: "warning",
-  APPROVED: "success",
-  CANCELLED: "danger",
-  EXPIRED: "danger",
-};
-const STATE_LABEL: Record<string, string> = {
-  PENDING: "Chờ duyệt",
-  APPROVED: "Đã duyệt",
-  CANCELLED: "Huỷ booking",
-  EXPIRED: "Hết hạn",
-};
 
 export default function BookingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -319,7 +304,8 @@ export default function BookingDetailScreen() {
     : data?.price ?? null;
 
   const productCode = data?.product?.ky_hieu ?? data?.product?.ma_sp ?? null;
-  const statusLabel = data?.tenTT || STATE_LABEL[data?.state] || "Chưa xác định";
+  // Chỉ 3 trạng thái booking (Chờ duyệt · Đã duyệt · Huỷ booking) theo cloud_bookings.state – lib/bookingState
+  const stateBadge = bookingStateBadge(data?.state);
   const pricingConfigName =
     data?.pricingConfig?.name ?? data?.pricingConfig?.ten_cau_hinh ?? data?.pricingConfig?.ten_cs ?? data?.maCSTong;
 
@@ -397,11 +383,7 @@ export default function BookingDetailScreen() {
           <Card style={styles.card}>
             <View style={styles.progressHead}>
               <Text variant="subhead">Tiến độ</Text>
-              {data?.colorCode ? (
-                <StatusBadge label={statusLabel} color={data.colorCode} />
-              ) : (
-                <Badge label={statusLabel} tone={STATE_TONE[data?.state] ?? "neutral"} />
-              )}
+              <Badge {...stateBadge} />
             </View>
             <ProgressSteps steps={BOOKING_STEPS} current={progress.current} cancelled={progress.cancelled} />
           </Card>

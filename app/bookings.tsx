@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { CalendarX2, SearchX } from "lucide-react-native";
@@ -11,6 +11,7 @@ import {
 import {
   AppHeader,
   Avatar,
+  Badge,
   Chip,
   EmptyState,
   ErrorState,
@@ -19,8 +20,8 @@ import {
   Screen,
   SearchBar,
   SkeletonList,
-  StatusBadge,
 } from "@/components/ui";
+import { BOOKING_TABS, BookingTabKey, bookingStateBadge, statesForTab } from "@/lib/bookingState";
 import { formatDate } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, elevation, radius, space } from "@/theme";
@@ -67,7 +68,6 @@ export default function BookingsScreen({
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<boolean>(false);
 
-  const [statusList, setStatusList] = useState<any[]>([]);
   const [duAn, setDuAn] = useState<any[]>([]);
 
   const [dataAll, setDataAll] = useState<any[]>([]);
@@ -79,16 +79,12 @@ export default function BookingsScreen({
   const filterRef = useRef<any>(null);
   const requestVersion = useRef(0);
 
-  const [selectTT, setSelectTT] = useState<any>("");
-
-  // Lọc nhanh theo tab trạng thái trên dữ liệu đã tải
-  const data = useMemo(
-    () =>
-      !selectTT || selectTT === "Tất cả"
-        ? dataAll
-        : dataAll.filter((item) => item?.tenTT === selectTT),
-    [dataAll, selectTT],
-  );
+  // Tab trạng thái booking (Tất cả · Chờ duyệt · Đã duyệt · Huỷ booking) – lọc ở máy chủ (p_states), số đếm = tổng máy chủ
+  const [tab, setTab] = useState<BookingTabKey>("ALL");
+  const tabRef = useRef<BookingTabKey>("ALL");
+  tabRef.current = tab;
+  const [counts, setCounts] = useState<Partial<Record<BookingTabKey, number>>>({});
+  const data = dataAll;
 
   const [filterCondition, setFilterCondition] = useState({
     TuNgay: "2000-01-01",
@@ -107,7 +103,7 @@ export default function BookingsScreen({
    */
   const fetchBookings = async (_filter: any, page: number, append: boolean) => {
     const version = append ? requestVersion.current : ++requestVersion.current;
-    const res = await BookingService.listBookings({
+    const listFilter = {
       maDA: _filter?.DuAn
         ? String(_filter.DuAn)
             .split(",")
@@ -118,6 +114,12 @@ export default function BookingsScreen({
       keyword: _filter?.inputSearch ?? "",
       tuNgay: _filter?.TuNgay,
       denNgay: _filter?.DenNgay,
+    };
+    // Trang đầu: đếm song song tổng từng tab theo cùng bộ lọc (dự án, tìm kiếm, ngày)
+    if (!append) void loadCounts(listFilter, version);
+    const res = await BookingService.listBookings({
+      ...listFilter,
+      states: statesForTab(tabRef.current),
       pageSize: PAGE_SIZE,
       pageIndex: page,
     });
@@ -130,6 +132,22 @@ export default function BookingsScreen({
     filterRef.current = _filter;
     hasMoreRef.current = rows.length >= PAGE_SIZE && page * PAGE_SIZE < total;
     setDataAll((prev) => dedupeBookings(append ? [...prev, ...rows] : rows));
+  };
+
+  const loadCounts = async (listFilter: any, version: number) => {
+    const totals = await Promise.all(
+      BOOKING_TABS.map((t) =>
+        BookingService.listBookings({ ...listFilter, states: statesForTab(t.key), pageSize: 1, pageIndex: 1 })
+          .then((r: any) => Number(r?.total) || 0)
+          .catch(() => undefined)
+      )
+    );
+    if (version !== requestVersion.current) return;
+    const next: Partial<Record<BookingTabKey, number>> = {};
+    BOOKING_TABS.forEach((t, i) => {
+      if (totals[i] != null) next[t.key] = totals[i];
+    });
+    setCounts(next);
   };
 
   const loadMore = async () => {
@@ -152,22 +170,6 @@ export default function BookingsScreen({
     setLoading(true);
     setLoadError(false);
     try {
-      // Trạng thái booking — cloud pgc_trang_thai
-      const resTT = await BookingService.getBookingStatus();
-
-      let arr: any[] = [];
-      arr.push({ id: 0, title: "Tất cả", ColorWeb: null });
-
-      (resTT?.data ?? []).forEach((item: any) => {
-        arr.push({
-          id: item.id,
-          title: item.item_name,
-          ColorWeb: item.color_code || null,
-        });
-      });
-
-      setStatusList(arr);
-
       const resDA = await ProjectService.getProjects({});
       setDuAn(resDA?.data ?? []);
 
@@ -263,20 +265,18 @@ export default function BookingsScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjects]);
 
-  /* ---------------- STATUS FILTER ---------------- */
+  /* ---------------- STATUS TAB ---------------- */
 
-  const applyChangeFilter = (p: string, v: any) => {
-    const newFilter = {
-      ...filterCondition,
-      [p]: v,
-      MaTT: v,
-      Offset: 1,
-    };
-
-    setFilterCondition(newFilter);
-
-    loadData2(newFilter);
-  };
+  // Đổi tab → tải lại trang đầu theo trạng thái mới (lần render đầu bỏ qua vì loadData đã tải)
+  const firstTab = useRef(true);
+  useEffect(() => {
+    if (firstTab.current) {
+      firstTab.current = false;
+      return;
+    }
+    loadData2(filterRef.current ?? filterCondition);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   /* ---------------- CLEAR FILTER ---------------- */
 
@@ -291,7 +291,7 @@ export default function BookingsScreen({
 
     setFilterCondition(resetFilter);
     setSearchQuery("");
-    setSelectTT("");
+    setTab("ALL");
     setShowFilters(false);
 
     // Nếu danh sách dự án đang trống thì effect [selectedProjects] không chạy,
@@ -302,20 +302,9 @@ export default function BookingsScreen({
     setSelectedProjects([]);
   };
 
-  // Có bộ lọc đang hoạt động: chọn dự án hoặc chọn trạng thái khác "Tất cả" (id 0)
-  const activeFilterCount =
-    (selectedProjects.length > 0 ? 1 : 0) +
-    (Number(filterCondition.MaTT) !== 0 ? 1 : 0);
-  const isFiltering = activeFilterCount > 0 || !!searchQuery || (!!selectTT && selectTT !== "Tất cả");
-
-  // Map tên trạng thái -> màu trả về từ data (pgc_trang_thai.color_code), dự phòng khi dòng thiếu colorCode
-  const statusColorMap = useMemo(() => {
-    const map: Record<string, string | null> = {};
-    statusList.forEach((s: any) => {
-      if (s?.title) map[s.title] = s.ColorWeb ?? null;
-    });
-    return map;
-  }, [statusList]);
+  // Có bộ lọc đang hoạt động: chọn dự án (trạng thái nằm ở tab)
+  const activeFilterCount = selectedProjects.length > 0 ? 1 : 0;
+  const isFiltering = activeFilterCount > 0 || !!searchQuery || tab !== "ALL";
 
   const renderItem = useCallback(
     ({ item: booking }: { item: any }) => (
@@ -329,15 +318,10 @@ export default function BookingsScreen({
             meta={[booking.soPhieu, formatDate(booking.ngayGiuCho)].filter(Boolean).join(" · ")}
             trailing={
               <>
-                {booking?.tenTT ? (
-                  // Bọc lại để badge căn phải (Badge tự alignSelf flex-start)
-                  <View style={styles.badge}>
-                    <StatusBadge
-                      label={booking.tenTT}
-                      color={booking.colorCode ?? statusColorMap[booking.tenTT]}
-                    />
-                  </View>
-                ) : null}
+                {/* Bọc lại để badge căn phải (Badge tự alignSelf flex-start) */}
+                <View style={styles.badge}>
+                  <Badge {...bookingStateBadge(booking.state)} />
+                </View>
                 <MoneyText value={booking.tongGiaGomVAT} short variant="subhead" />
               </>
             }
@@ -353,7 +337,7 @@ export default function BookingsScreen({
         </View>
       </View>
     ),
-    [router, statusColorMap]
+    [router]
   );
 
   const listHeader = (
@@ -378,20 +362,10 @@ export default function BookingsScreen({
               setSelectedProjects,
             )}
           />
-          <FilterSection
-            title="Trạng thái"
-            options={statusList.map((status: any) => ({
-              key: status?.id,
-              label: status?.title,
-              selected: filterCondition?.MaTT === status?.id,
-              color: status?.id === 0 ? null : status?.ColorWeb,
-              onPress: () => applyChangeFilter("TrangThai", status?.id),
-            }))}
-          />
         </FilterPanel>
       )}
 
-      {/* Lọc nhanh theo trạng thái trên dữ liệu đã tải */}
+      {/* Tab trạng thái booking – lọc ở máy chủ, số = tổng theo bộ lọc hiện tại */}
       {/* Tràn ra mép màn để bóng chip không bị cắt ở hai đầu */}
       <ScrollView
         horizontal
@@ -399,23 +373,16 @@ export default function BookingsScreen({
         style={styles.chipsScroll}
         contentContainerStyle={styles.chips}
       >
-        {statusList.map((status) => {
-          const active = status.id === 0 ? !selectTT || selectTT === "Tất cả" : selectTT === status.title;
-          const count =
-            status.id === 0
-              ? dataAll?.length
-              : dataAll?.filter((item) => item?.tenTT === status.title)?.length;
-          return (
-            <Chip
-              key={status.id}
-              label={status.title}
-              count={count}
-              selected={active}
-              onPress={() => setSelectTT(status?.title)}
-              variant="soft"
-            />
-          );
-        })}
+        {BOOKING_TABS.map((t) => (
+          <Chip
+            key={t.key}
+            label={t.label}
+            count={counts[t.key]}
+            selected={tab === t.key}
+            onPress={() => setTab(t.key)}
+            variant="soft"
+          />
+        ))}
       </ScrollView>
     </View>
   );
