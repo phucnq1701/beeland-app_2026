@@ -1,6 +1,7 @@
 import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyId, getValidSupabaseJwt } from "./cloudTenant";
-import { rpcRows, vnDayBound } from "./DatCocService";
+import { getValidSupabaseJwt } from "./cloudTenant";
+import { vnDayBound } from "./DatCocService";
+import { listResult, mergeProjectPages, pageArgs } from "../lib/listRpc";
 import { PaymentProgressService } from "./PaymentProgressService";
 
 const UUID_RE =
@@ -123,7 +124,7 @@ async function pgcOf(payload: any): Promise<string> {
 
 /**
  * HỢP ĐỒNG — cloud, y hệt web:
- * - Danh sách: fn_contract_list (ContractListService) – lọc/tìm/phân trang/"Đã thu" dưới máy chủ.
+ * - Danh sách: fn_sale_contract_list (ContractListService.listSaleContractPage) – lọc/tìm/phân trang/"Đã thu" + phạm vi dưới máy chủ.
  * - Trạng thái: cloud_catalogs catalog_type='pgc_trang_thai' (ma_ctdk='global').
  * - Lịch thanh toán + phiếu thu: PaymentProgressService (fn_contract_payment_schedule, fn_cash_vouchers_by_pgc).
  */
@@ -136,33 +137,43 @@ export const HopDongService = {
     const validJwt = await getValidSupabaseJwt();
     if (!validJwt) return { data: [], totalRows: 0 };
     try {
-      const tenantId = await getCompanyId();
       const limit = Math.min(5000, Math.max(1, Number(filter?.Limit ?? filter?.limit ?? 50)));
       const page = Math.max(1, Number(filter?.Offset ?? filter?.offset ?? 1));
-      const offset = (page - 1) * limit;
       const projectIds = parseProjectIds(filter?.DuAn ?? filter?.duAn ?? filter?.projectId);
       const projectUuids = projectIds.length ? await resolveProjectUuids(projectIds) : [];
       // Có chọn dự án nhưng không đổi ra uuid → không có dữ liệu hợp lệ (như web)
       if (projectIds.length && !projectUuids.length) return { data: [], totalRows: 0 };
       const maTT = Number(filter?.MaTT ?? 0) || 0;
-      const res = await axiosApiSupabase.post("rest/v1/rpc/fn_contract_list", {
-        p_ma_ctdk_uid: tenantId,
-        p_project_id: projectUuids.length ? projectUuids.join(",") : null,
+      // fn_sale_contract_list (web useSaleContractList → listSaleContractPage, migration 20261014201500): công ty +
+      // phạm vi (dự án, công ty / sàn, "chỉ dữ liệu của tôi") lấy từ JWT ở máy chủ; p_project_id 1 uuid; trả { rows, total }.
+      // Thay fn_contract_list(p_ma_ctdk_uid, …) – bản cũ chỉ còn giữ tạm cho frontend cũ.
+      const base = {
+        p_search: String(filter?.inputSearch ?? filter?.keyword ?? "").trim() || null,
         p_tu_ngay: vnDayBound(filter?.TuNgay ?? filter?.tuNgay, false),
         p_den_ngay: vnDayBound(filter?.DenNgay ?? filter?.denNgay, true),
-        p_input_search: String(filter?.inputSearch ?? filter?.keyword ?? "").trim() || null,
         p_ma_tt: maTT > 0 ? maTT : null,
-        p_company_ids: null,
-        p_offset: offset,
-        p_limit: limit,
-        p_loai_ct: "HDMB",
         p_transfer_only: filter?.TransferOnly === true,
-      });
-      const { rows, total } = rpcRows(res.data);
-      const data = rows.map(mapContractRow);
-      return { data, totalRows: total ?? data.length };
+      };
+      const call = async (projectId: string | null, p: number, size: number) => {
+        const res = await axiosApiSupabase.post("rest/v1/rpc/fn_sale_contract_list", {
+          ...base,
+          p_project_id: projectId,
+          ...pageArgs(p, size),
+        });
+        return listResult(res.data);
+      };
+      let result: { rows: any[]; total: number };
+      if (projectUuids.length > 1) {
+        // Chọn nhiều dự án: hàm chỉ nhận 1 dự án ⇒ gọi từng dự án rồi gộp đúng trang (thứ tự như máy chủ: ngày ký mới trước)
+        const pages = await Promise.all(projectUuids.map((id) => call(id, 1, page * limit)));
+        result = mergeProjectPages(pages, page, limit, (r: any) => r?.ngay_ky ?? r?.ngay_nhap ?? r?.created_at);
+      } else {
+        result = await call(projectUuids[0] ?? null, page, limit);
+      }
+      const data = result.rows.map(mapContractRow);
+      return { data, totalRows: result.total };
     } catch (error) {
-      console.log("ERROR HopDongService.get (fn_contract_list):", error);
+      console.log("ERROR HopDongService.get (fn_sale_contract_list):", error);
       return { data: [], totalRows: 0, error: true };
     }
   },

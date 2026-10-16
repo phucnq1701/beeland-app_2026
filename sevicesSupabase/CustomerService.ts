@@ -1,14 +1,11 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import axiosApi from "./axiosApi";
 import axiosApiSupabase from "./axiosApiSupabase";
+import { listResult, pageWindow } from "../lib/listRpc";
 import {
   getTenantId,
   getEmployeeId,
   getUserCompanyId,
-  getUserCompanyIds,
   getValidSupabaseJwt,
-  getTypeAccount,
-  getMaNv,
   getCompanyCode,
 } from "./cloudTenant";
 import { currentUserName } from "./CustomerRulesService";
@@ -168,40 +165,6 @@ const resolveCustomerUuid = async (idOrCode: string): Promise<string | null> => 
 };
 
 /**
- * Xác định p_employee_id cho RPC fn_customer_list (chuẩn web):
- * - Tài khoản đại lý (AGENCY): null.
- * - SYSTEM: claim employee_id trong JWT; nếu thiếu thì tra dm_employees
- *   theo ma_nv (giống web tra theo ma_ctdk + ma_nv, RLS JWT đã giới hạn tenant).
- * Trả về UUID hoặc null.
- */
-const resolveRpcEmployeeId = async (tenantId: string): Promise<string | null> => {
-  try {
-    const type = await getTypeAccount();
-    if (type === "AGENCY") return null;
-  } catch {}
-  const empId = await getEmployeeId();
-  if (empId && UUID_RE.test(empId)) return empId;
-  // Fallback: tra dm_employees theo ma_nv
-  try {
-    const maNv = await getMaNv();
-    if (!maNv) return null;
-    const res = await axiosApiSupabase.get("rest/v1/dm_employees", {
-      params: { ma_nv: `eq.${maNv}`, select: "id,company_id", limit: "1" },
-    });
-    const emp = Array.isArray(res.data) ? res.data[0] : null;
-    if (emp?.id && UUID_RE.test(emp.id)) {
-      try {
-        await AsyncStorage.setItem("@employee_id", emp.id);
-      } catch {}
-      return emp.id;
-    }
-  } catch (e) {
-    console.log("resolveRpcEmployeeId dm_employees lookup error:", e);
-  }
-  return null;
-};
-
-/**
  * Xác định company_id HỢP L trong dm_companies cho tài khoản đang đăng nhập.
  * u tiên: company_id của nhân viên (dm_employees) -> JWT/storage -> công ty đầu tiên của tenant.
  * Tuyệt đối không trả về tenant id nếu tenant không phải một bản ghi dm_companies,
@@ -326,7 +289,9 @@ export function normalizeCustomerRow(raw: any) {
   // khách chưa chọn trạng thái thì status rỗng để UI ẩn badge.
   const ttObj = raw?.trang_thai || raw?.tt || {};
   const statusName = ttObj?.item_name || raw?.ten_tt || raw?.status || "";
-  const statusColor = ttObj?.color_code || ttObj?.color_web || raw?.color_code || raw?.color_web || "#9CA3AF";
+  // fn_customer_list bản mới trả phẳng ten_tt / mau_tt (bản cũ: object trang_thai)
+  const statusColor =
+    ttObj?.color_code || ttObj?.color_web || raw?.mau_tt || raw?.color_code || raw?.color_web || "#9CA3AF";
 
   const nguonObj = raw?.nguon || {};
   const sourceName = nguonObj?.item_name || raw?.ten_nguon || raw?.source || "";
@@ -568,12 +533,10 @@ export const CustomerService = {
       };
     }
 
-    // Gọi RPC fn_customer_list (chuẩn Web) — bắt buộc để phân quyền đúng
+    // Gọi RPC fn_customer_list bản mới (web CustomerCloudService.listCustomerPage): công ty + nhân viên lấy từ JWT,
+    // phạm vi _customer_scope_ids() ở máy chủ (đại lý: khách của sàn; nội bộ: công ty được gán); trả { rows, total }.
+    // Thay bản cũ (p_ma_ctdk, p_employee_id, p_offset, p_limit – client tự gửi nhân viên/công ty).
     try {
-      const rpcTenantId = await getTenantId();
-      const employeeId = await resolveRpcEmployeeId(rpcTenantId);
-      const companyIds = await getUserCompanyIds();
-
       // Bộ lọc trạng thái: resolve value của pill -> UUID catalog
       // (value có thể là mã kiểu "active" khi danh mục fallback mặc định)
       const wantStatusFilter = !!maTtId && maTtId !== "all";
@@ -581,30 +544,30 @@ export const CustomerService = {
         ? await resolveStatusUuid(maTtId, statusLabel)
         : null;
 
-      const callRpc = async (pOffset: number, pLimit: number) => {
-        const rpcPayload: Record<string, any> = {
-          p_ma_ctdk: rpcTenantId,
-          p_employee_id: employeeId,
-          p_company_ids: companyIds || null,
+      const callRpcPage = async (pOffset: number, pLimit: number) => {
+        const w = pageWindow(pOffset, pLimit);
+        const res = await axiosApiSupabase.post("rest/v1/rpc/fn_customer_list", {
+          p_company_id: null,
+          p_company_ids: null,
+          p_search: search.trim() || null,
           p_is_personal: typeof isPersonal === "boolean" ? isPersonal : null,
+          p_is_noxh: null,
           p_ma_tt_id: statusUuid,
-          p_input_search: search.trim() || null,
-          p_offset: pOffset,
-          p_limit: pLimit,
-        };
-        const res = await axiosApiSupabase.post(
-          "rest/v1/rpc/fn_customer_list",
-          rpcPayload
-        );
-        return Array.isArray(res.data) ? res.data : [];
+          p_ma_nguon_id: null,
+          p_page: w.p_page,
+          p_size: w.p_size,
+        });
+        const { rows, total } = listResult(res.data);
+        return { rows: rows.slice(w.skip), total };
       };
+      const callRpc = async (pOffset: number, pLimit: number) => (await callRpcPage(pOffset, pLimit)).rows;
 
       // Case 1: không lọc trạng thái, hoặc đã có UUID để RPC lọc
       if (!wantStatusFilter || statusUuid) {
-        const rows = await callRpc(offset, limit);
+        const page = await callRpcPage(offset, limit);
+        const rows = page.rows;
         if (rows.length > 0) {
-          const total =
-            rows[0]?.total_count != null ? Number(rows[0].total_count) : rows.length;
+          const total = page.total;
           let data = rows.map(normalizeCustomerRow);
 
           // Phòng trường hợp RPC không lọc theo p_ma_tt_id: nếu thấy dòng có

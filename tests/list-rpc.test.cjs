@@ -39,3 +39,10 @@ test("mergeProjectPages: dòng thiếu ngày xếp cuối, bỏ trùng id", () =
   const r = plain(l.mergeProjectPages([a, b], 1, 10, dateOf));
   assert.deepEqual(r.rows.map((x) => x.id), ["y", "x"]);
 });
+
+test("pageWindow: offset chia hết cho limit → đúng trang; lệch → lấy từ trang 1 rồi bỏ phần đầu", () => {
+  assert.deepEqual(plain(l.pageWindow(0, 20)), { p_page: 1, p_size: 20, skip: 0 });
+  assert.deepEqual(plain(l.pageWindow(40, 20)), { p_page: 3, p_size: 20, skip: 0 });
+  assert.deepEqual(plain(l.pageWindow(25, 20)), { p_page: 1, p_size: 45, skip: 25 });
+  assert.deepEqual(plain(l.pageWindow(-3, 0)), { p_page: 1, p_size: 1, skip: 0 });
+});

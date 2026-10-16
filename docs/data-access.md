@@ -70,7 +70,7 @@ Khách hàng: `_customer_scope_ids()` (đại lý ⇒ khách có `company_id` = 
 
 ## Hàm máy chủ app đang gọi (chỉ có trên server, không có trong repo web)
 
-`fn_booking_list`, `fn_booking_create`, `fn_product_transaction`, `fn_customer_list`, `fn_deposit_list`, `fn_contract_list`,
+`fn_booking_list`, `fn_booking_create`, `fn_product_transaction`, `fn_customer_list`, `fn_deposit_list`, `fn_sale_contract_list`,
 `fn_contract_payment_schedule`, `fn_cash_vouchers_by_pgc`, `fn_cash_voucher_list`, `fn_get_current_price_lists`,
 `fn_get_sales_policies`, `fn_get_price_list_item_by_product`, `get_active_price_for_product`. Tham số lấy theo code web gọi;
 kết quả trả về **chưa kiểm chứng trực tiếp** cho các hàm không có migration trong `../beeland/supabase/migrations`.
@@ -93,8 +93,9 @@ rỗng (lỗi chỉ ghi `console.log`, không báo người dùng). Bản mới:
 | `fn_booking_list` | `BookingService.listBookings / listBookingsFromCloud` | dòng không còn `booking_id` ⇒ mở chi tiết bằng id phiếu giữ chỗ |
 | `fn_deposit_list` | `DatCocService.get` | phạm vi đại lý do máy chủ áp, app bỏ tự lọc |
 | `fn_signing_appointment_list` | `SigningService.list` | |
+| `fn_sale_contract_list` (thay `fn_contract_list`) | `HopDongService.get` (màn Hợp đồng + báo cáo HĐ) | dòng cùng dạng bản cũ (thêm `company_id`, `ten_cong_ty`, `co_vay`) |
+| `fn_customer_list` bản mới (thay bản `p_ma_ctdk`/`p_employee_id`) | `CustomerService.getCustomers` | trạng thái / nguồn trả phẳng `ten_tt`, `mau_tt`, `ten_nguon` |
 | `fn_da_project_list`, `fn_bds_product_list` | `ProjectService.getProjects`, `ProductService.getProducts` | xem `docs/products-lock.md` |
 
-Vẫn còn bản cũ (chưa đổi): `fn_contract_list`, `fn_customer_list` (2 bản), `fn_signing_appointment_get` / `fn_signing_deposit_search`
-(2 bản), `fn_cash_vouchers_by_pgc`, `fn_contract_payment_schedule`. Khi web dọn tiếp, kiểm lại bằng cách so tên tham số
+Vẫn còn bản cũ (chưa đổi): `fn_signing_appointment_get` / `fn_signing_deposit_search` (2 bản, bản cũ vẫn lọc đúng phạm vi đại lý), `fn_cash_vouchers_by_pgc`, `fn_contract_payment_schedule`. Khi web dọn tiếp, kiểm lại bằng cách so tên tham số
 `pg_get_function_identity_arguments` trên máy chủ với tham số app gửi.

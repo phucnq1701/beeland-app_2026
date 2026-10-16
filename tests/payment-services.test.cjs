@@ -111,16 +111,18 @@ test("deposit list: fn_deposit_list like the web, both response shapes", async (
   assert.equal(body.p_den_ngay, "2026-09-30T23:59:59.999+07:00");
 });
 
-test("contract list: fn_contract_list (HĐMB gốc) with server-side paid amount", async () => {
+test("contract list: fn_sale_contract_list (HĐMB gốc, như web listSaleContractPage) with server-side paid amount", async () => {
   const h = harness({
-    rpc: { fn_contract_list: { rows: [{ id: "hd1", pgc_id: "pgc1", so_hd: "HD-1", ten_kh: "Khách", gia_tri_hd_sau_ck: 800, gia_tri_hd: 900, da_thu: 300, ten_tt: "Đã ký", color_code: "#123456" }], total_count: 3 } },
+    rpc: { fn_sale_contract_list: { rows: [{ id: "hd1", pgc_id: "pgc1", so_hd: "HD-1", ten_kh: "Khách", gia_tri_hd_sau_ck: 800, gia_tri_hd: 900, da_thu: 300, ten_tt: "Đã ký", color_code: "#123456" }], total: 3 } },
   });
-  const res = await h.contracts().get({ Offset: 1, Limit: 20, inputSearch: " HD " });
-  const body = h.calls.find((c) => c.fn === "fn_contract_list").body;
-  assert.equal(body.p_loai_ct, "HDMB");
+  const res = await h.contracts().get({ Offset: 2, Limit: 20, inputSearch: " HD " });
+  const body = h.calls.find((c) => c.fn === "fn_sale_contract_list").body;
   assert.equal(body.p_transfer_only, false);
-  assert.equal(body.p_input_search, "HD");
-  assert.equal(body.p_ma_ctdk_uid, tenant);
+  assert.equal(body.p_search, "HD");
+  assert.equal(body.p_project_id, null);
+  assert.equal(body.p_page, 2);
+  assert.equal(body.p_size, 20);
+  assert.equal("p_ma_ctdk_uid" in body, false, "company comes from the JWT");
   assert.equal(res.totalRows, 3);
   assert.equal(res.data[0].SoHDMB, "HD-1");
   assert.equal(res.data[0].PhieuGiuChoId, "pgc1");

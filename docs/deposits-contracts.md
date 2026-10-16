@@ -30,7 +30,7 @@ Chi tiết đặt cọc có nút **"Đặt lịch ký"** (chỉ tài khoản đ�
 | Việc | App | Máy chủ | Web đối chiếu |
 |---|---|---|---|
 | Danh sách cọc | `DatCocService.get` | RPC `fn_deposit_list` bản mới (`p_project_id` 1 uuid, `p_search`, `p_page`, `p_size`; nhiều dự án ⇒ gọi từng dự án rồi gộp) | `services/DepositListService.ts` |
-| Danh sách HĐMB (gốc) | `HopDongService.get` | RPC `fn_contract_list` (`p_loai_ct HDMB`, `p_transfer_only false`) | `services/ContractListService.ts` |
+| Danh sách HĐMB (gốc) | `HopDongService.get` | RPC `fn_sale_contract_list` (`p_transfer_only false`, `p_project_id` 1 uuid, `p_search`, `p_page`, `p_size`; phạm vi từ JWT; nhiều dự án ⇒ gọi từng dự án rồi gộp) | `contracts/contract-list` `listSaleContractPage` |
 | Trạng thái (chip) | `DatCocService.getTT`, `HopDongService.getTT` | `cloud_catalogs` `pgc_trang_thai`, `ma_ctdk=global` | |
 | Lịch thanh toán 1 phiếu | `PaymentProgressService.getSchedule(pgcId)` | RPC `fn_contract_payment_schedule(p_ma_ctdk_uid, p_pgc_id)` | `services/ContractScheduleService.ts` |
 | Phiếu thu 1 phiếu | `PaymentProgressService.getReceipts(pgcId)` | RPC `fn_cash_vouchers_by_pgc(…, 'THU')` | `components/Sales/PgcCashVouchersTab.tsx` |

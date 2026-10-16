@@ -10,14 +10,14 @@
 | Thêm / sửa (form chung). `customer/new` quay về màn gọi khi mở từ tạo booking (`returnToBooking=1` → `booking/create`) hoặc form lịch ký (`returnToSigning=1`, `newCustomerFor`, `signingParams`, `personal=0` để mở sẵn doanh nghiệp → `signing/form`), kèm `newCustomer` | `app/customer/new.tsx`, `app/customer/[id]/edit.tsx` + `components/customer/CustomerForm.tsx` |
 | Hộp trùng khách | `components/customer/DuplicateSheet.tsx` |
 | Chi tiết, xoá | `app/customer/[id]/index.tsx` |
-| Giao dịch của khách (kiểu bo tròn như danh sách cọc/HĐ): header/ô tìm `soft`, mỗi giao dịch là card bo `radius.xxl`, cột phải `DocTrailing` (trạng thái trên, tiền rút gọn dưới). Chạm → chi tiết theo giai đoạn (`transactionTarget` trong `lib/customerRules.ts`): giữ chỗ → `booking/[id]` (id phiếu giữ chỗ, tra theo `ma_pgc_id`); `DATCOC` → `deposit/[id]`, `HDMB/HDGV/THANHLY` → `contract/[id]` – hai màn này cần dòng danh sách nên tìm trong `fn_deposit_list`/`fn_contract_list` theo số phiếu rồi ký hiệu căn, khớp `PhieuGiuChoId`; không tìm thấy (vd đại lý ngoài phạm vi, HĐ không thuộc danh sách HĐMB) thì mở chi tiết booking |  `app/customer/[id]/contracts.tsx` |
+| Giao dịch của khách (kiểu bo tròn như danh sách cọc/HĐ): header/ô tìm `soft`, mỗi giao dịch là card bo `radius.xxl`, cột phải `DocTrailing` (trạng thái trên, tiền rút gọn dưới). Chạm → chi tiết theo giai đoạn (`transactionTarget` trong `lib/customerRules.ts`): giữ chỗ → `booking/[id]` (id phiếu giữ chỗ, tra theo `ma_pgc_id`); `DATCOC` → `deposit/[id]`, `HDMB/HDGV/THANHLY` → `contract/[id]` – hai màn này cần dòng danh sách nên tìm trong `fn_deposit_list`/`fn_sale_contract_list` theo số phiếu rồi ký hiệu căn, khớp `PhieuGiuChoId`; không tìm thấy (vd đại lý ngoài phạm vi, HĐ không thuộc danh sách HĐMB) thì mở chi tiết booking |  `app/customer/[id]/contracts.tsx` |
 | Danh bạ chat (dữ liệu mẫu) | `app/contacts.tsx` |
 
 ## Dữ liệu
 
 | Việc | Hàm | Nguồn |
 |---|---|---|
-| Danh sách | `CustomerService.getCustomers` | RPC `fn_customer_list` |
+| Danh sách | `CustomerService.getCustomers` | RPC `fn_customer_list` bản mới (`p_search`, `p_page`, `p_size`, `p_ma_tt_id`, `p_is_personal`; công ty + nhân viên từ JWT, phạm vi `_customer_scope_ids`; offset lệch trang ⇒ `pageWindow`) – như web `CustomerCloudService.listCustomerPage` |
 | Chi tiết | `CustomerService.getCustomerDetailCloud` | `cloud_customers` |
 | Lưu (tạo/sửa) | `CustomerService.saveCustomerCloud` | POST/PATCH `cloud_customers` |
 | Xoá | `CustomerService.deleteCustomer` | DELETE `cloud_customers` (`return=representation`) |

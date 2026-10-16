@@ -65,3 +65,14 @@ export function mergeProjectPages<T extends { id?: any }>(
   const start = (Math.max(1, Number(pageIndex) || 1) - 1) * size;
   return { rows: all.slice(start, start + size), total };
 }
+
+/**
+ * Màn phân trang theo offset (vd Khách hàng) gọi hàm bản mới theo trang: offset chia hết cho limit ⇒ trang tương ứng;
+ * lệch ⇒ lấy trang 1 cỡ offset + limit rồi bỏ `skip` dòng đầu.
+ */
+export function pageWindow(offset: unknown, limit: unknown): { p_page: number; p_size: number; skip: number } {
+  const size = Math.max(1, Math.floor(Number(limit)) || 1);
+  const off = Math.max(0, Math.floor(Number(offset)) || 0);
+  if (off % size === 0) return { p_page: off / size + 1, p_size: size, skip: 0 };
+  return { p_page: 1, p_size: off + size, skip: off };
+}
