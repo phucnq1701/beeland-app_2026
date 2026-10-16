@@ -83,3 +83,10 @@ migration `20261014121500_da_project_scope_agency`, `20261014100000_bds_product_
   `expire_product_locks` (5 phút). App sweep **chỉ đổi phiếu** → căn có thể còn "Đã Lock" tới khi tác vụ nền chạy. Lệch web, chưa sửa.
 - SignalR: web `useSignalR` **JoinGroup** theo `tenCTDKVT + maNV`; app không join group → app có nhận `ChangeTable` hay không **chưa kiểm chứng**.
 - Booking căn mã 11 chờ quyết định nghiệp vụ (cần sửa server trước).
+- **Đại lý – phạm vi theo giỏ (2026-10-16):** nhân viên đại lý chỉ thấy căn của giỏ có tên mình trong "Quản lý nhân viên".
+  Nếu nghiệp vụ muốn **mọi nhân viên của sàn** tự thấy mọi căn giỏ của sàn (như dialog "Sản phẩm của đại lý") ⇒ phải đổi
+  `app_agency_product_ids` / `fn_bds_product_list` ở **máy chủ** (ảnh hưởng web) – chưa làm, chờ quyết định.
+- Sơ đồ tổng quan web chưa lọc đại lý theo giỏ (app đã lọc) – spec 0.2 #11. Dữ liệu giỏ có dòng nhân viên là id đại lý – spec 0.2 #12.
+- Màn chi tiết căn đã lock (`app/locked/[id].tsx`) ảnh đầu trang vẫn cao 320, chưa giảm 2/3 như chi tiết sản phẩm / dự án.
+- 4 test so sánh với code web hỏng vì web đã đổi chỗ file khi cấu trúc lại (`payment-math` → `Reports/DebtProgressReport.tsx`,
+  `price-sheet-calc` → `ContractForm/calculations.ts`, `scheduleRowsFromTemplate`, `productFromSavedSheet`) – cần trỏ lại đường dẫn.

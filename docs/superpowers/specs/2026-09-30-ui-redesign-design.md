@@ -121,6 +121,16 @@ App giữ đúng như web ở các điểm dưới đây cho tới khi đội we
     `usePriceConfigThenPriceList`; app chép đúng các tệp này (`lib/priceSheetCalc.ts`, `lib/priceSheetSchedule.ts`,
     `lib/priceSheetPayload.productFromSavedSheet`) và test so trực tiếp với code web.
 
+11. **Sơ đồ tổng quan của đại lý: app KHÁC web (người dùng quyết 2026-10-16).** Web `so-do-tong-quan` đọc REST
+    `bds_products`; RLS của đại lý (`app_agency_product_ids(true)`) cho xem cả căn **sàn từng giao dịch** (booking, giữ chỗ,
+    lịch ký) ⇒ sơ đồ web rộng hơn danh sách Cao tầng / Thấp tầng (chỉ căn trong giỏ). **App lọc Lưới / Tổng quan của đại lý
+    theo giỏ hàng** (`app_agency_product_ids(false)`) cho khớp Danh sách – xem `docs/products-lock.md`. Đề xuất web lọc sơ đồ
+    như danh sách.
+12. **Giỏ hàng: "Quản lý nhân viên" có dòng chứa id đại lý thay cho id nhân viên (dữ liệu cũ, 2026-10-16).** Giỏ
+    "Giỏ hàng đợt 1" và "Giỏ hàng bốc thăm ngày 10/06" (công ty brg) có `cloud_cart_employees.employee_id` = id SÀN BEELAND
+    (`dm_companies`) ⇒ không khớp nhân viên nào, vô tác dụng. `fn_cart_employee_add` hiện đã chặn kiểu ghi này. Cần xoá
+    các dòng đó trên web và thêm đúng nhân viên đại lý.
+
 ## 1. Mục tiêu và bối cảnh
 
 **Người dùng:** nhân viên kinh doanh / đại lý bất động sản, dùng app hằng ngày trên điện thoại, thường khi đang
