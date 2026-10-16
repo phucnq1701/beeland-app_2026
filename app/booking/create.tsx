@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Building2, Check, UserPlus, UserX } from "lucide-react-native";
 
@@ -343,6 +343,10 @@ export default function CreateBookingScreen() {
   const holdAmount =
     policyBookingAmount(salesConfig?.policy ?? null) ?? bookingData?.TienGiuCho ?? bookingData?.TienBooking ?? null;
 
+  // Danh sách khách cuộn trong khung cao tối đa ~nửa màn hình → ô Sàn và nút Tạo booking luôn gần tay
+  const { height: windowHeight } = useWindowDimensions();
+  const listMaxHeight = Math.round(windowHeight * 0.5);
+
   const openNewCustomer = () => {
     const params: Record<string, string> = { returnToBooking: "1" };
     if (bookingParam) params.dataBooking = bookingParam;
@@ -403,7 +407,12 @@ export default function CreateBookingScreen() {
             ) : null}
           </View>
 
-          <HomeSectionHeader title="Khách hàng *" />
+          <HomeSectionHeader
+            title="Khách hàng *"
+            actionLabel="Thêm mới"
+            actionIcon={UserPlus}
+            onAction={openNewCustomer}
+          />
           {customerError ? (
             <Text variant="caption" color="danger" accessibilityLiveRegion="polite">
               {customerError}
@@ -411,35 +420,35 @@ export default function CreateBookingScreen() {
           ) : null}
           <SearchBar value={searchQuery} onChangeText={setSearchQuery} placeholder="Tên, SĐT hoặc mã KH" variant="soft" />
 
-          <View style={styles.customerList}>
+          <View style={[styles.customerCard, { maxHeight: listMaxHeight }]}>
             {loading && customers.length === 0 ? (
-              <View style={styles.skeletonCard}>
-                <SkeletonList count={4} />
-              </View>
+              <SkeletonList count={4} />
             ) : customers.length === 0 ? (
-              <EmptyState icon={UserX} title="Không tìm thấy khách hàng" description="Thử từ khoá khác hoặc thêm khách hàng mới." />
+              <View style={styles.emptyWrap}>
+                <EmptyState icon={UserX} title="Không tìm thấy khách hàng" description="Thử từ khoá khác hoặc bấm Thêm mới." />
+              </View>
             ) : (
-              customers.map((customer) => {
-                const selected = !!selectedCustomer && customerKey(selectedCustomer) === customerKey(customer);
-                return (
-                  <CustomerOption
-                    key={customerKey(customer)}
-                    customer={customer}
-                    selected={selected}
-                    onPress={() => handleSelectCustomer(customer)}
-                  />
-                );
-              })
+              <ScrollView
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator
+                accessibilityRole="radiogroup"
+              >
+                {customers.map((customer, i) => {
+                  const selected = !!selectedCustomer && customerKey(selectedCustomer) === customerKey(customer);
+                  return (
+                    <CustomerOption
+                      key={customerKey(customer)}
+                      customer={customer}
+                      selected={selected}
+                      last={i === customers.length - 1}
+                      onPress={() => handleSelectCustomer(customer)}
+                    />
+                  );
+                })}
+              </ScrollView>
             )}
           </View>
-
-          <Button
-            variant="ghost"
-            icon={UserPlus}
-            title="Thêm khách hàng mới"
-            onPress={openNewCustomer}
-            style={[styles.addButton, styles.pill]}
-          />
 
           <SelectField
             label="Sàn giao dịch"
@@ -474,10 +483,12 @@ function isAgencyOptions(
 function CustomerOption({
   customer,
   selected,
+  last,
   onPress,
 }: {
   customer: BookingCustomer;
   selected: boolean;
+  last: boolean;
   onPress: () => void;
 }) {
   const sub = [maskPhone(customer.diDong), customer.company].filter(Boolean).join(" · ");
@@ -489,11 +500,12 @@ function CustomerOption({
       onPress={onPress}
       style={({ pressed }) => [
         styles.option,
+        last ? styles.optionLast : null,
         selected ? styles.optionSelected : null,
         pressed && !selected ? styles.optionPressed : null,
       ]}
     >
-      <Avatar name={customer.tenKH || "?"} size={44} round />
+      <Avatar name={customer.tenKH || "?"} size={40} round />
       <View style={styles.flex}>
         <Text variant="subhead" numberOfLines={1}>
           {customer.tenKH || "—"}
@@ -533,26 +545,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  skeletonCard: { borderRadius: radius.xxl, overflow: "hidden", backgroundColor: colors.surface },
-  customerList: { gap: space.sm + 2 },
+  // Khung trắng bo tròn chứa danh sách khách (cuộn bên trong, cao tối đa ~nửa màn hình)
+  customerCard: {
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.surface,
+    ...elevation.soft,
+  },
+  emptyWrap: { paddingVertical: space.lg },
   option: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    minHeight: 72,
-    paddingHorizontal: space.md + 2,
-    paddingVertical: space.md,
-    borderRadius: radius.xxl,
-    // Viền luôn dày 2 (trong suốt khi chưa chọn) → chọn không làm nội dung nhảy
-    borderWidth: 2,
-    borderColor: "transparent",
-    backgroundColor: colors.surface,
-    ...elevation.soft,
+    minHeight: 64,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm + 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  optionSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySubtle,
-  },
+  optionLast: { borderBottomWidth: 0 },
+  optionSelected: { backgroundColor: colors.primarySubtle },
   optionPressed: { backgroundColor: colors.surfaceMuted },
   radio: {
     width: 24,
@@ -564,7 +576,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   radioOn: { borderColor: colors.primary, backgroundColor: colors.primary },
-  addButton: { alignSelf: "flex-start" },
   footer: { flex: 1, gap: space.sm },
   footerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
 });

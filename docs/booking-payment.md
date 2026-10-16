@@ -5,7 +5,7 @@
 | Màn | File |
 |---|---|
 | Danh sách booking (RPC `fn_booking_list` bản mới – xem `docs/data-access.md`; tìm, lọc dự án/trạng thái, phân trang). Kiểu bo tròn: header/ô tìm/chip `soft`, mỗi booking là card riêng bo `radius.xxl`, avatar tròn, trạng thái trên – tiền dưới | `app/bookings.tsx` |
-| Tạo booking (chọn khách, sàn; tạo khách mới). Kiểu bo tròn: header `soft`, căn đang book là card navy, ô tìm `soft`, mỗi khách là card bo `radius.xxl` (chọn: viền + nền cam nhạt, viền luôn dày 2 để không nhảy), chọn sàn `SelectField raised`, nút dạng viên | `app/booking/create.tsx` |
+| Tạo booking (chọn khách, sàn; tạo khách mới). Kiểu bo tròn: header `soft`, căn đang book là card navy; tiêu đề "Khách hàng *" có nút viên **"+ Thêm mới"** (`HomeSectionHeader actionIcon`) ở đầu; ô tìm `soft`; danh sách khách trong **một khung trắng bo `radius.xxl`, cao tối đa ~50% màn hình, cuộn bên trong** (`nestedScrollEnabled`), dòng ngăn vạch mảnh, chọn = nền cam nhạt + nút tròn; chọn sàn `SelectField raised` (đại lý: khoá), nút dạng viên | `app/booking/create.tsx` |
 | Chi tiết booking (tiến độ 4 bước, giá, quà, ảnh chứng từ, đếm ngược giữ chỗ). Kiểu bo tròn: header `soft`, lề 20, khối tiền navy bo `radius.x3`, card + `CollapsibleSection` bo `radius.xxl` bóng nhẹ, nút dưới dạng viên | `app/booking/[id].tsx` + `components/booking/*` |
 | Thu tiền QR (VA ngân hàng) | `app/booking/qr-payment.tsx` + `components/booking/QrResult.tsx` |
 
