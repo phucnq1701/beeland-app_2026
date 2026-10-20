@@ -288,14 +288,14 @@ export const PriceSheetService = {
     if (!uid(configId)) return [];
     try {
       const rows = await rest("cloud_pricing_config_rounds", {
-        select: "id,ten,order_by,details,detail",
+        select: "id,ten,order_by,details",
         cau_hinh_id: `eq.${configId}`,
         order: "order_by.asc",
       });
       return rows.map((r) => ({
         ID: r.id,
         Name: r.ten ?? "",
-        Details: Array.isArray(r.details) ? r.details : Array.isArray(r.detail) ? r.detail : [],
+        Details: Array.isArray(r.details) ? r.details : [],
       }));
     } catch {
       return [];
