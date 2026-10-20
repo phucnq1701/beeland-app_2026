@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
 const path = require("node:path");
+const { loadCustomerLookup } = require("./helpers/customerLookupFake.cjs");
 
 const uid = (n) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 const tenant = uid(99);
@@ -78,6 +79,8 @@ function load(rows, { jwt = true, failTable } = {}) {
     exports, console,
     require: (name) => {
       if (name === "./axiosApiSupabase") return { default: http };
+      // Khách qua RPC fn_customer_get_by_ids (bảng cloud_customers đã khoá đọc thẳng)
+      if (name === "./customerLookup") return loadCustomerLookup(() => rows.cloud_customers, { calls });
       if (name === "./cloudTenant") return {
         getCompanyId: async () => tenant,
         getValidSupabaseJwt: async () => jwt ? "test-jwt" : null,

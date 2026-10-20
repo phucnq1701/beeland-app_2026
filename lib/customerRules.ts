@@ -160,6 +160,63 @@ export function evaluateProtection(
     else if (g === 'DATCOC') hasDeposit = true;
     else hasBooking = true;
   }
+  return protectionCore(
+    {
+      hasContract,
+      hasDeposit,
+      hasBooking,
+      txnTotal: input.stages.length,
+      careCount: input.careCount,
+      lastCareAt: input.lastCareAt,
+      createdAt: input.createdAt,
+      now: input.now,
+    },
+    cfg
+  );
+}
+
+/** Số liệu bảo vệ của 1 khách trùng do máy chủ trả trong `fn_customer_duplicate_check` (web DuplicateStats). */
+export type DuplicateStats = {
+  txn_total?: number;
+  has_contract?: boolean;
+  has_deposit?: boolean;
+  has_booking?: boolean;
+  care_count?: number;
+  last_care_at?: string | null;
+  created_at?: string | null;
+};
+
+/** Mức bảo vệ từ số liệu máy chủ – web CustomerDuplicateService.protectionFromStats. */
+export function protectionFromStats(stats: DuplicateStats, cfg: CustomerDuplicateConfig, now: number): DuplicateProtection {
+  return protectionCore(
+    {
+      hasContract: !!stats?.has_contract,
+      hasDeposit: !!stats?.has_deposit,
+      hasBooking: !!stats?.has_booking,
+      txnTotal: Number(stats?.txn_total || 0),
+      careCount: Number(stats?.care_count || 0),
+      lastCareAt: stats?.last_care_at ?? null,
+      createdAt: stats?.created_at ?? null,
+      now,
+    },
+    cfg
+  );
+}
+
+function protectionCore(
+  input: {
+    hasContract: boolean;
+    hasDeposit: boolean;
+    hasBooking: boolean;
+    txnTotal: number;
+    careCount: number;
+    lastCareAt: string | null;
+    createdAt: string | null;
+    now: number;
+  },
+  cfg: CustomerDuplicateConfig
+): DuplicateProtection {
+  const { hasContract, hasDeposit, hasBooking } = input;
   const daysFrom = (v: string | null): number | null => {
     if (!v) return null;
     const t = new Date(v).getTime();
@@ -174,8 +231,8 @@ export function evaluateProtection(
     activityCount: input.careCount,
     lastCareAt: input.lastCareAt,
     daysSinceCare: careDays,
-    hasTransaction: input.stages.length > 0,
-    transactionCount: input.stages.length,
+    hasTransaction: input.txnTotal > 0,
+    transactionCount: input.txnTotal,
     reasons: [],
     ruleKey: null,
     ruleLabel: null,

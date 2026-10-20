@@ -34,7 +34,7 @@ Chi tiết đặt cọc có nút **"Đặt lịch ký"** (chỉ tài khoản đ�
 | Trạng thái (chip) | `DatCocService.getTT`, `HopDongService.getTT` | `cloud_catalogs` `pgc_trang_thai`, `ma_ctdk=global` | |
 | Lịch thanh toán 1 phiếu | `PaymentProgressService.getSchedule(pgcId)` | RPC `fn_contract_payment_schedule(p_ma_ctdk_uid, p_pgc_id)` | `services/ContractScheduleService.ts` |
 | Phiếu thu 1 phiếu | `PaymentProgressService.getReceipts(pgcId)` | RPC `fn_cash_vouchers_by_pgc(…, 'THU')` | `components/Sales/PgcCashVouchersTab.tsx` |
-| Thông tin thêm của cọc (email, CCCD, loại căn) | `DatCocService.getDepositDetail` | `cloud_pgc_phieu_giucho`, `cloud_customers`, `bds_products` | |
+| Thông tin thêm của cọc (email, CCCD, loại căn) | `DatCocService.getDepositDetail` | `cloud_pgc_phieu_giucho`, khách qua RPC `fn_customer_get_by_ids` (`getCustomersByIds`; bảng `cloud_customers` đã khoá), `bds_products` | web `DepositCloudService` (`withCustomers`) |
 
 ## Quy tắc tiền (`lib/paymentMath.ts`, test `tests/payment-math.test.cjs` so trực tiếp code web)
 

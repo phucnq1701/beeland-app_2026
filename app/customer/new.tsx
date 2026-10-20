@@ -3,6 +3,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import { AppHeader, confirm } from "@/components/ui";
 import { CustomerForm } from "@/components/customer/CustomerForm";
+import { CustomerService } from "@/sevicesSupabase/CustomerService";
 
 /**
  * Thêm khách hàng. Mở từ màn tạo booking (returnToBooking=1): lưu xong / chọn khách trùng thì quay về
@@ -59,16 +60,20 @@ export default function CustomerNewScreen() {
           if (row && returning) backWith(row);
           else router.back();
         }}
-        onUseExisting={(m) => {
+        onUseExisting={async (m) => {
           if (returning) {
-            backWith({
-              id: m.customerId,
-              ten_kh: m.customerName,
-              is_personal: m.isPersonal,
-              dien_thoai: m.phone,
-              email: m.email,
-              cccd: m.cccd,
-            });
+            // Kết quả kiểm trùng (fn_customer_duplicate_check) không có email, loại khách chỉ là suy đoán ⇒ đọc lại hồ sơ
+            // bằng fn_customer_get_by_ids; đọc lỗi thì dùng dữ liệu tối thiểu của kết quả trùng.
+            const full = await CustomerService.getCustomerById(m.customerId).catch(() => null);
+            backWith(
+              full ?? {
+                id: m.customerId,
+                ten_kh: m.customerName,
+                is_personal: m.isPersonal,
+                dien_thoai: m.phone,
+                cccd: m.limited ? null : m.cccd,
+              }
+            );
           } else {
             router.replace(`/customer/${m.customerId}` as any);
           }

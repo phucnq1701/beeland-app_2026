@@ -26,7 +26,7 @@ Tổng quan mở chi tiết kèm params `period, customFrom, customTo, projectId
 |---|---|---|
 | Thu tiền | RPC `fn_cash_voucher_list` (`p_loai THU`, kỳ dạng `YYYY-MM-DD`, `p_contract_type GOC`, trang 5000) – tổng = cộng `so_tien` | `services/CashVoucherService.listVouchers`, `pages/Finance/revenue` |
 | Hợp đồng | `HopDongService.get` (`fn_sale_contract_list`) theo ngày ký trong kỳ – tổng giá trị = cộng `TongGiaTriHDMB`, số HĐ = `totalRows` | `services/ContractListService.ts` |
-| Tiến độ theo đợt | Dựng từ vòng đời phiếu: `cloud_pgc_phieu_giucho` (giai đoạn DATCOC/HDGV/HDMB, chưa xoá, **`ma_hd_goc is null`**), bỏ huỷ/thanh lý/từ chối; đã thu = dòng chi tiết phiếu thu (`cloud_cash_voucher_details`, PBT tách riêng, ghép alias HĐ/cọc) phân bổ luỹ tiến theo đợt (`buildInstallments`) | `services/AccountingCloudService.ts` (`listDebtSummaryFromLifecycle`, `listInstallmentsFromLifecycle`, `sumReceiptsByPgc`), `pages/Reports/DebtProgressReport.tsx` (mặc định GOC) |
+| Tiến độ theo đợt | Dựng từ vòng đời phiếu: `cloud_pgc_phieu_giucho` (giai đoạn DATCOC/HDGV/HDMB, chưa xoá, **`ma_hd_goc is null`**), bỏ huỷ/thanh lý/từ chối và HĐ gốc đã chuyển nhượng (`da_chuyen_nhuong`); đã thu = RPC **`fn_pgc_collected(p_pgc_ids)`** (máy chủ tính PBT riêng, alias HĐ/cọc, bỏ tiền lãi; phiếu không có khoá ⇒ `da_thu` lưu trên phiếu) phân bổ luỹ tiến theo đợt (`buildInstallments`); khách = `customerMapByIds` (RPC `fn_customer_get_by_ids`) | `services/AccountingCloudService.ts` (`listDebtSummaryFromLifecycle`, `listInstallmentsFromLifecycle`, `sumReceiptsByPgc`), `pages/Reports/DebtProgressReport.tsx` (mặc định GOC) |
 | Quá hạn | đợt có `agingOf` = d30/d60/d90/d90p (còn nợ > 0 và quá hạn), **không lọc kỳ** | `DebtProgressReport.agingOf` |
 | Sắp đến hạn | đợt còn nợ, `agingOf` = current, ngày TT trong kỳ (đợt chưa có ngày vẫn giữ) | |
 | Tổng quan | 4 số lấy đúng từ 4 nguồn trên (`getOverview`) | |
@@ -34,6 +34,8 @@ Tổng quan mở chi tiết kèm params `period, customFrom, customTo, projectId
 ## Bẫy đã gặp
 
 - Không đọc bảng mirror `cloud_debts` (dữ liệu cũ chép từ API cũ) – web màn tiến độ mặc định GOC cũng không đọc.
+- `cloud_cash_voucher_details` và `cloud_customers` đã khoá đọc thẳng (đợt ds_dot3 / ds_dot5): bản cũ đọc thẳng dòng phiếu
+  thu ⇒ báo cáo tiến độ / quá hạn / sắp đến hạn lỗi. Nay: `fn_pgc_collected` + `customerMapByIds` (2026-10-20).
 - Tra bảng phụ theo id phải chia nhóm (`byIds`/`byPgc`, 100 id/lần) và **báo lỗi** khi lỗi – lỗi im lặng làm mất bộ lọc
   huỷ/thanh lý → đếm sai quá hạn.
 - `legacy_api_mode` toàn hệ thống đang `off` (web Cloud-only) – xem `docs/data-access.md`.

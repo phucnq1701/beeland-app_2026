@@ -270,7 +270,8 @@ export default function SigningFormScreen() {
       setCustomer(null);
       return;
     }
-    const c = await CustomerService.getCustomerDetailCloud(String(maKH)).catch(() => null);
+    // Màn khác màn Khách hàng ⇒ fn_customer_get_by_ids (như web getCustomerFromCloud, không cần quyền màn Khách hàng)
+    const c = await CustomerService.getCustomerById(String(maKH)).catch(() => null);
     setCustomer(c);
   }, []);
 
@@ -885,7 +886,7 @@ export default function SigningFormScreen() {
                   <KeyValueRow label={isPersonal ? "Họ và tên" : "Tên công ty"} value={customer?.tenKH || "—"} />
                   <KeyValueRow
                     label={isPersonal ? "CCCD / Hộ chiếu" : "Mã số thuế"}
-                    value={(isPersonal ? customer?.cccd : customer?.ma_so_thue_ct) || "—"}
+                    value={(isPersonal ? customer?.cccd || customer?.cccd_masked : customer?.ma_so_thue_ct) || "—"}
                   />
                   <KeyValueRow label="Điện thoại" value={customer?.dien_thoai || "—"} />
                   <KeyValueRow label="Email" value={customer?.email || "—"} last={isPersonal} />

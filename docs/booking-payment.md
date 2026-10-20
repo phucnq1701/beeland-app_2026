@@ -21,7 +21,8 @@ Param `dataBooking` = JSON sản phẩm (`normalizeProduct`). Tạo xong → `ro
 2. Bấm Tạo: `lib/bookingPayload.buildBookingPayload(product, customer, san, sales)` – mỗi khoản giá lấy bảng giá,
    rỗng/0 thì giá sản phẩm (`pickPrice`, web `pick`); kèm `MaDotGia/MaCS/MaCSTong/MaTDTT`, `TienGiuCho` = tiền booking của
    chính sách (`policyBookingAmount`), `SanPhamId` = `ID`, `LockId`.
-3. `BookingService.createBooking`: đổi mã KH → uuid (`cloud_customers.ma_so_kh`), tiền giữ chỗ = chính sách, không có thì
+3. `BookingService.createBooking`: đổi mã KH → uuid (RPC `fn_customer_get_by_ids` qua `getCustomersByRefs`, ưu tiên dòng
+   đúng `ma_so_kh` – bảng `cloud_customers` đã khoá đọc thẳng), tiền giữ chỗ = chính sách, không có thì
    cài đặt bán hàng (`tien_booking`, trống thì `tien_dat_coc`; `pickSalesSetting`), hạn = `thoi_gian_booking` phút →
    RPC **`fn_booking_create`** (`p_payload` như web `Product.addBookingAPI`). Máy chủ: chỉ nhận căn mã 2, hoặc 18 có phiếu
    lock còn hạn; ghi phiếu giữ chỗ + booking, căn → 11, giải phóng lock. Lỗi → trả nguyên lời báo máy chủ, không ghi gì.
@@ -44,6 +45,8 @@ Param `dataBooking` = JSON sản phẩm (`normalizeProduct`). Tạo xong → `ro
 ## Chi tiết booking
 
 - Dữ liệu: `BookingService.getBookingEditDetail` (booking + phiếu giữ chỗ + giá `price_list_items` + quà + cài đặt).
+  Khách: `getCustomersByIds([khach_hang_id])` (RPC; lỗi ⇒ bản chụp `tt_khach_hang`). `getBookingDetail`: select
+  `BOOKING_SELECT_FULL` không còn embed khách, gắn `kh` bằng `withCustomers` (web `BookingCloudService`).
 - Tiến độ 4 bước: `lib/bookingProgress.ts` (Giữ chỗ → Đã thu tiền → Đặt cọc → Hợp đồng), đếm ngược `lib/countdown.ts`.
 - Ảnh chứng từ: `uploadBookingImage` (edge function `upload-file`) → `addBookingImages`; đọc `getListImageGC`.
   - Bẫy HEIC (iOS): `expo-image-picker` mặc định (`preferredAssetRepresentationMode: current`) giữ nguyên HEIC
@@ -66,6 +69,8 @@ Param `dataBooking` = JSON sản phẩm (`normalizeProduct`). Tạo xong → `ro
 - Booking phải qua `fn_booking_create` (bản cũ tự insert rồi mới gọi RPC đổi trạng thái → vẫn tạo booking khi bị từ chối).
 - Gửi đủ `DonGiaChuaVAT`, `TongGiaChuaVAT`, `TienVAT` như web.
 - Camera iOS sau BottomSheet: phải chờ `onClosed` (Modal `onDismiss`) rồi mới mở camera.
+- 2026-10-20: embed `kh:cloud_customers!khach_hang_id(...)` lỗi sau khi khoá bảng khách ⇒ cả câu select booking hỏng. Không
+  embed khách nữa – xem `docs/data-access.md` (Khách trên chứng từ).
 
 ## Tồn đọng / chưa kiểm chứng
 

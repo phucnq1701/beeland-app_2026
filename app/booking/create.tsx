@@ -108,7 +108,7 @@ export default function CreateBookingScreen() {
   const { dataBooking, newCustomer } = useLocalSearchParams();
 
   const bookingData = parseJsonParam(dataBooking);
-  // KH vừa tạo ở customer/new (bản ghi cloud_customers) → chuẩn hoá về BookingCustomer
+  // KH vừa tạo ở customer/new (dòng fn_customer_get) → chuẩn hoá về BookingCustomer
   const parsedNewCustomer = parseJsonParam(newCustomer);
   const initialNewCustomer = parsedNewCustomer ? normalizeCustomer(parsedNewCustomer) : null;
   const bookingParam = typeof dataBooking === "string" ? dataBooking : "";
@@ -262,10 +262,11 @@ export default function CreateBookingScreen() {
     }
   };
 
+  // Ô chọn khách như web BookingFormDialog: fn_customer_picker (từ khoá ≥ 2 ký tự, ≤ 50 dòng, không cần quyền màn Khách hàng)
   const loadData = async (search = "") => {
     setLoading(true);
     try {
-      const res = await CustomerSupabaseService.getCustomers({ search });
+      const res = await CustomerSupabaseService.pickCustomers({ search, limit: 50 });
       const list = Array.isArray(res?.data) ? res.data : [];
       setDataKH(list.map((customer) => normalizeCustomer(customer)));
     } catch (error) {
@@ -425,7 +426,11 @@ export default function CreateBookingScreen() {
               <SkeletonList count={4} />
             ) : customers.length === 0 ? (
               <View style={styles.emptyWrap}>
-                <EmptyState icon={UserX} title="Không tìm thấy khách hàng" description="Thử từ khoá khác hoặc bấm Thêm mới." />
+                {debouncedQuery.trim().length < 2 ? (
+                  <EmptyState icon={UserX} title="Tìm khách hàng" description="Nhập tên / SĐT / CCCD (ít nhất 2 ký tự) hoặc bấm Thêm mới." />
+                ) : (
+                  <EmptyState icon={UserX} title="Không tìm thấy khách hàng" description="Thử từ khoá khác hoặc bấm Thêm mới." />
+                )}
               </View>
             ) : (
               <ScrollView

@@ -38,7 +38,6 @@ function bookingService(posts, gets) {
   const http = {
     get: async (url, { params }) => {
       gets.push({ table: url.replace("rest/v1/", ""), params });
-      if (url.endsWith("cloud_customers")) return { data: [{ id: uid(6) }] };
       return { data: [] };
     },
     post: async (url, body) => {
@@ -50,6 +49,10 @@ function bookingService(posts, gets) {
     "./axiosApiSupabase": { default: http },
     "./cloudTenant": cloudTenant,
     "@react-native-async-storage/async-storage": storage,
+    // Mã khách → uuid qua RPC fn_customer_get_by_ids(p_refs) (bảng cloud_customers đã khoá đọc thẳng)
+    "./customerLookup": {
+      getCustomersByRefs: async (refs) => [{ id: uid(6), ma_so_kh: refs[0] }],
+    },
   }).BookingService;
 }
 

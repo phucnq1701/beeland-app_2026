@@ -157,7 +157,12 @@ export type CustomerRequest = {
   attachments: string[];
   createdAt: string | null;
   updatedAt: string | null;
-  /** `created_by` (mã NV hoặc 'PORTAL' = khách tự gửi) – `_ccr_json` không trả, service đọc riêng; null = chưa đọc. */
+  /** Số phiếu giữ chỗ máy chủ trả (`SoHD`) khi `MaHD` là uuid phiếu (web `contractCode`, không đọc thẳng bảng phiếu). */
+  contractCode: string | null;
+  /**
+   * `created_by` (mã NV hoặc 'PORTAL' = khách tự gửi). `_ccr_json` không trả và từ Đợt 5 không đọc thẳng bảng được
+   * ⇒ thường null (xét theo nguồn, xem `isCustomerSubmitted`).
+   */
   createdBy: string | null;
 };
 
@@ -178,6 +183,7 @@ export function fromApiItem(it: any): CustomerRequest {
     projectUuid: str(it?.ProjectId),
     projectName: s(it?.TenDA),
     contractId: str(it?.MaHD),
+    contractCode: str(it?.SoHD),
     title: s(it?.TieuDe),
     content: s(it?.NoiDung),
     category: catKey(it?.MaLoai),

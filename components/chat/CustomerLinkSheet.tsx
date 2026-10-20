@@ -24,7 +24,8 @@ type Props = {
 
 /**
  * Gắn hội thoại khách với hồ sơ khách hàng (web beechat/LinkCustomerModal.tsx): gợi ý khớp SĐT / email trước, tìm theo
- * tên / SĐT / mã (CustomerService.getCustomers – cùng nguồn màn Khách hàng) → `fn_chat_customer_link` (server kiểm cùng công ty).
+ * tên / SĐT / mã (CustomerService.pickCustomers – `fn_customer_picker`, ô chọn khách như web, từ khoá ≥ 2 ký tự) →
+ * `fn_chat_customer_link` (server kiểm cùng công ty).
  */
 export function CustomerLinkSheet({ visible, conversationId, suggestions, initialQuery, onClose, onLinked }: Props) {
   const toast = useToast();
@@ -45,7 +46,7 @@ export function CustomerLinkSheet({ visible, conversationId, suggestions, initia
     }
     let alive = true;
     setLoading(true);
-    CustomerService.getCustomers({ search: dq.trim(), limit: 20 })
+    CustomerService.pickCustomers({ search: dq.trim(), limit: 20 })
       .then((res: any) => {
         if (!alive) return;
         const list = Array.isArray(res?.data) ? res.data : [];
@@ -107,7 +108,9 @@ export function CustomerLinkSheet({ visible, conversationId, suggestions, initia
           {dq.trim() ? <Text variant="label" color="textTertiary" style={styles.head}>KẾT QUẢ TÌM</Text> : null}
           {loading ? <ActivityIndicator color={colors.primary} style={styles.loading} /> : rows.map(item)}
           {!loading && dq.trim() && rows.length === 0 ? (
-            <Text variant="caption" color="textSecondary" style={styles.head}>Không tìm thấy khách hàng</Text>
+            <Text variant="caption" color="textSecondary" style={styles.head}>
+              {dq.trim().length < 2 ? "Nhập ít nhất 2 ký tự để tìm" : "Không tìm thấy khách hàng"}
+            </Text>
           ) : null}
         </ScrollView>
       </View>

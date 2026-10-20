@@ -81,6 +81,13 @@ function load({ reject = {}, rpcResult, rpc = {}, settings } = {}) {
         return { default: { getItem: async () => JSON.stringify({ ho_ten: "NV Test" }) } };
       }
       if (name === "../lib/bookingPrice") return compileExports("lib/bookingPrice.ts");
+      // Khách qua RPC fn_customer_get_by_ids (bảng cloud_customers đã khoá đọc thẳng): so khớp ma_so_kh / di_dong
+      if (name === "./customerLookup") return {
+        getCustomersByRefs: async (refs) =>
+          rows.cloud_customers.filter((r) => refs.includes(r.ma_so_kh) || refs.includes(r.di_dong)),
+        getCustomersByIds: async (ids) => rows.cloud_customers.filter((r) => ids.includes(r.id)),
+        withCustomers: async (x) => x,
+      };
       return { default: {} };
     },
   });

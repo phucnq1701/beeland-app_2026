@@ -33,12 +33,12 @@ Mỗi bảng lọc tenant **khác nhau** – làm theo web (`../beeland/src/serv
 
 | Bảng / hàm | Cột | Giá trị |
 |---|---|---|
-| `cloud_customers`, `cloud_bookings`, `cloud_doc_folders/files` | `ma_ctdk` / `ma_ctdk_id` | uuid |
+| `cloud_customers` (Đợt 5: đã khoá, chỉ qua RPC `fn_customer_*` – xem `docs/customers.md`), `cloud_bookings`, `cloud_doc_folders/files` | `ma_ctdk` / `ma_ctdk_id` | uuid |
 | `cloud_pgc_phieu_giucho`, `cloud_pre_bookings`, `cloud_signing_appointments` | `ma_ctdk_uid` | uuid |
 | `cloud_catalogs` (cấu hình theo công ty) | `ma_ctdk_uid` | uuid · danh mục dùng chung: `ma_ctdk=eq.global` |
 | `cloud_catalogs` lịch `lich_tt_hd` | `ma_ctdk` | **mã chữ thường** (như web ContractCloudService) |
-| `cloud_customer_activities`, `cloud_customer_dup_requests(_logs)`, `cloud_required_field_configs`, `cloud_field_visibility_configs`, `cloud_debts` | `ma_ctdk` | **mã chữ thường** |
-| `cloud_cash_voucher_details` | `ma_ctdk` | uuid |
+| `cloud_customer_activities`, `cloud_customer_dup_requests(_logs)` (Đợt 5: đã khoá, chỉ qua RPC), `cloud_required_field_configs`, `cloud_field_visibility_configs`, `cloud_debts` | `ma_ctdk` | **mã chữ thường** |
+| `cloud_cash_voucher_details`, `cloud_cash_vouchers` (đã khoá đọc thẳng – chỉ qua RPC `fn_pgc_collected`, `fn_cash_vouchers_by_pgc`, `fn_cash_voucher_list`) | `ma_ctdk` | uuid |
 | RPC `fn_*` | `p_ma_ctdk_uid` / `p_ma_ctdk` | uuid (xem từng hàm) |
 
 ## Quy ước service
@@ -46,6 +46,16 @@ Mỗi bảng lọc tenant **khác nhau** – làm theo web (`../beeland/src/serv
 - Service trả shape PascalCase cũ cho màn (`MaSP`, `TenTT`…); dữ liệu Supabase snake_case được map trong service.
 - Không embed FK (`table!fk(...)`) ở chỗ mới: schema cache self-host từng thiếu FK → lỗi 400. Tra bảng phụ bằng
   `id=in.(…)`, **chia nhóm ~100 id** (URL dài lỗi im lặng). Một số chỗ cũ còn embed (`BOOKING_SELECT_FULL` có fallback).
+- **Khách trên chứng từ (từ 2026-10-20, migration `20261020000510_ds_dot5_customer_revoke`):** `cloud_customers` đã REVOKE
+  khỏi `authenticated` ⇒ `rest/v1/cloud_customers` và embed `kh:cloud_customers!khach_hang_id(...)` đều lỗi, **embed làm
+  hỏng cả câu** (danh sách trắng). Chỉ đọc qua `sevicesSupabase/customerLookup.ts` (port web
+  `services/customers/customer-lookup`): select giữ cột `khach_hang_id`, rồi `withCustomers(rows, { nested })` gắn `kh`
+  (cột như embed cũ, `slimCustomer`) bằng 1 lần RPC `fn_customer_get_by_ids(p_ids, p_refs, p_with_images)`; cần cột khác
+  (`dia_chi`, `is_personal`…) ⇒ `getCustomersByIds` / `customerMapByIds`; mã KH / SĐT → uuid ⇒ `getCustomersByRefs`.
+  Khách công ty khác chỉ thấy qua chứng từ ⇒ bản giới hạn `limited: true` (CCCD đã che 4 số cuối). Lỗi RPC ở
+  `withCustomers` / `customerMapByIds` ⇒ thiếu tên khách, không chặn màn. `tests/locked-tables.test.cjs` chặn service
+  chứng từ đọc thẳng bảng đã khoá (`cloud_customers`, `cloud_cash_voucher_details`, `cloud_cash_vouchers`,
+  `cloud_customer_requests`, `cloud_workflows`).
 - Hàm máy chủ mới trả `{ rows, total_count }`, bản cũ trả mảng dòng kèm `total_count` → dùng `rpcRows()` (`DatCocService.ts`).
 - Ngày lọc gửi theo giờ VN: `vnDayBound()` (`DatCocService.ts`) = `YYYY-MM-DDT00:00:00.000+07:00` / `…T23:59:59.999+07:00`;
   không lọc → `null` (không gửi khoảng 2000–2100).

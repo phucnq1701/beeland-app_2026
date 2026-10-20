@@ -67,6 +67,8 @@ function harness({ rpc = {}, tables = {}, failRpc = {}, typeAccount = "SYSTEM", 
     "./ProjectService": { ProjectService: { getProjects: async () => ({ data: scope }) } },
     "@react-native-async-storage/async-storage": { default: { getItem: async () => null } },
   };
+  // Khách qua RPC fn_customer_get_by_ids (helper thật, cùng axios giả)
+  map["./customerLookup"] = run("sevicesSupabase/customerLookup.ts", map);
   const progress = run("sevicesSupabase/PaymentProgressService.ts", map);
   map["./PaymentProgressService"] = progress;
   const dep = run("sevicesSupabase/DatCocService.ts", map);
@@ -186,31 +188,41 @@ test("receipt report: fn_cash_voucher_list THU for the period", async () => {
 });
 
 test("progress report: always live from the sales lifecycle, original contracts only (web default GOC)", async () => {
+  const P1 = uid(101), P2 = uid(102), P3 = uid(103), K1 = uid(201);
   const life = harness({
     tables: {
       cloud_debts: [{ ma_cong_no: "TIENDO:1", raw: { SoHDMB: "STALE" } }],
       cloud_pgc_phieu_giucho: [
-        { id: "p1", giai_doan: "HDMB", so_phieu_gc: "BK-1", san_pham_id: "s1", project_id: "d1", khach_hang_id: "k1", trang_thai_id: "t1",
+        { id: P1, giai_doan: "HDMB", so_phieu_gc: "BK-1", san_pham_id: "s1", project_id: "d1", khach_hang_id: K1, trang_thai_id: "t1",
           gia_tri_hd: 300, da_thu: 0, lich_thanh_toan: [{ DotTT: 1, SoTien: 100, NgayTT: "2020-01-01" }, { DotTT: 2, SoTien: 200, NgayTT: "2999-01-01" }, { DotTT: 3, SoTien: 10 }] },
-        { id: "p2", giai_doan: "DATCOC", trang_thai_id: "t2", lich_thanh_toan: [{ DotTT: 1, SoTien: 50, NgayTT: "2020-01-01" }] },
+        { id: P2, giai_doan: "DATCOC", trang_thai_id: "t2", lich_thanh_toan: [{ DotTT: 1, SoTien: 50, NgayTT: "2020-01-01" }] },
+        // HĐ gốc đã chuyển nhượng (cờ máy chủ) ⇒ bỏ như web
+        { id: P3, giai_doan: "HDMB", trang_thai_id: "t1", lich_thanh_toan: [{ DotTT: 1, SoTien: 70, NgayTT: "2020-01-01" }] },
       ],
       cloud_catalogs: [{ id: "t1", item_name: "Đã ký" }, { id: "t2", item_name: "Đã hủy" }],
-      cloud_contracts: [{ phieu_giu_cho_id: "p1", so_hdmb: "HD-1" }],
+      cloud_contracts: [{ phieu_giu_cho_id: P1, so_hdmb: "HD-1" }],
       cloud_deposits: [],
-      cloud_cash_voucher_details: [{ pgc_id: "p1", ma_loai: null, so_tien: 60 }],
       bds_products: [{ id: "s1", ky_hieu: "A-1" }],
       da_projects: [{ id: "d1", ten_da: "Dự án A" }],
-      cloud_customers: [{ id: "k1", ten_kh: "Khách" }],
+    },
+    rpc: {
+      // Đã thu theo phiếu: máy chủ (bảng cloud_cash_voucher_details đã khoá đọc thẳng)
+      fn_pgc_collected: { [P1]: { da_thu: 60, da_thu_pbt: 0 }, [P3]: { da_thu: 0, da_thu_pbt: 0, da_chuyen_nhuong: true } },
+      // Khách: RPC (bảng cloud_customers đã khoá đọc thẳng)
+      fn_customer_get_by_ids: (body) => (body.p_ids || []).includes(K1) ? [{ id: K1, ten_kh: "Khách" }] : [],
     },
   });
   const b = await life.reports().getProgress({});
   assert.equal(life.calls.some((c) => c.table === "cloud_debts"), false, "the stale mirror is not used");
+  assert.equal(life.calls.some((c) => c.table === "cloud_customers" || c.table === "cloud_cash_voucher_details"), false,
+    "locked tables are not read directly");
+  assert.deepEqual(plain(life.calls.find((c) => c.fn === "fn_pgc_collected").body.p_pgc_ids), [P1, P2, P3]);
   const pq = life.calls.find((c) => c.table === "cloud_pgc_phieu_giucho").params;
   assert.equal(pq.ma_ctdk_uid, `eq.${tenant}`);
   assert.equal(pq.deleted_at, "is.null");
   assert.equal(pq.giai_doan, "in.(DATCOC,HDGV,HDMB)");
   assert.equal(pq.ma_hd_goc, "is.null", "original contracts only");
-  assert.equal(b.rows.length, 3, "cancelled doc dropped");
+  assert.equal(b.rows.length, 3, "cancelled doc and transferred original dropped");
   const first = b.rows.find((r) => r.ngayDenHan === "2020-01-01");
   assert.deepEqual([first.soHD, first.tenDA, first.kyHieu, first.hoTenKH, first.daThu, first.conLai], ["HD-1", "Dự án A", "A-1", "Khách", 60, 40]);
   assert.equal(b.overdue.length, 1);

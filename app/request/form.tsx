@@ -187,7 +187,7 @@ export default function RequestFormScreen() {
         CustomerRequestService.resolveAttachments(d.attachments).catch(() =>
           d.attachments.map((v) => ({ stored: v, url: "", fileName: v.split("/").pop() || "Tệp", image: false })),
         ),
-        CustomerRequestService.contractLabel(d.contractId),
+        CustomerRequestService.contractLabel(d.contractId, d.contractCode),
       ]);
       const due = splitDue(d.dueDate);
       setNames({

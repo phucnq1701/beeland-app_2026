@@ -4,6 +4,7 @@ import { listResult, mergeProjectPages, pageArgs } from "../lib/listRpc";
 import { PaymentProgressService } from "./PaymentProgressService";
 import { statusCodeNum } from "../lib/depositQr";
 import { formatDirections } from "../lib/format";
+import { getCustomersByIds } from "./customerLookup";
 
 
 const UUID_RE =
@@ -251,8 +252,8 @@ export const DatCocService = {
    * - Header: dùng lại dòng từ fn_deposit_list (truyền vào `row`).
    * - Lịch thanh toán: cloud_catalogs catalog_type='lich_tt_hd', parent_code = MaPDC
    *   (fallback mảng JSONB lich_thanh_toan trên row).
-   * - Phiếu thu: cloud_cash_voucher_details (pgc_id = PhieuGiuChoId, loai_phieu='THU')
-   *   → cloud_cash_vouchers.
+   * - Phiếu thu: PaymentProgressService.getReceipts → RPC fn_cash_vouchers_by_pgc (bảng cloud_cash_voucher_details /
+   *   cloud_cash_vouchers đã khoá đọc thẳng).
    * - Phân bổ "Đã thu" vào từng đợt.
    */
   getDepositDetail: async (payload: any = {}) => {
@@ -295,21 +296,11 @@ export const DatCocService = {
                 header.TongGiaTriHDMB ?? pgc.gia_tri_hd_sau_ck ?? pgc.gia_tri_hd,
             };
 
-            // Khách hàng (email, cccd, địa chỉ)
+            // Khách hàng (email, cccd, địa chỉ) — qua RPC fn_customer_get_by_ids (cloud_customers đã khoá đọc thẳng từ
+            // 2026-10-20; web DepositCloudService withCustomers). Khách công ty khác chỉ thấy qua chứng từ ⇒ cccd đã che.
             if (pgc.khach_hang_id) {
               try {
-                const c = await axiosApiSupabase.get(
-                  "rest/v1/cloud_customers",
-                  {
-                    params: {
-                      select:
-                        "id,ten_kh,ten_cong_ty,dien_thoai,email,cccd,dia_chi,ma_so_kh",
-                      id: `eq.${pgc.khach_hang_id}`,
-                      limit: "1",
-                    },
-                  }
-                );
-                const kh = Array.isArray(c.data) ? c.data[0] : null;
+                const kh = (await getCustomersByIds([pgc.khach_hang_id]))[0] ?? null;
                 if (kh) {
                   header.KhachHang = header.KhachHang || kh.ten_kh || kh.ten_cong_ty || "";
                   header.DiDong = header.DiDong || kh.dien_thoai || "";

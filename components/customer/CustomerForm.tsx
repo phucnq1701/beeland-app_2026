@@ -211,7 +211,8 @@ export function CustomerForm({
     setSaving(true);
     let saved = false;
     try {
-      const result = await CustomerRulesService.checkDuplicate(values, mode === "edit" ? customerId : null);
+      // scoped = true khớp fn_customer_save(p_scoped = true) như web màn Khách hàng
+      const result = await CustomerRulesService.checkDuplicate(values, mode === "edit" ? customerId : null, { scoped: true });
       if (result.matches.length && result.mode !== "allow") {
         hapticError();
         setDup(result);
@@ -222,7 +223,8 @@ export function CustomerForm({
     } catch (err) {
       console.log("Customer save error:", err);
       hapticError();
-      toast.show({ type: "error", message: "Đã xảy ra sự cố khi lưu dữ liệu" });
+      // Lỗi máy chủ (kiểm trùng / lưu) hiện nguyên thông báo
+      toast.show({ type: "error", message: err instanceof Error && err.message ? err.message : "Đã xảy ra sự cố khi lưu dữ liệu" });
     } finally {
       // Đã lưu xong thì giữ khoá (màn đang chuyển đi) – bấm thêm lần nữa không tạo khách thứ hai
       if (!saved) savingRef.current = false;

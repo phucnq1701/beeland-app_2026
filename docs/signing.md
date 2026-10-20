@@ -30,7 +30,7 @@
 | Phương án TT | `plans`: `phuong_an_tt_ky` (Cài đặt danh mục), không có thì `phuong_an_tt` | `cloud_catalogs` (`ma_ctdk` = mã công ty chữ thường) |
 | Phân loại KH | `customerTypes` (`phan_loai_kh`), rỗng → `PHAN_LOAI_ALL` (1 cá nhân, 2 đồng sở hữu vợ chồng, 3 doanh nghiệp) | `cloud_catalogs` |
 | Đại lý phụ trách | `agencies` = `ProductService.getSanGiaoDichAPI`; đại lý đăng nhập: `agencySanId` = `branch_id` trong token, khoá ô | `dm_companies is_san` |
-| Đồng sở hữu | `customersByIds(dong_so_huu_ids)` | `cloud_customers` |
+| Đồng sở hữu | `customersByIds(dong_so_huu_ids)` – giữ thứ tự id; khách công ty khác ⇒ bản giới hạn (CCCD che) | RPC `fn_customer_get_by_ids` (`customerLookup.getCustomersByIds`; bảng `cloud_customers` đã khoá đọc thẳng) |
 | Tệp đính kèm | `uploadTenantFile(file, "signing")` (`BookingService.ts`, dùng chung với ảnh chứng từ booking) → cột `tai_lieu` `[{fileName,url,uploadedAt}]` | edge function `upload-file` |
 | Bắt buộc nhập / ẩn trường | `CustomerRulesService.getRulesForForm("signing" \| "agency_signing")` + `lib/signing.missingRequired(requiredValues(form, khách))` | `cloud_required_field_configs`, `cloud_field_visibility_configs` |
 

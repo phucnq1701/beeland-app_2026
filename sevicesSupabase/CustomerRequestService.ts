@@ -8,6 +8,7 @@
  *  - Tệp khách gửi từ app/web khách hàng lưu `drive-files:<path>` (kho riêng tư) → ký link xem qua edge `storage-broker`.
  *  - Tệp nhân viên thêm: edge `upload-file` (`uploadTenantFile`, như ảnh chứng từ booking / hồ sơ lịch ký).
  * Yêu cầu khách tự gửi (app khách hàng `fn_portal_request_create`) nằm chung bảng → hiện ở đây.
+ * Đợt 5: bảng `cloud_customer_requests` đã khoá đọc/ghi thẳng – mọi thao tác chỉ qua các RPC trên.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -106,18 +107,16 @@ export const CustomerRequestService = {
     return { rows: rows.map(fromApiItem), total: Number(res?.total ?? rows.length) };
   },
 
-  /** Chi tiết + `created_by` (đọc bảng – RLS cho nhân viên cùng công ty) để biết yêu cầu khách tự gửi. */
+  /**
+   * Chi tiết – web getById → `fn_customer_request_get` (null = không thấy / ngoài phạm vi).
+   * Đợt 5 (ds_dot5, 2026-10-20) đã REVOKE đọc thẳng `cloud_customer_requests` và `_ccr_json` không trả `created_by`
+   * ⇒ `createdBy` = null: nhận biết yêu cầu khách tự gửi theo nguồn `app` / `website` (`isCustomerSubmitted`).
+   */
   get: async (id: string): Promise<CustomerRequest> => {
-    const [res, createdBy] = await Promise.all([
-      rpc<any>("fn_customer_request_get", { p_id: id }, "Không tải được yêu cầu"),
-      axiosApiSupabase
-        .get("rest/v1/cloud_customer_requests", { params: { select: "created_by", id: `eq.${id}`, limit: "1" } })
-        .then((r) => (Array.isArray(r.data) && r.data[0]?.created_by ? String(r.data[0].created_by) : null))
-        .catch(() => null),
-    ]);
+    const res = await rpc<any>("fn_customer_request_get", { p_id: id }, "Không tải được yêu cầu");
     const d = Array.isArray(res) ? res[0] : res;
     if (!d) throw new Error("Không tìm thấy yêu cầu");
-    return { ...fromApiItem(d), createdBy };
+    return { ...fromApiItem(d), createdBy: null };
   },
 
   /** Thêm (không `id`) hoặc sửa – máy chủ ghi đè toàn bộ trường, tự cấp số phiếu, người tiếp nhận mặc định = người đăng nhập. */
@@ -193,10 +192,14 @@ export const CustomerRequestService = {
       }));
   },
 
-  /** Nhãn hợp đồng / phiếu: uuid phiếu giữ chỗ → số phiếu (web `withContractCode`); mã cũ giữ nguyên. */
-  contractLabel: async (contractId: string | null): Promise<string | null> => {
+  /**
+   * Nhãn hợp đồng / phiếu: uuid phiếu giữ chỗ → số phiếu; mã cũ giữ nguyên. `known` = `SoHD` máy chủ trả trong
+   * `_ccr_json` (web `fromApiItem.contractCode`) – có thì dùng luôn, không đọc bảng phiếu.
+   */
+  contractLabel: async (contractId: string | null, known?: string | null): Promise<string | null> => {
     if (!contractId) return null;
     if (!uid(contractId)) return contractId;
+    if (known) return known;
     try {
       const res = await axiosApiSupabase.get("rest/v1/cloud_pgc_phieu_giucho", {
         params: { select: "so_phieu_gc", id: `eq.${contractId}`, limit: "1" },

@@ -110,7 +110,7 @@ export type PickedCustomer = {
   email: string;
 };
 
-/** Chọn khách hàng từ danh mục (tên / SĐT / CCCD); có nút thêm khách mới cá nhân / doanh nghiệp. */
+/** Chọn khách hàng (tên / SĐT / CCCD, `fn_customer_picker` như web – từ khoá ≥ 2 ký tự); có nút thêm khách mới cá nhân / doanh nghiệp. */
 export function CustomerPickerSheet({
   visible,
   title,
@@ -137,7 +137,7 @@ export function CustomerPickerSheet({
     if (!visible) return;
     const v = ++version.current;
     setLoading(true);
-    CustomerService.getCustomers({ search: debounced.trim(), limit: 30 })
+    CustomerService.pickCustomers({ search: debounced.trim(), limit: 30 })
       .then((r: any) => {
         if (v !== version.current) return;
         setList(
@@ -188,7 +188,11 @@ export function CustomerPickerSheet({
               onPress={() => onPick(c)}
             />
           ))}
-          <Status loading={loading} empty={!loading && !shown.length} text="Không tìm thấy khách hàng." />
+          <Status
+            loading={loading}
+            empty={!loading && !shown.length}
+            text={debounced.trim().length < 2 ? "Nhập tên / SĐT / CCCD (ít nhất 2 ký tự) để tìm khách." : "Không tìm thấy khách hàng."}
+          />
         </ScrollView>
       </View>
     </BottomSheet>

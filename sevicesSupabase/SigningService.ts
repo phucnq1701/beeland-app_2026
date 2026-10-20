@@ -18,6 +18,7 @@ import {
   getValidSupabaseJwt,
 } from "./cloudTenant";
 import { currentUserName } from "./CustomerRulesService";
+import { getCustomersByIds } from "./customerLookup";
 import { rpcRows } from "./DatCocService";
 import { agencySanId } from "../lib/agencySan";
 import { ProductService } from "./ProductService";
@@ -302,17 +303,16 @@ export const SigningService = {
   /** Sàn của tài khoản đại lý (branch_id) – quy tắc chung `lib/agencySan` (dùng cả ở form tạo booking). */
   agencySanId: async (): Promise<string | null> => agencySanId(await getTypeAccount(), await getBranchId()),
 
-  /** Thông tin hiển thị của các khách (đồng đứng tên) theo uuid. */
+  /**
+   * Thông tin hiển thị của các khách (đồng đứng tên) theo uuid — RPC fn_customer_get_by_ids (cloud_customers đã khoá đọc
+   * thẳng từ 2026-10-20, migration 20261020000510_ds_dot5_customer_revoke; web customer-lookup getCustomersByIds).
+   * Khách công ty khác chỉ thấy qua chứng từ ⇒ bản giới hạn (`limited`, cccd đã che). Giữ thứ tự `ids`.
+   */
   customersByIds: async (ids: string[]) => {
     const list = ids.map(uid).filter(Boolean) as string[];
     if (!list.length) return [];
-    const res = await axiosApiSupabase.get("rest/v1/cloud_customers", {
-      params: {
-        select: "id,ma_so_kh,ten_kh,ten_cong_ty,cccd,dien_thoai,email,is_personal",
-        id: `in.(${list.join(",")})`,
-      },
-    });
-    const map = new Map((Array.isArray(res.data) ? res.data : []).map((c: any) => [String(c.id), c]));
-    return list.map((id) => map.get(id)).filter(Boolean) as any[];
+    const rows = await getCustomersByIds(list);
+    const map = new Map(rows.map((c: any) => [String(c.id).toLowerCase(), c]));
+    return list.map((id) => map.get(id.toLowerCase())).filter(Boolean) as any[];
   },
 };

@@ -3,23 +3,47 @@ import axiosApiSupabase from "./axiosApiSupabase";
 import { listResult, pageWindow } from "../lib/listRpc";
 import {
   getTenantId,
-  getEmployeeId,
   getUserCompanyId,
   getValidSupabaseJwt,
-  getCompanyCode,
 } from "./cloudTenant";
 import { currentUserName } from "./CustomerRulesService";
+import { getCustomersByRefs, pickCustomers as pickCustomerRows, getCustomersByIds } from "./customerLookup";
 import { mapCustomerTransaction } from "../lib/customerRules";
 
-/** Cột cloud_customers mà màn sửa khách trên app quản lý (PATCH chỉ gồm các cột này). */
+/*
+ * Đợt 5 (migration web 20261020000510_ds_dot5_customer_revoke): bảng cloud_customers, cloud_customer_activities,
+ * customer_work_history, cloud_customer_dup_requests(_logs) đã khoá đọc / ghi thẳng qua PostgREST. Mọi thao tác khách
+ * hàng đi qua RPC SECURITY DEFINER như web beeland/src/services/CustomerCloudService.ts:
+ *   chi tiết  fn_customer_get(p_id)               – getCustomerScoped (ngoài phạm vi ⇒ null; không quyền xem ⇒ lỗi 42501)
+ *   lưu       fn_customer_save(p_row, p_scoped)   – saveCustomerToCloud (trả uuid; máy chủ đặt id/ma_ctdk/company_id/người tạo/sửa, cấp mã)
+ *   xoá       fn_customer_delete(p_id)            – removeCustomerFromCloud (máy chủ kiểm phạm vi + quyền + booking/chứng từ)
+ *   hoạt động fn_customer_activity_list/save/delete – services/customers/customer-activity
+ * Lỗi RAISE của máy chủ nằm ở error.response.data.message ⇒ hiện nguyên cho người dùng.
+ */
+
+/**
+ * Cột form app quản lý — sửa khách chỉ gửi các cột này cho fn_customer_save (máy chủ ghép lên bản ghi cũ, cột không gửi
+ * giữ nguyên ⇒ dữ liệu chỉ nhập trên web không bị ghi đè).
+ */
 const APP_EDIT_COLUMNS = new Set([
-  "ma_ctdk", "ma_so_kh", "company_id", "is_personal", "ten_kh", "ten_cong_ty", "di_dong", "dien_thoai", "di_dong2",
+  "is_personal", "ten_kh", "ten_cong_ty", "di_dong", "dien_thoai", "di_dong2",
   "dien_thoai_ct", "email", "email_ct", "cccd", "so_cmnd", "dia_chi", "dia_chi_ct", "ma_so_thue_ct", "ma_so_ttncn",
   "nguoi_dai_dien_pl", "chuc_vu", "ndd_dien_thoai", "ndd_email", "ndd_so_cccd", "ma_tt_id", "ma_nguon_id",
-  "ghi_chu", "ngay_sua", "updated_by_id",
+  "ghi_chu",
 ]);
 
-const escapeIlike = (value: string) => value.replace(/[%,()]/g, "");
+/** Thông báo lỗi máy chủ (RAISE EXCEPTION → message), không có thì câu mặc định */
+const serverMessage = (e: any, fallback: string): string =>
+  e?.response?.data?.message || e?.response?.data?.hint || (e instanceof Error && e.message) || fallback;
+
+async function rpc<T = any>(fn: string, body: Record<string, any>, fallback: string): Promise<T> {
+  try {
+    const res = await axiosApiSupabase.post(`rest/v1/rpc/${fn}`, body);
+    return res.data as T;
+  } catch (e) {
+    throw new Error(serverMessage(e, fallback));
+  }
+}
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -125,107 +149,22 @@ const resolveStatusUuid = async (
   return null;
 };
 
-/** Lấy 1 danh mục theo id (để bù tên/màu khi join không có) */
-const fetchCatalogById = async (catalogId?: string | null) => {
-  if (!catalogId || !UUID_RE.test(String(catalogId))) return null;
-  try {
-    const res = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
-      params: { id: `eq.${catalogId}`, select: "id,item_code,item_name,color_code", limit: "1" },
-    });
-    return Array.isArray(res.data) ? res.data[0] : null;
-  } catch {
-    return null;
-  }
-};
-
 /**
  * Resolve UUID khách hàng từ id (UUID) hoặc mã KH (ma_so_kh, vd KH-893482).
  * Màn danh sách/home có thể truyền mã KH — mọi query cột uuid phải dùng UUID.
- * Trả về UUID hoặc null.
+ * Mã KH → `fn_customer_get_by_ids(p_refs)` (customerLookup.getCustomersByRefs), khớp đúng mã, không có thì SĐT
+ * (như web CustomerCloudService.getCustomerByRef). Lỗi máy chủ ném ra; không tìm thấy ⇒ null.
  */
 const resolveCustomerUuid = async (idOrCode: string): Promise<string | null> => {
   const v = String(idOrCode || "").trim();
   if (!v) return null;
   if (UUID_RE.test(v)) return v;
-  try {
-    const tenantId = await getTenantId();
-    const params: Record<string, string> = {
-      ma_so_kh: `eq.${v}`,
-      select: "id",
-      limit: "1",
-    };
-    if (tenantId && UUID_RE.test(tenantId)) params.ma_ctdk = `eq.${tenantId}`;
-    const res = await axiosApiSupabase.get("rest/v1/cloud_customers", { params });
-    const row = Array.isArray(res.data) ? res.data[0] : null;
-    if (row?.id && UUID_RE.test(String(row.id))) return String(row.id);
-  } catch (e) {
-    console.log("resolveCustomerUuid error:", e);
-  }
-  return null;
-};
-
-/**
- * Xác định company_id HỢP L trong dm_companies cho tài khoản đang đăng nhập.
- * u tiên: company_id của nhân viên (dm_employees) -> JWT/storage -> công ty đầu tiên của tenant.
- * Tuyệt đối không trả về tenant id nếu tenant không phải một bản ghi dm_companies,
- * vì sẽ làm hỏng FK và khiến RPC fn_customer_list loại bản ghi.
- */
-const resolveCompanyId = async (): Promise<string | null> => {
-  const tenantId = await getTenantId();
-  const candidates: string[] = [];
-
-  const jwtCompanyId = await getUserCompanyId();
-  if (jwtCompanyId && UUID_RE.test(jwtCompanyId)) candidates.push(jwtCompanyId);
-
-  const employeeId = await getEmployeeId();
-  if (employeeId && UUID_RE.test(employeeId)) {
-    try {
-      const res = await axiosApiSupabase.get("rest/v1/dm_employees", {
-        params: { id: `eq.${employeeId}`, select: "company_id,company_ids", limit: "1" },
-      });
-      const emp = Array.isArray(res.data) ? res.data[0] : null;
-      if (emp?.company_id && UUID_RE.test(emp.company_id)) candidates.unshift(emp.company_id);
-      if (Array.isArray(emp?.company_ids)) {
-        emp.company_ids.forEach((c: any) => {
-          if (typeof c === "string" && UUID_RE.test(c)) candidates.push(c);
-        });
-      }
-    } catch (e) {
-      console.log("resolveCompanyId dm_employees error:", e);
-    }
-  }
-
-  const seen = new Set<string>();
-  for (const candidate of candidates) {
-    if (!candidate || seen.has(candidate)) continue;
-    seen.add(candidate);
-    try {
-      // chỉ kiểm tra tồn tại theo id (ứng viên đã đến từ JWT/nhân viên nên đúng tenant)
-      const res = await axiosApiSupabase.get("rest/v1/dm_companies", {
-        params: { id: `eq.${candidate}`, select: "id", limit: "1" },
-      });
-      if (Array.isArray(res.data) && res.data.length > 0) return candidate;
-    } catch (e) {
-      // thử ứng viên kế tiếp
-    }
-  }
-
-  // Cuối cùng: lấy công ty đầu tiên của tenant (thử cả 2 tên cột tenant)
-  if (tenantId && UUID_RE.test(tenantId)) {
-    for (const tenantCol of ["ma_ctdk", "ma_ctdk_uid"]) {
-      try {
-        const res = await axiosApiSupabase.get("rest/v1/dm_companies", {
-          params: { [tenantCol]: `eq.${tenantId}`, select: "id", limit: "1" },
-        });
-        const comp = Array.isArray(res.data) ? res.data[0] : null;
-        if (comp?.id && UUID_RE.test(comp.id)) return comp.id;
-      } catch (e) {
-        // thử cột tenant kế tiếp
-      }
-    }
-  }
-
-  return null;
+  const rows = await getCustomersByRefs([v]);
+  const hit =
+    rows.find((r: any) => String(r?.ma_so_kh ?? "").trim() === v) ||
+    rows.find((r: any) => String(r?.di_dong ?? "").trim() === v) ||
+    null;
+  return hit?.id && UUID_RE.test(String(hit.id)) ? String(hit.id) : null;
 };
 
 export interface CustomerCloudModel {
@@ -439,54 +378,8 @@ export const CustomerService = {
     }
   },
 
-  /** Kiểm tra khách hàng trùng theo SĐT, CCCD hoặc Email */
-  checkDuplicateCustomer: async ({ phone, cccd, email }: { phone?: string; cccd?: string; email?: string }) => {
-    const tenantId = await getTenantId();
-    if (!tenantId || !UUID_RE.test(tenantId) || (!phone && !cccd && !email)) return null;
-
-    try {
-      const orConditions: string[] = [];
-      const cleanPhone = phone?.trim();
-      const cleanCccd = cccd?.trim();
-      const cleanEmail = email?.trim().toLowerCase();
-
-      if (cleanPhone) {
-        orConditions.push(`dien_thoai.eq.${cleanPhone}`);
-        orConditions.push(`di_dong.eq.${cleanPhone}`);
-        orConditions.push(`di_dong2.eq.${cleanPhone}`);
-        orConditions.push(`dien_thoai_ct.eq.${cleanPhone}`);
-      }
-      if (cleanCccd) {
-        orConditions.push(`cccd.eq.${cleanCccd}`);
-        orConditions.push(`so_cmnd.eq.${cleanCccd}`);
-      }
-      if (cleanEmail) {
-        orConditions.push(`email.eq.${cleanEmail}`);
-        orConditions.push(`email2.eq.${cleanEmail}`);
-        orConditions.push(`email_ct.eq.${cleanEmail}`);
-      }
-
-      if (orConditions.length === 0) return null;
-
-      const params: Record<string, string> = {
-        select:
-          "id,ma_so_kh,ten_kh,ten_cong_ty,is_personal,di_dong,dien_thoai,email,cccd,dia_chi,ma_tt_id,ma_nguon_id,created_at",
-        ma_ctdk: `eq.${tenantId}`,
-        or: `(${orConditions.join(",")})`,
-        limit: "1",
-      };
-
-      const res = await axiosApiSupabase.get("rest/v1/cloud_customers", { params });
-      const rows = Array.isArray(res.data) ? res.data : [];
-      if (rows.length > 0) {
-        return normalizeCustomerRow(rows[0]);
-      }
-      return null;
-    } catch (error) {
-      console.log("ERROR checkDuplicateCustomer:", error);
-      return null;
-    }
-  },
+  // checkDuplicateCustomer (đọc thẳng cloud_customers) đã bỏ — không màn nào gọi; kiểm trùng dùng
+  // CustomerRulesService.checkDuplicate như web.
 
   /**
    * Lấy danh sách khách hàng:
@@ -512,7 +405,7 @@ export const CustomerService = {
   } = {}) => {
     const validJwt = await getValidSupabaseJwt();
     if (!validJwt) {
-      console.log("[Customer] chưa có cloud_jwt hợp lệ, bỏ qua gọi cloud_customers");
+      console.log("[Customer] chưa có cloud_jwt hợp lệ, bỏ qua gọi fn_customer_list");
       return {
         data: [],
         total: 0,
@@ -613,81 +506,68 @@ export const CustomerService = {
   },
 
   /**
-   * Lấy chi tiết khách hàng từ Supabase. Nhận cả UUID `id` lẫn mã KH `ma_so_kh`
-   * (vd KH-893482 — màn home/danh sách có thể truyền mã).
-   * Lấy `select=*` trước (rich join ma_nguon_id/ma_tt_id không có FK trong
-   * schema cache nên luôn 400 PGRST200), rồi bù tên/màu bằng truy vấn riêng.
+   * Ô chọn khách ở màn khác (booking, lịch ký, phiếu tính giá, gắn hội thoại chat…) — `fn_customer_picker` như web
+   * CustomerCloudService.listCustomerPicker: khách trong công ty được xem, không cần quyền màn Khách hàng, từ khoá
+   * ≥ 2 ký tự (ngắn hơn ⇒ rỗng, không gọi máy chủ), ≤ 50 dòng, không phân trang. Dòng cùng dạng fn_customer_list
+   * (`ten_tt`, `mau_tt`, `ten_nguon` phẳng) ⇒ chuẩn hoá bằng normalizeCustomerRow. Lỗi máy chủ ném ra.
+   */
+  pickCustomers: async ({ search = "", limit = 20, isPersonal }: { search?: string; limit?: number; isPersonal?: boolean } = {}) => {
+    const rows = await pickCustomerRows(search, { limit, isPersonal: typeof isPersonal === "boolean" ? isPersonal : null });
+    return { data: rows.map(normalizeCustomerRow) };
+  },
+
+  /**
+   * Một khách theo uuid cho màn khác (form lịch ký…) — `fn_customer_get_by_ids` như web getCustomerFromCloud: khách
+   * trong công ty được xem ⇒ đầy đủ; khách công ty khác nằm trên chứng từ ⇒ bản giới hạn (`limited`, CCCD che, không
+   * điền vào ô nhập); ngoài cả hai ⇒ null. Lỗi máy chủ ném ra.
+   */
+  getCustomerById: async (idOrCode: string) => {
+    const v = String(idOrCode || "").trim();
+    if (!v) return null;
+    // Mã KH (phiếu cũ) ⇒ tra theo mã / SĐT như web getCustomerByRef
+    const id = UUID_RE.test(v) ? v : await resolveCustomerUuid(v);
+    const row = id ? (await getCustomersByIds([id]))[0] : null;
+    if (!row) return null;
+    const n = normalizeCustomerRow(row);
+    // Bản giới hạn: CCCD đã che ⇒ không đưa vào ô nhập (web fromRow: SoCMND/CCCD = null, CCCDMasked riêng)
+    return row.limited === true ? { ...n, cccd: "", so_cmnd: "", cccd_masked: row.cccd ?? null } : n;
+  },
+
+  /**
+   * Chi tiết khách cho màn Khách hàng › chi tiết / sửa — RPC `fn_customer_get(p_id)` như web getCustomerScoped
+   * (cần quyền xem màn Khách hàng, theo phạm vi công ty; kèm `trang_thai`, `nguon`, `cty`, `creator`, `updater` lồng).
+   * Nhận cả UUID `id` lẫn mã KH `ma_so_kh` (home / danh sách có thể truyền mã): mã → `fn_customer_get_by_ids(p_refs)`
+   * lấy uuid rồi `fn_customer_get`.
+   * Không tồn tại / ngoài phạm vi ⇒ null. Lỗi máy chủ (không quyền xem, phiên hết hạn…) ném Error với thông báo máy chủ
+   * — màn hiện thông báo đó, không nuốt thành "không tìm thấy".
+   * Khách chỉ thấy qua chứng từ ⇒ bản giới hạn `limited: true` (CCCD che, giấy tờ trống) – màn chỉ xem, không sửa / xoá.
    */
   getCustomerDetailCloud: async (idOrCode: string) => {
     const v = String(idOrCode || "").trim();
     if (!v) return null;
-    const isUuid = UUID_RE.test(v);
-
-    let row: any = null;
-    try {
-      const params: Record<string, string> = { select: "*", limit: "1" };
-      if (isUuid) {
-        params.id = `eq.${v}`;
-      } else {
-        params.ma_so_kh = `eq.${v}`;
-        const tenantId = await getTenantId();
-        if (tenantId && UUID_RE.test(tenantId)) params.ma_ctdk = `eq.${tenantId}`;
-      }
-      const res = await axiosApiSupabase.get("rest/v1/cloud_customers", { params });
-      row = Array.isArray(res.data) ? res.data[0] : null;
-    } catch (e) {
-      console.log("ERROR getCustomerDetailCloud:", e);
-      return null;
-    }
-
-    if (!row) return null;
-
+    const id = await resolveCustomerUuid(v);
+    if (!id) return null;
+    const row = await rpc<any>("fn_customer_get", { p_id: id }, "Không tải được khách hàng");
+    if (!row || typeof row !== "object") return null;
     const normalized = normalizeCustomerRow(row);
-
-    // Bù trạng thái nếu join không trả về
-    if (!row.trang_thai && normalized.ma_tt_id) {
-      const st = await fetchCatalogById(normalized.ma_tt_id);
-      if (st) {
-        normalized.tenTT = st.item_name || st.item_code;
-        normalized.status = normalized.tenTT;
-        normalized.color_code = st.color_code || normalized.color_code;
-        normalized.statusColor = st.color_code || normalized.statusColor;
-      }
+    const cty = row.cty || null;
+    if (cty) normalized.tenSan = cty.ten_ct_vt || cty.ten_ct || normalized.tenSan;
+    if (row.limited === true) {
+      return { ...normalized, limited: true, cccd: "", so_cmnd: "", cccd_masked: row.cccd ?? null };
     }
-
-    // Bù nguồn nếu join không trả về
-    if (!row.nguon && normalized.ma_nguon_id) {
-      const src = await fetchCatalogById(normalized.ma_nguon_id);
-      if (src) {
-        normalized.tenNguon = src.item_name || src.item_code;
-        normalized.source = normalized.tenNguon;
-      }
-    }
-
-    // Bù tên công ty nếu join không trả về
-    if (!row.cty && normalized.company_id && UUID_RE.test(String(normalized.company_id))) {
-      try {
-        const res = await axiosApiSupabase.get("rest/v1/dm_companies", {
-          params: { id: `eq.${normalized.company_id}`, select: "id,ten_ct,ten_ct_vt,is_san", limit: "1" },
-        });
-        const comp = Array.isArray(res.data) ? res.data[0] : null;
-        if (comp) {
-          normalized.cty = comp;
-          normalized.tenSan = comp.ten_ct_vt || comp.ten_ct || "";
-        }
-      } catch (e) {
-        // bỏ qua
-      }
-    }
-
     return normalized;
   },
 
-  /** Lưu khách hàng (Tạo mới hoặc Cập nhật) vào cloud_customers — upsert onConflict: id */
+  /**
+   * Lưu khách hàng (tạo mới / cập nhật) — RPC `fn_customer_save(p_row, p_scoped = true)` như web saveCustomerToCloud ở
+   * màn Khách hàng: máy chủ kiểm quyền thêm / sửa + phạm vi công ty, chống trùng CCCD / SĐT (trùng ⇒ ghép vào khách cũ),
+   * cấp mã khách (quy tắc KHACHHANG), tự đặt id, ma_ctdk, company_id (sàn đại lý ‖ công ty nhân viên), người tạo / sửa,
+   * ngày sửa. Trả uuid ⇒ đọc lại dòng bằng fn_customer_get để trả về màn gọi.
+   * Sửa: chỉ gửi cột form app quản lý (APP_EDIT_COLUMNS) — cột không gửi máy chủ giữ nguyên.
+   */
   saveCustomerCloud: async (payload: any = {}) => {
     const validJwt = await getValidSupabaseJwt();
     const tenantId = await getTenantId();
-    const employeeId = await getEmployeeId();
 
     if (!validJwt || !tenantId || !UUID_RE.test(tenantId)) {
       return {
@@ -725,31 +605,11 @@ export const CustomerService = {
     const cccdVal = String(payload.cccd ?? payload.soCMND ?? payload.so_cmnd ?? "").trim();
     const emailVal = String(payload.email ?? "").trim();
     const diaChiVal = String(payload.diaChi ?? payload.dia_chi ?? payload.thuongTru ?? payload.thuong_tru ?? "").trim();
-    const nowIso = new Date().toISOString();
-
-    // company_id: Gán theo công ty THẬT của nhân viên (không dùng tenant id)
-    // để RPC fn_customer_list không loại bản ghi và không lỗi khóa ngoại.
     const isUpdate = Boolean(payload.id && UUID_RE.test(String(payload.id)));
-    let assignedCompanyId: string | null =
-      payload.company_id && UUID_RE.test(String(payload.company_id))
-        ? String(payload.company_id)
-        : null;
 
-    if (!isUpdate && !assignedCompanyId) {
-      assignedCompanyId = await resolveCompanyId();
-    }
-
-    if (!isUpdate && !assignedCompanyId) {
-      return {
-        status: 400,
-        message:
-          "Không xác định được công ty/chi nhánh hợp lệ của tài khoản. Vui lòng đăng nhập lại.",
-      };
-    }
-
+    // Cột khách (máy chủ chỉ nhận cột trong danh sách của _ds5_customer_save; id / ma_ctdk / company_id / người tạo,
+    // sửa / ngày sửa do máy chủ đặt nên không gửi)
     const input: Record<string, any> = {
-      ma_ctdk: tenantId,
-      ...(assignedCompanyId ? { company_id: assignedCompanyId } : {}),
       is_personal: isPersonal,
       // Khi là DN, Web yêu cầu đồng bộ ten_kh = ten_cong_ty để hiển thị và tìm kiếm
       ten_kh: isPersonal ? tenKh : (tenCongTy || tenKh),
@@ -780,7 +640,6 @@ export const CustomerService = {
       ndd_so_cccd: !isPersonal ? String(payload.nddSoCccd ?? payload.ndd_so_cccd ?? "").trim() || null : null,
       ma_tt_id: UUID_RE.test(rawTtId) ? rawTtId : null,
       ma_nguon_id: UUID_RE.test(rawNguonId) ? rawNguonId : null,
-      ngay_sua: nowIso,
     };
 
     // Ghi chú (cột ghi_chu – app thêm 2026-10-02, web chưa dùng): chỉ ghi khi payload có trường này,
@@ -789,86 +648,44 @@ export const CustomerService = {
       input.ghi_chu = String(payload.ghiChu ?? payload.ghi_chu ?? "").trim() || null;
     }
 
-    if (employeeId && UUID_RE.test(employeeId)) {
-      if (!payload.id) input.created_by_id = employeeId;
-      input.updated_by_id = employeeId;
-    }
-
     // Danh xưng (quý danh) — Web lưu ma_qd = item_code, ten_qd = item_name
     if (payload.maQd || payload.ma_qd) input.ma_qd = payload.maQd || payload.ma_qd;
     if (payload.tenQd || payload.ten_qd) input.ten_qd = payload.tenQd || payload.ten_qd;
 
-    // Tự sinh mã khách nếu tạo mới chưa có mã (theo quy tắc KH-{6 số cuối timestamp})
-    if (!payload.id && !payload.ma_so_kh && !payload.maSoKh) {
-      input.ma_so_kh = `KH-${Date.now().toString().slice(-6)}`;
+    // Mã khách: tạo mới không gửi ⇒ máy chủ cấp theo quy tắc đánh mã của công ty (như web; trước đây app tự sinh KH-xxxxxx)
+    const maSoKh = String(payload.ma_so_kh ?? payload.maSoKh ?? "").trim();
+    if (!isUpdate && maSoKh) input.ma_so_kh = maSoKh;
+
+    let pRow: Record<string, any> = input;
+    if (isUpdate) {
+      // Chỉ ghi các cột form app quản lý; cột chỉ nhập trên web (ngày sinh, nơi cấp, tài khoản, email phụ,
+      // thường trú riêng, danh xưng…) không gửi thì máy chủ giữ nguyên, không bị ghi đè null.
+      pRow = { id: String(payload.id) };
+      Object.keys(input).forEach((key) => {
+        if (APP_EDIT_COLUMNS.has(key) && input[key] !== undefined) pRow[key] = input[key];
+      });
     }
 
-    if (payload.id && UUID_RE.test(String(payload.id))) {
-      input.id = String(payload.id);
-    }
-
+    let savedId: string;
     try {
-      let row: any;
-
-      if (isUpdate) {
-        const customerId = String(payload.id);
-        const existing = await CustomerService.getCustomerDetailCloud(customerId);
-        if (!existing) {
-          return { status: 404, message: "Không tìm thấy khách hàng để cập nhật" };
-        }
-
-        // PATCH: giữ nguyên các trường hệ thống, chỉ cập nhật trường Mobile cho phép
-        const updateInput: Record<string, any> = {
-          ...input,
-          ma_ctdk: existing.ma_ctdk || tenantId,
-          ma_so_kh: existing.ma_so_kh,
-          company_id: existing.company_id,
-        };
-        delete updateInput.id;
-        delete updateInput.created_by_id;
-        delete updateInput.created_at;
-        delete updateInput.updated_at;
-        // Chỉ ghi các cột form app quản lý; cột chỉ nhập trên web (ngày sinh, nơi cấp, tài khoản, email phụ,
-        // thường trú riêng, danh xưng…) không có trong payload thì giữ nguyên, không bị ghi đè null.
-        Object.keys(updateInput).forEach((key) => {
-          if (!APP_EDIT_COLUMNS.has(key)) delete updateInput[key];
-        });
-        Object.keys(updateInput).forEach((key) => {
-          if (updateInput[key] === undefined) delete updateInput[key];
-        });
-
-        const res = await axiosApiSupabase.patch(
-          "rest/v1/cloud_customers",
-          updateInput,
-          {
-            params: { id: `eq.${customerId}`, ma_ctdk: `eq.${tenantId}` },
-            headers: { Prefer: "return=representation" },
-          }
-        );
-        row = Array.isArray(res.data) ? res.data[0] : res.data;
-      } else {
-        const res = await axiosApiSupabase.post("rest/v1/cloud_customers", input, {
-          headers: { Prefer: "return=representation" },
-        });
-        row = Array.isArray(res.data) ? res.data[0] : res.data;
-      }
-
-      if (!row?.id) {
-        return { status: 5000, message: "Không nhận được phản hồi từ máy chủ" };
-      }
-
-      return {
-        status: 2000,
-        data: normalizeCustomerRow(row),
-        message: payload.id ? "Cập nhật khách hàng thành công" : "Tạo khách hàng thành công",
-      };
+      savedId = String(
+        (await rpc<string>("fn_customer_save", { p_row: pRow, p_scoped: true }, "Không thể lưu thông tin khách hàng")) ?? ""
+      ).trim();
     } catch (error: any) {
-      console.log("ERROR saveCustomerCloud:", error?.response?.data || error);
-      return {
-        status: 5000,
-        message: error?.response?.data?.message || "Không thể lưu thông tin khách hàng",
-      };
+      console.log("ERROR saveCustomerCloud:", error?.message || error);
+      return { status: 5000, message: error?.message || "Không thể lưu thông tin khách hàng" };
     }
+    if (!UUID_RE.test(savedId)) {
+      return { status: 5000, message: "Không nhận được phản hồi từ máy chủ" };
+    }
+
+    // Đọc lại dòng đã lưu (mã khách, công ty do máy chủ đặt); đọc lỗi thì trả dữ liệu vừa gửi kèm id
+    const fresh = await CustomerService.getCustomerDetailCloud(savedId).catch(() => null);
+    return {
+      status: 2000,
+      data: fresh ?? normalizeCustomerRow({ ...input, ...pRow, id: savedId }),
+      message: isUpdate ? "Cập nhật khách hàng thành công" : "Tạo khách hàng thành công",
+    };
   },
 
   /** Alias cho addCustomerCloud */
@@ -876,85 +693,27 @@ export const CustomerService = {
     return CustomerService.saveCustomerCloud(payload);
   },
 
-  /** Xoá khách hàng (nhận UUID hoặc mã KH — kiểm tra giao dịch trước, hard delete) */
+  /**
+   * Xoá khách hàng (nhận UUID hoặc mã KH) — RPC `fn_customer_delete(p_id)` như web removeCustomerFromCloud: máy chủ kiểm
+   * phạm vi đầy đủ + quyền xoá, chặn khi còn phiếu booking (cloud_pre_bookings), booking / HĐ (cloud_bookings) hoặc
+   * chứng từ khác — thông báo chặn của máy chủ hiện nguyên cho người dùng.
+   */
   deleteCustomer: async (idOrCode: string) => {
-    const tenantId = await getTenantId();
-    const id = await resolveCustomerUuid(idOrCode);
+    let id: string | null;
+    try {
+      id = await resolveCustomerUuid(idOrCode);
+    } catch (error: any) {
+      return { status: 500, message: error?.message || "Không thể xoá khách hàng" };
+    }
     if (!id) {
       return { status: 400, message: "Thiếu mã khách hàng" };
     }
-
     try {
-      // 0. Như web (CustomerList → PreBookingCloudService.countByKH): có phiếu booking thiện chí → không xoá
-      if (tenantId && UUID_RE.test(tenantId)) {
-        const preRes = await axiosApiSupabase.get("rest/v1/cloud_pre_bookings", {
-          params: {
-            select: "id",
-            ma_ctdk_uid: `eq.${tenantId}`,
-            khach_hang_id: `eq.${id}`,
-            deleted_at: "is.null",
-          },
-          headers: { Prefer: "count=exact" },
-        });
-        const range = String(preRes.headers?.["content-range"] ?? "");
-        const total = range.includes("/") ? Number(range.split("/").pop()) : NaN;
-        const count = Number.isFinite(total) ? total : Array.isArray(preRes.data) ? preRes.data.length : 0;
-        if (count > 0) {
-          return { status: 400, message: `Khách hàng đã có ${count} phiếu booking, không được phép xóa.` };
-        }
-      }
-
-      // 1. Kiểm tra xem khách hàng có giao dịch phiếu giữ chỗ / cọc / HĐ không
-      const pgcRes = await axiosApiSupabase.get("rest/v1/cloud_pgc_phieu_giucho", {
-        params: {
-          khach_hang_id: `eq.${id}`,
-          select: "id,so_phieu_gc,giai_doan",
-          limit: "1",
-        },
-      });
-      if (Array.isArray(pgcRes.data) && pgcRes.data.length > 0) {
-        return {
-          status: 400,
-          message: "Khách hàng đã có giao dịch (giữ chỗ/đặt cọc/hợp đồng), không thể xoá!",
-        };
-      }
-
-      const bookingRes = await axiosApiSupabase.get("rest/v1/cloud_bookings", {
-        params: {
-          khach_hang_id: `eq.${id}`,
-          select: "id",
-          limit: "1",
-        },
-      });
-      if (Array.isArray(bookingRes.data) && bookingRes.data.length > 0) {
-        return {
-          status: 400,
-          message: "Khách hàng đã có phiếu booking, không thể xoá!",
-        };
-      }
-
-      // 2. Xóa cứng
-      const params: Record<string, string> = { id: `eq.${id}` };
-      if (tenantId && UUID_RE.test(tenantId)) {
-        params.ma_ctdk = `eq.${tenantId}`;
-      }
-
-      // Đọc lại dòng đã xoá: máy chủ chặn (RLS) thì không có dòng nào → báo lỗi, không báo đã xoá
-      const res = await axiosApiSupabase.delete("rest/v1/cloud_customers", {
-        params,
-        headers: { Prefer: "return=representation" },
-      });
-      const deleted = Array.isArray(res?.data) ? res.data.length : 0;
-      if (deleted === 0) {
-        return {
-          status: 403,
-          message: "Không xoá được khách hàng: tài khoản không có quyền xoá hoặc khách đã bị xoá trước đó.",
-        };
-      }
+      await rpc("fn_customer_delete", { p_id: id }, "Không thể xoá khách hàng");
       return { status: 2000, message: "Xoá khách hàng thành công" };
-    } catch (error) {
-      console.log("ERROR delete customer (cloud):", error);
-      return { status: 500, message: "Không thể xoá khách hàng" };
+    } catch (error: any) {
+      console.log("ERROR delete customer (cloud):", error?.message || error);
+      return { status: 400, message: error?.message || "Không thể xoá khách hàng" };
     }
   },
 
@@ -1001,20 +760,17 @@ export const CustomerService = {
     }
   },
 
-  /** Lấy lịch sử làm việc / nhật ký chăm sóc (nhận UUID hoặc mã KH) */
+  /**
+   * Lịch sử làm việc / nhật ký chăm sóc (nhận UUID hoặc mã KH) — RPC `fn_customer_activity_list(p_khach_hang_id)` như web
+   * customers/customer-activity.listCustomerActivities: theo phạm vi công ty, khách chỉ thấy qua chứng từ ⇒ rỗng,
+   * mới nhất trước (≤ 500). Lỗi ⇒ [] (như web).
+   */
   getCustomerActivities: async (customerId: string) => {
-    const uuid = await resolveCustomerUuid(customerId);
-    if (!uuid) return [];
     try {
-      const res = await axiosApiSupabase.get("rest/v1/cloud_customer_activities", {
-        params: {
-          khach_hang_id: `eq.${uuid}`,
-          select: "*",
-          order: "created_at.desc",
-          limit: "50",
-        },
-      });
-      const rows = Array.isArray(res.data) ? res.data : [];
+      const uuid = await resolveCustomerUuid(customerId);
+      if (!uuid) return [];
+      const data = await rpc<any[]>("fn_customer_activity_list", { p_khach_hang_id: uuid }, "Không tải được lịch sử chăm sóc");
+      const rows = Array.isArray(data) ? data : [];
       return rows.map((r: any) => ({
         id: r.id,
         loai: r.loai || "call",
@@ -1030,37 +786,48 @@ export const CustomerService = {
     }
   },
 
-  /** Thêm nhật ký chăm sóc khách hàng */
+  /**
+   * Thêm (hoặc sửa khi có `id`) nhật ký chăm sóc — RPC `fn_customer_activity_save(p)` như web saveCustomerActivity:
+   * máy chủ kiểm quyền sửa + phạm vi đầy đủ khách, tự đặt công ty (ma_ctdk_uid). nguoi_thuc_hien = tên người nhập.
+   * Lỗi máy chủ trả nguyên thông báo.
+   */
   addCustomerActivity: async (payload: {
     customerId: string;
     content: string;
     title?: string;
     loai?: "call" | "meeting" | "quote" | "email" | "note";
+    id?: string;
   }) => {
-    const uuid = await resolveCustomerUuid(payload.customerId);
-    if (!uuid) {
-      return { status: 400, message: "Không xác định được khách hàng" };
-    }
     try {
-      // Như web CustomerActivityCloudService.saveCustomerActivity: ma_ctdk = mã công ty (chữ thường),
-      // nguoi_thuc_hien = tên người nhập – để web đọc được và tính mức bảo vệ khách.
-      const code = (await getCompanyCode()).trim().toLowerCase();
-      if (!code) return { status: 400, message: "Thiếu mã công ty đăng ký" };
-      const body: Record<string, any> = {
-        ma_ctdk: code,
+      const uuid = await resolveCustomerUuid(payload.customerId);
+      if (!uuid) {
+        return { status: 400, message: "Không xác định được khách hàng" };
+      }
+      const p: Record<string, any> = {
         khach_hang_id: uuid,
-        noi_dung: payload.content,
-        tieu_de: payload.title || "Chăm sóc khách hàng",
         loai: payload.loai || "note",
+        tieu_de: payload.title || "Chăm sóc khách hàng",
+        noi_dung: payload.content || null,
         trang_thai: "hoan_thanh",
         nguoi_thuc_hien: (await currentUserName()) || null,
         thoi_gian: new Date().toISOString(),
       };
-      const res = await axiosApiSupabase.post("rest/v1/cloud_customer_activities", body);
-      return { status: 2000, data: res.data, message: "Thêm nhật ký thành công" };
-    } catch (e) {
-      console.log("ERROR addCustomerActivity:", e);
-      return { status: 5000, message: "Không thể thêm nhật ký" };
+      if (payload.id) p.id = payload.id;
+      const id = await rpc<string>("fn_customer_activity_save", { p }, "Không thể thêm nhật ký");
+      return { status: 2000, data: id, message: "Thêm nhật ký thành công" };
+    } catch (e: any) {
+      console.log("ERROR addCustomerActivity:", e?.message || e);
+      return { status: 5000, message: e?.message || "Không thể thêm nhật ký" };
+    }
+  },
+
+  /** Xoá 1 nhật ký chăm sóc — RPC `fn_customer_activity_delete(p_id)` (web removeCustomerActivity) */
+  deleteCustomerActivity: async (activityId: string) => {
+    try {
+      await rpc("fn_customer_activity_delete", { p_id: activityId }, "Không thể xoá nhật ký");
+      return { status: 2000, message: "Đã xoá nhật ký" };
+    } catch (e: any) {
+      return { status: 5000, message: e?.message || "Không thể xoá nhật ký" };
     }
   },
 

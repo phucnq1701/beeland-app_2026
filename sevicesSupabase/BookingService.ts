@@ -9,6 +9,7 @@ import {
   getValidSupabaseJwt,
 } from "./cloudTenant";
 import { BookingSalesConfig, isLowRiseProduct, mapPriceListItem, sortPriceLists } from "../lib/bookingPrice";
+import { getCustomersByIds, getCustomersByRefs, withCustomers } from "./customerLookup";
 
 /** Ngày dương lịch theo giờ máy (VN) dạng YYYY-MM-DD — không dùng toISOString (UTC lệch ngày 0h–7h). */
 export const localYmd = (d: Date = new Date()) =>
@@ -260,8 +261,10 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // NOTE: embed FK có thể thiếu trên schema cache -> fallback select gọn nếu 400 PGRST200
+// Khách KHÔNG embed (cloud_customers đã khoá đọc thẳng từ 2026-10-20, migration 20261020000510_ds_dot5_customer_revoke —
+// embed làm hỏng cả câu): gắn `kh` sau bằng withCustomers (RPC fn_customer_get_by_ids), như web BookingCloudService.
 const BOOKING_SELECT_FULL =
-  "id,so_phieu,state,tong_gia,tien_giu_cho,da_thu,ngay_giu_cho,ngay_nhap,het_han_luc,thoi_gian_con_lai,created_at,ma_pgc_id,khach_hang_id,ma_da_id,ma_sp_id,ma_san_id,trang_thai_id,kh:cloud_customers!khach_hang_id(id,ten_kh,ten_cong_ty,dien_thoai,email,ma_so_kh),da:da_projects!ma_da_id(id,ten_da,ma_da_code),sp:bds_products!ma_sp_id(id,ma_sp,ky_hieu),san:dm_companies!ma_san_id(id,ma_dl,ten_ct,ten_ct_vt),tt:cloud_catalogs!trang_thai_id(id,item_code,item_name,color_code)";
+  "id,so_phieu,state,tong_gia,tien_giu_cho,da_thu,ngay_giu_cho,ngay_nhap,het_han_luc,thoi_gian_con_lai,created_at,ma_pgc_id,khach_hang_id,ma_da_id,ma_sp_id,ma_san_id,trang_thai_id,da:da_projects!ma_da_id(id,ten_da,ma_da_code),sp:bds_products!ma_sp_id(id,ma_sp,ky_hieu),san:dm_companies!ma_san_id(id,ma_dl,ten_ct,ten_ct_vt),tt:cloud_catalogs!trang_thai_id(id,item_code,item_name,color_code)";
 const BOOKING_SELECT_SIMPLE =
   "id,so_phieu,state,tong_gia,tien_giu_cho,da_thu,ngay_giu_cho,ngay_nhap,het_han_luc,thoi_gian_con_lai,created_at,ma_pgc_id,khach_hang_id,ma_da_id,ma_sp_id,ma_san_id,trang_thai_id";
 
@@ -593,27 +596,17 @@ export const BookingService = {
         }
       }
 
-      // Resolve uuid khách hàng (MaKH có thể là ma_so_kh hoặc uuid).
-      // KHÔNG gộp ma_so_kh (text) với id (uuid) trong 1 or=: khi mã KH không
-      // phải uuid (vd "KH-00006"), so sánh id.eq."KH-00006" làm Postgres lỗi
-      // 22P02 "invalid input syntax for type uuid" → cả query chết 400 →
-      // "Không tìm thấy khách hàng". Khi không phải uuid chỉ tra ma_so_kh.
+      // Resolve uuid khách hàng (MaKH có thể là ma_so_kh hoặc uuid). Không phải uuid ⇒ tra mã khách qua RPC
+      // fn_customer_get_by_ids(p_refs) (bảng cloud_customers đã khoá đọc thẳng — như web salesDocsCloud getCustomersByRefs);
+      // RPC so khớp cả ma_so_kh lẫn di_dong ⇒ ưu tiên dòng đúng mã khách.
       let khUid: string | null = null;
       {
         const v = String(maKH).trim();
         if (UUID_RE.test(v)) khUid = v;
         else {
           try {
-            const r = await axiosApiSupabase.get("rest/v1/cloud_customers", {
-              params: {
-                select: "id",
-                ma_ctdk: `eq.${companyId}`,
-                ma_so_kh: `eq.${v}`,
-                limit: "1",
-              },
-            });
-            const rows = Array.isArray(r.data) ? r.data : [];
-            khUid = rows[0]?.id || null;
+            const rows = await getCustomersByRefs([v]);
+            khUid = (rows.find((r: any) => String(r?.ma_so_kh ?? "").trim() === v) || rows[0])?.id || null;
           } catch {}
         }
       }
@@ -805,7 +798,7 @@ export const BookingService = {
       const res = await axiosApiSupabase.get(query);
       const rows = Array.isArray(res.data) ? res.data : [];
       if (rows.length > 0) {
-        return { data: normalizeBooking(rows[0]) };
+        return { data: normalizeBooking(await withCustomers(rows[0], { nested: [] })) };
       }
 
       // Fallback tìm theo ma_pgc_id nếu idStr là ma_pgc_id uuid
@@ -818,7 +811,7 @@ export const BookingService = {
         const pgcRes = await axiosApiSupabase.get(pgcQuery);
         const pgcRows = Array.isArray(pgcRes.data) ? pgcRes.data : [];
         if (pgcRows.length > 0) {
-          return { data: normalizeBooking(pgcRows[0]) };
+          return { data: normalizeBooking(await withCustomers(pgcRows[0], { nested: [] })) };
         }
       }
 
@@ -840,7 +833,7 @@ export const BookingService = {
         const res = await axiosApiSupabase.get(query);
         const rows = Array.isArray(res.data) ? res.data : [];
         if (rows.length > 0) {
-          return { data: normalizeBooking(rows[0]) };
+          return { data: normalizeBooking(await withCustomers(rows[0], { nested: [] })) };
         }
       } catch (e) {
         console.log("ERROR getBookingDetail fallback:", e);
@@ -854,7 +847,7 @@ export const BookingService = {
    * Chi tiết booking theo đúng mapping web BookingFormDialog.tsx +
    * BookingDocsCloudService.getBookingEditDetail.
    * Trả về 1 object gồm: phiếu (cloud_bookings + cloud_pgc_phieu_giucho),
-   * khách hàng (cloud_customers + tt_khach_hang), sàn, sản phẩm, dự án,
+   * khách hàng (fn_customer_get_by_ids + tt_khach_hang), sàn, sản phẩm, dự án,
    * giá theo bảng giá (price_list_items), chính sách/tiến độ/quà tặng.
    */
   getBookingEditDetail: async (bookingIdOrCode: string) => {
@@ -944,7 +937,11 @@ export const BookingService = {
       const sanPhamId = pgc?.san_pham_id || booking.ma_sp_id || null;
       const [product, kh, san, policy, priceList, priceItem, status] = await Promise.all([
         byId("bds_products", sanPhamId),
-        byId("cloud_customers", booking.khach_hang_id || pgc?.khach_hang_id),
+        // Khách qua RPC (cloud_customers đã khoá đọc thẳng; như web ContractCloudService getCustomersByIds). Lỗi ⇒ null,
+        // dùng bản chụp tt_khach_hang. Khách công ty khác chỉ thấy qua chứng từ ⇒ bản giới hạn (cccd đã che).
+        getCustomersByIds([booking.khach_hang_id || pgc?.khach_hang_id])
+          .then((rows) => rows[0] ?? null)
+          .catch(() => null),
         byId("dm_companies", pgc?.san_id || booking.ma_san_id),
         byId("da_sales_policies", maCS),
         // Phiếu cũ vẫn cần tên bảng giá đã hết hiệu lực.

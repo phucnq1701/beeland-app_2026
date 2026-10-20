@@ -11,7 +11,8 @@ import { colors, elevation, radius, space } from "@/theme";
 
 /**
  * Chọn khách cho phiếu (không bắt buộc – web không bắt buộc khách ở phiếu tính giá).
- * Tìm trong kho khách (cloud_customers) như ô tìm khách của form web; tạo khách mới làm ở màn Khách hàng.
+ * Tìm khách qua `fn_customer_picker` (CustomerService.pickCustomers) như ô tìm khách của form web (từ khoá ≥ 2 ký tự);
+ * tạo khách mới làm ở màn Khách hàng.
  */
 export function CustomerPicker({
   value,
@@ -35,7 +36,7 @@ export function CustomerPicker({
       return;
     }
     setLoading(true);
-    CustomerService.getCustomers({ search: q, limit: 10 })
+    CustomerService.pickCustomers({ search: q, limit: 10 })
       .then((res: any) => {
         if (v === version.current) setRows(res?.data ?? []);
       })
@@ -100,7 +101,7 @@ export function CustomerPicker({
         </View>
       ) : debounced.trim() && !loading ? (
         <Text variant="caption" color="textSecondary">
-          Không tìm thấy khách hàng.
+          {debounced.trim().length < 2 ? "Nhập ít nhất 2 ký tự để tìm khách." : "Không tìm thấy khách hàng."}
         </Text>
       ) : null}
     </View>

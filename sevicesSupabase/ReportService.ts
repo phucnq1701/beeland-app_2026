@@ -8,10 +8,9 @@ import {
   agingOf,
   buildInstallments,
   isDroppedStatus,
-  isPbtLoaiName,
-  sumReceiptLines,
   toProgressRow,
 } from "../lib/paymentMath";
+import { customerMapByIds } from "./customerLookup";
 
 /**
  * Báo cáo tính trên Cloud – như web (không gọi API cũ `api/bao-cao/*`):
@@ -89,10 +88,12 @@ async function lifecycleParents(projectKey: string | null): Promise<any[]> {
   const [statuses, products, customers, depositsRes, contractsRes, paid] = await Promise.all([
     byIds("cloud_catalogs", "id,item_code,item_name", docs.map((d) => str(d.trang_thai_id))),
     byIds("bds_products", "id,ma_sp,ky_hieu,ma_da", docs.map((d) => str(d.san_pham_id))),
-    byIds("cloud_customers", "id,ten_kh,ten_cong_ty,dien_thoai", docs.map((d) => str(d.khach_hang_id))),
+    // Khách qua RPC fn_customer_get_by_ids (cloud_customers đã khoá đọc thẳng từ 2026-10-20; web
+    // listDebtSummaryFromLifecycle → withCustomers). Lỗi ⇒ map rỗng: báo cáo vẫn hiện, chỉ thiếu tên khách.
+    customerMapByIds(docs.map((d) => d.khach_hang_id)),
     byPgc("cloud_deposits", "phieu_giu_cho_id,so_phieu", ids),
     byPgc("cloud_contracts", "phieu_giu_cho_id,so_hdmb", ids),
-    receiptsByDoc(companyId),
+    collectedByPgc(ids),
   ]);
   // Dự án lấy theo phiếu, thiếu thì theo sản phẩm (web enrichProjectFromProducts)
   const projects = await byIds(
@@ -118,17 +119,19 @@ async function lifecycleParents(projectKey: string | null): Promise<any[]> {
       const sp = products[str(r.san_pham_id)] || {};
       const pid = str(r.project_id || sp.ma_da);
       const da = projects[pid] || {};
-      const kh = customers[str(r.khach_hang_id)] || {};
+      const kh = customers.get(str(r.khach_hang_id).toLowerCase()) || {};
       const payload = r.payload || {};
       const hd = r.tt_hop_dong || payload.TTHopDong || {};
       const giaTri = n(r.gia_tri_hd_sau_ck) || n(r.gia_tri_hd);
       const soHD = docNo.get(String(r.id)) || r.so_phieu_gc || String(r.id);
-      const p = paid.get(String(r.id)) || paid.get(String(soHD)) || { daThu: 0, daThuPBT: 0 };
-      const daThu = p.daThu || n(r.da_thu);
+      // Máy chủ có khoá ⇒ đúng số máy chủ (kể cả 0); không có khoá mới dùng `da_thu` lưu trên phiếu (web)
+      const p = paid.get(String(r.id));
+      const daThu = p ? p.daThu : n(r.da_thu);
       const tenTT =
         tt.item_name || (r.giai_doan === "HDMB" ? "Hợp đồng mua bán" : r.giai_doan === "HDGV" ? "HĐ Góp vốn" : "Đặt cọc");
       return {
-        _dropped: isDroppedStatus(tt.item_name || ""),
+        // Bỏ phiếu huỷ / thanh lý và HĐ gốc đã chuyển nhượng (D4-10, cờ máy chủ — web isTransferred)
+        _dropped: isDroppedStatus(tt.item_name || "") || p?.daChuyenNhuong === true,
         MaPGC: r.id,
         GiaiDoan: r.giai_doan,
         SoHD: soHD,
@@ -145,7 +148,7 @@ async function lifecycleParents(projectKey: string | null): Promise<any[]> {
         DaThuHD: Math.round(daThu),
         ConLai: Math.round(giaTri - daThu),
         PhiBaoTri: Math.round(n(r.phi_bao_tri)),
-        DaThuPBT: Math.round(p.daThuPBT || 0),
+        DaThuPBT: Math.round(p?.daThuPBT || 0),
         LichThanhToan:
           (Array.isArray(r.lich_thanh_toan) && r.lich_thanh_toan.length ? r.lich_thanh_toan : null) ||
           (Array.isArray(hd.LichThanhToan) ? hd.LichThanhToan : null) ||
@@ -168,38 +171,33 @@ async function byPgc(table: string, select: string, pgcIds: string[]): Promise<a
   return out;
 }
 
-/** Đã thu theo phiếu từ dòng chi tiết phiếu thu (web sumReceiptsByPgc). */
-async function receiptsByDoc(companyId: string) {
-  try {
-    const r = await axiosApiSupabase.get("rest/v1/cloud_cash_voucher_details", {
-      params: { select: "pgc_id,ma_loai,so_tien", ma_ctdk: `eq.${companyId}`, loai_phieu: "eq.THU", limit: "50000" },
-    });
-    const lines: any[] = Array.isArray(r.data) ? r.data : [];
-    const pgcIds = [...new Set(lines.map((d) => str(d.pgc_id)).filter(Boolean))];
-    const loaiIds = [...new Set(lines.map((d) => str(d.ma_loai)).filter(Boolean))];
-    if (!pgcIds.length) return sumReceiptLines([], { alias: {}, code: {}, pbtLoai: new Set() });
-    const [pgcs, contracts, deposits, loai] = await Promise.all([
-      byIds("cloud_pgc_phieu_giucho", "id,so_phieu_gc", pgcIds),
-      byIds("cloud_contracts", "id,phieu_giu_cho_id,so_hdmb", pgcIds),
-      byIds("cloud_deposits", "id,phieu_giu_cho_id", pgcIds),
-      byIds("cloud_catalogs", "id,item_name", loaiIds),
-    ]);
-    const alias: Record<string, string> = {};
-    const code: Record<string, string> = {};
-    Object.values(pgcs).forEach((p: any) => (code[String(p.id)] = str(p.so_phieu_gc)));
-    Object.values(contracts).forEach((c: any) => {
-      if (c.phieu_giu_cho_id) alias[String(c.id)] = String(c.phieu_giu_cho_id);
-      if (c.so_hdmb) code[String(c.id)] = String(c.so_hdmb);
-    });
-    Object.values(deposits).forEach((c: any) => {
-      if (c.phieu_giu_cho_id) alias[String(c.id)] = String(c.phieu_giu_cho_id);
-    });
-    const pbtLoai = new Set(Object.values(loai).filter((c: any) => isPbtLoaiName(c.item_name)).map((c: any) => String(c.id)));
-    return sumReceiptLines(lines, { alias, code, pbtLoai });
-  } catch (e) {
-    console.log("ERROR receiptsByDoc:", e);
-    throw e;
+/**
+ * Đã thu theo phiếu giữ chỗ — RPC fn_pgc_collected (web AccountingCloudService.sumReceiptsByPgc). Bảng
+ * cloud_cash_voucher_details đã khoá đọc thẳng nên không cộng dòng phiếu thu ở app nữa. Máy chủ tính cả bí danh HĐ / cọc,
+ * phần kế thừa HĐ gốc, bỏ tiền lãi; HĐ gốc đã chuyển nhượng ⇒ `daChuyenNhuong` (tiền = 0). ≤ 20 000 phiếu / lần.
+ * Lỗi ném ra (báo lỗi, không im lặng).
+ */
+async function collectedByPgc(
+  pgcIds: string[]
+): Promise<Map<string, { daThu: number; daThuPBT: number; daChuyenNhuong: boolean }>> {
+  const map = new Map<string, { daThu: number; daThuPBT: number; daChuyenNhuong: boolean }>();
+  const ids = [...new Set(pgcIds.map((v) => str(v).trim()).filter((v) => UUID_RE.test(v)))];
+  for (let i = 0; i < ids.length; i += 20000) {
+    try {
+      const r = await axiosApiSupabase.post("rest/v1/rpc/fn_pgc_collected", { p_pgc_ids: ids.slice(i, i + 20000) });
+      Object.entries((r.data as Record<string, any>) || {}).forEach(([id, v]) => {
+        map.set(String(id), {
+          daThu: Math.round(n(v?.da_thu)),
+          daThuPBT: Math.round(n(v?.da_thu_pbt)),
+          daChuyenNhuong: v?.da_chuyen_nhuong === true,
+        });
+      });
+    } catch (e) {
+      console.log("ERROR fn_pgc_collected:", e);
+      throw e;
+    }
   }
+  return map;
 }
 
 const inRange = (date: any, f: ReportFilter) => {

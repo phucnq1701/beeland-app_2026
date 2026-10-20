@@ -7,7 +7,7 @@ import { CustomerFormValues } from "@/lib/customerRules";
 import { CustomerRulesService } from "@/sevicesSupabase/CustomerRulesService";
 import { CustomerService } from "@/sevicesSupabase/CustomerService";
 
-/** Chi tiết khách (bản ghi cloud_customers đã chuẩn hoá) → giá trị form. */
+/** Chi tiết khách (fn_customer_get, đã chuẩn hoá) → giá trị form. */
 function toFormValues(d: any): Partial<CustomerFormValues> {
   const isPersonal = d.is_personal !== false;
   return {
@@ -33,10 +33,11 @@ function toFormValues(d: any): Partial<CustomerFormValues> {
 export default function CustomerEditScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [state, setState] = useState<{ loading: boolean; detail: any; locked: boolean }>({
+  const [state, setState] = useState<{ loading: boolean; detail: any; locked: boolean; error: string | null }>({
     loading: true,
     detail: null,
     locked: false,
+    error: null,
   });
   const [reload, setReload] = useState(0);
 
@@ -44,9 +45,18 @@ export default function CustomerEditScreen() {
     let alive = true;
     setState((s) => ({ ...s, loading: true }));
     (async () => {
-      const detail = id ? await CustomerService.getCustomerDetailCloud(String(id)) : null;
-      const locked = detail?.id ? await CustomerRulesService.hasIdentityLock(String(detail.id)) : false;
-      if (alive) setState({ loading: false, detail, locked });
+      try {
+        const found = id ? await CustomerService.getCustomerDetailCloud(String(id)) : null;
+        // Bản giới hạn (khách công ty khác chỉ thấy qua chứng từ): máy chủ không cho sửa ⇒ không mở form
+        const detail = found && found.limited !== true ? found : null;
+        const locked = detail?.id ? await CustomerRulesService.hasIdentityLock(String(detail.id)) : false;
+        const error = found?.limited === true ? "Khách thuộc công ty khác – không có quyền sửa." : null;
+        if (alive) setState({ loading: false, detail, locked, error });
+      } catch (err) {
+        // Lỗi máy chủ (không quyền xem, phiên hết hạn…) hiện nguyên thông báo
+        const error = err instanceof Error && err.message ? err.message : "Không tải được khách hàng.";
+        if (alive) setState({ loading: false, detail: null, locked: false, error });
+      }
     })();
     return () => {
       alive = false;
@@ -63,7 +73,7 @@ export default function CustomerEditScreen() {
           {state.loading ? (
             <SkeletonDetail />
           ) : (
-            <ErrorState description="Không tìm thấy khách hàng." onRetry={() => setReload((n) => n + 1)} />
+            <ErrorState description={state.error || "Không tìm thấy khách hàng."} onRetry={() => setReload((n) => n + 1)} />
           )}
         </Screen>
       </>
