@@ -15,6 +15,10 @@ dữ liệu (màu trạng thái từ danh mục) dùng `StatusBadge color=…`: 
 antd mà web lưu (`blue`, `green`, `orange`, `red`, `purple`, `magenta`, `gold`, `cyan`, `geekblue`… → giữ tông Tag web nhưng
 kiểu soft: nền nhạt cùng độ đậm `*Subtle`, chữ đậm, không viền; bảng màu ở `components/utils/statusColor.ts`); `default`/không hợp lệ → trung tính. `size="sm"` = chữ 11 cho góc card. Test tương phản: `tests/theme-contrast.test.cjs`.
 
+## Splash
+
+Nền navy `#16233B` (= `colors.showcase.bg`) + logo giữa (`assets/images/splash-navy.png`, đã đệm để Android 12+ cắt tròn không mất góc), cấu hình ở plugin `expo-splash-screen` trong `app.json`. Thanh trạng thái iOS lúc splash chữ trắng (`UIStatusBarStyle` light); root layout đặt lại `dark` khi JS chạy, màn cập nhật OTA đặt `light`. Đổi splash là thay đổi native → phải build Store mới, OTA không đẩy được.
+
 ## Component (`components/ui`, xem trực quan ở `app/dev/ui-gallery.tsx` – chỉ `__DEV__`)
 
 `Text` (variant, color token, `numeric`), `Button` (primary/secondary/ghost/danger, `loading` chặn bấm lặp), `IconButton`

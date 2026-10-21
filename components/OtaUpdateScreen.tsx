@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Text } from "@/components/ui";
@@ -30,6 +31,8 @@ export function OtaUpdateScreen({ percent }: { percent: number | null }) {
 
   return (
     <View style={styles.root} accessibilityViewIsModal>
+      {/* Nền navy → chữ thanh trạng thái trắng (ghi đè style="dark" của root layout khi màn này đang hiện). */}
+      <StatusBar style="light" />
       <View style={[styles.content, { paddingTop: insets.top + space.x4, paddingBottom: insets.bottom + space.x3 }]}>
         <View style={styles.brand}>
           <Image

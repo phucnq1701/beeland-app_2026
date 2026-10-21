@@ -8,15 +8,11 @@
     "scheme": "myapp",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.beesky.beelandcrm",
       "infoPlist": {
+        "UIStatusBarStyle": "UIStatusBarStyleLightContent",
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
@@ -54,6 +50,15 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-navy.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#16233B"
+        }
+      ],
       [
         "expo-location",
         {
