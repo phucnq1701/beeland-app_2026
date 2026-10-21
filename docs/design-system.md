@@ -5,8 +5,8 @@
 | Nhóm | Ghi chú |
 |---|---|
 | `colors` | `primary` #C9501A (nút chính, một màu chính), `bg`, `surface`, `surfaceMuted`, `border(Strong)`, `text`, `textSecondary`, `textTertiary`, `onPrimary`, cặp trạng thái `success/warning/danger/info` + `*Subtle` + `on*Subtle`, `backdrop`, `skeleton` |
-| `colors.showcase` | Navy + cam sáng cho màn trưng bày dự án/căn (`bg` #16233B, `surface`, `accent`, `paper`, `text`, `textMuted`); `scrim` (3 điểm gradient phủ ảnh cho `expo-linear-gradient`), `glass`/`glassBorder` (nút kính mờ trên ảnh), `track` (rãnh thanh tiến độ trên navy) |
-| `typography` | display 28 · title 22 · heading 17 · subhead/body 15 · caption 14 · label 12 (**nhỏ nhất**). Ngoài thang: `clockType` 56/64 chỉ cho đồng hồ màn "đang cập nhật dữ liệu mới" (`docs/ota-update.md`) |
+| `colors.showcase` | Navy + cam sáng cho màn trưng bày dự án/căn (`bg` #16233B, `surface`, `accent`, `paper`, `text`, `textMuted`); `scrim` (3 điểm gradient phủ ảnh cho `expo-linear-gradient`), `glass`/`glassBorder` (nút kính mờ trên ảnh), `track` (rãnh thanh tiến độ trên thẻ navy) |
+| `typography` | display 28 · title 22 · heading 17 · subhead/body 15 · caption 14 · label 12 (**nhỏ nhất**). Ngoài thang: `clockType` 88/92 chỉ cho đồng hồ màn "đang cập nhật dữ liệu mới" (`docs/ota-update.md`) |
 | `space`, `radius` (`sm…xl`, `xxl` 24, `x3` 28, `full`), `elevation` (`soft` · `raised` · `overlay` · `modal`) | khoảng cách, bo góc, đổ bóng. `soft` = bóng rất nhẹ cho card bo tròn lớn không viền (trang chủ); card có bóng mà cần `overflow: hidden` thì tách 2 lớp (ngoài bóng, trong cắt) vì iOS mất bóng |
 | `fontStyleFor(weight, fontsLoaded)` | nơi duy nhất đặt fontFamily ngoài `Text` (font Be Vietnam Pro, dự phòng font hệ thống) |
 

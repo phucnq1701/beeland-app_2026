@@ -8,8 +8,8 @@ App khách hàng `beeland-app-KH` làm cùng cách (`beeland-app-KH/docs/ota-upd
 
 1. Hỏi máy chủ EAS có bản JS mới cho đúng `runtimeVersion` (= version app native) không. Tối đa 8 giây.
 2. Không có bản mới → vào app ngay.
-3. Có bản mới → hiện màn **"BeeLand đang cập nhật dữ liệu mới. Xin vui lòng chờ ..."** (`components/OtaUpdateScreen.tsx`:
-   logo, giờ, thứ ngày, % tải). Bắt buộc, không có nút bỏ qua. Tải xong app tự reload sang bản mới.
+3. Có bản mới → hiện màn **"BeeLand đang cập nhật dữ liệu mới · Xin vui lòng chờ ..."** (`components/OtaUpdateScreen.tsx`, phương án D "Navy cao cấp" chốt 2026-10-21: nền navy,
+   logo + tên góc trên, giờ lớn căn trái, thẻ navy nhạt có % và thanh tiến độ cam). Bắt buộc, không có nút bỏ qua. Tải xong app tự reload sang bản mới.
 4. Offline, máy chủ lỗi, hỏi quá 8 giây hoặc tải quá 90 giây → bỏ màn chờ, vào app bằng bản đang có.
 5. Sau đó mới kiểm tra version Store (`UserService.checkVersion`) như trước: có bản native mới thì hiện hộp "PHIÊN BẢN MỚI".
 

@@ -41,7 +41,7 @@ export const typography: Record<TextVariant, TypeStyle> = {
 };
 
 /** Đồng hồ lớn ở màn "đang cập nhật dữ liệu mới" (components/OtaUpdateScreen.tsx) — ngoài thang chữ thường. */
-export const clockType: TypeStyle = { weight: 'bold', fontSize: 56, lineHeight: 64 };
+export const clockType: TypeStyle = { weight: 'bold', fontSize: 88, lineHeight: 92, letterSpacing: -2 };
 
 const FONT_WEIGHT_VALUE: Record<FontWeightName, '400' | '500' | '600' | '700'> = {
   regular: '400',
