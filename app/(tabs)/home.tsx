@@ -264,7 +264,7 @@ export default function HomeScreen() {
         <View style={styles.carousel}>
           <View style={styles.carouselHead}>
             <HomeSectionHeader
-              title="Dự án hot tuần này (test OTA)"
+              title="Dự án nổi bật"
               actionLabel="Xem tất cả"
               onAction={() => router.push("/projects")}
             />
