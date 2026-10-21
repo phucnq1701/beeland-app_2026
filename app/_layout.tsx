@@ -94,9 +94,10 @@ export default function RootLayout() {
             <RootLayoutNav />
             <ChatNotifier />
           </ToastProvider>
+          {/* Trong FontStatusProvider để màn "đang cập nhật dữ liệu mới" dùng font của app. */}
+          <UpdateManager />
         </FontStatusProvider>
       </GestureHandlerRootView>
-      <UpdateManager />
     </QueryClientProvider>
   );
 }

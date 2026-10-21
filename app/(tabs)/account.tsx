@@ -4,6 +4,8 @@ import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from "react-nat
 import { useFocusEffect, useRouter } from "expo-router";
 import { ChevronRight, LayoutGrid, LogOut, Trash2, User } from "lucide-react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Application from "expo-application";
+import * as Updates from "expo-updates";
 
 import { chatAuthChanged, unregisterChatPush } from "@/components/chat/chatPush";
 import { FeatureGrid } from "@/components/home/FeatureGrid";
@@ -20,6 +22,7 @@ import {
 } from "@/components/ui";
 import { MENU_TAB_FEATURE_IDS } from "@/components/utils/menuTabs";
 import { routeForFeature, visibleFeatureIds } from "@/lib/featureConfig";
+import { shortBundleId } from "@/lib/otaUpdate";
 import { features } from "@/mocks/features";
 import { colors, elevation, radius, space } from "@/theme";
 import { CloudProfileService, CloudProfile } from "@/sevicesSupabase/CloudProfileService";
@@ -260,6 +263,10 @@ export default function AccountScreen() {
           fullWidth
           style={styles.pill}
         />
+        {/* Mã bản OTA đang chạy ("gốc" = bản trong build) — để kiểm tra máy đã nhận bản cập nhật nào (docs/ota-update.md). */}
+        <Text variant="caption" color="textSecondary" align="center" numeric>
+          {appVersionLabel()}
+        </Text>
       </View>
 
       <Modal visible={deleting} transparent animationType="fade" onRequestClose={() => {}}>
@@ -274,6 +281,12 @@ export default function AccountScreen() {
       </Modal>
     </Screen>
   );
+}
+
+function appVersionLabel(): string {
+  const base = `BeeLand ${Application.nativeApplicationVersion ?? "—"}`;
+  if (!Updates.isEnabled) return base;
+  return `${base} · ${shortBundleId(Updates.updateId, Updates.isEmbeddedLaunch)}`;
 }
 
 function RowIcon({ icon: Icon, danger }: { icon: typeof User; danger?: boolean }) {

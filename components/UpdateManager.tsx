@@ -1,19 +1,28 @@
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Linking,
   Platform,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import * as SplashScreen from "expo-splash-screen";
 import * as Updates from "expo-updates";
 import * as Application from "expo-application";
 import { UserService } from "../sevices/UserService";
+import { progressPercent, runOtaUpdate } from "@/lib/otaUpdate";
+import { OtaUpdateScreen } from "./OtaUpdateScreen";
 
+/**
+ * Khi mở app:
+ * 1. OTA (EAS Update): có bản JS mới → màn "đang cập nhật dữ liệu mới" (bắt buộc, không bỏ qua), tải xong tự reload.
+ *    Offline / máy chủ lỗi → vào app bằng bản đang có. Chi tiết: docs/ota-update.md.
+ * 2. Bản Store: máy chủ báo version native mới hơn → hộp "PHIÊN BẢN MỚI" mở link Store.
+ */
 export default function UpdateManager() {
   const [updating, setUpdating] = useState(false);
   const [visible, setVisible] = useState(false);
+  const { downloadProgress } = Updates.useUpdates();
 
   useEffect(() => {
     (async () => {
@@ -23,15 +32,18 @@ export default function UpdateManager() {
   }, []);
 
   const checkExpoUpdate = async () => {
-    try {
-      await new Promise((res) => setTimeout(res, 1000));
-      const update = await Updates.checkForUpdateAsync();
-      if (update.isAvailable) {
+    if (__DEV__ || !Updates.isEnabled) return;
+    const result = await runOtaUpdate({
+      check: Updates.checkForUpdateAsync,
+      fetch: Updates.fetchUpdateAsync,
+      reload: Updates.reloadAsync,
+      onUpdating: () => {
         setUpdating(true);
-        await Updates.fetchUpdateAsync();
-        await Updates.reloadAsync();
-      }
-    } catch {}
+        // Màn chờ phải hiện ngay, không nằm sau splash.
+        void SplashScreen.hideAsync();
+      },
+    });
+    if (result === "error") setUpdating(false);
   };
 
   const checkStoreVersion = async () => {
@@ -40,7 +52,7 @@ export default function UpdateManager() {
       // console.log("checkStoreVersion", res);
       const currentVersion = Number(Application.nativeApplicationVersion);
       // console.log("currentVersion", currentVersion);
-      
+
       const serverVersion =
         Platform.OS === "ios"
           ? Number(res?.data?.VesionIOS)
@@ -55,36 +67,12 @@ export default function UpdateManager() {
     const res = await UserService.checkVersion();
     const url =
       Platform.OS === "ios" ? res?.data?.linkIOS : res?.data?.linkAndroid;
-    Linking.openURL(url);
+    if (url) Linking.openURL(url);
     setVisible(false);
   };
 
   if (updating) {
-    return (
-      <View
-        style={{
-          position: "absolute",
-          inset: 0,
-          justifyContent: "center",
-          alignItems: "center",
-          backgroundColor: "rgba(0,0,0,0.4)",
-          zIndex: 99999,
-        }}
-      >
-        <View
-          style={{
-            width: 250,
-            padding: 20,
-            backgroundColor: "#fff",
-            borderRadius: 12,
-            alignItems: "center",
-          }}
-        >
-          <ActivityIndicator size="large" />
-          <Text style={{ marginTop: 10 }}>Đang cập nhật phiên bản mới...</Text>
-        </View>
-      </View>
-    );
+    return <OtaUpdateScreen percent={progressPercent(downloadProgress)} />;
   }
 
   if (!visible) return null;

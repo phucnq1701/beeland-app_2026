@@ -15,7 +15,7 @@ thu tiền booking qua QR, theo dõi khách hàng, đặt cọc, hợp đồng, 
 |---|---|
 | Chạy (thiết bị / tunnel) | `npx expo start --tunnel` · web: `npx expo start --web` |
 | Test (node:test) | `node --test tests/` |
-| Kiểu | `npx tsc --noEmit` (còn 4 lỗi cũ ở `components/UpdateManager.tsx`) |
+| Kiểu | `npx tsc --noEmit` (sạch) |
 | Lint | `npx expo lint` (còn 2 lỗi cũ ở `app/receipts.tsx` – màn mẫu) |
 | Kiểm bundle | `npx expo export --platform ios --output-dir .expo/export-check` (xong xoá thư mục) |
 | Build / OTA | `eas build …`, `eas update …` – **chỉ chạy khi người dùng yêu cầu rõ** |
@@ -61,6 +61,7 @@ Test: `tests/*.test.cjs`, nạp TS bằng `tests/helpers/loadTs.cjs` (file thu�
 | Phiếu tính giá (lập / sửa / duyệt / PDF, công thức chiết khấu, lịch thanh toán) | `docs/price-sheets.md` |
 | Tài liệu / ảnh / video dự án | `docs/media.md` |
 | Token, component UI, quy tắc màn danh sách, lint | `docs/design-system.md` |
+| Cập nhật OTA khi mở app (màn "đang cập nhật dữ liệu mới"), mã bản, đẩy / rollback bản | `docs/ota-update.md` |
 | Lịch sử redesign, quyết định D1–D11, mâu thuẫn web (0.2) | `docs/superpowers/specs/2026-09-30-ui-redesign-design.md` |
 
 ## Cấu trúc thư mục

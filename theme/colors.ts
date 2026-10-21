@@ -65,6 +65,8 @@ export const colors = {
     /** Nút kính mờ đặt trên ảnh (navy trong – đọc được cả trên ảnh sáng). */
     glass: 'rgba(22, 35, 59, 0.35)',
     glassBorder: 'rgba(255, 255, 255, 0.3)',
+    /** Rãnh thanh tiến độ trên nền navy (màn "đang cập nhật dữ liệu mới"). */
+    track: 'rgba(255, 255, 255, 0.16)',
   },
 } as const;
 

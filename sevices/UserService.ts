@@ -2,6 +2,11 @@ import axios from "axios";
 import axiosApi from "./axiosApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+/** Phản hồi /api/app/get-version (tên field giữ nguyên theo API, kể cả lỗi chính tả "Vesion"). */
+export type StoreVersionResponse = {
+  data?: { VesionIOS?: string | number; VesionAndroid?: string | number; linkIOS?: string; linkAndroid?: string };
+};
+
 export const UserService = {
   getTransactions: async (payload: any = {}) => {
     const tenCTDKVT = (await AsyncStorage.getItem("tenCTDKVT")) || "beesky";
@@ -30,7 +35,7 @@ export const UserService = {
   //     })
   //     .then((res) => res.data);
   // },
-  async checkVersion(): Promise<null> {
+  async checkVersion(): Promise<StoreVersionResponse | null> {
     let response = await axios.post(
       `https://api-bms.beesky.vn/api/app/get-version`,
       { MaLoaiApp: 1 },
