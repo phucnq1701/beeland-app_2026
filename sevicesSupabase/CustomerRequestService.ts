@@ -12,7 +12,7 @@
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import axiosApiSupabase from "./axiosApiSupabase";
+import axiosApiSupabase, { API_URL } from "./axiosApiSupabase";
 import { uploadTenantFile } from "./BookingService";
 import { getCompanyId, getValidSupabaseJwt } from "./cloudTenant";
 import {
@@ -31,8 +31,6 @@ import {
   type YcCatalogType,
 } from "../lib/customerRequest";
 import { fileUrl, isImageFile, uid } from "../lib/signing";
-
-const API_URL = "https://api-beelandv2.beesky.vn";
 
 const errMsg = (e: any, fallback: string): string =>
   e?.response?.data?.message || e?.response?.data?.hint || (e instanceof Error && e.message) || fallback;

@@ -36,8 +36,10 @@ Lối vào: nút tròn **Tin nhắn** ở header Trang chủ (`HomeHeader`, ch�
   trước đó > 1 MB bị 413). iOS chọn ảnh: `preferredAssetRepresentationMode: Compatible` (HEIC → JPEG).
 - **Gửi lạc quan:** tin tạm `local-<client_msg_id>` hiện ngay; lỗi → "Chưa gửi được · Thử lại · Xoá" (gửi lại cùng
   `client_msg_id` → server không tạo trùng, tệp đã tải không tải lại).
-- **Realtime:** `@supabase/supabase-js` `RealtimeClient` (+ `react-native-url-polyfill`), kênh private `chat:u:<employee_id>`
-  (`setAuth(JWT)`), 5 sự kiện như web. Một kênh dùng chung (đếm tham chiếu `useChatSession`). Dự phòng: realtime chưa nối,
+- **Realtime:** hub SignalR `wss://api-beeland26.beesky.vn/api/realtime` (`sevicesSupabase/realtimeHub.ts`, giao thức như
+  web `realtimeShim.ts`: `Join` / `Leave` / `Broadcast`, nhận `broadcast`), kênh private `chat:u:<employee_id>` (JWT qua
+  `access_token`; `syncRealtimeAuth()` nối lại khi JWT đổi — thay `setAuth`), 5 sự kiện như web. Mỗi topic Join một lần
+  (đếm tham chiếu trong hub), tự nối lại + Join lại khi rớt mạng / JWT hết hạn. Một kênh dùng chung (đếm tham chiếu `useChatSession`). Dự phòng: realtime chưa nối,
   hoặc xem hội thoại chưa tham gia → làm mới 15 s khi màn đang mở; tab Khách hàng làm mới 30 s (hội thoại chưa tham gia
   không phát `chat:u`). Mở lại app → tải bù.
 - **Đã đọc:** đang mở + là thành viên + có tin mới → `fn_chat_mark_read`. "Đã xem" dưới tin cuối của mình = có người khác

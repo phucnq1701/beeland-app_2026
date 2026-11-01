@@ -2,7 +2,11 @@ import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getValidSupabaseJwt, isJwtExpired } from "./cloudTenant";
 
-const API_URL = "https://api-beelandv2.beesky.vn";
+/**
+ * API BEELAND (.NET + SQL Server từ 01/11/2026), nhận nguyên cú pháp Supabase (`rest/v1`, `functions/v1`, `storage/v1`);
+ * realtime là SignalR `/api/realtime` (`realtimeHub.ts`). Địa chỉ cũ `api-beelandv2.beesky.vn` chỉ còn chuyển tiếp tạm.
+ */
+export const API_URL = "https://api-beeland26.beesky.vn";
 
 export const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg3NTQ2ODQ0LCJleHAiOjE5NDUyMjY4NDR9.ftDz2g-LgHuMoXnFMzTtbIfgDodnntv5fGbbonqWYiw";

@@ -6,7 +6,8 @@ thu tiền booking qua QR, theo dõi khách hàng, đặt cọc, hợp đồng, 
 - **Stack:** Expo 54, React Native 0.81 (old arch), expo-router 6, TypeScript strict, lucide-react-native,
   TanStack Query (ít dùng), SignalR (`ChangeTable`), Supabase self-host qua REST/RPC (axios), một số màn còn gọi API .NET cũ.
 - **Web cùng workspace:** `../beeland` (React + Vite) – **chuẩn nghiệp vụ**.
-- **Server dữ liệu:** `https://api-beelandv2.beesky.vn` (cố định trong `sevicesSupabase/axiosApiSupabase.ts`, không có môi
+- **Server dữ liệu:** `https://api-beeland26.beesky.vn` – API .NET + SQL Server từ 01/11/2026, nhận nguyên cú pháp Supabase
+  (`API_URL` trong `sevicesSupabase/axiosApiSupabase.ts`; realtime SignalR `sevicesSupabase/realtimeHub.ts`; không có môi
   trường test riêng → mọi thao tác ghi là **dữ liệu thật**). API cũ: `https://api-beeland.beesky.vn` (`sevices/axiosApi.ts`).
 
 ## Lệnh

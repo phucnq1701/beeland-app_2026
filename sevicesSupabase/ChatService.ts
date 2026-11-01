@@ -1,22 +1,20 @@
 import "react-native-url-polyfill/auto";
 
-import { RealtimeClient, type RealtimeChannel } from "@supabase/supabase-js";
-
 import type {
   ChatContact, ChatConversationDetail, ChatInboxPage, ChatMe, ChatMessage, ChatMessagesPage,
 } from "@/lib/chat";
 
-import axiosApiSupabase, { SUPABASE_ANON_KEY } from "./axiosApiSupabase";
+import axiosApiSupabase, { API_URL, SUPABASE_ANON_KEY } from "./axiosApiSupabase";
 import { getValidSupabaseJwt } from "./cloudTenant";
+import { joinChannel, syncRealtimeAuth, type HubChannel } from "./realtimeHub";
 
 /**
  * Chat – CÙNG RPC với web (beeland/src/services/chat/ChatService.ts): `fn_chat_*` bằng JWT ứng dụng (claim employee_id),
  * trả `{data}` | `{error}`. Tệp: edge `chat-files` (JWT người dùng – KHÔNG dùng `@token` như interceptor axios gắn cho
  * functions/v1) → `upload_url` trả `{attachment_id, path, token}` → PUT lên link ký kho `chat-files`; `file_url` → link 5 phút.
- * Realtime: kênh private `chat:u:<employee_id>` (cần JWT trên websocket), 5 sự kiện như web.
+ * Realtime: kênh private `chat:u:<employee_id>` (cần JWT trên websocket), 5 sự kiện như web — hub SignalR `realtimeHub.ts`.
  */
 
-const API_URL = "https://api-beelandv2.beesky.vn";
 const SESSION_EXPIRED = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
 const URL_TTL_MS = 240_000;
 
@@ -155,33 +153,30 @@ export const CHAT_EVENT_NAMES = ["message_new", "message_updated", "conversation
 export type ChatEventName = (typeof CHAT_EVENT_NAMES)[number];
 export type ChatEvent = { event: ChatEventName; payload: any };
 
-let rt: RealtimeClient | null = null;
-function realtime(): RealtimeClient {
-  if (!rt) rt = new RealtimeClient(`${API_URL.replace(/^http/, "ws")}/realtime/v1`, { params: { apikey: SUPABASE_ANON_KEY } });
-  return rt;
-}
-
 /**
  * Nghe kênh cá nhân `chat:u:<employee_id>` (private, JWT). `onStatus(true)` khi đã nối; nối lại sau khi rớt → màn tải bù.
  * Trả hàm huỷ (an toàn cả khi gọi trước lúc kênh tạo xong).
  */
 export function subscribeChatUser(employeeId: string, onEvent: (e: ChatEvent) => void, onStatus: (live: boolean) => void): () => void {
-  let ch: RealtimeChannel | null = null;
+  let ch: HubChannel | null = null;
   let closed = false;
   void (async () => {
     const jwt = await getValidSupabaseJwt();
     if (!jwt || closed) return onStatus(false);
-    const client = realtime();
-    await client.setAuth(jwt);
+    await syncRealtimeAuth();
     if (closed) return;
-    let c = client.channel(`chat:u:${employeeId}`, { config: { private: true, broadcast: { self: false } } });
-    for (const name of CHAT_EVENT_NAMES) c = c.on("broadcast", { event: name }, (msg: { payload?: unknown }) => onEvent({ event: name, payload: msg?.payload ?? {} }));
-    ch = c;
-    c.subscribe((status) => onStatus(status === "SUBSCRIBED"));
+    ch = joinChannel(
+      `chat:u:${employeeId}`,
+      { private: true },
+      (event, payload) => {
+        if ((CHAT_EVENT_NAMES as readonly string[]).includes(event)) onEvent({ event: event as ChatEventName, payload: payload ?? {} });
+      },
+      onStatus,
+    );
   })().catch(() => onStatus(false));
   return () => {
     closed = true;
-    if (ch) void realtime().removeChannel(ch);
+    ch?.close();
     ch = null;
   };
 }
@@ -201,31 +196,24 @@ export function subscribeTyping(
   opts: { conversationId: string; meId: string; channelKey?: string | null },
   onTyping: (who: string) => void,
 ): { ping: () => void; close: () => void } {
-  let ch: RealtimeChannel | null = null;
+  let ch: HubChannel | null = null;
   let closed = false;
   let last = 0;
   void (async () => {
-    const client = realtime();
     if (opts.channelKey) {
-      const c = client.channel(`chatv:${opts.channelKey}`, { config: { broadcast: { self: false } } });
-      c.on("broadcast", { event: "typing" }, (msg: { payload?: { from?: string } }) => {
-        if (msg?.payload?.from === "visitor") onTyping("visitor");
+      ch = joinChannel(`chatv:${opts.channelKey}`, {}, (event, payload) => {
+        if (event === "typing" && payload?.from === "visitor") onTyping("visitor");
       });
-      ch = c;
-      c.subscribe();
       return;
     }
     const jwt = await getValidSupabaseJwt();
     if (!jwt || closed) return;
-    await client.setAuth(jwt);
+    await syncRealtimeAuth();
     if (closed) return;
-    const c = client.channel(`chat:c:${opts.conversationId}`, { config: { private: true, broadcast: { self: false } } });
-    c.on("broadcast", { event: "typing" }, (msg: { payload?: { employee_id?: string } }) => {
-      const who = msg?.payload?.employee_id;
-      if (who && who !== opts.meId) onTyping(who);
+    ch = joinChannel(`chat:c:${opts.conversationId}`, { private: true }, (event, payload) => {
+      const who = payload?.employee_id;
+      if (event === "typing" && who && who !== opts.meId) onTyping(who);
     });
-    ch = c;
-    c.subscribe();
   })().catch(() => undefined);
   return {
     ping() {
@@ -233,11 +221,11 @@ export function subscribeTyping(
       if (!ch || now - last < TYPING_GAP_MS) return;
       last = now;
       const payload = opts.channelKey ? { t: "typing", from: "agent" } : { employee_id: opts.meId };
-      void ch.send({ type: "broadcast", event: "typing", payload });
+      ch.send("typing", payload);
     },
     close() {
       closed = true;
-      if (ch) void realtime().removeChannel(ch);
+      ch?.close();
       ch = null;
     },
   };

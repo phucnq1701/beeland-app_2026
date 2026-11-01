@@ -4,9 +4,12 @@
 
 | Nguồn | Client | Base URL | Dùng cho |
 |---|---|---|---|
-| Supabase self-host | `sevicesSupabase/axiosApiSupabase.ts` | `https://api-beelandv2.beesky.vn` (`rest/v1/…`, `rest/v1/rpc/…`, `functions/v1/…`) | Gần như toàn app |
+| API BEELAND (.NET, cú pháp Supabase) | `sevicesSupabase/axiosApiSupabase.ts` (`API_URL`) | `https://api-beeland26.beesky.vn` (`rest/v1/…`, `rest/v1/rpc/…`, `functions/v1/…`, `storage/v1/…`; realtime SignalR `/api/realtime`) | Gần như toàn app |
 | API .NET cũ | `sevices/axiosApi.ts` (và `sevicesSupabase/axiosApi.ts`) | `https://api-beeland.beesky.vn/` | Quên/đặt lại mật khẩu, thông báo, video dự án, lịch hẹn (đang ẩn), kiểm tra phiên bản, SignalR |
 
+- 01/11/2026 BEELAND chuyển từ Supabase sang API .NET + SQL Server (`api-beeland26`), giữ nguyên đường dẫn / body / lỗi
+  kiểu PostgREST. Địa chỉ cũ `api-beelandv2.beesky.vn` chỉ chuyển tiếp tạm (không có realtime). Không còn Supabase Auth /
+  Realtime / GraphQL; URL ký kho tệp mới dạng `…/api/storage/local/…` — dùng nguyên URL, không tự ghép.
 - Web đã chạy **Cloud-only**: `cloud_global_settings.legacy_api_mode = {"mode":"off"}` (đọc ngày 01/10/2026, cập nhật
   22/08/2026). Các màn app còn gọi API cũ (bảng trên) **chưa kiểm chứng** còn hoạt động.
 - Không có môi trường test riêng: mọi thao tác ghi đi vào dữ liệu thật.
