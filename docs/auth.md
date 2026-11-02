@@ -29,6 +29,8 @@
   `message`. Lỗi mạng mới ném (axios).
 - **Không còn "Nhớ mật khẩu"** (bỏ 2026-11-02, bản 10.7): bản ≤ 10.6 lưu `@remember_login` gồm mật khẩu dạng chữ.
   `purgeLegacyRememberedLogin()` (gọi trong `app/_layout.tsx` lúc mở app) chép tài khoản sang `@last_login` rồi xoá khoá cũ.
+  `loadLastLogin()` đọc cả `@remember_login` khi chưa có `@last_login` — màn Đăng nhập chạy song song với `_layout`, có thể
+  đọc trước khi chép xong (lỗi bắt được khi chạy thử 2026-11-02: lần mở đầu sau cập nhật không điền sẵn).
 
 ## Đăng nhập bằng Face ID / vân tay (bản 10.7)
 
@@ -47,7 +49,8 @@ Tính năng riêng của app (web không có). Code: `lib/biometric.ts` (Keychai
   (`@biometric_declined`) → `confirm()` "Bật". Đang bật cho **tài khoản khác** → xoá cái cũ trước. iOS: quét xác nhận
   rồi mới ghi (ghi không tự hỏi); Android: ghi Keystore tự bật hộp quét.
 - **Màn Đăng nhập:** nút "Đăng nhập bằng Face ID" (bấm mới quét, không tự quét) + dòng `Nội bộ · mã công ty · ngu***`.
-  Quét → đọc mật khẩu → `signIn` như đăng nhập thường (không hỏi bật lại).
+  Quét → đọc mật khẩu → `signIn` như đăng nhập thường (không hỏi bật lại). Bật xong mà vẫn ở màn này (đăng nhập bị chặn)
+  → cập nhật state để nút hiện ngay.
   - Huỷ quét → im lặng. Sai quá nhiều (lockout) → toast, giữ tính năng.
   - Đọc ra `null` (sinh trắc học trên máy đã đổi) → tắt + toast "đăng nhập bằng mật khẩu rồi bật lại".
   - Máy chủ từ chối (thường do **đổi mật khẩu trên web**) → tắt + toast `message`. Lỗi mạng → giữ.

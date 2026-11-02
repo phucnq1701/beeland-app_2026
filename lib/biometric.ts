@@ -147,16 +147,20 @@ export async function saveLastLogin(account: LoginAccount): Promise<void> {
   await AsyncStorage.setItem(LAST_LOGIN_KEY, JSON.stringify(account)).catch(() => undefined);
 }
 
-/** Tài khoản gần nhất; máy lên từ bản cũ chưa có thì dựng lại từ khoá phiên (`accountFromScope`). */
+/**
+ * Tài khoản gần nhất. Máy lên từ bản cũ: đọc cả `@remember_login` (màn Đăng nhập có thể đọc trước khi
+ * `purgeLegacyRememberedLogin` ở `_layout` chép xong), rồi dựng lại từ khoá phiên (`accountFromScope`).
+ */
 export async function loadLastLogin(): Promise<LoginAccount | null> {
   try {
-    const [[, last], [, scope], [, company], [, type]] = await AsyncStorage.multiGet([
+    const [[, last], [, legacy], [, scope], [, company], [, type]] = await AsyncStorage.multiGet([
       LAST_LOGIN_KEY,
+      LEGACY_REMEMBER_KEY,
       ACCOUNT_SCOPE_KEY,
       "tenCTDKVT",
       "@type_account",
     ]);
-    return parseAccount(last) ?? accountFromScope(scope, company, type);
+    return parseAccount(last) ?? legacyRememberedAccount(legacy) ?? accountFromScope(scope, company, type);
   } catch {
     return null;
   }

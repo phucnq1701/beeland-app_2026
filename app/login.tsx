@@ -227,7 +227,10 @@ export default function LoginScreen() {
   const offerBiometric = async (account: LoginAccount, pwd: string) => {
     const current = await getBiometricAccount();
     if (current && sameAccount(current, account)) return;
-    if (current) await disableBiometricLogin();
+    if (current) {
+      await disableBiometricLogin();
+      setBiometricAccount(null);
+    }
     const support = biometric ?? (await getBiometricSupport());
     if (!support || (await wasBiometricDeclined(account))) return;
     const accepted = await confirm({
@@ -242,6 +245,9 @@ export default function LoginScreen() {
     }
     try {
       await enableBiometricLogin({ ...account, password: pwd }, support);
+      // Đăng nhập bị chặn sau đó (thiếu tenant…) thì vẫn ở màn này → hiện nút Face ID ngay.
+      setBiometric(support);
+      setBiometricAccount(account);
       toast.show({ type: "success", message: `Đã bật đăng nhập bằng ${support.label}` });
     } catch (error) {
       if (error instanceof BiometricError && error.kind === "cancel") return;
