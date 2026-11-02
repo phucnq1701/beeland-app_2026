@@ -29,7 +29,8 @@ Chỉ người dùng tự chạy (CLAUDE.md quy tắc 6). Bản đẩy lên ch�
 
 | Version native (`app.json` › `version`) | Nhận bản OTA |
 |---|---|
-| 10.6 (hiện tại) | `npm run update` khi `app.json` đang là 10.6 |
+| 10.7 (hiện tại – TestFlight build 22, có Face ID) | `npm run update` khi `app.json` đang là 10.7 |
+| 10.6 (bản trên App Store) | Đổi `version` về 10.6 rồi đẩy riêng – lưu ý JS mới cần thư viện Face ID nên **không** đẩy code Face ID lên 10.6 |
 | Bản cũ hơn trên máy khách | Phải đổi `version` về đúng số đó rồi đẩy riêng, hoặc chờ khách lên Store |
 
 Build native mới với version mới → OTA sau đó chỉ tới máy có version mới.
