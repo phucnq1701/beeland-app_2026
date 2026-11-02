@@ -54,7 +54,7 @@ type SignInResult = { status: "ok" } | { status: "rejected"; message: string } |
 
 const NETWORK_ERROR = "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-/** "Nội bộ · brg · adm***" – tài khoản sẽ đăng nhập bằng Face ID. */
+/** "Nội bộ · brg · adm***" – tài khoản sẽ đăng nhập bằng Face ID (nhãn trợ năng của nút tròn). */
 const biometricCaption = (a: LoginAccount) =>
   `${a.loginType === "AGENCY" ? "Đại lý" : "Nội bộ"} · ${a.companyCode} · ${maskUsername(a.username)}`;
 /** = `Button size="lg"` (minHeight 52) để nút Face ID tròn cao bằng nút Đăng nhập. */
@@ -514,11 +514,7 @@ export default function LoginScreen() {
             />
           </View>
 
-          <View style={styles.row}>
-            <Button title="Quên mật khẩu?" variant="ghost" onPress={() => router.push("/forgot-password")} />
-          </View>
-
-          {/* Face ID: nút tròn cùng hàng, bên phải nút Đăng nhập (màu như Button secondary). */}
+          {/* Bố cục người dùng chốt 2026-11-02: [Đăng nhập][◯ Face ID] rồi "Quên mật khẩu?" căn trái bên dưới. */}
           <View style={styles.loginRow}>
             <Button
               title="Đăng nhập"
@@ -544,11 +540,14 @@ export default function LoginScreen() {
               </Pressable>
             ) : null}
           </View>
-          {biometric && biometricAccount ? (
-            <Text variant="caption" color="textSecondary" align="center" numberOfLines={1} style={styles.biometricCaption}>
-              {capitalize(biometric.label)} · {biometricCaption(biometricAccount)}
-            </Text>
-          ) : null}
+          <View style={styles.row}>
+            <Button
+              title="Quên mật khẩu?"
+              variant="ghost"
+              onPress={() => router.push("/forgot-password")}
+              style={styles.forgot}
+            />
+          </View>
         </View>
       </ScrollView>
     </Screen>
@@ -570,7 +569,9 @@ const styles = StyleSheet.create({
     ...elevation.soft,
   },
   pill: { borderRadius: radius.full },
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginTop: -space.xs },
+  row: { flexDirection: "row", alignItems: "center", justifyContent: "flex-start", marginTop: -space.sm },
+  // Chữ thẳng mép trái với nút Đăng nhập (ghost có padding ngang).
+  forgot: { paddingHorizontal: 0 },
   loginRow: { flexDirection: "row", alignItems: "center", gap: space.md },
   // Cùng màu Button `secondary` (nền trắng, viền borderStrong, icon inverse), tròn, cao bằng nút lg.
   biometricButton: {
@@ -584,5 +585,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   biometricButtonPressed: { backgroundColor: colors.surfaceMuted },
-  biometricCaption: { marginTop: -space.sm },
 });
