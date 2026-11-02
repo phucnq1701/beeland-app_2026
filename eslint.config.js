@@ -16,6 +16,8 @@ const UI_STRICT_FILES = [
   'app/(tabs)/_layout.tsx',
   'app/(tabs)/home.tsx',
   'app/(tabs)/account.tsx',
+  'components/account/**/*.{ts,tsx}',
+  'app/login.tsx',
   'app/all-management.tsx',
   'app/profile.tsx',
   'components/home/**/*.{ts,tsx}',

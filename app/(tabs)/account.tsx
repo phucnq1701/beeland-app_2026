@@ -7,6 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Application from "expo-application";
 import * as Updates from "expo-updates";
 
+import { BiometricLoginSetting } from "@/components/account/BiometricLoginSetting";
 import { chatAuthChanged, unregisterChatPush } from "@/components/chat/chatPush";
 import { FeatureGrid } from "@/components/home/FeatureGrid";
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
@@ -21,6 +22,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { MENU_TAB_FEATURE_IDS } from "@/components/utils/menuTabs";
+import { disableBiometricLogin } from "@/lib/biometric";
 import { routeForFeature, visibleFeatureIds } from "@/lib/featureConfig";
 import { shortBundleId } from "@/lib/otaUpdate";
 import { features } from "@/mocks/features";
@@ -100,6 +102,7 @@ export default function AccountScreen() {
       }
       await unregisterChatPush();
       chatAuthChanged(false);
+      await disableBiometricLogin();
       await clearDeletedEmployeeSession(deletedSession.current);
       queryClient.clear();
       if (router.canDismiss()) router.dismissAll();
@@ -243,6 +246,7 @@ export default function AccountScreen() {
                 onPress={() => router.push("/all-management")}
               />
             </View>
+            {settingsDisabled ? null : <BiometricLoginSetting style={styles.divider} />}
             <View pointerEvents={deleting ? "none" : "auto"} style={styles.divider}>
               <ListItem
                 leading={<RowIcon icon={Trash2} danger />}

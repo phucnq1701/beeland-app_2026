@@ -12,6 +12,7 @@ import { ChatNotifier } from "@/components/chat/ChatNotifier";
 import { FontStatusProvider } from "@/components/ui/FontStatus";
 import { ToastProvider } from "@/components/ui/Toast";
 import { applyWebFont } from "@/constants/webFont";
+import { purgeLegacyRememberedLogin } from "@/lib/biometric";
 import { fonts } from "@/theme";
 SplashScreen.preventAutoHideAsync();
 applyWebFont();
@@ -80,6 +81,8 @@ export default function RootLayout() {
       } catch (error) {
         console.log('[RootLayout] AsyncStorage check error:', error instanceof Error ? error.message : String(error));
       }
+      // Bản cũ lưu mật khẩu dạng chữ ("Nhớ mật khẩu") → xoá, chỉ giữ tài khoản để điền sẵn.
+      await purgeLegacyRememberedLogin();
       setStorageChecked(true);
     };
     initApp();

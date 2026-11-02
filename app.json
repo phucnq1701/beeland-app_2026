@@ -2,7 +2,7 @@
   "expo": {
     "name": "BeeLand App",
     "slug": "beeland-app",
-    "version": "10.6",
+    "version": "10.7",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
@@ -103,6 +103,18 @@
         {
           "color": "#E86F25",
           "defaultChannel": "chat"
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Cho phép $(PRODUCT_NAME) dùng Face ID để đăng nhập nhanh."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Cho phép $(PRODUCT_NAME) dùng Face ID để đăng nhập nhanh."
         }
       ]
     ],
