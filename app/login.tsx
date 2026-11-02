@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Keyboard,
@@ -53,6 +54,11 @@ type SignInResult = { status: "ok" } | { status: "rejected"; message: string } |
 
 const NETWORK_ERROR = "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** "Nội bộ · brg · adm***" – tài khoản sẽ đăng nhập bằng Face ID. */
+const biometricCaption = (a: LoginAccount) =>
+  `${a.loginType === "AGENCY" ? "Đại lý" : "Nội bộ"} · ${a.companyCode} · ${maskUsername(a.username)}`;
+/** = `Button size="lg"` (minHeight 52) để nút Face ID tròn cao bằng nút Đăng nhập. */
+const LG_BUTTON_HEIGHT = 52;
 
 /**
  * Đăng nhập (nội bộ / đại lý) bằng mật khẩu hoặc Face ID / vân tay (`lib/biometric.ts`, docs/auth.md).
@@ -512,24 +518,36 @@ export default function LoginScreen() {
             <Button title="Quên mật khẩu?" variant="ghost" onPress={() => router.push("/forgot-password")} />
           </View>
 
-          <Button title="Đăng nhập" size="lg" loading={loading} onPress={() => void handleLogin()} style={styles.pill} />
-
-          {biometric && biometricAccount ? (
-            <View style={styles.biometric}>
-              <Button
-                title={`Đăng nhập bằng ${biometric.label}`}
-                variant="secondary"
-                size="lg"
-                icon={BiometricIcon}
-                loading={biometricLoading}
+          {/* Face ID: nút tròn cùng hàng, bên phải nút Đăng nhập (màu như Button secondary). */}
+          <View style={styles.loginRow}>
+            <Button
+              title="Đăng nhập"
+              size="lg"
+              loading={loading}
+              onPress={() => void handleLogin()}
+              style={[styles.pill, styles.flex]}
+            />
+            {biometric && biometricAccount ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Đăng nhập bằng ${biometric.label}, ${biometricCaption(biometricAccount)}`}
+                accessibilityState={{ busy: biometricLoading }}
+                disabled={biometricLoading}
                 onPress={() => void handleBiometricLogin()}
-                style={styles.pill}
-              />
-              <Text variant="caption" color="textSecondary" align="center" numberOfLines={1}>
-                {biometricAccount.loginType === "AGENCY" ? "Đại lý" : "Nội bộ"} · {biometricAccount.companyCode} ·{" "}
-                {maskUsername(biometricAccount.username)}
-              </Text>
-            </View>
+                style={({ pressed }) => [styles.biometricButton, pressed ? styles.biometricButtonPressed : null]}
+              >
+                {biometricLoading ? (
+                  <ActivityIndicator size="small" color={colors.inverse} />
+                ) : (
+                  <BiometricIcon size={24} color={colors.inverse} strokeWidth={2} />
+                )}
+              </Pressable>
+            ) : null}
+          </View>
+          {biometric && biometricAccount ? (
+            <Text variant="caption" color="textSecondary" align="center" numberOfLines={1} style={styles.biometricCaption}>
+              {capitalize(biometric.label)} · {biometricCaption(biometricAccount)}
+            </Text>
           ) : null}
         </View>
       </ScrollView>
@@ -553,5 +571,18 @@ const styles = StyleSheet.create({
   },
   pill: { borderRadius: radius.full },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginTop: -space.xs },
-  biometric: { gap: space.sm },
+  loginRow: { flexDirection: "row", alignItems: "center", gap: space.md },
+  // Cùng màu Button `secondary` (nền trắng, viền borderStrong, icon inverse), tròn, cao bằng nút lg.
+  biometricButton: {
+    width: LG_BUTTON_HEIGHT,
+    height: LG_BUTTON_HEIGHT,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  biometricButtonPressed: { backgroundColor: colors.surfaceMuted },
+  biometricCaption: { marginTop: -space.sm },
 });

@@ -48,7 +48,8 @@ Tính năng riêng của app (web không có). Code: `lib/biometric.ts` (Keychai
 - **Hỏi bật:** sau đăng nhập bằng mật khẩu thành công, nếu Face ID chưa bật cho tài khoản này và chưa từng chọn "Không"
   (`@biometric_declined`) → `confirm()` "Bật". Đang bật cho **tài khoản khác** → xoá cái cũ trước. iOS: quét xác nhận
   rồi mới ghi (ghi không tự hỏi); Android: ghi Keystore tự bật hộp quét.
-- **Màn Đăng nhập:** nút "Đăng nhập bằng Face ID" (bấm mới quét, không tự quét) + dòng `Nội bộ · mã công ty · ngu***`.
+- **Màn Đăng nhập:** nút tròn icon Face ID / vân tay cùng hàng, bên phải nút "Đăng nhập" (cao 52 = Button lg, màu như
+  Button `secondary`; người dùng chốt bố cục 2026-11-02), bấm mới quét; dưới hàng nút: `Face ID · Nội bộ · mã công ty · ngu***`.
   Quét → đọc mật khẩu → `signIn` như đăng nhập thường (không hỏi bật lại). Bật xong mà vẫn ở màn này (đăng nhập bị chặn)
   → cập nhật state để nút hiện ngay.
   - Huỷ quét → im lặng. Sai quá nhiều (lockout) → toast, giữ tính năng.
