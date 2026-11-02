@@ -1,5 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+
+import { SESSION_KEYS } from "@/lib/sessionKeys";
+
 import axiosApiSupabase, { SUPABASE_ANON_KEY } from "./axiosApiSupabase";
 import { decodeJwtPayload, isJwtExpired, isUuidLike, looksLikeJwt } from "./cloudTenant";
 
@@ -7,12 +10,6 @@ export interface DeletedEmployeeSession {
   jwt: string;
   token: string | null;
 }
-
-const SESSION_KEYS = [
-  "@token", "@supabase_jwt", "@cloud_profile", "@company_id", "@tenant_id",
-  "@cloud_company_id", "@employee_id", "@user_company_id", "@branch_id",
-  "@ma_nv", "@type_account", "@company_code", "maCTDK_UUID", "maCTDK", "tenCTDKVT",
-];
 
 async function assertSameSession(session: DeletedEmployeeSession, allowPartiallyCleared = false): Promise<void> {
   const jwt = await AsyncStorage.getItem("@supabase_jwt");

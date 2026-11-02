@@ -61,6 +61,12 @@ Tính năng riêng của app (web không có). Code: `lib/biometric.ts` (Keychai
 - **Đăng xuất:** giữ (để lần sau dùng Face ID). **Xoá tài khoản:** xoá.
 
 - Phiên: JWT không tự làm mới. Trang chủ kiểm tra lúc mở: không có token/JWT hoặc JWT hết hạn → `/login`.
+- **Đăng xuất** (`account.tsx handleLogout`, 2026-11-02): gỡ push (`unregisterChatPush`, cần JWT cũ) →
+  `logoutCurrentSession()` (`sevicesSupabase/LogoutService.ts`, giống web `signOutCloudSession`: cloud-auth
+  `{ action: "logout", token: @token }` huỷ phiên trên máy chủ – lỗi mạng bỏ qua – rồi xoá `SESSION_KEYS` của
+  `lib/sessionKeys.ts`) → `queryClient.clear()` → `dismissAll` + `router.replace("/login")`. Giữ `@last_login`,
+  `@account_scope`, `@home_features_config`, Face ID. Trước bản này đăng xuất chỉ `router.push("/login")` (không xoá
+  token) → tắt app mở lại vẫn vào thẳng Trang chủ, vuốt lùi quay lại được app.
 - Hồ sơ: `CloudProfileService.userInfo()` đọc claim JWT + cache `@cloud_profile`, không gọi máy chủ.
 - Xoá tài khoản: `AccountDeletionService.deleteCurrentEmployee` → `DELETE rest/v1/dm_employees` (dòng của chính NV),
   hỏi `confirm()` trước.

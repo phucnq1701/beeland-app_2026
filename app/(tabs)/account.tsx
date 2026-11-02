@@ -28,6 +28,7 @@ import { shortBundleId } from "@/lib/otaUpdate";
 import { features } from "@/mocks/features";
 import { colors, elevation, radius, space } from "@/theme";
 import { CloudProfileService, CloudProfile } from "@/sevicesSupabase/CloudProfileService";
+import { logoutCurrentSession } from "@/sevicesSupabase/LogoutService";
 import {
   deleteCurrentEmployee,
   clearDeletedEmployeeSession,
@@ -48,6 +49,7 @@ export default function AccountScreen() {
   const [retry, setRetry] = useState(0);
   const queryClient = useQueryClient();
   const [deleting, setDeleting] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [employeeDeleted, setEmployeeDeleted] = useState(false);
   const deleteBusy = useRef(false);
   const confirmationOpen = useRef(false);
@@ -55,17 +57,29 @@ export default function AccountScreen() {
   // Chặn bấm "Đăng xuất" 2 lần làm mở 2 màn đăng nhập chồng nhau
   const loggingOut = useRef(false);
 
-  const handleLogout = () => {
+  /**
+   * Đăng xuất thật (docs/auth.md): gỡ push (cần JWT cũ) → huỷ phiên cloud-auth + xoá phiên trên máy
+   * (`logoutCurrentSession`) → xoá cache dữ liệu → thay hẳn bằng màn Đăng nhập (vuốt lùi không quay lại app).
+   * Trước 2026-11-02 chỉ `router.push("/login")` nên tắt app mở lại vẫn vào thẳng Trang chủ.
+   */
+  const handleLogout = async () => {
     if (deleteBusy.current || loggingOut.current) return;
     if (deletedSession.current) {
       void performDeleteAccount();
       return;
     }
     loggingOut.current = true;
-    // Gỡ máy khỏi push của tài khoản này (JWT cũ còn) rồi ngắt banner tin nhắn.
-    void unregisterChatPush();
-    chatAuthChanged(false);
-    router.push("/login");
+    setSigningOut(true);
+    try {
+      await unregisterChatPush().catch(() => undefined);
+      chatAuthChanged(false);
+      await logoutCurrentSession();
+      queryClient.clear();
+      if (router.canDismiss()) router.dismissAll();
+      router.replace("/login");
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   useFocusEffect(useCallback(() => {
@@ -262,8 +276,8 @@ export default function AccountScreen() {
           variant="secondary"
           icon={LogOut}
           title="Đăng xuất"
-          loading={deleting}
-          onPress={handleLogout}
+          loading={deleting || signingOut}
+          onPress={() => void handleLogout()}
           fullWidth
           style={styles.pill}
         />

@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const ts = require("typescript");
+const { loadTs } = require("./helpers/loadTs.cjs");
 
 const employee = "11111111-1111-4111-8111-111111111111";
 const tenant = "22222222-2222-4222-8222-222222222222";
@@ -75,6 +76,7 @@ function load({ payload = claims(), result = [{ id: employee }], error, batchFai
     axios: { default: api },
     "./axiosApiSupabase": { default: { defaults: { baseURL: "https://api.example.test" } }, SUPABASE_ANON_KEY: "anon-test" },
     "./cloudTenant": cloudTenant,
+    "@/lib/sessionKeys": loadTs("lib/sessionKeys.ts"),
   });
   return { ...service, storage, calls, setFailRemove: (value) => { failRemove = value; } };
 }
