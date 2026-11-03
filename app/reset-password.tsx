@@ -5,24 +5,25 @@ import { CheckCircle2, Circle, Eye, EyeOff } from "lucide-react-native";
 
 import { AppHeader, Button, Screen, Text, TextField, useToast } from "@/components/ui";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
+import { MAX_PASSWORD, MIN_PASSWORD, resetErrorMessage } from "@/lib/staffResetPassword";
 import { colors, space } from "@/theme";
-import { AuthService } from "@/sevices/AuthService";
+import { StaffResetPasswordService } from "@/sevicesSupabase/StaffResetPasswordService";
 
 /**
- * Quên mật khẩu – bước 3: đặt mật khẩu mới (payload giữ nguyên).
- * Sửa: trước đây báo "thành công" cả khi máy chủ trả status lỗi → nay báo lỗi khi status có và khác 200.
+ * Quên mật khẩu – bước 3: đặt mật khẩu mới bằng token một lần (`staff-reset-password` {action:"reset"}, hạn 15 phút).
+ * Máy chủ thu hồi mọi phiên đăng nhập của tài khoản → về màn đăng nhập.
  */
 export default function ResetPasswordScreen() {
   const router = useRouter();
   const toast = useToast();
-  const { companyCode, otp } = useLocalSearchParams<{ companyCode: string; email: string; otp: string }>();
+  const { resetToken } = useLocalSearchParams<{ resetToken: string }>();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const submitting = useRef(false);
 
-  const hasMinLength = password.length >= 6;
+  const hasMinLength = password.length >= MIN_PASSWORD && password.length <= MAX_PASSWORD;
   const hasMatch = password.length > 0 && password === confirmPassword;
   const isValid = hasMinLength && hasMatch;
 
@@ -31,26 +32,14 @@ export default function ResetPasswordScreen() {
     submitting.current = true;
     try {
       setLoading(true);
-      const res = await AuthService.resetPassword({
-        TenCTDK: companyCode,
-        Password: password,
-        PasswordRe: confirmPassword,
-        MaNV: Number(otp),
-      });
-      // API cũ không rõ dạng trả về khi thành công (màn cũ không kiểm) → chỉ coi là lỗi khi có status khác 200
-      if (res?.status == null || Number(res.status) === 200) {
-        hapticSuccess();
-        toast.show({ type: "success", message: "Đã đặt lại mật khẩu. Vui lòng đăng nhập lại." });
-        router.dismissAll();
-        router.replace("/login");
-      } else {
-        hapticError();
-        toast.show({ type: "error", message: res?.message || "Không thể đặt lại mật khẩu" });
-      }
-    } catch (error: any) {
-      console.log(error);
+      await StaffResetPasswordService.reset(resetToken ?? "", password);
+      hapticSuccess();
+      toast.show({ type: "success", message: "Đã đặt lại mật khẩu. Vui lòng đăng nhập lại." });
+      router.dismissAll();
+      router.replace("/login");
+    } catch (error) {
       hapticError();
-      toast.show({ type: "error", message: error?.response?.data?.message || "Không thể đặt lại mật khẩu" });
+      toast.show({ type: "error", message: resetErrorMessage(error, "Không thể đặt lại mật khẩu") });
     } finally {
       submitting.current = false;
       setLoading(false);
@@ -79,7 +68,7 @@ export default function ResetPasswordScreen() {
           required
         />
         <View style={styles.rules}>
-          <Rule ok={hasMinLength} text="Ít nhất 6 ký tự" />
+          <Rule ok={hasMinLength} text={`Ít nhất ${MIN_PASSWORD} ký tự`} />
           <Rule ok={hasMatch} text="Hai mật khẩu trùng nhau" />
         </View>
         <Button title="Đặt lại mật khẩu" size="lg" loading={loading} disabled={!isValid} onPress={() => void handleReset()} />

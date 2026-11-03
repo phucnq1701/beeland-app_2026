@@ -73,13 +73,22 @@ Tính năng riêng của app (web không có). Code: `lib/biometric.ts` (Keychai
 - Xoá tài khoản: `AccountDeletionService.deleteCurrentEmployee` → `DELETE rest/v1/dm_employees` (dòng của chính NV),
   hỏi `confirm()` trước.
 
-## Quên mật khẩu (API .NET cũ – `sevices/AuthService.ts`)
+## Quên mật khẩu – OTP email (`functions/v1/staff-reset-password`, từ 03/11/2026)
 
-| Bước | Endpoint | Thành công |
-|---|---|---|
-| Gửi OTP | `api/FogotPassword` (`TenCTDKVT`, `Email`) | `status === 200` |
-| Xác thực OTP | `api/admin/Staff/Authentication_OTP` (`TenCTDKVT`, `Email`, `OTP`) | `status === 200` |
-| Đặt lại | `api/admin/Staff/RestPassword` (`TenCTDK`, `Password`, `PasswordRe`, `MaNV: Number(otp)`) | báo lỗi chỉ khi có `status` khác 200 |
+Endpoint MỚI của API .NET (api-beeland-new nhánh `staff-reset-password`, `StaffResetPasswordService`) – web không có luồng
+tương ứng cho nhân viên (chỉ liên kết email cho đại lý). Áp cho mọi tài khoản đăng nhập `cloud_users` (Nội bộ + Đại lý).
+App: `sevicesSupabase/StaffResetPasswordService.ts`, `lib/staffResetPassword.ts` (test `tests/staff-reset-password.test.cjs`).
+
+| Bước | Màn | Gửi | Trả về |
+|---|---|---|---|
+| 1. Gửi mã | `app/forgot-password.tsx` (điền sẵn mã công ty + tài khoản từ màn đăng nhập) | `{action:"request", maCTDK, account}` | `{otpId, expiresIn: 600, resendAfter: 60}` – **cùng một dạng** dù tài khoản có email hay không |
+| 2. Nhập mã | `app/verify-otp.tsx` (một ô nhập ẩn + 6 ô hiển thị, tự điền mã iOS) | `{action:"verify", otpId, code}` | `{resetToken, expiresIn: 900}` |
+| 3. Mật khẩu mới | `app/reset-password.tsx` | `{action:"reset", resetToken, newPassword}` | `{success}` → về màn đăng nhập |
+
+- Lỗi: HTTP 400/500 `{error}` (axios ném) – đọc bằng `resetErrorMessage`; chờ gửi lại có `retryAfter` (`retryAfterOf`).
+- Máy chủ: mã 6 số hạn 10 phút, sai 5 lần huỷ mã; chờ 60 s, tối đa 5 lần / giờ theo mã công ty|tài khoản; email nhận =
+  email hồ sơ nhân viên, không có thì tên đăng nhập nếu là email. Đặt xong thu hồi mọi phiên đăng nhập.
+- Bản giả khi BE chưa triển khai: `EXPO_PUBLIC_STAFF_RESET_MOCK=1` (`mocks/staffResetPassword.ts`, mã đúng 123456).
 
 ## Bẫy / điểm dễ sai
 
@@ -92,6 +101,6 @@ Tính năng riêng của app (web không có). Code: `lib/biometric.ts` (Keychai
 
 ## Tồn đọng
 
-- Dạng trả về của `RestPassword` khi thành công **chưa kiểm chứng** (không màn web nào gọi endpoint này).
-- Các endpoint quên mật khẩu thuộc API cũ – còn hoạt động khi web đã Cloud-only hay không: **chưa kiểm chứng**.
+- Quên mật khẩu: endpoint `staff-reset-password` **chưa triển khai** lên api-beeland26 (03/11/2026) → gọi thật trả 404, app báo
+  "Không gửi được mã xác thực". Cần SMTP trên server API (DB chưa có cấu hình smtp) và email hồ sơ nhân viên (nhiều tài khoản chưa có).
 - Đăng ký: màn cũ báo thành công giả; hiện chỉ hướng dẫn liên hệ quản trị. Muốn có đăng ký thật cần API.

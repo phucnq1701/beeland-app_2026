@@ -5,7 +5,7 @@
 | Nguồn | Client | Base URL | Dùng cho |
 |---|---|---|---|
 | API BEELAND (.NET, cú pháp Supabase) | `sevicesSupabase/axiosApiSupabase.ts` (`API_URL`) | `https://api-beeland26.beesky.vn` (`rest/v1/…`, `rest/v1/rpc/…`, `functions/v1/…`, `storage/v1/…`; realtime SignalR `/api/realtime`) | Gần như toàn app |
-| API .NET cũ | `sevices/axiosApi.ts` | `https://api-beeland.beesky.vn/` | Chỉ còn: quên/đặt lại mật khẩu (`sevices/AuthService`, chờ endpoint mới – `docs/auth.md`), lịch hẹn (đang ẩn, `sevices/CongViecService` + `CustomerService`) |
+| API .NET cũ | `sevices/axiosApi.ts` | `https://api-beeland.beesky.vn/` | Chỉ còn lịch hẹn (đang ẩn, `sevices/CongViecService` + `CustomerService`). Quên mật khẩu đã chuyển sang `functions/v1/staff-reset-password` (`docs/auth.md`) |
 | Phiên bản app trên store | `sevicesSupabase/UserService.checkVersion` | `https://api-bms.beesky.vn/api/app/get-version` | Hệ thống quản lý phiên bản riêng, không phải dữ liệu BEELAND |
 
 - 01/11/2026 BEELAND chuyển từ Supabase sang API .NET + SQL Server (`api-beeland26`), giữ nguyên đường dẫn / body / lỗi

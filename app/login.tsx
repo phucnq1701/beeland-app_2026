@@ -544,7 +544,7 @@ export default function LoginScreen() {
             <Button
               title="Quên mật khẩu?"
               variant="ghost"
-              onPress={() => router.push("/forgot-password")}
+              onPress={() => router.push({ pathname: "/forgot-password", params: { companyCode: companyCode.trim(), account: username.trim() } })}
               style={styles.forgot}
             />
           </View>
