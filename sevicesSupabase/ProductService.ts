@@ -1,6 +1,4 @@
 import axiosApiSupabase from "./axiosApiSupabase";
-import axiosApi from "./axiosApi";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getCompanyId, getValidSupabaseJwt } from "./cloudTenant";
 import { orderByIds, productIdsFromRpc, productListRpcArgs } from "../lib/projectScope";
 
@@ -592,27 +590,5 @@ export const ProductService = {
       console.log("ERROR getSanGiaoDichAPI:", error);
       return { data: [] };
     }
-  },
-
-  /**
-   * Chi tiết giữ chỗ — giữ legacy API (workflow phức tạp).
-   */
-  getGiuCho: async (payload: any = {}) => {
-    const tenCTDKVT = (await AsyncStorage.getItem("tenCTDKVT")) || "beesky";
-    const dataInit = { TenCTDKVT: tenCTDKVT, ...payload };
-    return await axiosApi
-      .post("api/admin/giu-cho-chi-tiet", dataInit)
-      .then((res) => res.data);
-  },
-
-  /**
-   * Duyệt giữ chỗ — giữ legacy API (write operation).
-   */
-  postDuyet: async (payload: any = {}) => {
-    const tenCTDKVT = (await AsyncStorage.getItem("tenCTDKVT")) || "beesky";
-    const dataInit = { TenCTDKVT: tenCTDKVT, ...payload };
-    return await axiosApi
-      .post("api/admin/giu-cho/xuly", dataInit)
-      .then((res) => res.data);
   },
 };

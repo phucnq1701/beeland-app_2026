@@ -1,4 +1,3 @@
-import axiosApi from "./axiosApi";
 import axiosApiSupabase from "./axiosApiSupabase";
 import { listResult, pageWindow } from "../lib/listRpc";
 import {
@@ -900,9 +899,4 @@ export const CustomerService = {
 
   getAllContracts: async (payload: any = {}) => CustomerService.getHopDong(payload),
 
-  getQRCode: async (payload: any) => {
-    return await axiosApi
-      .post("https://api.vietqr.io/v2/generate", payload)
-      .then((res) => res.data);
-  },
 };

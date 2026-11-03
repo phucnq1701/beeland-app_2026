@@ -4,7 +4,8 @@ App bán hàng bất động sản cho **nhân viên kinh doanh nội bộ và �
 thu tiền booking qua QR, theo dõi khách hàng, đặt cọc, hợp đồng, báo cáo. Đăng nhập theo mã công ty (đa công ty).
 
 - **Stack:** Expo 54, React Native 0.81 (old arch), expo-router 6, TypeScript strict, lucide-react-native,
-  TanStack Query (ít dùng), SignalR (`ChangeTable`), Supabase self-host qua REST/RPC (axios), một số màn còn gọi API .NET cũ.
+  TanStack Query (ít dùng), realtime SignalR `/api/realtime` (`realtimeHub.ts`), REST/RPC cú pháp Supabase (axios); API .NET cũ
+  chỉ còn quên mật khẩu + lịch hẹn (đang ẩn).
 - **Web cùng workspace:** `../beeland` (React + Vite) – **chuẩn nghiệp vụ**.
 - **Server dữ liệu:** `https://api-beeland26.beesky.vn` – API .NET + SQL Server từ 01/11/2026, nhận nguyên cú pháp Supabase
   (`API_URL` trong `sevicesSupabase/axiosApiSupabase.ts`; realtime SignalR `sevicesSupabase/realtimeHub.ts`; không có môi
@@ -74,7 +75,7 @@ Test: `tests/*.test.cjs`, nạp TS bằng `tests/helpers/loadTs.cjs` (file thu�
 | `components/<module>/` | Khối dùng chung theo module (booking, product, customer, sales, reports, media, home, signing, request, chat) |
 | `lib/` | Logic thuần có test (trạng thái căn, giá, tiền, luật khách, định dạng…) |
 | `sevicesSupabase/` | Service gọi Supabase (REST/RPC/edge function) – nơi chính |
-| `sevices/` | Service gọi API .NET cũ – chỉ còn vài màn dùng (xem `docs/data-access.md`) |
+| `sevices/` | Service gọi API .NET cũ – chỉ còn quên mật khẩu + lịch hẹn (xem `docs/data-access.md`) |
 | `theme/` | Token màu, chữ, khoảng cách |
 | `mocks/` | Dữ liệu mẫu cho các màn chưa có API thật |
 | `tests/` | Test node:test |

@@ -8,10 +8,10 @@
 | Tệp trong thư mục (tìm kiếm máy chủ, chờ 500ms) | `app/documents/[folderId].tsx` | `DocumentService.getDetail` |
 | Xem tài liệu (PDF/Office/ảnh/TXT, WebView) | `app/documents/viewer.tsx` | `components/utils/documentLinks.ts` |
 | Thư viện ảnh (album) / ảnh trong album | `app/photo-gallery.tsx`, `app/photos/[folderId].tsx` | `DocumentService.get` (`GALLERY`) |
-| Thư mục video / video trong thư mục | `app/video/[projectId].tsx`, `app/videos/[folderId].tsx`, `app/videos/viewer.tsx` | **API cũ** `sevices/DocumentService.getFolderVideo` / `getDetailVideo` |
 | Khung chung (kiểu bo tròn: header/ô tìm/chip `soft`, mỗi thư mục / tệp là card bo `radius.xxl`, icon tệp trong vòng tròn nền nhạt theo loại, nút chia sẻ / › tròn) | `components/media/FolderListScreen.tsx`, `FileListScreen.tsx`, `lib/shareText.ts` | |
 
-Lối vào: chi tiết dự án (`app/project/[id].tsx`) → `/folders/${MaDA}`, `/photo-gallery?projectId=${MaDA}`, `/video/${MaDA}`.
+Lối vào: chi tiết dự án (`app/project/[id].tsx`) → `/folders/${MaDA}`, `/photo-gallery?projectId=${MaDA}`.
+Màn video (API cũ, không có lối vào) đã xoá 03/11/2026 – web không có thư viện video riêng, video là tệp trong Drive (`cloud_doc_*`).
 
 ## Bảng `cloud_doc_folders` / `cloud_doc_files` (đã kiểm chứng trong `sevicesSupabase/DocumentService.ts`)
 
@@ -43,5 +43,4 @@ Trình xem thêm mới phải dùng hook này cho đồng bộ.
 
 ## Tồn đọng
 
-- Video dùng API cũ (`api-beeland.beesky.vn`) – còn dữ liệu khi web Cloud-only hay không: **chưa kiểm chứng**.
 - Biểu mẫu (`form_id` 801 `FORMS` trên web) chưa có trên app.

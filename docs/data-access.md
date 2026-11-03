@@ -5,13 +5,21 @@
 | Nguồn | Client | Base URL | Dùng cho |
 |---|---|---|---|
 | API BEELAND (.NET, cú pháp Supabase) | `sevicesSupabase/axiosApiSupabase.ts` (`API_URL`) | `https://api-beeland26.beesky.vn` (`rest/v1/…`, `rest/v1/rpc/…`, `functions/v1/…`, `storage/v1/…`; realtime SignalR `/api/realtime`) | Gần như toàn app |
-| API .NET cũ | `sevices/axiosApi.ts` (và `sevicesSupabase/axiosApi.ts`) | `https://api-beeland.beesky.vn/` | Quên/đặt lại mật khẩu, thông báo, video dự án, lịch hẹn (đang ẩn), kiểm tra phiên bản, SignalR |
+| API .NET cũ | `sevices/axiosApi.ts` | `https://api-beeland.beesky.vn/` | Chỉ còn: quên/đặt lại mật khẩu (`sevices/AuthService`, chờ endpoint mới – `docs/auth.md`), lịch hẹn (đang ẩn, `sevices/CongViecService` + `CustomerService`) |
+| Phiên bản app trên store | `sevicesSupabase/UserService.checkVersion` | `https://api-bms.beesky.vn/api/app/get-version` | Hệ thống quản lý phiên bản riêng, không phải dữ liệu BEELAND |
 
 - 01/11/2026 BEELAND chuyển từ Supabase sang API .NET + SQL Server (`api-beeland26`), giữ nguyên đường dẫn / body / lỗi
   kiểu PostgREST. Địa chỉ cũ `api-beelandv2.beesky.vn` chỉ chuyển tiếp tạm (không có realtime). Không còn Supabase Auth /
   Realtime / GraphQL; URL ký kho tệp mới dạng `…/api/storage/local/…` — dùng nguyên URL, không tự ghép.
 - Web đã chạy **Cloud-only**: `cloud_global_settings.legacy_api_mode = {"mode":"off"}` (đọc ngày 01/10/2026, cập nhật
-  22/08/2026). Các màn app còn gọi API cũ (bảng trên) **chưa kiểm chứng** còn hoạt động.
+  22/08/2026). API cũ không nhận JWT `cloud-auth` (gọi thử không token → 401) và dữ liệu đã dừng từ khi chuyển Cloud.
+- 03/11/2026 đã chuyển khỏi API cũ: thông báo (`notifications`), realtime trạng thái căn (`bds_products` qua `/api/realtime`),
+  bỏ fallback API cũ của `FilterService.getStatusSP`; xoá màn video (không lối vào) và các service API cũ không dùng.
+- Realtime `sevicesSupabase/realtimeHub.ts`: `joinChannel` (broadcast, chat) và `subscribeTableChanges` (thay đổi bảng,
+  như `.on("postgres_changes")` của web – gửi kèm `Join`, nhận `postgres_changes(ref, ids, {eventType, new, old})`;
+  `old` chỉ có khoá chính). Server chỉ cho tài khoản đăng nhập, tự lọc công ty + RLS; 8 bảng được phát: `notifications`,
+  `av2_jobs`, `bds_products`, `cloud_pre_bookings`, `cloud_booking_extra_payments`, `cloud_pgc_phieu_giucho`,
+  `campaign_leads`, `email_inbox` (api-beeland-new `Realtime/RealtimeTables.cs`).
 - Không có môi trường test riêng: mọi thao tác ghi đi vào dữ liệu thật.
 
 ## Phiên và header (axiosApiSupabase)

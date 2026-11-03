@@ -1,4 +1,3 @@
-import axiosApi from "./axiosApi";
 import axiosApiSupabase from "./axiosApiSupabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getValidSupabaseJwt, getCompanyId } from "./cloudTenant";

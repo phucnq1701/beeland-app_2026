@@ -1,4 +1,3 @@
-import axiosApi from "./axiosApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axiosApiSupabase from "./axiosApiSupabase";
 import { listResult, mergeProjectPages, pageArgs } from "../lib/listRpc";
@@ -1446,42 +1445,6 @@ export const BookingService = {
     }
   },
 
-  // ===== API cũ giữ lại để các màn khác chưa migrate vẫn chạy =====
-  getLockList: async (payload: any = {}) => {
-    const dataInit = {
-      ...payload,
-    };
-    return await axiosApi
-      .post("api/admin/san-pham/danh-sach-lock-can", dataInit)
-      .then((res) => res.data);
-  },
-
-  getLockDetail: async (payload: any = {}) => {
-    const dataInit = {
-      ...payload,
-    };
-    return await axiosApi
-      .post("api/admin/lock-can-chi-tiet", dataInit)
-      .then((res) => res.data);
-  },
-
-  lockCan: async (payload: any = {}) => {
-    const dataInit = {
-      ...payload,
-    };
-    return await axiosApi
-      .post("api/admin/san-pham/lock-can", dataInit)
-      .then((res) => res.data);
-  },
-
-  addImageBooking: async (payload: any = {}) => {
-    const dataInit = {
-      ...payload,
-    };
-    return await axiosApi
-      .post("api/beeland/add-images-booking", dataInit)
-      .then((res) => res.data);
-  },
   /** Ảnh booking trên self-host; MaPGC là UUID vòng đời, không phải số phiếu. */
   getListImageGC: async (payload: { MaPGC?: string; maPGC?: string } = {}) => {
     if (!(await getValidSupabaseJwt())) {
