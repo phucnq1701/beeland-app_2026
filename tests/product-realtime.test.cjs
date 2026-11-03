@@ -84,6 +84,23 @@ test("applyRealtimeChange with a legacy numeric code and unknown unit", () => {
   assert.equal(miss.changedMaSP, null);
 });
 
+test("rowToRealtimeChange maps a bds_products row; applyRealtimeChange then matches the unit by MaSP", () => {
+  const row = { ma_sp: "p2", ma_tt: "u5", ma_khu: "K1", ma_tang: "T1", vi_tri: null, mau_nen: "" };
+  const ev = r.rowToRealtimeChange(row);
+  assert.deepEqual(plain(ev), { maSP: "p2", maTT: "u5", mauNen: null, data: { MaKhu: "K1", MaTang: "T1", MaVT: null } });
+  assert.equal(r.rowToRealtimeChange({ ma_tt: "u5" }), null);
+  // Thấp tầng: nhiều căn cùng tầng không có vị trí → chỉ đổi đúng căn theo MaSP
+  const g = [{ rawBlock: { maKhu: "K1", floor: [{ maTang: "T1", detailFloor: [
+    { MaSP: "p1", MaVT: null, MaTT: "u2" },
+    { MaSP: "p2", MaVT: null, MaTT: "u2" },
+  ] }] } }];
+  const { grid: after, changedMaSP } = r.applyRealtimeChange(g, ev, catalog);
+  assert.equal(changedMaSP, "p2");
+  assert.equal(after[0].rawBlock.floor[0].detailFloor[0].MaTT, "u2");
+  assert.equal(after[0].rawBlock.floor[0].detailFloor[1].MaTT, "u5");
+  assert.equal(after[0].rawBlock.floor[0].detailFloor[1].TenTT, "Đã đặt cọc");
+});
+
 test("compareUnitCode sorts naturally (A-2 before A-10)", () => {
   const codes = ["A-10", "A-2", "B-1", "A-02-b", "A-02-a", "", "A-1"];
   assert.deepEqual([...codes].sort(r.compareUnitCode), ["", "A-1", "A-2", "A-02-a", "A-02-b", "A-10", "B-1"]);

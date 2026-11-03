@@ -68,8 +68,7 @@ const UI_STRICT_FILES = [
   'app/folders/**/*.{ts,tsx}',
   'app/documents/[[]folderId].tsx',
   'app/photo-gallery.tsx',
-  'app/video/**/*.{ts,tsx}',
-  'app/videos/[[]folderId].tsx',
+  'app/notifications.tsx',
   'components/media/**/*.{ts,tsx}',
 ];
 

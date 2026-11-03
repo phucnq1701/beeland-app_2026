@@ -8,7 +8,7 @@
 | 2 tab động (nội dung theo cấu hình) | `app/(tabs)/feature-1.tsx`, `feature-2.tsx` → `components/FeatureTabScreen.tsx` |
 | Trang chủ | `app/(tabs)/home.tsx` + `components/home/*` |
 | Tất cả quản lý (chọn tính năng trang chủ / tab menu). Kiểu bo tròn: header/thanh chọn `soft`, danh sách đã chọn trong card bo `radius.xxl`, "Tất cả các mục" là `FeatureGrid columns={4} compact` (ô nhỏ 84, icon 40, chữ 12; ô thường ở trang chủ 92, icon 44, chữ 13 – cùng bo 20, khoảng cách 10) | `app/all-management.tsx` |
-| Thông báo (API cũ `api/admin/get-notifications`) | `app/notifications.tsx` |
+| Thông báo: bảng `notifications` như chuông web (`ModuleLayout.tsx`) – 50 tin mới nhất, lọc chung / công ty (mã `tenCTDKVT` chữ thường) / tài khoản (`ma_nv`); bấm = đã đọc, "Đánh dấu tất cả"; tự tải lại khi có INSERT (realtime) | `app/notifications.tsx`, `sevicesSupabase/NotificationService.ts`, `lib/notifications.ts` |
 
 ## Tính năng và quyền
 
@@ -57,4 +57,4 @@ tính năng 17 – `docs/price-sheets.md`),
 ## Tồn đọng
 
 - Bật lại Lịch hẹn: bỏ `'3'` khỏi `HIDDEN_FEATURE_IDS`; màn còn gọi API cũ (`sevices/CongViecService`, `sevices/CustomerService`).
-- Thông báo dùng API cũ – **chưa kiểm chứng** còn dữ liệu khi web đã Cloud-only.
+- Chuông ở Trang chủ chưa có số chưa đọc (web có). Bấm thông báo chỉ đánh dấu đã đọc, chưa mở màn theo `type` / `related_id` như web.

@@ -18,10 +18,10 @@
 | Dự án (dùng chung cho mọi ô chọn dự án trong app) | `ProjectService.getProjects` | RPC `fn_da_project_list` (như web `listManagedProjects`), app giữ thêm lọc `ap_dung = true`; MaDA = `ma_da_code`, thiếu thì uuid |
 | Danh sách sản phẩm (màn Sản phẩm, chọn căn ở Đặt lịch / Phiếu tính giá) | `ProductService.getProducts` → `normalizeProduct` | RPC `fn_bds_product_list` (như web Cao tầng / Thấp tầng) lấy id + thứ tự + tổng, rồi REST `bds_products?id=in.(…)` đọc đủ cột |
 | Chi tiết, ảnh sản phẩm | `ProductService.getDetailProducts / getBannerProduct` | `bds_products` (REST) |
-| Danh mục trạng thái căn | `FilterService.getStatusSP` | `cloud_catalogs` `bds_trang_thai`, `ma_ctdk=global` (MaTT = uuid, `_raw.item_code` = mã số) |
+| Danh mục trạng thái căn | `FilterService.getStatusSP` | `cloud_catalogs` `bds_trang_thai`, `ma_ctdk=global` (MaTT = uuid, `_raw.item_code` = mã số); lỗi → rỗng (đã bỏ fallback API cũ) |
 | Lưới khu/tầng/vị trí | `PriceServices.getBlock` | `bds_products` + `cloud_catalogs` |
 | Giá theo bảng giá (chi tiết căn) | `PriceServices.getActivePriceForProduct` | RPC `get_active_price_for_product` |
-| Realtime | SignalR `https://api-beeland.beesky.vn/signalr-beeland`, sự kiện `ChangeTable` (`app/products.tsx`) | cập nhật ô bằng `lib/productRealtime.applyRealtimeChange` |
+| Realtime | `subscribeTableChanges` (`sevicesSupabase/realtimeHub.ts`): UPDATE `bds_products` lọc `ma_ctdk=eq.<uuid công ty>` – như web `useProductStatusRealtime` (`app/products.tsx`) | `lib/productRealtime.rowToRealtimeChange` → `applyRealtimeChange` (khớp căn theo `MaSP`, sự kiện cũ theo `MaVT`); danh sách đổi MaTT/TenTT/ColorTT |
 
 ## Phạm vi dự án / sản phẩm (máy chủ quyết định, app không tự lọc)
 
@@ -81,7 +81,8 @@ migration `20261014121500_da_project_scope_agency`, `20261014100000_bds_product_
 
 - Web hết hạn lock còn gọi `LOCK_RELEASE` trả căn về Mở bán (`ProductLockService.closeLockRow`) + tác vụ nền
   `expire_product_locks` (5 phút). App sweep **chỉ đổi phiếu** → căn có thể còn "Đã Lock" tới khi tác vụ nền chạy. Lệch web, chưa sửa.
-- SignalR: web `useSignalR` **JoinGroup** theo `tenCTDKVT + maNV`; app không join group → app có nhận `ChangeTable` hay không **chưa kiểm chứng**.
+- Realtime trạng thái căn: chưa thử trên máy với dữ liệu thật (cần đổi trạng thái một căn – thao tác ghi). Tên trạng thái lấy
+  theo danh mục, chưa dùng `cloud_status_override` như web (lúc tải lưới cũng chưa dùng).
 - Booking căn mã 11 chờ quyết định nghiệp vụ (cần sửa server trước).
 - **Đại lý – phạm vi theo giỏ (2026-10-16):** nhân viên đại lý chỉ thấy căn của giỏ có tên mình trong "Quản lý nhân viên".
   Nếu nghiệp vụ muốn **mọi nhân viên của sàn** tự thấy mọi căn giỏ của sàn (như dialog "Sản phẩm của đại lý") ⇒ phải đổi

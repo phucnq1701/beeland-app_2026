@@ -34,14 +34,15 @@ import {
   Text,
 } from "@/components/ui";
 import { SummaryKey } from "@/lib/productOverview";
-import { applyRealtimeChange, resolveCatalogStatus, unitStatusOf } from "@/lib/productRealtime";
+import { applyRealtimeChange, resolveCatalogStatus, rowToRealtimeChange, unitStatusOf } from "@/lib/productRealtime";
 import { colors, space } from "@/theme";
 import { ProductService } from "@/sevicesSupabase/ProductService";
 import { ProjectService } from "@/sevicesSupabase/ProjectService";
 import { FilterService } from "@/sevicesSupabase/FilterService";
 import { PriceServices } from "@/sevicesSupabase/PriceServices";
 
-import * as signalR from "@microsoft/signalr";
+import { subscribeTableChanges } from "@/sevicesSupabase/realtimeHub";
+import { getCompanyId } from "@/sevicesSupabase/cloudTenant";
 
 type ViewMode = "list" | "grid" | "overview";
 
@@ -75,9 +76,6 @@ export default function ProductsScreen({
   const trangThaiRef = useRef<any[]>([]);
   trangThaiRef.current = TrangThai;
   const [dataGrid, setDataGrid] = useState<any[]>([]);
-  // Bản mới nhất cho handler realtime (đăng ký một lần, tránh closure cũ)
-  const dataGridRef = useRef<any[]>([]);
-  dataGridRef.current = dataGrid;
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -104,81 +102,50 @@ export default function ProductsScreen({
     KyHieu: "",
   });
 
-  // real time
-
-  const [hubConnection, setHubConnection] = useState<any>(null);
+  // Realtime trạng thái căn: nghe UPDATE bảng bds_products của công ty qua hub `/api/realtime` – cùng nguồn với web
+  // (beeland-dotnet/src/hooks/useProductStatusRealtime.ts). Server tự lọc RLS (căn đã xoá, giỏ hàng đại lý).
   const [localChange, setLocalChange] = useState<any>(null);
 
-  const initSignalR = async () => {
-    try {
-      // Logger no-op: chặn hoàn toàn log nội bộ của SignalR (tránh stack trace rác
-      // khi server đóng kết nối realtime — không phải lỗi API)
-      const silentLogger: signalR.ILogger = {
-        log: () => {},
-      };
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+    let clearTimer: ReturnType<typeof setTimeout> | null = null;
+    void (async () => {
+      const companyId = await getCompanyId();
+      if (cancelled || !companyId) return;
+      unsubscribe = subscribeTableChanges(
+        `product-status-${companyId}`,
+        [{ event: "UPDATE", table: "bds_products", filter: `ma_ctdk=eq.${companyId}` }],
+        (payload) => {
+          const response = rowToRealtimeChange(payload?.new);
+          if (!response) return;
+          // Tra trạng thái mới theo uuid trong danh mục → cập nhật cả tên và màu (lib/productRealtime).
+          // Danh mục + lưới đọc qua ref vì handler chỉ đăng ký một lần.
+          const catalog = trangThaiRef.current;
+          const entry = resolveCatalogStatus(response.maTT, catalog);
+          setDataGrid((prev) => applyRealtimeChange(prev, response, catalog).grid);
 
-      const connection = new signalR.HubConnectionBuilder()
-        .withUrl("https://api-beeland.beesky.vn/signalr-beeland")
-        .withAutomaticReconnect()
-        .configureLogging(silentLogger)
-        .build();
-
-      // Xử lý khi server đóng kết nối (không phải lỗi API, chỉ realtime)
-      connection.onclose((err) => {
-        if (err) {
-          console.log("[SignalR] Connection closed:", err?.message || err);
+          // Danh sách: đổi trạng thái đúng dòng của căn vừa đổi
+          if (entry) {
+            setProducts2((list) =>
+              list.map((p) =>
+                p?.MaSP === response.maSP ? { ...p, MaTT: entry.MaTT, TenTT: entry.TenTT, ColorTT: entry.ColorWeb ?? p?.ColorTT } : p
+              )
+            );
+          }
+          setLocalChange({ MaTang: response.data.MaTang, MaVT: response.data.MaVT });
+          if (clearTimer) clearTimeout(clearTimer);
+          clearTimer = setTimeout(() => setLocalChange(null), 1000);
         }
-      });
-
-      await connection.start();
-      // console.log("✅ Connected SignalR");
-
-      setHubConnection(connection);
-    } catch {
-      // SignalR connection error
-    }
-  };
-
-  useEffect(() => {
-    if (!hubConnection) return;
-
-    try {
-      hubConnection.on("ChangeTable", (response: any) => {
-        // Tra trạng thái mới theo mã/uuid trong danh mục → cập nhật cả tên và màu (lib/productRealtime).
-        // Danh mục + lưới đọc qua ref vì handler chỉ đăng ký một lần.
-        const catalog = trangThaiRef.current;
-        const entry = resolveCatalogStatus(response?.maTT, catalog);
-        const { changedMaSP } = applyRealtimeChange(dataGridRef.current, response, catalog);
-
-        setDataGrid((prev) => applyRealtimeChange(prev, response, catalog).grid);
-
-        // Danh sách: đổi trạng thái đúng dòng của căn vừa đổi
-        if (changedMaSP && entry) {
-          setProducts2((list) =>
-            list.map((p) => (p?.MaSP === changedMaSP ? { ...p, MaTT: entry.MaTT } : p))
-          );
-        }
-        setLocalChange({
-          MaTang: response.data?.MaTang,
-          MaVT: response.data?.MaVT,
-        });
-
-        setTimeout(() => setLocalChange(null), 1000);
-      });
-    } catch {
-      // SignalR listen error
-    }
-  }, [hubConnection]);
-
-  useEffect(() => {
-    void initSignalR();
-  }, []);
-
-  useEffect(() => {
+      );
+      if (cancelled) unsubscribe();
+    })();
     return () => {
-      hubConnection?.stop();
+      cancelled = true;
+      if (clearTimer) clearTimeout(clearTimer);
+      unsubscribe?.();
     };
-  }, [hubConnection]);
+  }, []);
 
   const applyChangeFilter = (p: string, v: any) => {
     // Tạo bản sao để tránh mutate state trực tiếp (gây không re-render)
