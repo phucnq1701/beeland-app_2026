@@ -4,9 +4,25 @@
  * Chỉ hàm thuần (không import) để test nạp trực tiếp.
  */
 
-/** Như máy chủ (cloud-auth change-password + giới hạn Argon2). */
-export const MIN_PASSWORD = 6;
-export const MAX_PASSWORD = 256;
+/**
+ * Chính sách mật khẩu chung (sếp chốt 2026-11-10, giống web + máy chủ MatKhauChinhSach): tối thiểu 8 ký tự, ít nhất 1 chữ hoa,
+ * 1 chữ thường, 1 số, 1 ký tự đặc biệt (không phải chữ / số / khoảng trắng).
+ */
+export const MIN_PASSWORD = 8;
+export const MAX_PASSWORD = 128;
+
+export interface PasswordRule { key: string; label: string; hint?: string; ok: (pw: string) => boolean }
+
+export const PASSWORD_RULES: PasswordRule[] = [
+  { key: 'length', label: 'Tối thiểu 8 ký tự', ok: (p) => [...p].length >= MIN_PASSWORD && [...p].length <= MAX_PASSWORD },
+  { key: 'upper', label: 'Có ít nhất 1 chữ cái viết hoa (A – Z)', ok: (p) => /\p{Lu}/u.test(p) },
+  { key: 'lower', label: 'Có ít nhất 1 chữ cái viết thường (a – z)', ok: (p) => /\p{Ll}/u.test(p) },
+  { key: 'digit', label: 'Có ít nhất 1 số (0 – 9)', ok: (p) => /\d/.test(p) },
+  { key: 'special', label: 'Có ít nhất 1 ký tự đặc biệt', hint: '(ví dụ: ! @ # $ % ^ & * ...)', ok: (p) => /[^\p{L}\p{N}\s]/u.test(p) },
+];
+
+/** Mật khẩu đạt đủ chính sách */
+export const isStrongPassword = (pw: string) => PASSWORD_RULES.every((r) => r.ok(pw));
 export const OTP_LENGTH = 6;
 
 export const isOtpCode = (code: string) => /^[0-9]{6}$/.test(code);

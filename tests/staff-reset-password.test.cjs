@@ -24,9 +24,14 @@ test("normalizeLogin trims like the login screen (server lowercases)", () => {
   assert.deepEqual(JSON.parse(JSON.stringify(s.normalizeLogin("  MSR ", " NV01 "))), { maCTDK: "MSR", account: "NV01" });
 });
 
-test("password rules match the server (6..256)", () => {
-  assert.equal(s.MIN_PASSWORD, 6);
-  assert.equal(s.MAX_PASSWORD, 256);
+test("password rules match the server policy (8+ hoa thường số đặc biệt, ≤128)", () => {
+  assert.equal(s.MIN_PASSWORD, 8);
+  assert.equal(s.MAX_PASSWORD, 128);
+  assert.equal(s.PASSWORD_RULES.length, 5);
+  assert.equal(s.isStrongPassword("BeeSky@2026"), true);
+  assert.equal(s.isStrongPassword("Đổi@mật1"), true);
+  for (const weak of ["Aa1!aaa", "beesky@2026", "BEESKY@2026", "BeeSky@abcd", "BeeSky2026x", "BeeSky 2026a", ""])
+    assert.equal(s.isStrongPassword(weak), false, weak);
   assert.equal(s.isOtpCode("123456"), true);
   assert.equal(s.isOtpCode("12345"), false);
   assert.equal(s.isOtpCode("12345a"), false);
