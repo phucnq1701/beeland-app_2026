@@ -1,23 +1,14 @@
 /**
- * Cầu nối edge function `payment-gateway` — dùng chung với web
- * (beeland/src/services/PaymentGatewayService.ts), nên tài khoản định danh (VA)
- * tạo ở app hay web đều là một, trạng thái thanh toán đồng bộ hai bên.
- * Xác thực: token phiên đăng nhập Cloud (AsyncStorage "@token") qua x-cloud-token.
+ * Cổng thanh toán (QR tài khoản định danh — VA) qua bộ API riêng app: `fn_nv_app_cong_thanh_toan { p_action, … }`.
+ * Máy chủ dùng chung lõi với web (PaymentGatewayEdgeService) ⇒ VA tạo ở app hay web là một, trạng thái đồng bộ hai bên.
+ * Xác thực bằng JWT (callNv) — không gửi token phiên / công ty từ máy. Lỗi ⇒ Error mang thông điệp máy chủ (như web).
  */
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axiosApiSupabase from "./axiosApiSupabase";
+import { callNv } from "@/services/nvApi";
 
-async function call<T = any>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
-  const token = ((await AsyncStorage.getItem("@token")) || "").trim();
-  if (!token) throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-  const res = await axiosApiSupabase.post(
-    "functions/v1/payment-gateway",
-    { action, token, ...payload },
-    { headers: { "x-cloud-token": token }, timeout: 45000 }
-  );
-  const data = res.data;
-  if (data?.error) throw new Error(String(data.error));
-  return data?.data as T;
+type Action = "accounts" | "create" | "delete" | "expire_sweep" | "list";
+
+function call<T = any>(action: Action, payload: Record<string, unknown> = {}): Promise<T> {
+  return callNv<T>("fn_nv_app_cong_thanh_toan", { p_action: action, ...payload }, { timeout: 45000 });
 }
 
 export type GatewayAccount = {
