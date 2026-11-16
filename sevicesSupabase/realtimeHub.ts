@@ -6,14 +6,15 @@ import {
   type HubConnection,
 } from "@microsoft/signalr";
 
-import { API_URL, SUPABASE_ANON_KEY } from "./axiosApiSupabase";
-import { getValidSupabaseJwt } from "./cloudTenant";
+import { API_URL } from "@/services/config";
+import { getFreshJwt } from "@/services/session";
 
 /**
  * Realtime của API .NET (thay Supabase Realtime từ 01/11/2026): hub SignalR `/api/realtime`, cùng giao thức web
  * `beeland-dotnet/src/integrations/dotnet/realtimeShim.ts` — gọi `Join(ref, topic, { private, self })` / `Leave(ref)` /
  * `Broadcast(ref, event, payload)`, nhận `broadcast(topic, isPrivate, event, payload)`.
- * Xác thực: JWT ứng dụng (`@supabase_jwt`) qua `access_token`, chưa có / hết hạn thì anon key (chỉ vào được `chatv:*`).
+ * Xác thực: JWT phiên app (services/session, tự làm mới khi sắp hết hạn) qua `access_token`; không còn anon key (app chỉ nghe sau
+ * đăng nhập — chưa có phiên ⇒ kết nối không token, server chỉ cho kênh công khai `chatv:*`).
  * Kênh private (`chat:u:…`, `chat:c:…`) cần JWT đúng nhân viên → gọi `syncRealtimeAuth()` trước khi vào (như `setAuth` cũ).
  * Thay đổi bảng (`postgres_changes`): `subscribeTableChanges()` — gửi danh sách bảng theo dõi kèm `Join` như web, nhận
  * `postgres_changes(ref, ids, data)` với `data = { eventType, new, old (chỉ khoá chính), commit_timestamp }`. Server chỉ cho
@@ -59,7 +60,7 @@ export type HubChannel = {
 };
 
 const keyOf = (name: string, isPrivate: boolean) => `${isPrivate ? "p" : "c"}:${name}`;
-const currentToken = async () => (await getValidSupabaseJwt()) || SUPABASE_ANON_KEY;
+const currentToken = async () => (await getFreshJwt().catch(() => "")) || "";
 
 /** Mỗi topic chỉ Join một lần trên server, nhiều nơi nghe dùng chung (đếm tham chiếu). */
 const topics = new Map<string, Topic>();

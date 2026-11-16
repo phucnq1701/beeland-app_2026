@@ -25,6 +25,11 @@ export interface PolicyKhoLine {
   /** Sức chứa = sl_nhap − sl_xuat (trần phân bổ CTBH) */
   suc_chua: number;
   nguong: number;
+  /** Hạn mức nhóm (spec 2026-11-16-kho-han-muc-nhom): con_lai / suc_chua ở trên là giá trị hiệu lực */
+  dung_chung: boolean;
+  group_line_id: string | null;
+  con_lai_nhom: number | null;
+  suc_chua_nhom: number | null;
 }
 
 export interface PolicyKhoOption {
@@ -48,6 +53,11 @@ export interface PolicyKhoStock {
   den_ngay: string | null;
   kho_active: boolean;
   pham_vi: { da_project_id: string; toa_id: string | null }[];
+  /** Hạn mức nhóm (spec 2026-11-16-kho-han-muc-nhom): con_lai / suc_chua ở trên là giá trị hiệu lực */
+  dung_chung: boolean;
+  group_line_id: string | null;
+  con_lai_nhom: number | null;
+  suc_chua_nhom: number | null;
 }
 
 export interface GiftWhDocument {

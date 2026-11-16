@@ -19,7 +19,7 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import { X, ChevronLeft, ChevronRight } from "lucide-react-native";
 import * as Sharing from "expo-sharing";
 import * as MediaLibrary from "expo-media-library";
-import { DocumentService } from "@/sevicesSupabase/DocumentService";
+import { DocumentService, type DocFile } from "@/sevicesSupabase/DocumentService";
 import { useToast } from "@/components/ui";
 import { useViewerChrome } from "@/components/ImageViewerModal";
 
@@ -62,25 +62,21 @@ export default function PhotosScreen() {
     return BASE_URL.replace(/\/+$/, "") + "/" + link.replace(/^\/+/, "");
   };
 
-  const mapApiToPhoto = (item: any): Photo => ({
-    id: String(item.ID),
-    name: item.Name,
-    url: getFullUrl(item.Link),
-    thumbnail: getFullUrl(item.Link),
-    size: item.Size ? (item.Size / 1024 / 1024).toFixed(2) + " MB" : "0 MB",
-    date: item.CreatedAt,
+  // fn_nv_app_tai_lieu_tep: size đã là MB (như web)
+  const mapApiToPhoto = (item: DocFile): Photo => ({
+    id: item.id,
+    name: item.name,
+    url: getFullUrl(item.link),
+    thumbnail: getFullUrl(item.link),
+    size: item.size ? `${item.size} MB` : "0 MB",
+    date: item.createdAt,
   });
 
   const loadImg = async () => {
     try {
       setLoading(true);
 
-      const res = await DocumentService.getDetail({
-        DocumentID: Number(folderId),
-        InputSearch: "",
-      });
-
-      const data = res?.data ?? [];
+      const data = await DocumentService.files("GALLERY", String(folderId));
 
       const mapped = data
         .map(mapApiToPhoto)

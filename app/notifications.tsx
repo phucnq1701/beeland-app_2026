@@ -1,19 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { Bell, BellOff } from "lucide-react-native";
 
 import { AppHeader, Button, EmptyState, ErrorState, Screen, Skeleton, Text, useToast } from "@/components/ui";
-import { relativeTime, type AppNotification } from "@/lib/notifications";
+import { notificationRoute, relativeTime, type AppNotification } from "@/lib/notifications";
 import { colors, radius, space } from "@/theme";
 import { NotificationService } from "@/sevicesSupabase/NotificationService";
 
 /**
- * Thông báo — bảng `notifications` (Cloud), cùng nguồn và cách lọc với chuông thông báo web
- * (beeland-dotnet/src/components/Layout/ModuleLayout.tsx). Có thông báo mới → tự tải lại (realtime).
+ * Thông báo — hộp thư thông báo theo kịch bản của chính người đăng nhập, CÙNG nguồn chuông web (từ 2026-11-15 web chỉ hiện nguồn
+ * này). Có tin mới → tự tải lại (realtime tb:u:<nhân viên>). Bấm tin: đánh dấu đã đọc, mở màn app tương ứng nếu app có màn đó
+ * (như web mở theo form_code + id bản ghi); không có thì chỉ đánh dấu đã đọc.
  */
 export default function NotificationsScreen() {
   const toast = useToast();
+  const router = useRouter();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -24,7 +26,7 @@ export default function NotificationsScreen() {
   const load = useCallback(async () => {
     try {
       setLoadError(false);
-      setItems(await NotificationService.list());
+      setItems((await NotificationService.list()).items);
     } catch (error) {
       console.log("[Notifications] load error:", error);
       setLoadError(true);
@@ -48,12 +50,16 @@ export default function NotificationsScreen() {
 
   const markOne = useCallback(
     (item: AppNotification) => {
-      if (item.isRead) return;
-      NotificationService.markRead([item.id])
-        .then(() => setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))))
-        .catch(() => toast.show({ type: "error", message: "Không cập nhật được trạng thái đã đọc" }));
+      // Như web: đánh dấu đã đọc xong mới cập nhật danh sách; mở màn tương ứng ngay (không chờ)
+      if (!item.isRead) {
+        NotificationService.markRead(item.id)
+          .then(() => setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))))
+          .catch(() => toast.show({ type: "error", message: "Không cập nhật được trạng thái đã đọc" }));
+      }
+      const route = notificationRoute(item);
+      if (route) router.push(route as any);
     },
-    [toast]
+    [router, toast]
   );
 
   const markAll = async () => {
@@ -61,7 +67,7 @@ export default function NotificationsScreen() {
     markingRef.current = true;
     setMarkingAll(true);
     try {
-      await NotificationService.markRead(unread.map((n) => n.id));
+      await NotificationService.markRead();
       setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
       toast.show({ type: "success", message: "Đã đánh dấu tất cả là đã đọc" });
     } catch {

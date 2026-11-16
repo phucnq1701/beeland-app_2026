@@ -1,6 +1,6 @@
 /**
- * Thông báo nhân viên — bảng `notifications` trên Cloud, cùng cách lọc với chuông thông báo của web
- * (beeland-dotnet/src/components/Layout/ModuleLayout.tsx › fetchCloudNotifications).
+ * Thông báo nhân viên — hộp thư "thông báo theo kịch bản" của chính người đăng nhập (tb_nb_hop_thu), CÙNG nguồn với chuông web
+ * từ 2026-11-15 (beeland ModuleLayout.tsx: CHI_THONG_BAO_THEO_KICH_BAN — bảng notifications cũ đã chặn). Máy chủ lọc theo người.
  * Chỉ hàm thuần (không import) để test nạp trực tiếp.
  */
 
@@ -10,46 +10,51 @@ export type AppNotification = {
   message: string;
   createdAt: string;
   isRead: boolean;
-  type: string | null;
+  /** form_code của màn sinh thông báo (web mở /thong-bao/mo?fc=&id=) */
+  formCode: number | null;
+  /** id bản ghi (ban_ghi_id) */
   relatedId: string | null;
+  /** mã thao tác hiển thị (vd 15-03) */
+  action: string | null;
 };
 
 const str = (v: unknown) => (v == null ? '' : String(v).trim());
 
-/**
- * Bộ lọc `or` cho rest/v1/notifications: thông báo chung + của công ty (mã công ty chữ thường, vd `msr`) + của tài khoản.
- * Không có mã công ty → null (web cũng không tải).
- */
-export function notificationOrFilter(companyCode: string, maNV: string): string | null {
-  const code = str(companyCode).toLowerCase();
-  if (!code) return null;
-  const parts = ['is_global.eq.true', `ma_ctdk.eq.${code}`];
-  const nv = str(maNV);
-  if (nv) parts.push(`account_id.eq.${nv}`);
-  return `(${parts.join(',')})`;
+/** Dòng fn_nv_app_thong_bao_list (= fn_tb_nb_hop_thu_list) ⇒ AppNotification. */
+export function mapHopThu(rows: any[]): AppNotification[] {
+  return (Array.isArray(rows) ? rows : []).filter((h) => h?.id).map((h) => {
+    const fc = Number(h.form_code);
+    return {
+      id: String(h.id),
+      title: str(h.tieu_de) || 'Thông báo',
+      message: h.noi_dung == null ? '' : String(h.noi_dung),
+      createdAt: str(h.created_at),
+      isRead: h.da_doc === true || h.da_doc === 1,
+      formCode: Number.isFinite(fc) && fc > 0 ? fc : null,
+      relatedId: str(h.ban_ghi_id) || null,
+      action: str(h.ma_thao_tac) || null,
+    };
+  });
 }
 
 /**
- * Lọc lại như web: có account_id → chỉ đúng tài khoản; có ma_ctdk → đúng công ty; còn lại phải là thông báo chung.
+ * Màn app mở khi bấm thông báo — như web (form_code ⇒ màn, ?id= bản ghi) nhưng chỉ các màn app CÓ và tải được theo id.
+ * Màn web không có trên app (giỏ hàng, phụ lục…) / đặt cọc, hợp đồng (màn app cần dòng danh sách) ⇒ null: chỉ đánh dấu đã đọc.
  */
-export function visibleNotifications(rows: any[], companyCode: string, maNV: string): AppNotification[] {
-  const code = str(companyCode).toLowerCase();
-  const nv = str(maNV);
-  return (rows || [])
-    .filter((n) => {
-      if (n?.account_id) return nv ? String(n.account_id) === nv : false;
-      if (n?.ma_ctdk) return String(n.ma_ctdk).toLowerCase() === code;
-      return !!n?.is_global;
-    })
-    .map((n) => ({
-      id: String(n.id),
-      title: str(n.title) || 'Thông báo',
-      message: n.message == null ? '' : String(n.message),
-      createdAt: str(n.created_at),
-      isRead: !!n.is_read,
-      type: n.type ?? null,
-      relatedId: n.related_id ?? null,
-    }));
+// ban_ghi_id của các thao tác ở các màn này = id bản ghi chính (đã đối chiếu _tb_nb_phat). Không mở: Booking (ban_ghi = phiếu giữ chỗ,
+// màn app theo id booking), Phiếu thu (màn app chưa có chi tiết thật).
+const FORM_ROUTES: Record<number, string> = {
+  804: '/price-sheet/[id]', // Phiếu tính giá
+  824: '/customer/[id]', // Khách hàng
+  832: '/request/[id]', // Yêu cầu khách hàng
+  9002: '/signing/[id]', // Đặt lịch ký
+};
+
+export function notificationRoute(n: Pick<AppNotification, 'formCode' | 'relatedId'>): { pathname: string; params: { id: string } } | null {
+  const path = n.formCode != null ? FORM_ROUTES[n.formCode] : undefined;
+  const id = str(n.relatedId);
+  if (!path || !id) return null;
+  return { pathname: path, params: { id } };
 }
 
 /** "Vừa xong" / "x phút trước" / "x giờ trước" / "Hôm qua" / "x ngày trước" / dd/mm/yyyy. */

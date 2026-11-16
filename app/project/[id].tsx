@@ -46,14 +46,14 @@ export default function ProjectOptionsScreen() {
       title: "Tài liệu",
       subtitle: "Quản lý tài liệu dự án",
       icon: FileText,
-      onPress: () => router.push(`/folders/${projectData.MaDA}` as any),
+      onPress: () => router.push({ pathname: "/folders/[projectId]", params: { projectId: String(projectData.id ?? projectData.MaDA ?? "") } }),
     },
     {
       id: "gallery",
       title: "Thư viện ảnh",
       subtitle: "Hình ảnh & media dự án",
       icon: ImageIcon,
-      onPress: () => router.push(`/photo-gallery?projectId=${projectData.MaDA}` as any),
+      onPress: () => router.push({ pathname: "/photo-gallery", params: { projectId: String(projectData.id ?? projectData.MaDA ?? "") } }),
     },
     {
       id: "diagram",

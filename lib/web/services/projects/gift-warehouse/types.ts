@@ -38,12 +38,19 @@ export interface GiftWhLine {
   /** Chứng từ (Đặt cọc / HĐ) đang chiếm suất của dòng — tồn tính động (chinh-sach-theo-kho D5) */
   sl_chung_tu: number;
   sl_xuat: number;
-  con_lai: number;
+  /** Còn lại của chính dòng: riêng (quà có số) / còn lại nhóm (dòng nhóm); null = quà dùng chung hạn mức nhóm */
+  con_lai: number | null;
+  /** Còn lại dùng cho chứng từ: riêng / nhóm / min (spec 2026-11-16-kho-han-muc-nhom) */
+  con_lai_hieu_luc: number;
   nguong_canh_bao: number;
   thu_tu: number;
   is_active: boolean;
   /** Từng có XUAT / GIU ⇒ không bỏ khỏi kho được, chỉ ngưng */
   co_xuat: boolean;
+  /** Quà con không có số riêng, dùng chung hạn mức của dòng nhóm */
+  dung_chung: boolean;
+  /** Dòng nhóm (item_id null, nhóm có quà con trong kho): giữ hạn mức nhóm */
+  la_dong_nhom: boolean;
 }
 
 /** Thao tác cả nhóm quà trong kho (fn_gift_warehouse_line_update với nhom = true): áp cho mọi quà con của nhóm, nguyên tử */
@@ -53,6 +60,11 @@ export interface GiftWhGroupPatch {
   bo?: boolean;
   /** Ngưỡng từng quà con; dòng không có trong mảng giữ ngưỡng */
   nguong?: { line_id: string; nguong_canh_bao: number }[];
+  /** Hạn mức nhóm: số ⇒ đặt (qua sổ kho), null ⇒ bỏ hạn mức nhóm */
+  so_luong_nhom?: number | null;
+  nguong_nhom?: number;
+  /** Số riêng từng quà con: null ⇒ dùng chung hạn mức nhóm */
+  so_luong?: { line_id: string; so_luong: number | null }[];
 }
 
 export interface GiftWarehouse {
@@ -98,8 +110,8 @@ export interface GiftWhScopeInput {
 export interface GiftWhLineInput {
   group_id: string;
   item_id: string | null;
-  /** Số lượng ban đầu ≥ 0 (> 0 ⇒ ghi NHAP) */
-  so_luong: number;
+  /** Số lượng ban đầu ≥ 0 (> 0 ⇒ ghi NHAP); null ở quà con = dùng chung hạn mức nhóm (cần phần tử nhóm item_id null) */
+  so_luong: number | null;
   nguong_canh_bao: number;
 }
 

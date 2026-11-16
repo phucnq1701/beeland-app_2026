@@ -1,88 +1,61 @@
-import "react-native-url-polyfill/auto";
-
 import type {
   ChatContact, ChatConversationDetail, ChatInboxPage, ChatMe, ChatMessage, ChatMessagesPage,
 } from "@/lib/chat";
+import { callNv, errorMessage, postFormNv } from "@/services/nvApi";
+import { getJwt } from "@/services/session";
 
-import axiosApiSupabase, { API_URL, SUPABASE_ANON_KEY } from "./axiosApiSupabase";
-import { getValidSupabaseJwt } from "./cloudTenant";
 import { joinChannel, syncRealtimeAuth, type HubChannel } from "./realtimeHub";
 
 /**
- * Chat – CÙNG RPC với web (beeland/src/services/chat/ChatService.ts): `fn_chat_*` bằng JWT ứng dụng (claim employee_id),
- * trả `{data}` | `{error}`. Tệp: edge `chat-files` (JWT người dùng – KHÔNG dùng `@token` như interceptor axios gắn cho
- * functions/v1) → `upload_url` trả `{attachment_id, path, token}` → PUT lên link ký kho `chat-files`; `file_url` → link 5 phút.
- * Realtime: kênh private `chat:u:<employee_id>` (cần JWT trên websocket), 5 sự kiện như web — hub SignalR `realtimeHub.ts`.
+ * Chat — bộ API riêng app (fn_nv_app_chat_*, lõi chung: SP app gọi thẳng đúng SP chat web usp_chat_* — người gọi / công ty từ phiên,
+ * trả `{data}` | `{error}` như web). Tệp: fn_nv_app_chat_tep_tai (multipart, máy chủ ghi tệp vào kho chat-files đúng đường dẫn SP cấp ⇒
+ * attachment_id) / fn_nv_app_chat_tep_link (URL ký 300 s tải thẳng từ kho). Không còn REST bảng / edge chat-files / kho ký PUT của Supabase.
+ * Realtime: kênh private `chat:u:<employee_id>` (JWT phiên app trên websocket), 5 sự kiện như web — hub SignalR `realtimeHub.ts`.
  */
 
 const SESSION_EXPIRED = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
 const URL_TTL_MS = 240_000;
 
-const errMsg = (e: any, fallback: string): string =>
-  e?.response?.data?.message || e?.response?.data?.hint || (e instanceof Error && e.message) || fallback;
+/** Tên hàm web (fn_chat_*) ⇒ endpoint app. */
+export const CHAT_FN: Record<string, string> = {
+  fn_chat_me: "fn_nv_app_chat_me",
+  fn_chat_danh_ba: "fn_nv_app_chat_danh_ba",
+  fn_chat_inbox: "fn_nv_app_chat_inbox",
+  fn_chat_conversation_get: "fn_nv_app_chat_hoi_thoai",
+  fn_chat_messages: "fn_nv_app_chat_tin",
+  fn_chat_send: "fn_nv_app_chat_gui",
+  fn_chat_edit: "fn_nv_app_chat_sua_tin",
+  fn_chat_recall: "fn_nv_app_chat_thu_hoi",
+  fn_chat_pref: "fn_nv_app_chat_tuy_chinh",
+  fn_chat_customer_tags: "fn_nv_app_chat_the_khach",
+  fn_chat_customer_link: "fn_nv_app_chat_lien_ket_khach",
+  fn_chat_request_info: "fn_nv_app_chat_xin_thong_tin",
+  fn_chat_mark_read: "fn_nv_app_chat_da_doc",
+  fn_chat_direct_open: "fn_nv_app_chat_mo_1_1",
+  fn_chat_group_create: "fn_nv_app_chat_tao_nhom",
+  fn_chat_members_add: "fn_nv_app_chat_them_tv",
+  fn_chat_members_remove: "fn_nv_app_chat_bot_tv",
+  fn_chat_leave: "fn_nv_app_chat_roi",
+  fn_chat_join: "fn_nv_app_chat_tham_gia",
+  fn_chat_customer_status: "fn_nv_app_chat_trang_thai_khach",
+  fn_chat_push_dang_ky: "fn_nv_app_chat_push_dang_ky",
+  fn_chat_push_huy: "fn_nv_app_chat_push_huy",
+};
 
-async function requireJwt(): Promise<string> {
-  const jwt = await getValidSupabaseJwt();
-  if (!jwt) throw new Error(SESSION_EXPIRED);
-  return jwt;
-}
-
-/** RPC `fn_chat_*`: lỗi PostgREST / lỗi nghiệp vụ `{error}` → Error(message tiếng Việt). */
+/** RPC chat: lỗi máy chủ / lỗi nghiệp vụ `{error}` → Error(message tiếng Việt). */
 async function chatRpc<T>(fn: string, args: Record<string, unknown> = {}, fallback = "Có lỗi xảy ra, vui lòng thử lại"): Promise<T> {
-  await requireJwt();
+  const target = CHAT_FN[fn];
+  if (!target) throw new Error(fallback);
+  if (!(await getJwt())) throw new Error(SESSION_EXPIRED);
   let data: any;
   try {
-    data = (await axiosApiSupabase.post(`rest/v1/rpc/${fn}`, args)).data;
+    data = await callNv<any>(target, args);
   } catch (e) {
-    const m = errMsg(e, fallback);
+    const m = errorMessage(e, fallback);
     throw new Error(/phiên đăng nhập không hợp lệ/i.test(m) ? "Tài khoản chưa có hồ sơ nhân viên nên chưa dùng được chat." : m);
   }
   if (data && typeof data === "object" && data.error) throw new Error(String(data.error));
   return data?.data as T;
-}
-
-/** Edge `chat-files` bằng JWT (fetch riêng – interceptor axios gắn `@token` cho functions/v1). */
-async function callFiles<T>(body: Record<string, unknown>): Promise<T> {
-  const jwt = await requireJwt();
-  let res: Response;
-  try {
-    res = await fetch(`${API_URL}/functions/v1/chat-files`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${jwt}` },
-      body: JSON.stringify(body),
-    });
-  } catch {
-    throw new Error("Không kết nối được máy chủ. Vui lòng kiểm tra mạng.");
-  }
-  const json: any = await res.json().catch(() => null);
-  if (!res.ok || json?.error) throw new Error(String(json?.error || json?.message || "Không xử lý được tệp"));
-  return json?.data as T;
-}
-
-/** Đổi URL nội bộ (http://api-gw:8000/storage/v1/…) về địa chỉ công khai. */
-const toPublicUrl = (u: string) => {
-  const i = u.indexOf("/storage/v1/");
-  return i < 0 ? u : `${API_URL}${u.slice(i)}`;
-};
-
-/** PUT multipart lên link ký (XHR: lớp mạng native nhận phần tệp `{ uri, name, type }`, fetch của RN thì không ổn định). */
-function putSigned(path: string, token: string, file: { uri: string; name: string; mime: string }): Promise<void> {
-  const body = new FormData();
-  body.append("cacheControl", "3600");
-  body.append("", { uri: file.uri, name: file.name, type: file.mime } as any);
-  const url = `${API_URL}/storage/v1/object/upload/sign/chat-files/${path.split("/").map(encodeURIComponent).join("/")}?token=${encodeURIComponent(token)}`;
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
-    xhr.setRequestHeader("Authorization", `Bearer ${SUPABASE_ANON_KEY}`);
-    xhr.setRequestHeader("x-upsert", "false");
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(
-      xhr.status === 413 ? "Tệp quá lớn" : "Tải tệp lên thất bại, vui lòng thử lại",
-    )));
-    xhr.onerror = () => reject(new Error("Không kết nối được máy chủ. Vui lòng kiểm tra mạng."));
-    xhr.send(body);
-  });
 }
 
 const urlCache = new Map<string, { url: string; exp: number }>();
@@ -125,13 +98,20 @@ export const ChatService = {
     chatRpc<{ ok: boolean }>("fn_chat_push_dang_ky", { p_push_token: pushToken, p_nen_tang: platform }),
   pushUnregister: (pushToken: string) => chatRpc<{ so: number }>("fn_chat_push_huy", { p_push_token: pushToken }),
 
-  /** Tải một tệp lên kho `chat-files` của hội thoại → id tệp để gửi kèm tin. */
+  /** Tải một tệp lên kho `chat-files` của hội thoại (1 bước, máy chủ ghi tệp) → id tệp để gửi kèm tin. */
   async upload(conversationId: string, file: { uri: string; name: string; mime: string; size: number }): Promise<string> {
-    const r = await callFiles<{ attachment_id: string; path: string; token: string }>({
-      action: "upload_url", conversation_id: conversationId, ten_tep: file.name, mime: file.mime, kich_thuoc: file.size,
-    });
-    if (!r?.attachment_id || !r.path || !r.token) throw new Error("Không tạo được liên kết tải lên");
-    await putSigned(r.path, r.token, file);
+    let r: { attachment_id?: string };
+    try {
+      r = await postFormNv<{ attachment_id?: string }>("fn_nv_app_chat_tep_tai", () => {
+        const body = new FormData();
+        body.append("conversation_id", conversationId);
+        body.append("file", { uri: file.uri, name: file.name, type: file.mime } as any);
+        return body;
+      });
+    } catch (e: any) {
+      throw new Error(e?.status === 413 ? "Tệp quá lớn" : errorMessage(e, "Tải tệp lên thất bại, vui lòng thử lại"));
+    }
+    if (!r?.attachment_id) throw new Error("Tải tệp lên thất bại, vui lòng thử lại");
     return r.attachment_id;
   },
 
@@ -139,8 +119,12 @@ export const ChatService = {
   async fileUrl(attachmentId: string): Promise<string> {
     const hit = urlCache.get(attachmentId);
     if (hit && hit.exp > Date.now()) return hit.url;
-    const r = await callFiles<{ url: string }>({ action: "file_url", attachment_id: attachmentId });
-    const url = toPublicUrl(String(r?.url || ""));
+    let url = "";
+    try {
+      url = String((await callNv<{ url?: string }>("fn_nv_app_chat_tep_link", { p_attachment_id: attachmentId }))?.url || "");
+    } catch (e) {
+      throw new Error(errorMessage(e, "Không mở được tệp"));
+    }
     if (!/^https?:\/\//i.test(url)) throw new Error("Không mở được tệp");
     urlCache.set(attachmentId, { url, exp: Date.now() + URL_TTL_MS });
     return url;
@@ -161,7 +145,7 @@ export function subscribeChatUser(employeeId: string, onEvent: (e: ChatEvent) =>
   let ch: HubChannel | null = null;
   let closed = false;
   void (async () => {
-    const jwt = await getValidSupabaseJwt();
+    const jwt = await getJwt();
     if (!jwt || closed) return onStatus(false);
     await syncRealtimeAuth();
     if (closed) return;
@@ -206,7 +190,7 @@ export function subscribeTyping(
       });
       return;
     }
-    const jwt = await getValidSupabaseJwt();
+    const jwt = await getJwt();
     if (!jwt || closed) return;
     await syncRealtimeAuth();
     if (closed) return;

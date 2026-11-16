@@ -3,7 +3,7 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 import { ChatService } from "@/sevicesSupabase/ChatService";
-import { getValidSupabaseJwt } from "@/sevicesSupabase/cloudTenant";
+import { getFreshJwt } from "@/services/session";
 
 /**
  * Push tin nhắn (docs/chat.md mục Thông báo). Máy chủ: bảng `chat_push_thiet_bi` + edge `chat-push` (beeland migration
@@ -79,7 +79,7 @@ async function ensureChannel(n: Notif) {
 async function doRegister(ask: boolean): Promise<void> {
   const n = notifications();
   if (!n || loggedOut) return;
-  if (!(await getValidSupabaseJwt())) return;
+  if (!(await getFreshJwt())) return;
   let perm = await n.getPermissionsAsync();
   if (!perm.granted && ask && perm.canAskAgain) perm = await n.requestPermissionsAsync();
   if (!perm.granted) return;
@@ -116,7 +116,7 @@ export async function unregisterChatPush(): Promise<void> {
     const token = await AsyncStorage.getItem(TOKEN_KEY);
     if (!token) return;
     await AsyncStorage.removeItem(TOKEN_KEY);
-    if (await getValidSupabaseJwt()) await ChatService.pushUnregister(token);
+    if (await getFreshJwt()) await ChatService.pushUnregister(token);
   } catch (e) {
     console.log("[chatPush] huỷ lỗi:", e instanceof Error ? e.message : String(e));
   }

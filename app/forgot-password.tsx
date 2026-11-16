@@ -11,7 +11,7 @@ import { StaffResetPasswordService } from "@/sevicesSupabase/StaffResetPasswordS
 
 /**
  * Quên mật khẩu – bước 1: gửi mã OTP tới email đăng ký của tài khoản (nhân viên nội bộ + đại lý).
- * API `functions/v1/staff-reset-password` {action:"request"} – máy chủ trả cùng một dạng dù tài khoản có email hay không.
+ * API `fn_nv_app_quen_mat_khau` {action:"request"} – máy chủ trả cùng một dạng dù tài khoản có email hay không.
  */
 export default function ForgotPasswordScreen() {
   const router = useRouter();

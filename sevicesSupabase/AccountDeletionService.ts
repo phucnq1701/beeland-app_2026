@@ -1,99 +1,54 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
+import { callNv, errorMessage } from "@/services/nvApi";
+import { clearSession, getJwt, getSessionToken } from "@/services/session";
 
-import { SESSION_KEYS } from "@/lib/sessionKeys";
-
-import axiosApiSupabase, { SUPABASE_ANON_KEY } from "./axiosApiSupabase";
-import { decodeJwtPayload, isJwtExpired, isUuidLike, looksLikeJwt } from "./cloudTenant";
+/**
+ * Tự xoá tài khoản (Apple 5.1.1(v)) — bộ API riêng app `fn_nv_app_xoa_tai_khoan` (user chốt 2026-11-16): máy chủ lấy nhân viên /
+ * công ty từ JWT (không gửi id), xoá hồ sơ nhân viên như lõi xoá nhân viên của web; nhân viên còn chứng từ ⇒ KHOÁ tài khoản (không
+ * đăng nhập được nữa); tài khoản quản trị / nhóm toàn quyền ⇒ máy chủ từ chối (liên hệ quản trị). Không còn DELETE thẳng
+ * bảng dm_employees qua REST (web đã chặn tự xoá ở trigger — đường cũ luôn lỗi).
+ */
+export type DeletionResult = "xoa" | "khoa";
 
 export interface DeletedEmployeeSession {
   jwt: string;
   token: string | null;
+  result: DeletionResult;
 }
 
-async function assertSameSession(session: DeletedEmployeeSession, allowPartiallyCleared = false): Promise<void> {
-  const jwt = await AsyncStorage.getItem("@supabase_jwt");
-  const token = await AsyncStorage.getItem("@token");
+async function assertSameSession(session: Pick<DeletedEmployeeSession, "jwt" | "token">, allowPartiallyCleared = false): Promise<void> {
+  const jwt = (await getJwt()) || null;
+  const token = (await getSessionToken()) || null;
   if ((jwt !== session.jwt && !(allowPartiallyCleared && jwt === null)) ||
       (token !== session.token && !(allowPartiallyCleared && token === null))) {
     throw new Error("Phiên đăng nhập đã thay đổi. Vui lòng tải lại màn hình.");
   }
 }
 
-/**
- * Giống web: chỉ DELETE hồ sơ dm_employees của phiên hiện tại.
- * Không xóa cloud_users, không thu hồi phiên trên thiết bị khác.
- * Kiểm tra client không thay thế cho phân quyền RLS phía máy chủ.
- */
+/** Xoá (hoặc khoá) tài khoản đang đăng nhập. Lỗi ⇒ ném Error với lời máy chủ; phiên giữ nguyên. */
 export async function deleteCurrentEmployee(): Promise<DeletedEmployeeSession> {
-  const jwt = (await AsyncStorage.getItem("@supabase_jwt")) || "";
-  const token = await AsyncStorage.getItem("@token");
-  const claims = decodeJwtPayload(jwt);
-  if (!looksLikeJwt(jwt) || isJwtExpired(jwt) || !claims.sub ||
-      !Number.isFinite(claims.exp) || !isUuidLike(claims.company_id)) {
-    throw new Error("Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.");
-  }
-  // Không dùng sub (cloud_users.id) hay cache employee_id có thể thuộc phiên cũ.
-  if (!isUuidLike(claims.employee_id)) {
-    throw new Error("Phiên đăng nhập chưa có mã định danh nhân viên. Vui lòng đăng nhập lại.");
-  }
-  const session = { jwt, token };
-  await assertSameSession(session);
-
-  let response;
+  const jwt = await getJwt();
+  const token = (await getSessionToken()) || null;
+  if (!jwt) throw new Error("Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.");
+  let r: any;
   try {
-    // Gửi JWT cố định, không đi qua interceptor có fallback anon-key.
-    response = await axios.delete(`${axiosApiSupabase.defaults.baseURL}/rest/v1/dm_employees`, {
-      timeout: 30000,
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${jwt}`,
-        Prefer: "return=representation",
-        Accept: "application/json",
-      },
-      params: {
-        ma_ctdk: `eq.${claims.company_id}`,
-        id: `eq.${claims.employee_id}`,
-        select: "id",
-      },
-    });
-  } catch (error: unknown) {
-    if (axios.isAxiosError(error)) {
-      const status = error.response?.status;
-      const code = error.response?.data?.code;
-      if (status === 401) {
-        throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-      }
-      if (status === 403 || code === "42501") {
-        throw new Error("Bạn không có quyền xóa hồ sơ nhân viên này.");
-      }
-      if (code === "23503") {
-        throw new Error("Hồ sơ nhân viên đang được dữ liệu khác sử dụng nên chưa thể xóa.");
-      }
-      if (!error.response) {
-        throw new Error("Không nhận được xác nhận xóa từ máy chủ. Vui lòng kiểm tra kết nối và trạng thái hồ sơ trước khi thử lại.");
-      }
-    }
-    throw new Error("Không xóa được hồ sơ nhân viên. Vui lòng thử lại hoặc liên hệ quản trị viên.");
+    r = await callNv<any>("fn_nv_app_xoa_tai_khoan", {});
+  } catch (e) {
+    throw new Error(errorMessage(e, "Không xóa được tài khoản. Vui lòng thử lại hoặc liên hệ quản trị viên."));
   }
-  if (!Array.isArray(response.data) || response.data.length !== 1 ||
-      response.data[0]?.id !== claims.employee_id) {
-    throw new Error("Không tìm thấy nhân viên cần xóa (hoặc không có quyền xóa).");
-  }
-  return session;
+  const result = r?.ket_qua;
+  if (result !== "xoa" && result !== "khoa") throw new Error("Không nhận được xác nhận xóa từ máy chủ. Vui lòng thử lại.");
+  return { jwt, token, result };
 }
 
-/** Chỉ gọi sau khi DELETE đã được xác nhận; không xóa phiên mới nếu đã đổi tài khoản. */
+/** Chỉ gọi sau khi máy chủ đã xác nhận; không xoá phiên mới nếu đã đổi tài khoản. Phiên máy chủ: đăng xuất (bỏ qua lỗi). */
 export async function clearDeletedEmployeeSession(session: DeletedEmployeeSession): Promise<void> {
   await assertSameSession(session, true);
+  if (session.token) {
+    await callNv("fn_nv_app_dang_xuat", { p_token: session.token }, { anonymous: true, timeout: 8000 }).catch(() => undefined);
+  }
   try {
-    await AsyncStorage.multiRemove(SESSION_KEYS);
+    await clearSession();
   } catch {
-    // Retry theo từng khóa nếu thao tác batch thất bại.
-    try {
-      for (const key of SESSION_KEYS) await AsyncStorage.removeItem(key);
-    } catch {
-      throw new Error("Đã xóa hồ sơ nhưng chưa dọn được phiên trên thiết bị. Vui lòng thử đăng xuất lại.");
-    }
+    throw new Error("Đã xóa tài khoản nhưng chưa dọn được phiên trên thiết bị. Vui lòng thử đăng xuất lại.");
   }
 }

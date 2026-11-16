@@ -8,7 +8,7 @@ import { Text } from "@/components/ui/Text";
 import { bannerFromEvent, bannerFromPush, chatTarget, createSeen, type ChatBanner } from "@/lib/chatNotify";
 import { useReducedMotion } from "@/lib/useReducedMotion";
 import type { ChatEvent } from "@/sevicesSupabase/ChatService";
-import { getValidSupabaseJwt } from "@/sevicesSupabase/cloudTenant";
+import { getFreshJwt } from "@/services/session";
 import { colors, elevation, motion, radius, space } from "@/theme";
 
 import {
@@ -69,7 +69,7 @@ export function ChatNotifier() {
 
   const open = useCallback(
     async (conversationId: string | null) => {
-      if (!conversationId || isChatLoggedOut() || !(await getValidSupabaseJwt())) return;
+      if (!conversationId || isChatLoggedOut() || !(await getFreshJwt())) return;
       if (conversationId === getActiveChat()) return;
       router.push(`/chat/${conversationId}` as never);
     },

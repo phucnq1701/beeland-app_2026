@@ -118,6 +118,10 @@ export default function AccountScreen() {
       chatAuthChanged(false);
       await disableBiometricLogin();
       await clearDeletedEmployeeSession(deletedSession.current);
+      toast.show({
+        type: "success",
+        message: deletedSession.current.result === "khoa" ? "Tài khoản đã bị khóa (còn chứng từ trên hệ thống)." : "Đã xóa tài khoản.",
+      });
       queryClient.clear();
       if (router.canDismiss()) router.dismissAll();
       router.replace("/login");
@@ -141,7 +145,7 @@ export default function AccountScreen() {
     const confirmed = await confirm({
       title: "Xóa tài khoản",
       message:
-        "Bạn có chắc chắn muốn xóa hồ sơ nhân viên của mình như trên web và đăng xuất khỏi app? Không thể hoàn tác việc xóa hồ sơ. Tài khoản đăng nhập trên hệ thống không bị vô hiệu hóa.",
+        "Bạn có chắc chắn muốn xóa tài khoản và đăng xuất khỏi app? Hồ sơ nhân viên sẽ bị xóa; nếu đã có chứng từ trên hệ thống thì tài khoản bị khóa (không đăng nhập được nữa) để giữ chứng từ. Không thể hoàn tác.",
       confirmText: "Xóa",
       cancelText: "Hủy",
       destructive: true,

@@ -70,11 +70,14 @@ const toLine = (r: Row): GiftWhLine => ({
   sl_giu: num(r.sl_giu),
   sl_chung_tu: num(r.sl_chung_tu),
   sl_xuat: num(r.sl_xuat),
-  con_lai: num(r.con_lai),
+  con_lai: r.con_lai == null ? null : num(r.con_lai),
+  con_lai_hieu_luc: num(r.con_lai_hieu_luc ?? r.con_lai),
   nguong_canh_bao: num(r.nguong_canh_bao),
   thu_tu: num(r.thu_tu, 1),
   is_active: r.is_active === true,
   co_xuat: r.co_xuat === true,
+  dung_chung: r.dung_chung === true,
+  la_dong_nhom: r.la_dong_nhom === true,
 });
 
 const toWarehouse = (r: Row): GiftWarehouse => ({
@@ -136,7 +139,7 @@ const warehousePayload = (v: GiftWarehouseInput) => {
 const linePayload = (l: GiftWhLineInput) => ({
   group_id: l.group_id,
   item_id: l.item_id || null,
-  so_luong: l.so_luong,
+  so_luong: l.so_luong ?? null,
   nguong_canh_bao: l.nguong_canh_bao,
 });
 
@@ -179,6 +182,10 @@ export const toPolicyKhoStock = (r: Row): PolicyKhoStock => ({
   den_ngay: strOrNull(r.den_ngay),
   kho_active: r.kho_active === true,
   pham_vi: arr(r.pham_vi).map((s) => ({ da_project_id: lowerId(s.da_project_id), toa_id: idOrNull(s.toa_id) })),
+  dung_chung: r.dung_chung === true,
+  group_line_id: idOrNull(r.group_line_id),
+  con_lai_nhom: r.con_lai_nhom == null ? null : num(r.con_lai_nhom),
+  suc_chua_nhom: r.suc_chua_nhom == null ? null : num(r.suc_chua_nhom),
 });
 
 const toDocument = (r: Row): GiftWhDocument => ({

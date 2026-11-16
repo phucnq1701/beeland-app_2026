@@ -11,9 +11,9 @@ type Doc = FileItem & { link: string };
 
 const WEB_VIEW_TYPES = ["pdf", "jpg", "jpeg", "png", "txt", "html", "doc", "docx", "xls", "xlsx"];
 
-/** Tài liệu trong thư mục: tìm kiếm phía máy chủ (chờ 500ms như cũ), mở bằng trình xem hoặc ứng dụng ngoài. */
+/** Tài liệu trong thư mục (fn_nv_app_tai_lieu_tep): tìm kiếm phía máy chủ (chờ 500ms, tìm cả thư mục con như web), mở bằng trình xem hoặc ứng dụng ngoài. */
 export default function DocumentsScreen() {
-  const { folderId } = useLocalSearchParams<{ folderId: string }>();
+  const { folderId, title } = useLocalSearchParams<{ folderId: string; title?: string }>();
   const toast = useToast();
   const [docs, setDocs] = useState<Doc[]>([]);
   const [query, setQuery] = useState("");
@@ -28,17 +28,17 @@ export default function DocumentsScreen() {
       const v = ++version.current;
       if (refresh) setRefreshing(true);
       try {
-        const res: any = await DocumentService.getDetail({ DocumentID: Number(folderId), InputSearch: search });
+        const rows = await DocumentService.files("DOCUMENT", String(folderId), search);
         if (v !== version.current) return;
         setDocs(
-          (res?.data ?? []).map((doc: any) => ({
-            id: doc.ID,
-            name: doc.Name,
-            type: getDocumentType(doc.Type || "", doc.Name || "", doc.Link || ""),
-            size: doc.Size > 0 ? `${doc.Size} MB` : undefined,
-            date: doc.CreatedAt ? new Date(doc.CreatedAt).toLocaleDateString("vi-VN") : undefined,
-            link: !doc.Link ? "" : /^https?:\/\//i.test(doc.Link) ? doc.Link : `https://upload.beesky.vn/${doc.Link.replace(/^\/+/, "")}`,
-            note: doc.GhiChu,
+          rows.map((doc) => ({
+            id: doc.id,
+            name: doc.name,
+            type: getDocumentType(doc.type, doc.name, doc.link),
+            size: doc.size > 0 ? `${doc.size} MB` : undefined,
+            date: doc.createdAt ? new Date(doc.createdAt).toLocaleDateString("vi-VN") : undefined,
+            link: doc.link,
+            note: doc.note,
           }))
         );
         setError(false);
@@ -92,7 +92,7 @@ export default function DocumentsScreen() {
 
   return (
     <FileListScreen
-      title="Tài liệu"
+      title={title ? String(title) : "Tài liệu"}
       items={docs}
       loading={loading}
       error={error}

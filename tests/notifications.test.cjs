@@ -5,32 +5,32 @@ const { loadTs } = require("./helpers/loadTs.cjs");
 const n = loadTs("lib/notifications.ts");
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
-test("notificationOrFilter: global + company code (lowercase) + own account, like the web bell", () => {
-  assert.equal(n.notificationOrFilter("MSR", "NV01"), "(is_global.eq.true,ma_ctdk.eq.msr,account_id.eq.NV01)");
-  assert.equal(n.notificationOrFilter(" msr ", ""), "(is_global.eq.true,ma_ctdk.eq.msr)");
-  assert.equal(n.notificationOrFilter("", "NV01"), null);
-});
-
-test("visibleNotifications keeps only rows for this account / company / global and maps fields", () => {
-  const rows = [
-    { id: "a", title: "Riêng tôi", message: "m1", created_at: "2026-11-03T08:00:00Z", is_read: false, account_id: "NV01", ma_ctdk: "msr", type: "booking", related_id: "r1" },
-    { id: "b", title: "Người khác", message: "m2", created_at: "2026-11-03T07:00:00Z", is_read: false, account_id: "NV02", ma_ctdk: "msr" },
-    { id: "c", title: "", message: "m3", created_at: "2026-11-03T06:00:00Z", is_read: true, ma_ctdk: "MSR" },
-    { id: "d", title: "Công ty khác", message: "m4", created_at: "2026-11-03T05:00:00Z", is_read: false, ma_ctdk: "abc" },
-    { id: "e", title: "Toàn hệ thống", message: null, created_at: "2026-11-03T04:00:00Z", is_read: null, is_global: true },
-    { id: "f", title: "Không gắn gì", message: "m6", created_at: "2026-11-03T03:00:00Z", is_read: false },
-  ];
-  const out = plain(n.visibleNotifications(rows, "msr", "NV01"));
-  assert.deepEqual(out.map((x) => x.id), ["a", "c", "e"]);
+test("mapHopThu: dòng hộp thư fn_tb_nb_hop_thu_list ⇒ thông báo app", () => {
+  const out = plain(n.mapHopThu([
+    { id: "a", tieu_de: "Phiếu thu PT-1: duyệt", noi_dung: "x", form_code: 815, ban_ghi_id: "r1", da_doc: false, created_at: "2026-11-16T08:00:00Z", ma_thao_tac: "08-02" },
+    { id: "b", tieu_de: "", noi_dung: null, form_code: null, ban_ghi_id: null, da_doc: true, created_at: "2026-11-16T07:00:00Z" },
+    { tieu_de: "không id" },
+  ]));
   assert.deepEqual(out[0], {
-    id: "a", title: "Riêng tôi", message: "m1", createdAt: "2026-11-03T08:00:00Z", isRead: false, type: "booking", relatedId: "r1",
+    id: "a", title: "Phiếu thu PT-1: duyệt", message: "x", createdAt: "2026-11-16T08:00:00Z", isRead: false, formCode: 815, relatedId: "r1", action: "08-02",
   });
   assert.equal(out[1].title, "Thông báo");
+  assert.equal(out[1].message, "");
   assert.equal(out[1].isRead, true);
-  assert.equal(out[2].message, "");
-  assert.equal(out[2].isRead, false);
-  // Chưa có mã nhân viên → thông báo gắn tài khoản bị ẩn
-  assert.deepEqual(plain(n.visibleNotifications(rows, "msr", "")).map((x) => x.id), ["c", "e"]);
+  assert.equal(out[1].formCode, null);
+  assert.equal(out.length, 2);
+  assert.deepEqual(plain(n.mapHopThu(null)), []);
+});
+
+test("notificationRoute: chỉ màn app có và tải được theo id; còn lại không mở", () => {
+  assert.deepEqual(plain(n.notificationRoute({ formCode: 9002, relatedId: "u1" })), { pathname: "/signing/[id]", params: { id: "u1" } });
+  assert.deepEqual(plain(n.notificationRoute({ formCode: 832, relatedId: "r1" })), { pathname: "/request/[id]", params: { id: "r1" } });
+  assert.equal(n.notificationRoute({ formCode: 27, relatedId: "b1" }), null, "booking: thông báo mang id phiếu giữ chỗ");
+  assert.equal(n.notificationRoute({ formCode: 815, relatedId: "p1" }), null, "phiếu thu: chưa có màn chi tiết thật");
+  assert.equal(n.notificationRoute({ formCode: 803, relatedId: "g1" }), null, "giỏ hàng: app không có màn");
+  assert.equal(n.notificationRoute({ formCode: 28, relatedId: "d1" }), null, "đặt cọc: màn app cần dòng danh sách");
+  assert.equal(n.notificationRoute({ formCode: 815, relatedId: null }), null);
+  assert.equal(n.notificationRoute({ formCode: null, relatedId: "x" }), null);
 });
 
 test("relativeTime formats like a feed", () => {

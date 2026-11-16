@@ -1,5 +1,5 @@
 /**
- * Quên mật khẩu (nhân viên + đại lý) — endpoint `functions/v1/staff-reset-password` của API .NET
+ * Quên mật khẩu (nhân viên + đại lý) — endpoint app `fn_nv_app_quen_mat_khau` (= edge staff-reset-password của API .NET)
  * (api-beeland-new `StaffResetPasswordService`): request → verify → reset; lỗi trả HTTP 400/500 `{ error }`.
  * Chỉ hàm thuần (không import) để test nạp trực tiếp.
  */
