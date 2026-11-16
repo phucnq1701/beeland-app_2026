@@ -60,8 +60,17 @@ function load({ payload = claims(), result = [{ id: employee }], error, batchFai
       storage.delete(key);
     },
   } };
+  // services/session.getFreshJwt: JWT còn hạn ⇒ trả; hết hạn ⇒ "" (ca làm mới phiên: tests/nv-session.test.cjs)
+  const sessionStub = { getFreshJwt: async () => {
+    const jwt = storage.get("@supabase_jwt") || "";
+    try {
+      const exp = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString()).exp;
+      return exp && exp <= Math.floor(Date.now() / 1000) + 30 ? "" : jwt;
+    } catch { return ""; }
+  } };
   const cloudTenant = compile("sevicesSupabase/cloudTenant.ts", {
     "@react-native-async-storage/async-storage": asyncStorage,
+    "@/services/session": sessionStub,
   });
   const api = {
     delete: async (url, config) => {

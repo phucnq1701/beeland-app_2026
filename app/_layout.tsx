@@ -9,6 +9,7 @@ import { StyleSheet } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import UpdateManager from "@/components/UpdateManager";
 import { ChatNotifier } from "@/components/chat/ChatNotifier";
+import { SessionGuard } from "@/components/SessionGuard";
 import { FontStatusProvider } from "@/components/ui/FontStatus";
 import { ToastProvider } from "@/components/ui/Toast";
 import { applyWebFont } from "@/constants/webFont";
@@ -96,6 +97,7 @@ export default function RootLayout() {
             <StatusBar style="dark" />
             <RootLayoutNav />
             <ChatNotifier />
+            <SessionGuard />
           </ToastProvider>
           {/* Trong FontStatusProvider để màn "đang cập nhật dữ liệu mới" dùng font của app. */}
           <UpdateManager />

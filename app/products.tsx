@@ -32,6 +32,7 @@ import {
   SegmentedControl,
   SkeletonList,
   Text,
+  useToast,
 } from "@/components/ui";
 import { SummaryKey } from "@/lib/productOverview";
 import { applyRealtimeChange, resolveCatalogStatus, rowToRealtimeChange, unitStatusOf } from "@/lib/productRealtime";
@@ -66,6 +67,17 @@ export default function ProductsScreen({
   const [legendOpen, setLegendOpen] = useState<boolean>(false);
   const [selectedOverviewStatus, setSelectedOverviewStatus] = useState<SummaryKey>("all");
   const router = useRouter();
+  const toast = useToast();
+  // Lỗi tải (mất phiên, máy chủ lỗi…) ⇒ báo, không để danh sách trống im lặng; cùng thông điệp chỉ báo 1 lần / 4 giây
+  const lastErrorRef = useRef<{ msg: string; at: number } | null>(null);
+  const notifyError = (res: any) => {
+    const msg = res?.error;
+    if (!msg) return;
+    const now = Date.now();
+    if (lastErrorRef.current && lastErrorRef.current.msg === msg && now - lastErrorRef.current.at < 4000) return;
+    lastErrorRef.current = { msg, at: now };
+    toast.show({ type: "error", message: msg });
+  };
   const { MaDA } = useLocalSearchParams();
 
 
@@ -177,6 +189,7 @@ export default function ProductsScreen({
 
   const loadDataByDA = async (MaDA: any) => {
     const resListKhu = await ProductService.getKhuVuc({ maDA: MaDA });
+    notifyError(resListKhu);
     setKhuVuc(resListKhu?.data || []);
 
     void handleFormGrid(MaDA);
@@ -189,6 +202,7 @@ export default function ProductsScreen({
       maDA: MaDA ?? filterCondition?.MaDA,
     });
 
+    notifyError(result);
     const raw = result?.data || [];
 
     const mappedBlocks = raw
@@ -232,6 +246,7 @@ export default function ProductsScreen({
       setHasMore(true);
 
       const resDA = await ProjectService.getProjects({});
+      notifyError(resDA);
       setDuAn(resDA?.data || []);
       const ma = Number(MaDA);
       const finalMa = isNaN(ma) ? resDA?.data?.[0]?.MaDA : ma;
@@ -264,6 +279,7 @@ export default function ProductsScreen({
       };
       setFilterCondition(filter);
       const res = await ProductService.getProducts(filter);
+      notifyError(res);
       const data = res?.data || [];
       setProducts2(data);
 
@@ -302,6 +318,7 @@ export default function ProductsScreen({
       void loadDataByDA(_filter.MaDA);
 
       const res = await ProductService.getProducts(filter);
+      notifyError(res);
       const data = res?.data || [];
       setProducts2(data);
 
@@ -340,6 +357,7 @@ export default function ProductsScreen({
       };
 
       const res = await ProductService.getProducts(filter);
+      notifyError(res);
       const data = res?.data || [];
       setProducts2(data);
 
@@ -405,6 +423,7 @@ export default function ProductsScreen({
       };
 
       const res = await ProductService.getProducts(filter);
+      notifyError(res);
       const data = res?.data || [];
 
       setProducts2((prev) => {

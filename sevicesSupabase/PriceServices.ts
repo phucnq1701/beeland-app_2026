@@ -1,46 +1,7 @@
-import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyId, getTypeAccount, getValidSupabaseJwt } from "./cloudTenant";
-import { agencyScopeFromRpc, filterByAgencyScope } from "../lib/projectScope";
+import { errorMessage } from "@/services/nvApi";
+import { DuAnApi, SanPhamApi } from "@/services/SanPhamApi";
 
-/**
- * Phạm vi căn của nhân viên đại lý — cùng tập `fn_bds_product_list` (danh sách) dùng: RPC
- * `app_agency_product_ids(false)` = căn trong giỏ hàng hợp lệ có nhân viên đó. `null` = nội bộ ⇒ không lọc.
- * Lỗi gọi: tài khoản đăng nhập AGENCY ⇒ không cho xem căn nào (fail-closed); còn lại giữ như cũ.
- */
-async function getAgencyCartScope(): Promise<string[] | null> {
-  try {
-    const res = await axiosApiSupabase.post("rest/v1/rpc/app_agency_product_ids", {
-      p_include_docs: false,
-    });
-    return agencyScopeFromRpc(res?.data);
-  } catch (error) {
-    console.log("ERROR getAgencyCartScope (app_agency_product_ids):", error);
-    return (await getTypeAccount()) === "AGENCY" ? [] : null;
-  }
-}
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Map ma_da_code (text, vd "148") -> da_projects.id (uuid).
- */
-async function resolveProjectUuid(maDA: any): Promise<string | null> {
-  if (maDA == null || maDA === "" || maDA === -1) return null;
-  const value = String(maDA).trim();
-  if (UUID_RE.test(value)) return value;
-
-  try {
-    const res = await axiosApiSupabase.get("rest/v1/da_projects", {
-      params: { select: "id", ma_da_code: `eq.${value}`, limit: "1" },
-    });
-    const rows = Array.isArray(res.data) ? res.data : [];
-    return rows.length > 0 ? rows[0].id : null;
-  } catch (error) {
-    console.log("ERROR resolveProjectUuid (da_projects):", error);
-    return null;
-  }
-}
+import { loadProductDetail } from "./ProductService";
 
 /**
  * 1 dòng bảng giá (bảng price_list_items) — các cột phục vụ hiển thị giá
@@ -150,240 +111,36 @@ export function computeActivePriceTotals(
 }
 
 /**
- * Resolve UUID sản phẩm (bds_products.id): nhận sẵn uuid hoặc tra theo
- * ma_sp / ky_hieu — giống cách checkBooking đã làm (or= bắt buộc bọc ngoặc).
- */
-async function resolveProductUuid(
-  productId: any,
-  maSP: any
-): Promise<string | null> {
-  const direct = String(productId ?? "").trim();
-  if (UUID_RE.test(direct)) return direct;
-
-  const code = String(maSP ?? "").trim();
-  if (!code) return null;
-  try {
-    const safe = code.replace(/[,()]/g, "");
-    const r = await axiosApiSupabase.get("rest/v1/bds_products", {
-      params: {
-        select: "id",
-        or: `(ma_sp.eq.${safe},ky_hieu.eq.${safe})`,
-        limit: "1",
-      },
-    });
-    const rows = Array.isArray(r.data) ? r.data : [];
-    return rows[0]?.id || null;
-  } catch (error) {
-    console.log("ERROR resolveProductUuid (bds_products):", error);
-    return null;
-  }
-}
-
-/**
- * Lấy block/khu theo dự án — cloud.
- * Nhóm sản phẩm theo khu -> tầng -> căn.
- * Trục lưới (tầng = catalog `tang`, cột = catalog `vi_tri`) lấy từ cloud_catalogs
- * theo ma_ctdk_uid + da_project_id (theo web AI) — vì ma_tang/vi_tri là uuid.
- * Shape: { data: [{ maKhu, tenKhu, location:[{maVT,tenVT}], floor:[{maTang,tenTang,detailFloor:[]}] }] }
+ * Sơ đồ căn + giá đang áp dụng — bộ API riêng app nhân viên (fn_nv_app_so_do / fn_nv_app_san_pham_chi_tiet).
+ * Phạm vi do máy chủ áp (đại lý ⇒ căn trong giỏ hợp lệ; nội bộ ⇒ dự án được gán) — app không tự lọc nữa.
  */
 export const PriceServices = {
+  /** Lưới khu → tầng → căn của dự án. payload: { maDA } (mã dự án | uuid). Shape cũ: { data: [{ maKhu, tenKhu, location, floor }] } */
   getBlock: async (payload: any = {}) => {
-    const companyId = await getCompanyId();
-    const validJwt = await getValidSupabaseJwt();
-    if (!validJwt) {
-      console.log("[Price] chưa có cloud_jwt, bỏ qua getBlock");
-      return { data: [] };
-    }
-
     try {
-      const maDA = payload?.maDA ?? payload?.MaDA;
-      const projectUuid = await resolveProjectUuid(maDA);
-      if (!projectUuid) return { data: [] };
-
-      const params: Record<string, string> = {
-        select: [
-          "id",
-          "ma_sp",
-          "ky_hieu",
-          "ma_da",
-          "ma_khu",
-          "ma_tang",
-          "ma_tt",
-          "vi_tri",
-          "mau_nen",
-          "tong_gia_gom_vat",
-          "khu:ma_khu(id,item_code,item_name)",
-          "tang:ma_tang(id,item_code,item_name)",
-          "tt:ma_tt(id,item_name,color_code)",
-        ].join(","),
-        ma_da: `eq.${projectUuid}`,
-        order: "created_at.desc",
-        limit: "2000",
-      };
-
-      if (companyId && UUID_RE.test(companyId)) {
-        params.ma_ctdk = `eq.${companyId}`;
-      }
-
-      const [res, agencyScope] = await Promise.all([
-        axiosApiSupabase.get("rest/v1/bds_products", { params }),
-        getAgencyCartScope(),
-      ]);
-      // Đại lý: Lưới / Tổng quan chỉ hiện căn trong giỏ hàng như Danh sách. REST của đại lý (RLS) còn trả cả căn
-      // sàn từng giao dịch nên phải lọc lại; nội bộ (agencyScope = null) giữ nguyên.
-      const rows = filterByAgencyScope(Array.isArray(res.data) ? res.data : [], agencyScope);
-
-      // Trục lưới: tầng (catalog tang) + cột (catalog vi_tri) theo dự án
-      const catalogBase: Record<string, string> = {
-        select: "id,item_code,item_name",
-        da_project_id: `eq.${projectUuid}`,
-        order: "item_code.asc",
-        limit: "500",
-      };
-      if (companyId && UUID_RE.test(companyId)) {
-        catalogBase.ma_ctdk_uid = `eq.${companyId}`;
-      }
-
-      let tangList: any[] = [];
-      let vtList: any[] = [];
-      try {
-        const [tangRes, vtRes] = await Promise.all([
-          axiosApiSupabase.get("rest/v1/cloud_catalogs", {
-            params: { ...catalogBase, catalog_type: "eq.tang" },
-          }),
-          axiosApiSupabase.get("rest/v1/cloud_catalogs", {
-            params: { ...catalogBase, catalog_type: "eq.vi_tri" },
-          }),
-        ]);
-        tangList = Array.isArray(tangRes.data) ? tangRes.data : [];
-        vtList = Array.isArray(vtRes.data) ? vtRes.data : [];
-      } catch (e) {
-        console.log("ERROR getBlock catalogs (tang/vi_tri):", e);
-      }
-
-      const tangOrder = new Map<string, number>();
-      tangList.forEach((t: any, i: number) => tangOrder.set(t.id, i));
-
-      const location = vtList.map((v: any) => ({
-        maVT: v.id,
-        tenVT: v.item_name || v.item_code || v.id,
-      }));
-
-      // Nhóm theo khu
-      const blockMap = new Map<string, any>();
-      for (const r of rows) {
-        const maKhu = r.ma_khu;
-        if (maKhu == null || maKhu === -1) continue;
-
-        if (!blockMap.has(String(maKhu))) {
-          blockMap.set(String(maKhu), {
-            maKhu,
-            tenKhu: r.khu?.item_name || r.khu?.item_code || String(maKhu),
-            location,
-            floor: [],
-          });
-        }
-        const block = blockMap.get(String(maKhu));
-
-        const maTang = r.ma_tang;
-        let floor = block.floor.find(
-          (f: any) => String(f.maTang) === String(maTang)
-        );
-        if (!floor) {
-          floor = {
-            maTang,
-            tenTang: r.tang?.item_name || r.tang?.item_code || String(maTang),
-            detailFloor: [],
-          };
-          block.floor.push(floor);
-        }
-
-        floor.detailFloor.push({
-          MaSP: r.ma_sp,
-          KyHieu: r.ky_hieu,
-          MaVT: r.vi_tri,
-          MaTT: r.ma_tt,
-          GiaBan: r.tong_gia_gom_vat,
-          MauNen: r.mau_nen || r.tt?.color_code || "",
-          TenTT: r.tt?.item_name || "",
-          ColorTT: r.tt?.color_code || "",
-        });
-      }
-
-      // Sắp tầng theo catalog tang (item_code asc); nếu catalog trống thì giữ nguyên
-      const data = Array.from(blockMap.values()).map((b: any) => ({
-        ...b,
-        floor: [...b.floor].sort((a: any, c: any) => {
-          const ai = tangOrder.get(a.maTang);
-          const ci = tangOrder.get(c.maTang);
-          if (ai != null && ci != null) return ai - ci;
-          return String(a.tenTang).localeCompare(String(c.tenTang), "vi");
-        }),
-      }));
-
-      return { data };
-    } catch (error) {
-      console.log("ERROR getBlock (bds_products):", error);
-      return { data: [] };
+      const projectId = await DuAnApi.resolveId(payload?.maDA ?? payload?.MaDA);
+      if (!projectId) return { data: [] };
+      return { data: await SanPhamApi.grid(projectId) };
+    } catch (e) {
+      console.log("ERROR getBlock (fn_nv_app_so_do):", errorMessage(e));
+      return { data: [], error: errorMessage(e) };
     }
   },
 
   /**
-   * Giá đang hiệu lực của 1 sản phẩm — gọi RPC
-   * get_active_price_for_product(p_ma_ctdk_uid, p_product_id, p_check_date).
-   * Function trả SETOF price_list_items nhưng thực chất tối đa 1 dòng
-   * (đã LIMIT 1 trong SQL) → lấy phần tử đầu tiên, rỗng thì null.
-   * payload: { productId?: uuid, maSP?: string, checkDate?: "YYYY-MM-DD" }
-   * (p_check_date có default current_date trong SQL — chỉ gửi khi có)
+   * Dòng bảng giá đang áp dụng của căn (lõi chung get_active_price_for_product: ưu tiên nhỏ nhất, hiệu lực hôm nay theo giờ VN),
+   * cột tổng còn trống thì tính như web (computeActivePriceTotals). payload: { productId (uuid) | maSP }.
    */
   getActivePriceForProduct: async (
-    payload: {
-      productId?: any;
-      maSP?: any;
-      MaSP?: any;
-      checkDate?: string;
-    } = {}
+    payload: { productId?: any; maSP?: any; MaSP?: any } = {}
   ): Promise<{ data: ActivePriceListItem | null }> => {
-    const companyId = await getCompanyId();
-    const validJwt = await getValidSupabaseJwt();
-    if (!validJwt || !companyId || !UUID_RE.test(companyId)) {
-      console.log(
-        "[Price] chưa có cloud_jwt/company_id hợp lệ, bỏ qua getActivePriceForProduct"
-      );
-      return { data: null };
-    }
-
+    const key = String(payload?.productId ?? payload?.maSP ?? payload?.MaSP ?? "").trim();
+    if (!key) return { data: null };
     try {
-      const productUuid = await resolveProductUuid(
-        payload?.productId,
-        payload?.maSP ?? payload?.MaSP
-      );
-      if (!productUuid) return { data: null };
-
-      const body: Record<string, any> = {
-        p_ma_ctdk_uid: companyId,
-        p_product_id: productUuid,
-      };
-      const checkDate = String(payload?.checkDate ?? "").trim();
-      if (checkDate) body.p_check_date = checkDate;
-
-      const res = await axiosApiSupabase.post(
-        "rest/v1/rpc/get_active_price_for_product",
-        body
-      );
-      const rows = Array.isArray(res.data)
-        ? res.data
-        : res.data
-          ? [res.data]
-          : [];
-      return {
-        data:
-          rows.length > 0
-            ? computeActivePriceTotals(rows[0] as ActivePriceListItem)
-            : null,
-      };
-    } catch (error) {
-      console.log("ERROR getActivePriceForProduct:", error);
+      const d = await loadProductDetail(key);
+      return { data: computeActivePriceTotals((d?.activePrice ?? null) as ActivePriceListItem | null) };
+    } catch (e) {
+      console.log("ERROR getActivePriceForProduct (fn_nv_app_san_pham_chi_tiet):", errorMessage(e));
       return { data: null };
     }
   },

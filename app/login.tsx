@@ -13,7 +13,6 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Eye, EyeOff, Fingerprint, ScanFace } from "lucide-react-native";
 
 import { buildAccountScope, setAccountScope } from "@/components/utils/accountScope";
@@ -34,21 +33,9 @@ import {
 import { maskUsername, sameAccount, type LoginAccount } from "@/lib/biometricLogin";
 import { hapticError } from "@/lib/haptics";
 import { colors, elevation, radius, space } from "@/theme";
-import {
-  cacheCloudProfile,
-  PROFILE_KEY,
-} from "@/sevicesSupabase/CloudProfileService";
 import { chatAuthChanged } from "@/components/chat/chatPush";
 import { resetChatSession } from "@/components/chat/useChat";
-import { AuthSupabaseService } from "@/sevicesSupabase/AuthService";
-import {
-  persistTenantFromJwt,
-  decodeJwtPayload,
-  isJwtExpired,
-  findJwtInObject,
-  looksLikeJwt,
-  getSessionStatus,
-} from "@/sevicesSupabase/cloudTenant";
+import { AuthApi } from "@/services/AuthApi";
 
 type SignInResult = { status: "ok" } | { status: "rejected"; message: string } | { status: "network" } | { status: "blocked" };
 
@@ -99,124 +86,23 @@ export default function LoginScreen() {
     };
   }, []);
 
-  /** Gọi cloud-auth và lưu phiên; chưa chuyển màn. "blocked" = đã báo Alert (tài khoản thiếu cấu hình). */
+  /** Đăng nhập (API riêng app nhân viên) và lưu phiên; chưa chuyển màn. "blocked" = đã báo Alert (tài khoản thiếu cấu hình). */
   const signIn = async (account: LoginAccount, pwd: string): Promise<SignInResult> => {
-    try {
-      const payload = {
-        action: "login",
-        maCTDK: account.companyCode,
-        email: account.username,
-        password: pwd,
-        typeAccount: account.loginType === "AGENCY" ? "AGENCY" : "SYSTEM",
-      };
-
-      const res = await AuthSupabaseService.login(payload);
-      console.log("[Login] cloud-auth response keys:", Object.keys(res || {}));
-      if (res?.status === 200) {
-        const dataObj =
-          (res as any)?.data && typeof (res as any).data === "object"
-            ? (res as any).data
-            : {};
-        const token =
-          (res as any)?.acessToken ??
-          (res as any)?.accessToken ??
-          (res as any)?.token ??
-          dataObj?.acessToken ??
-          dataObj?.accessToken ??
-          dataObj?.token ??
-          "";
-        let supabaseJwt =
-          (res as any)?.jwt ??
-          (res as any)?.cloud_jwt ??
-          (res as any)?.supabase_jwt ??
-          (res as any)?.cloudJwt ??
-          dataObj?.jwt ??
-          dataObj?.cloud_jwt ??
-          dataObj?.supabase_jwt ??
-          dataObj?.cloudJwt ??
-          dataObj?.access_token ??
-          "";
-        try {
-          if (!supabaseJwt || !looksLikeJwt(supabaseJwt)) {
-            const scanned = findJwtInObject(res);
-            if (scanned) {
-              console.log("[Login] tìm thấy JWT bằng quét đệ quy response");
-              supabaseJwt = scanned;
-            }
-          }
-          const p = decodeJwtPayload(supabaseJwt || "");
-          console.log(
-            `[Login] jwt exp=${p?.exp} now=${Math.floor(
-              Date.now() / 1000
-            )} expired=${isJwtExpired(supabaseJwt || "")} company_id=${
-              p?.company_id || p?.ma_ctdk
-            } company_code=${p?.company_code} role=${p?.role}`
-          );
-        } catch {}
-
-        if (token || supabaseJwt) {
-          await AsyncStorage.multiRemove([
-            PROFILE_KEY,
-            "@token",
-            "@supabase_jwt",
-            "@company_id",
-            "@tenant_id",
-            "@cloud_company_id",
-            "@employee_id",
-            "@user_company_id",
-            "@branch_id",
-            "@ma_nv",
-            "@type_account",
-            "maCTDK_UUID",
-            "@home_features_config",
-          ]);
-          if (token) {
-            await AsyncStorage.setItem("@token", token);
-          }
-          if (supabaseJwt) {
-            await AsyncStorage.setItem("@supabase_jwt", supabaseJwt);
-          } else {
-            await AsyncStorage.removeItem("@supabase_jwt");
-          }
-          await AsyncStorage.setItem(
-            "maCTDK",
-            String(dataObj?.maCTDK ?? (res as any)?.maCTDK ?? "")
-          );
-          await AsyncStorage.setItem("tenCTDKVT", account.companyCode);
-          await AsyncStorage.setItem("@type_account", payload.typeAccount);
-          await setAccountScope(buildAccountScope(payload.typeAccount, account.companyCode, account.username));
-          await saveLastLogin(account);
-
-          await persistTenantFromJwt(supabaseJwt || "", account.companyCode, res);
-          await cacheCloudProfile(res, supabaseJwt || "");
-          try {
-            const st = await getSessionStatus();
-            console.log(
-              `[Login] session sau khi lưu: ok=${st.ok} reason=${st.reason} tenant=${st.tenantId} hasJwt=${st.hasJwt} expired=${st.jwtExpired}`
-            );
-            if (!st.ok) {
-              Alert.alert(
-                "Thông báo",
-                "Đăng nhập thành công nhưng thiếu thông tin công ty (tenant). Vui lòng liên hệ quản trị để kiểm tra tài khoản."
-              );
-              return { status: "blocked" };
-            }
-          } catch {}
-          return { status: "ok" };
-        }
-        console.log("[Login] WARN response 200 nhưng không có token/jwt nào");
-        Alert.alert(
-          "Thông báo",
-          "Máy chủ không trả phiên đăng nhập (thiếu token). Vui lòng thử lại hoặc liên hệ quản trị."
-        );
-        return { status: "blocked" };
-      }
-      // cloud-auth trả HTTP 200 kèm { status: 401, message } khi sai tài khoản / mật khẩu.
-      return { status: "rejected", message: res?.message || "Đăng nhập thất bại" };
-    } catch (error) {
-      console.log("Login error:", error);
-      return { status: "network" };
+    const res = await AuthApi.login(account, pwd);
+    if (res.status === "network") return { status: "network" };
+    if (res.status === "rejected") return { status: "rejected", message: res.message || "Đăng nhập thất bại" };
+    const user = res.session.nguoi_dung;
+    const typeAccount = account.loginType === "AGENCY" ? "AGENCY" : "SYSTEM";
+    await setAccountScope(buildAccountScope(typeAccount, account.companyCode, account.username));
+    await saveLastLogin(account);
+    if (!user?.company_id) {
+      Alert.alert(
+        "Thông báo",
+        "Đăng nhập thành công nhưng thiếu thông tin công ty (tenant). Vui lòng liên hệ quản trị để kiểm tra tài khoản."
+      );
+      return { status: "blocked" };
     }
+    return { status: "ok" };
   };
 
   /** Phiên mới → bỏ hồ sơ chat cũ, nối lại kênh tin nhắn + đăng ký push cho tài khoản này. */

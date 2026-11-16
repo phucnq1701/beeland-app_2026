@@ -1,3 +1,4 @@
+import { getFreshJwt } from "@/services/session";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 function base64UrlDecodeToString(input: string): string {
@@ -211,15 +212,9 @@ export function isJwtExpired(token: string, leewaySec = 30): boolean {
   }
 }
 
-/** JWT còn hạn mới dùng được cho rest/v1, hết hạn thì trả null để caller fallback anon-key */
+/** JWT dùng được ngay: sắp / đã hết hạn thì tự làm mới phiên (services/session.ts). null = hết phiên. */
 export async function getValidSupabaseJwt(): Promise<string | null> {
-  const jwt = (await AsyncStorage.getItem("@supabase_jwt")) || "";
-  if (!jwt) return null;
-  if (isJwtExpired(jwt)) {
-    console.log("[Auth] @supabase_jwt expired, cần đăng nhập lại");
-    return null;
-  }
-  return jwt;
+  return (await getFreshJwt()) || null;
 }
 
 /**

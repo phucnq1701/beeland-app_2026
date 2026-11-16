@@ -15,7 +15,7 @@ import {
 } from "@/lib/biometric";
 import { maskUsername, sameAccount, type LoginAccount } from "@/lib/biometricLogin";
 import { hapticError } from "@/lib/haptics";
-import { AuthSupabaseService } from "@/sevicesSupabase/AuthService";
+import { AuthApi } from "@/services/AuthApi";
 import { colors, radius, space } from "@/theme";
 
 type Props = {
@@ -97,7 +97,7 @@ export function BiometricLoginSetting({ style }: Props) {
     try {
       let verified;
       try {
-        verified = await AuthSupabaseService.verifyPassword(account, password);
+        verified = await AuthApi.verifyPassword(account, password);
       } catch {
         hapticError();
         toast.show({ type: "error", message: "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại." });

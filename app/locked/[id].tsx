@@ -36,6 +36,8 @@ export default function LockDetailScreen() {
   const [data, setData] = useState<any>(null);
   const [bannerProduct, setBannerProduct] = useState<any[]>([]);
   const [dataProduct, setDataProduct] = useState<any>(null);
+  // Quyền BOOKING của form màn sản phẩm theo loại căn (như web useProductTxPerm) — chưa tải / không có ⇒ ẩn nút.
+  const [canBook, setCanBook] = useState(false);
 
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [, setIsLocked] = useState<boolean>(false);
@@ -86,8 +88,8 @@ export default function LockDetailScreen() {
     setBannerProduct(result?.data ?? []);
   };
   const getProducts = async () => {
-    const result = await ProductService.getDetailProducts({ maSP: maSP });
-
+    const result = await ProductService.getDetailProducts({ maSP: maSP, fresh: true });
+    setCanBook(!!result?.perms?.booking);
     if (result?.data) {
       setDataProduct(result.data);
     }
@@ -220,7 +222,7 @@ export default function LockDetailScreen() {
         </ScrollView>
         {back}
 
-        {active ? (
+        {active && canBook ? (
           <BottomActionBar>
             <Button
               size="lg"

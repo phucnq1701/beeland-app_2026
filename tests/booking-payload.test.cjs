@@ -1,5 +1,5 @@
 /* global __dirname */
-// Tạo booking với dữ liệu THẬT của màn: bds_products → ProductService.normalizeProduct (uuid ở "ID",
+// Tạo booking với dữ liệu THẬT của màn: fn_nv_app_san_pham_chi_tiet → lib/nvSanPham.mapProductDetail (uuid ở "ID",
 // không có SanPhamId) → buildBookingPayload (màn tạo booking) → BookingService.createBooking → p_payload.
 // Web chuẩn: beeland/src/components/Products/BookingFormDialog.tsx + services/Product.js (addBookingAPI).
 // Tự chứa (không dùng tests/helpers) để cherry-pick riêng được.
@@ -56,22 +56,18 @@ function bookingService(posts, gets) {
   }).BookingService;
 }
 
-// Một dòng bds_products như Supabase trả về (cột snake_case)
+// Chi tiết căn như fn_nv_app_san_pham_chi_tiet trả về (cột snake_case phẳng)
 const productRow = {
   id: uid(3), ma_sp: "SP01", ky_hieu: "B2-608", ma_da: uid(4), ma_khu: uid(8),
-  dien_tich_thong_thuy: 73.9, don_gia_thong_thuy: 21815079,
+  dien_tich_thong_thuy: 73.9,
   don_gia_chua_vat: 19831890, tong_gia_chua_vat: 1465576671, tien_vat: 146557667.1,
   tong_gia_gom_vat: 1612134338.1, tong_gia_tri_hdmb: 1641528341.502, tien_pbt: 29394003.402,
-  da: { ten_da: "Dự án A", ma_da_code: "DA01" },
+  ten_da: "Dự án A", ma_da_code: "DA01", khoa: null,
 };
+const mapProductDetail = (row) => load("lib/nvSanPham.ts", {}).mapProductDetail(row);
 
 test("booking from the real product shape sends the product uuid and the VAT fields like the web", async () => {
-  const { normalizeProduct } = load("sevicesSupabase/ProductService.ts", {
-    "./axiosApiSupabase": { default: {} },
-    "./cloudTenant": cloudTenant,
-    "@react-native-async-storage/async-storage": storage,
-  });
-  const product = normalizeProduct(productRow);
+  const product = mapProductDetail(productRow);
   assert.equal(product.ID, uid(3));
   assert.equal(product.SanPhamId, undefined, "the screen data has no SanPhamId");
 
@@ -110,10 +106,5 @@ test("booking from the lock screen forwards the lock id", () => {
 });
 
 test("wall-to-wall area is read from the real column dt_tim_tuong", () => {
-  const { normalizeProduct } = load("sevicesSupabase/ProductService.ts", {
-    "./axiosApiSupabase": { default: {} },
-    "./cloudTenant": cloudTenant,
-    "@react-native-async-storage/async-storage": storage,
-  });
-  assert.equal(normalizeProduct({ id: uid(3), dt_tim_tuong: 80.5 }).DTTimDuong, 80.5);
+  assert.equal(mapProductDetail({ id: uid(3), dt_tim_tuong: 80.5 }).DTTimDuong, 80.5);
 });

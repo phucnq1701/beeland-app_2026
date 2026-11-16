@@ -1,3 +1,4 @@
+import { getFreshJwt } from "@/services/session";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Landmark } from "lucide-react-native";
@@ -73,25 +74,12 @@ export default function HomeScreen() {
         router.replace("/login");
         return;
       }
-      try {
-        const supabaseJwt = await AsyncStorage.getItem("@supabase_jwt");
-        if (!supabaseJwt) {
-          console.log("[Home] chưa có cloud_jwt -> về login");
-          router.replace("/login");
-          return;
-        }
-        // Giữ require lười như bản cũ (tránh vòng import lúc khởi động)
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const cloudTenant = require("@/sevicesSupabase/cloudTenant");
-        if (cloudTenant.isJwtExpired(supabaseJwt)) {
-          const p = cloudTenant.decodeJwtPayload(supabaseJwt);
-          console.log(
-            `[Home] cloud_jwt expired (exp=${p?.exp}, now=${Math.floor(Date.now() / 1000)}) -> về login lấy JWT mới`,
-          );
-          router.replace("/login");
-          return;
-        }
-      } catch {}
+      // JWT sắp / đã hết hạn ⇒ tự làm mới bằng token phiên (services/session.ts); chỉ về Đăng nhập khi phiên hết hẳn.
+      const jwt = await getFreshJwt();
+      if (!jwt) {
+        console.log("[Home] không còn phiên hợp lệ -> về login");
+        router.replace("/login");
+      }
     };
 
     void checkToken();

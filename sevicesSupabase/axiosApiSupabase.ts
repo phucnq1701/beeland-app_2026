@@ -1,12 +1,13 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getValidSupabaseJwt, isJwtExpired } from "./cloudTenant";
+import { getFreshJwt } from "@/services/session";
+import { API_URL } from "@/services/config";
 
 /**
  * API BEELAND (.NET + SQL Server từ 01/11/2026), nhận nguyên cú pháp Supabase (`rest/v1`, `functions/v1`, `storage/v1`);
  * realtime là SignalR `/api/realtime` (`realtimeHub.ts`). Địa chỉ cũ `api-beelandv2.beesky.vn` chỉ còn chuyển tiếp tạm.
  */
-export const API_URL = "https://api-beeland26.beesky.vn";
+export { API_URL };
 
 export const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg3NTQ2ODQ0LCJleHAiOjE5NDUyMjY4NDR9.ftDz2g-LgHuMoXnFMzTtbIfgDodnntv5fGbbonqWYiw";
@@ -28,18 +29,14 @@ axiosApiSupabase.interceptors.request.use(
     const isSupabaseRest = config.url?.startsWith("rest/v1");
 
     if (isSupabaseRest) {
-      // rest/v1 bắt buộc JWT còn hạn, hết hạn thì dùng anon để tránh PGRST303
-      const validJwt = await getValidSupabaseJwt();
+      // rest/v1 cần JWT còn hạn: sắp / đã hết thì làm mới phiên trước (services/session.ts) — không còn lặng lẽ dùng
+      // anon key (danh sách rỗng). Làm mới thất bại ⇒ gửi không JWT ⇒ máy chủ trả 401 ⇒ màn báo lỗi.
+      const validJwt = await getFreshJwt();
       if (validJwt) {
         config.headers.Authorization = `Bearer ${validJwt}`;
       } else {
-        const expired = await AsyncStorage.getItem("@supabase_jwt");
-        if (expired && isJwtExpired(expired)) {
-          console.log(
-            `[Auth] JWT expired, gọi ${config.url} bằng anon-key, cần đăng nhập lại để có RLS đầy đủ`
-          );
-        }
-        config.headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
+        console.log(`[Auth] chưa có JWT hợp lệ khi gọi ${config.url}`);
+        delete config.headers.Authorization;
       }
     } else {
       const token = await AsyncStorage.getItem("@token");
