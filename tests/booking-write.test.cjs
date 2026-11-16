@@ -71,6 +71,17 @@ function load({ reject = {}, rpcResult, rpc = {}, settings } = {}) {
     exports, console: { log() {} },
     require: (name) => {
       if (name === "./axiosApiSupabase") return { default: http };
+      // Bộ API riêng app: ghi lại lời gọi như post để các ca so được endpoint + body
+      if (name === "@/services/nvApi") return {
+        callNv: async (fn, args) => {
+          posts.push({ target: fn, body: args });
+          if (reject[fn]) throw reject[fn];
+          if (fn === "fn_nv_app_booking_tao") return rpcResult;
+          return fn in rpc ? (typeof rpc[fn] === "function" ? rpc[fn](args) : rpc[fn]) : null;
+        },
+        errorMessage: (e, f) => e?.response?.data?.message || e?.message || f,
+      };
+      if (name === "@/services/SanPhamApi") return { DuAnApi: { resolveId: async (x) => x }, SanPhamApi: { detail: async () => null } };
       if (name === "./cloudTenant") return {
         getCompanyId: async () => tenant,
         getValidSupabaseJwt: async () => "test-jwt",
@@ -103,7 +114,7 @@ const bookingInput = {
   DonGiaDat: 0, TongGiaDat: 0, DonGiaXD: 0, ThanhTienXD: 0,
 };
 
-test("createBooking goes through fn_booking_create only, like the web", async () => {
+test("createBooking goes through fn_nv_app_booking_tao only (wraps the web fn_booking_create)", async () => {
   const { service, posts } = load({
     rpcResult: { phieu_giu_cho_id: uid(200), booking_id: uid(201), so_phieu: "BK-ABC123" },
   });
@@ -114,15 +125,17 @@ test("createBooking goes through fn_booking_create only, like the web", async ()
   assert.equal(res.maPGC, uid(200));
   assert.equal(res.soPhieu, "BK-ABC123");
   // Một giao dịch phía máy chủ: không tự ghi bảng, không gọi fn_product_transaction riêng
-  assert.deepEqual(posts.map((p) => p.target), ["rpc/fn_booking_create"]);
+  assert.deepEqual(posts.map((p) => p.target), ["fn_nv_app_booking_tao"]);
   const body = posts[0].body.p_payload;
-  assert.equal(body.ma_ctdk_uid, tenant);
+  // Công ty / người nhập / ngày / tiền / hạn giữ chỗ do máy chủ điền (63_app_nhan_vien/50) — app không gửi
+  for (const k of ["ma_ctdk_uid", "nguoi_nhap", "nguoi_nhap_id", "ngay_giu_cho", "het_han_luc", "tien_giu_cho"]) {
+    assert.equal(k in body, false, `${k} do máy chủ điền`);
+  }
   assert.equal(body.san_pham_id, uid(3));
   assert.equal(body.ma_sp, "SP01");
   assert.equal(body.ky_hieu, "B2-608");
   assert.equal(body.khach_hang_id, uid(6), "ma_so_kh is resolved to the customer uuid");
   assert.equal(body.san_id, uid(5));
-  assert.equal(body.nguoi_nhap, "NV Test");
   assert.equal(body.gia.dien_tich, 73.9);
   assert.equal(body.gia.don_gia_gom_vat, 21815079);
   assert.equal(body.gia.tong_gom_vat, 1612134338.1);
@@ -132,11 +145,11 @@ test("createBooking goes through fn_booking_create only, like the web", async ()
 
 test("createBooking stops and returns the server message when fn_booking_create rejects", async () => {
   const message = 'Sản phẩm đang ở trạng thái "Booking chờ duyệt" nên không lập được phiếu giữ chỗ';
-  const { service, posts } = load({ reject: { "rpc/fn_booking_create": pgError(message) } });
+  const { service, posts } = load({ reject: { fn_nv_app_booking_tao: pgError(message) } });
   const res = await service.createBooking(bookingInput);
   assert.equal(res.status, 5000);
   assert.equal(res.message, message);
-  assert.deepEqual(posts.map((p) => p.target), ["rpc/fn_booking_create"], "nothing written outside the RPC");
+  assert.deepEqual(posts.map((p) => p.target), ["fn_nv_app_booking_tao"], "nothing written outside the RPC");
 });
 
 test("createBooking passes the lock id when booking from a lock", async () => {
@@ -198,26 +211,19 @@ test("booking sales config for low-rise units and projects without a price list"
   });
 });
 
-test("createBooking: the policy booking amount wins over sales settings and the price list is recorded", async () => {
+test("createBooking: the chosen price list / policy / config / schedule are recorded (booking amount is decided by the server)", async () => {
   const { service, posts } = load({
     rpcResult: { phieu_giu_cho_id: uid(200), booking_id: uid(201), so_phieu: "BK-1" },
-    settings: [{ ma_ctdk: tenant, ma_da: uid(4), ap_dung: true, tien_booking: 5000000 }],
   });
   await service.createBooking({
     ...bookingInput, TienGiuCho: 50000000, MaDotGia: "pl-top", MaCS: "cs1", MaCSTong: "cf1", MaTDTT: "ps1",
   });
-  const body = posts.find((p) => p.target === "rpc/fn_booking_create").body.p_payload;
-  assert.equal(body.tien_giu_cho, 50000000);
+  const body = posts.find((p) => p.target === "fn_nv_app_booking_tao").body.p_payload;
+  assert.equal("tien_giu_cho" in body, false);
   assert.equal(body.price_list_id, "pl-top");
   assert.equal(body.sales_policy_id, "cs1");
   assert.equal(body.tt_hop_dong.MaDotGia, "pl-top");
   assert.equal(body.tt_hop_dong.MaCS, "cs1");
   assert.equal(body.tt_hop_dong.MaTDTT, "ps1");
-
-  const noPolicy = load({
-    rpcResult: { phieu_giu_cho_id: uid(200), booking_id: uid(201), so_phieu: "BK-1" },
-    settings: [{ ma_ctdk: tenant, ma_da: uid(4), ap_dung: true, tien_booking: 5000000 }],
-  });
-  await noPolicy.service.createBooking(bookingInput);
-  assert.equal(noPolicy.posts.find((p) => p.target === "rpc/fn_booking_create").body.p_payload.tien_giu_cho, 5000000);
 });
+

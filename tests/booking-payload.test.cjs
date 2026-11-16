@@ -53,6 +53,15 @@ function bookingService(posts, gets) {
     "./customerLookup": {
       getCustomersByRefs: async (refs) => [{ id: uid(6), ma_so_kh: refs[0] }],
     },
+    // Bộ API riêng app: fn_nv_app_booking_tao (bọc fn_booking_create)
+    "@/services/nvApi": {
+      callNv: async (fn, args) => {
+        posts.push({ target: fn, body: args });
+        return { phieu_giu_cho_id: uid(200), booking_id: uid(201), so_phieu: "BK-1" };
+      },
+      errorMessage: (e, f) => e?.message || f,
+    },
+    "@/services/SanPhamApi": { DuAnApi: { resolveId: async (x) => x }, SanPhamApi: { detail: async () => null } },
   }).BookingService;
 }
 

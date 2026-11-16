@@ -309,26 +309,22 @@ async function callBookingListRpc(params: {
   page?: number;
   size?: number;
 }) {
-  const validJwt = await getValidSupabaseJwt();
-  if (!validJwt) {
-    console.log("[Booking] chưa có cloud_jwt hợp lệ");
-    return { data: [] as any[], total: 0 };
-  }
   try {
-    const res = await axiosApiSupabase.post("rest/v1/rpc/fn_booking_list", {
-      p_project_id: params.projectId || null,
-      p_search: params.search || null,
+    const pa = pageArgs(params.page, params.size);
+    const res = await callNv<any>("fn_nv_app_booking_list", {
+      p_du_an_id: params.projectId || null,
+      p_tu_khoa: params.search || null,
       p_tu_ngay: params.tuNgay || null,
       p_den_ngay: params.denNgay || null,
-      p_ma_tt: params.maTT ?? null,
       p_states: params.states && params.states.length ? params.states : null,
-      ...pageArgs(params.page, params.size),
+      p_trang: pa.p_page,
+      p_so_dong: pa.p_size,
     });
-    const { rows, total } = listResult(res.data);
+    const { rows, total } = listResult(res);
     return { data: rows.map(normalizeBookingRow), total };
   } catch (error) {
-    console.log("ERROR fn_booking_list:", error);
-    return { data: [] as any[], total: 0 };
+    console.log("ERROR fn_nv_app_booking_list:", nvErrorMessage(error));
+    return { data: [] as any[], total: 0, error: nvErrorMessage(error) };
   }
 }
 
@@ -401,47 +397,12 @@ export const BookingService = {
    */
   listBookings: async (payload: any = {}) => {
     try {
-      // Dự án: ma_da_code → uuid, RPC nhận chuỗi uuid ngăn cách dấu phẩy
-      const maDAs: string[] = Array.isArray(payload?.maDA)
-        ? payload.maDA
-        : payload?.maDA
-          ? [payload.maDA]
-          : [];
-      const uids: string[] = [];
-      for (const code of maDAs) {
-        const v = String(code).trim();
-        if (!v) continue;
-        if (UUID_RE.test(v)) {
-          uids.push(v);
-          continue;
-        }
-        try {
-          const r = await axiosApiSupabase.get("rest/v1/da_projects", {
-            params: { select: "id", ma_da_code: `eq.${v}`, limit: "1" },
-          });
-          const rows = Array.isArray(r.data) ? r.data : [];
-          if (rows[0]?.id) uids.push(rows[0].id);
-        } catch {}
-      }
-
-      // Trạng thái: RPC lọc theo số item_code; UI đang giữ uuid catalog → tra item_code
-      let maTTCode: number | null = null;
-      const maTT = payload?.maTT ?? payload?.MaTT;
-      if (maTT != null && maTT !== "" && maTT !== 0) {
-        const v = String(maTT).trim();
-        if (UUID_RE.test(v)) {
-          try {
-            const r = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
-              params: { select: "item_code", id: `eq.${v}`, limit: "1" },
-            });
-            const code = Array.isArray(r.data) ? r.data[0]?.item_code : null;
-            const n = parseInt(String(code ?? "").replace(/[^0-9]/g, ""), 10);
-            if (Number.isFinite(n)) maTTCode = n;
-          } catch {}
-        } else if (Number.isFinite(Number(v))) {
-          maTTCode = Number(v);
-        }
-      }
+      // Dự án: mã dự án / uuid ⇒ uuid (danh sách dự án người dùng xem được); máy chủ nhận 1 dự án / lần
+      const maDAs: any[] = Array.isArray(payload?.maDA) ? payload.maDA : payload?.maDA ? [payload.maDA] : [];
+      const uids = (await Promise.all(maDAs.map((x) => DuAnApi.resolveId(x)))).filter((x): x is string => !!x);
+      if (maDAs.length > 0 && uids.length === 0) return { data: [], total: 0 };
+      // Lọc trạng thái thay bằng tab (states) — màn không còn gửi MaTT
+      const maTTCode: number | null = null;
 
       // Mốc ngày quá rộng (mặc định 2000-01-01..2100-01-01) coi như không giới hạn
       const tuNgay = payload?.tuNgay ?? payload?.TuNgay;
@@ -485,56 +446,6 @@ export const BookingService = {
   },
 
   /**
-   * Kiểm tra căn đã có booking chưa — theo web checkBooking.
-   * Query cloud_bookings theo keyword (ma_sp/ky_hieu), khớp MaSP/KyHieu.
-   */
-  checkBooking: async (payload: any = {}) => {
-    const companyId = await getCompanyId();
-    const validJwt = await getValidSupabaseJwt();
-    if (!validJwt || !companyId || !UUID_RE.test(companyId)) {
-      return { status: 2000, isBooking: false };
-    }
-
-    try {
-      const maSP = String(payload?.MaSP ?? payload?.maSP ?? "").trim();
-      if (!maSP) return { status: 2000, isBooking: false };
-
-      // Chuẩn UUID: resolve id sản phẩm trước (ma_sp/ky_hieu là text; or= không
-      // ngoặc bị gateway làm hỏng, ilike trên cột uuid ma_sp_id lỗi 400 →
-      // checkBooking trước đây luôn âm thầm trả isBooking=false).
-      let spUid: string | null = null;
-      try {
-        const safe = maSP.replace(/[,()]/g, "");
-        const r = await axiosApiSupabase.get("rest/v1/bds_products", {
-          params: {
-            select: "id",
-            or: `(ma_sp.eq.${safe},ky_hieu.eq.${safe})`,
-            limit: "1",
-          },
-        });
-        const prows = Array.isArray(r.data) ? r.data : [];
-        spUid = prows[0]?.id || null;
-      } catch {}
-      if (!spUid) return { status: 2000, isBooking: false };
-
-      const res = await axiosApiSupabase.get("rest/v1/cloud_bookings", {
-        params: {
-          select: "id,so_phieu",
-          ma_ctdk_id: `eq.${companyId}`,
-          loai_ct: "eq.BOOKING",
-          ma_sp_id: `eq.${spUid}`,
-          limit: "1",
-        },
-      });
-      const rows = Array.isArray(res.data) ? res.data : [];
-      return { status: 2000, isBooking: rows.length > 0 };
-    } catch (error) {
-      console.log("ERROR checkBooking:", error);
-      return { status: 2000, isBooking: false };
-    }
-  },
-
-  /**
    * Tạo booking mới — theo web addBookingAPI.
    * payload: { MaKH, MaSP, SanPhamId, KyHieu, MaSan, MaDA, TenDA, MaKhu,
    *   TongGiaGomPBT, DTThongThuy, TongGiaGomVAT, PhiBaoTri, TienGiuCho?, ... }
@@ -544,55 +455,23 @@ export const BookingService = {
    * - LockId (tuỳ chọn): phiếu lock khi booking từ căn đã lock
    */
   createBooking: async (payload: any = {}) => {
-    const companyId = await getCompanyId();
-    const validJwt = await getValidSupabaseJwt();
-    if (!validJwt || !companyId || !UUID_RE.test(companyId)) {
-      return { status: 5000, message: "Chưa đăng nhập cloud" };
-    }
-
     try {
       const maKH = payload?.MaKH ?? payload?.maKH;
       const maSP = payload?.MaSP ?? payload?.maSP;
       if (!maKH) return { status: 5000, message: "Vui lòng chọn khách hàng" };
       if (!maSP) return { status: 5000, message: "Thiếu mã sản phẩm" };
 
-      const now = new Date();
-      const nowIso = now.toISOString();
-
-      // Resolve uuid sản phẩm + dự án
-      let spUid: string | null = payload?.SanPhamId || null;
-      let spRow: any = null;
+      // uuid căn: màn tạo booking luôn có (SanPhamId = ID chi tiết căn); thiếu thì tra chi tiết căn theo mã
+      let spUid: string | null = UUID_RE.test(String(payload?.SanPhamId ?? "")) ? String(payload.SanPhamId) : null;
+      let kyHieu = payload?.KyHieu ?? payload?.kyHieu ?? null;
       if (!spUid) {
-        try {
-          const r = await axiosApiSupabase.get("rest/v1/bds_products", {
-            params: { select: "id,ma_sp,ky_hieu,ma_da", ma_sp: `eq.${maSP}`, limit: "1" },
-          });
-          const rows = Array.isArray(r.data) ? r.data : [];
-          spRow = rows[0] || null;
-          spUid = spRow?.id || null;
-        } catch {}
+        const d = await SanPhamApi.detail(String(maSP));
+        spUid = d?.product?.ID ?? null;
+        kyHieu = kyHieu ?? d?.product?.KyHieu ?? null;
       }
       if (!spUid) return { status: 5000, message: "Không tìm thấy sản phẩm" };
 
-      let daUid: string | null = spRow?.ma_da || null;
-      const maDA = payload?.MaDA ?? payload?.maDA;
-      if (!daUid && maDA) {
-        const v = String(maDA).trim();
-        if (UUID_RE.test(v)) daUid = v;
-        else {
-          try {
-            const r = await axiosApiSupabase.get("rest/v1/da_projects", {
-              params: { select: "id", ma_da_code: `eq.${v}`, limit: "1" },
-            });
-            const rows = Array.isArray(r.data) ? r.data : [];
-            daUid = rows[0]?.id || null;
-          } catch {}
-        }
-      }
-
-      // Resolve uuid khách hàng (MaKH có thể là ma_so_kh hoặc uuid). Không phải uuid ⇒ tra mã khách qua RPC
-      // fn_customer_get_by_ids(p_refs) (bảng cloud_customers đã khoá đọc thẳng — như web salesDocsCloud getCustomersByRefs);
-      // RPC so khớp cả ma_so_kh lẫn di_dong ⇒ ưu tiên dòng đúng mã khách.
+      // Mã khách (ma_so_kh) ⇒ uuid qua RPC tra khách (cloud_customers đã khoá đọc thẳng)
       let khUid: string | null = null;
       {
         const v = String(maKH).trim();
@@ -606,33 +485,6 @@ export const BookingService = {
       }
       if (!khUid) return { status: 5000, message: "Không tìm thấy khách hàng" };
 
-      // Tiền booking như web (BookingFormDialog.handleSubmit): chính sách bán hàng đã chọn (payload.TienGiuCho)
-      // trước, không có mới lấy cài đặt bán hàng (tien_booking, trống thì tien_dat_coc).
-      const policyAmount = Number(payload?.TienGiuCho);
-      let tienGiuCho: number | null = Number.isFinite(policyAmount) && policyAmount > 0 ? policyAmount : null;
-      let hetHanLuc: string | null = null;
-      try {
-        const s = await axiosApiSupabase.get("rest/v1/cloud_sales_settings", {
-          params: {
-            select: "tien_booking,tien_dat_coc,thoi_gian_booking,ma_da,tu_ngay,den_ngay,ap_dung",
-            ma_ctdk: `eq.${companyId}`,
-            order: "created_at.desc",
-            limit: "200",
-          },
-        });
-        const rows = Array.isArray(s.data) ? s.data : [];
-        const setting = pickSalesSetting(rows, daUid, localYmd(now));
-        // Giống web: tiền booking = "Tiền booking" của cài đặt, trống thì mới lấy "Tiền đặt cọc"
-        const t = Number(setting?.tien_booking) || Number(setting?.tien_dat_coc) || 0;
-        if (tienGiuCho == null && Number.isFinite(t) && t > 0) tienGiuCho = t;
-        const minutes = Number(setting?.thoi_gian_booking);
-        if (Number.isFinite(minutes) && minutes > 0) {
-          hetHanLuc = new Date(now.getTime() + minutes * 60000).toISOString();
-        }
-      } catch {}
-
-      const staff = await getStaffName();
-      const employeeId = await getEmployeeId();
       const num = (v: any) => {
         if (v == null || v === "") return null;
         const n = Number(String(v).replace(/,/g, ""));
@@ -640,23 +492,17 @@ export const BookingService = {
       };
       const sanId = payload?.MaSan ?? payload?.maSan;
 
-      // Như web Product.addBookingAPI: một RPC fn_booking_create làm trọn giao dịch phía máy chủ
-      // (kiểm tra trạng thái căn: mã 2, hoặc mã 18 kèm phiếu lock còn hạn; ghi phiếu giữ chỗ +
-      // booking; đổi căn sang 11). Máy chủ từ chối → không có gì được ghi, trả nguyên lời báo lỗi.
+      // fn_nv_app_booking_tao (bọc fn_booking_create của web): máy chủ tự điền công ty, người nhập, ngày giữ chỗ, tiền giữ chỗ
+      // (chính sách > cài đặt bán hàng) và hạn (thời gian booking) như web; kiểm căn (2, hoặc 18 kèm lock còn hạn), ghi phiếu
+      // giữ chỗ + booking, đổi căn sang 11. Từ chối ⇒ không ghi gì, trả nguyên lời báo của máy chủ.
       const body = {
-        ma_ctdk_uid: companyId,
         san_pham_id: spUid,
         ma_sp: maSP,
-        ky_hieu: payload?.KyHieu ?? payload?.kyHieu ?? spRow?.ky_hieu ?? null,
+        ky_hieu: kyHieu,
         khach_hang_id: khUid,
         san_id: UUID_RE.test(String(sanId ?? "")) ? String(sanId) : null,
         so_phieu: payload?.SoPhieu ?? null,
-        ngay_giu_cho: nowIso,
-        het_han_luc: hetHanLuc,
-        tien_giu_cho: tienGiuCho,
         ghi_chu: payload?.GhiChu ?? payload?.ghiChu ?? null,
-        nguoi_nhap: staff || null,
-        nguoi_nhap_id: employeeId && UUID_RE.test(employeeId) ? employeeId : null,
         price_list_id: payload?.MaDotGia ?? null,
         sales_policy_id: payload?.MaCS ?? null,
         pricing_config_id: payload?.MaCSTong ?? null,
@@ -699,11 +545,10 @@ export const BookingService = {
 
       let created: any;
       try {
-        const res = await axiosApiSupabase.post("rest/v1/rpc/fn_booking_create", { p_payload: body });
-        created = res.data || {};
+        created = (await callNv<any>("fn_nv_app_booking_tao", { p_payload: body })) || {};
       } catch (e) {
-        console.log("ERROR fn_booking_create:", e);
-        return { status: 5000, message: serverMessage(e, "Tạo booking thất bại") };
+        console.log("ERROR fn_nv_app_booking_tao:", nvErrorMessage(e));
+        return { status: 5000, message: nvErrorMessage(e, "Tạo booking thất bại") };
       }
 
       return {
