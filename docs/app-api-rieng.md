@@ -90,3 +90,18 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
   phiếu tính giá / chat / báo cáo). Test 315 đạt.
 - Chưa thử trên máy ảo màn tạo booking (lệnh điều khiển máy ảo tới Lock căn / tạo booking bị chặn vì app nối dữ liệu prod).
 - "Thêm khách mới" trong form booking mở màn customer/new — vẫn ghi qua rest/v1 ⇒ làm ở L2 (Khách hàng).
+
+### 2026-11-16 (tối) — L1 2b: form phiếu tính giá = chép nguyên văn web (user chốt)
+- `scripts/sync-web-pricing.cjs` (commit 90a3ed06): chép NGUYÊN VĂN 28 module thuần của web vào `lib/web/` (chỉ đổi đường dẫn import),
+  trích kiểu từ module không thuần (`_stubs`), trích hàm thuần (`_extract`), trích logic ngay trong PriceSheetForm.tsx thành hàm
+  `fn(ctx)` (`PriceSheetForm.logic.ts`: webCalculations, webGetRestoredRoundResults, webFormulaCtx, webRecalcPaymentScheduleSequential,
+  webDueDatesOf, webBuildSave). Shim viết tay `lib/web/_shims/` (supabase ⇒ chỉ rpc đọc đã đối chiếu sang fn_nv_app_*, sonner, session).
+  `--check` so khớp web; web đổi ⇒ chạy lại script. Repo web cho test: `_wt/beeland` → `_wt/web-ref` (symlink).
+- dayjs 1.11.20 (bản web dùng) — chỉ thêm đúng mục dayjs vào package-lock (lock vốn lệch package.json; npm install đầy đủ sẽ nâng gói khác).
+- Test: phiếu BRG thật tính bằng bản chép ⇒ đúng từng số web đã lưu (3 vòng CK). 9 test cũ so bản sao CŨ của app với web nay đỏ
+  (lộ ra khi nối repo web) — sẽ bỏ khi thay lib cũ (priceSheetCalc / Formulas / Schedule / payload) bằng lib/web.
+- Việc còn (lớp điều phối form, port từ PriceSheetForm + hook web): endpoint app mới cần (đọc): fn_price_list_quy_can_options (quỹ căn),
+  fn_caller_sales_company (công ty bán hàng), fn_sales_policy_option_usage (đã dùng tùy chọn), fn_exception_request_active (ngoại lệ),
+  tồn kho quà (policyKho), cấu hình tính giá sản phẩm (PricingConfigCloudService), fn_generate_form_code (số phiếu — ghi bộ đếm, kiểm kỹ);
+  rồi viết lại usePriceSheetDraft + màn new.tsx theo luồng app (thêm Quỹ căn, Công ty bán hàng, chọn chính sách trước bảng giá, tick tùy chọn
+  theo điều kiện, Ngày hết hạn, mẫu in tự chọn), duyệt vẫn trên web; mở PRICE_SHEET_CREATE_LOCKED khi test xong.
