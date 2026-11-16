@@ -65,3 +65,19 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
 - Việc tiếp (app): BookingService createLock / listProductLocks / getLockDetailCloud / sweepExpiredLocks / createBooking /
   listBookings / getBookingEditDetail ⇒ fn_nv_app_*; rồi: chứng từ booking (ảnh), QR thanh toán (payment-gateway), sàn GD,
   cấu hình bán hàng của form booking, Đặt cọc (list / chi tiết / QR), Hợp đồng, Tiến độ TT, chọn / tạo khách trong booking.
+
+### 2026-11-16 — L1: booking (app) + QR + đặt cọc / hợp đồng / tiến độ TT
+- Booking app xong (BookingService hết rest/v1; chứng từ 54–55, sàn 53, cài đặt bán hàng 56, tải tệp fn_nv_app_tai_tep).
+- QR VA: `fn_nv_app_cong_thanh_toan {p_action: accounts|create|delete|expire_sweep|list}` (C# bọc PaymentGatewayEdgeService, BE 1ff2be05;
+  app 01ca746e). So HTTP với api/fn/payment-gateway: đọc giống hệt; lỗi cùng thông điệp (app nhận HTTP 400 thay vì 200 {error}).
+  Prod chưa có VA nào ⇒ chưa thử create/delete thật (không tạo VA thật).
+- SP 60–65 (BE f74e3874, đã lên BEELAND26): trang_thai_list (= fn_status_catalog_list), dat_coc_list (= fn_deposit_list, p_transfer 0),
+  dat_coc_chi_tiet (fn_sales_doc_get + đúng dòng _deposit_rows_hoan + loại căn/hướng + cờ QR), hop_dong_list (= fn_sale_contract_list,
+  transfer_only 0), lich_tt_phieu (= fn_contract_payment_schedule, nhận id phiếu/HĐ/cọc), phieu_thu_phieu (= fn_cash_vouchers_by_pgc).
+  Thử 1 lô rollback 7 tài khoản (`t_dat_coc.py`) + HTTP 4 tài khoản: ĐẠT (con_lai = giây đếm ngược, lệch theo giờ gọi).
+- App 117cf994: DatCoc / HopDong / PaymentProgress qua API riêng; bỏ lịch dự phòng ở máy (web cũng không còn); nút QR cọc như web
+  (PAYMENT_QR + không đổi căn / hoàn cọc chờ duyệt, fail-closed). Máy ảo: HĐ list 10 + chi tiết + lịch; cọc list 25 + chi tiết + QR (lỗi
+  "chưa cấu hình ClientId" đúng như web, nút tạo khoá). Test 314 đạt, tsc + eslint sạch.
+- CHỜ USER: nút QR booking theo quyền web? (web: PAYMENT_QR /sales/bookings + khoá khi đổi căn chờ duyệt; admin/hanhnh/devtest MSR không có
+  quyền xem /sales/bookings ⇒ sẽ mất nút QR booking trên app).
+- Còn L1: chọn / tạo khách trong form booking (customerLookup, fn_customer_get_by_ids / picker), viết lại form phiếu tính giá (2b), e2e L1.
