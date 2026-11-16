@@ -105,3 +105,17 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
   tồn kho quà (policyKho), cấu hình tính giá sản phẩm (PricingConfigCloudService), fn_generate_form_code (số phiếu — ghi bộ đếm, kiểm kỹ);
   rồi viết lại usePriceSheetDraft + màn new.tsx theo luồng app (thêm Quỹ căn, Công ty bán hàng, chọn chính sách trước bảng giá, tick tùy chọn
   theo điều kiện, Ngày hết hạn, mẫu in tự chọn), duyệt vẫn trên web; mở PRICE_SHEET_CREATE_LOCKED khi test xong.
+
+### 2026-11-16 (đêm) — L1 2b XONG: Lập / Sửa phiếu tính giá = logic form web chép nguyên văn (cờ PRICE_SHEET_CREATE_LOCKED = false)
+- BE (đã triển khai BEELAND26): SP 70 quy_can_list, 71 cong_ty_ban_hang_cua_toi, 72 cong_ty_dai_ly, 73 tuy_chon_da_dung, 74 ton_kho_qua,
+  75 ngoai_le_hieu_luc (bọc SP web, so rollback 6 tài khoản + HTTP: ĐẠT); 34 trả mọi cột price_list_items; 35/36 thêm cột thô + @p_id
+  (THÊM THAM SỐ ⇒ restart API khi deploy). BE b9df4383, 6b82eacc.
+- App: lib/web 104 module + hook useWebPriceSheetForm (244/246 câu thân PriceSheetForm web) + trích trang web (handleEdit /
+  handlePriceSheetSaved); shim supabase (RPC_MAP ⇒ fn_nv_app_*, .from chỉ 4 bảng đọc), Product / Project / Customer / NhanVienService /
+  CodeGenService / session / sonner / priceSheetConstants; stub chạy thật cho module không thuần. Màn new.tsx (3 bước) + WebRoundCard.
+  Xoá editor + lõi tính cũ của app. Test 306 đạt; máy ảo: lập (C6-2301: CS lọc theo tòa, CK theo phân bổ / kho, CK tiền, lịch 5 đợt) +
+  sửa (S4-1401 chuyển nhượng, đúng số đã lưu) — CHƯA bấm Lưu thật (ghi prod); lưu đã thử rollback (máy chủ cấp số PTG-CS-0001).
+- Khác web có chủ đích: số phiếu không xem trước (máy chủ cấp khi lưu); không có bước 360 / người đồng sở hữu (giữ nguyên dữ liệu phiếu
+  cũ khi sửa); "Lưu & gửi duyệt" không có (duyệt trên web).
+- Web đổi form ⇒ `node scripts/sync-web-pricing.cjs` (test web-pricing báo lệch); RPC mới chưa có trong RPC_MAP ⇒ log "app không hỗ trợ".
+- Ghi nhớ khác: form booking web đã đổi nhiều (Công ty bán hàng, bỏ quà / ưu tiên, chính sách trước bảng giá) — app booking chưa theo.
