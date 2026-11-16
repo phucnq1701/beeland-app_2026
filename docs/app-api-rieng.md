@@ -32,7 +32,7 @@ xuyên luồng trên máy ảo, xong mới sang luồng sau.
 | L0 | Đăng nhập & phiên | đăng nhập / làm mới / đăng xuất / hết phiên, Face ID kiểm MK, hồ sơ | XONG (chờ deploy API) |
 | L1 | Bán hàng từ căn | Dự án → Sản phẩm (DS / lưới / tổng quan) → Chi tiết căn ✔ · Lock căn → Căn đã lock → Tạo booking (chọn / tạo khách, sàn, giá theo bảng giá & chính sách, ảnh chứng từ, QR thanh toán) → DS / chi tiết Booking → Đặt cọc (DS / chi tiết / QR) → Hợp đồng + tiến độ TT · Phiếu tính giá: xem / xoá / lịch sử (duyệt: web; lập / sửa: tạm khoá, viết lại form khớp web ở cuối luồng) | XONG 16-11 (booking thật BK-BF228DD95B đạt; chờ deploy API) |
 | L2 | Khách hàng | DS / chi tiết / thêm / sửa, trùng khách, yêu cầu KH, luật nhập | XONG 16-11 (SP 78–96; chờ deploy API) |
-| L3 | Lịch ký & báo cáo | đặt lịch ký (đại lý), lịch hẹn (ẩn), báo cáo | |
+| L3 | Lịch ký & báo cáo | đặt lịch ký (đại lý), lịch hẹn (ẩn), báo cáo | XONG 16-11 (SP A0–A3, B0–B9; lịch hẹn ẩn để L5; chờ deploy API) |
 | L4 | Liên lạc & tài khoản | chat, thông báo, tài liệu / ảnh, đổi-quên MK, xoá TK, realtime, upload chung | |
 | L5 | Dọn & test toàn bộ | bỏ sevicesSupabase / sevices cũ, đổi khoá lưu, kịch bản e2e toàn app | |
 
@@ -154,3 +154,18 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
 - Test: t_kh2.py / t_kh3.py / t_yc.py (rollback, nhiều tài khoản) app = web; HTTP app = web; app 319 test; máy ảo: DS khách / lọc trạng thái /
   chi tiết / giao dịch / Sửa bị khoá / form Thêm khách / DS + chi tiết yêu cầu.
 - API thật cần build + restart cho endpoint mới SP 76–96 + 2 endpoint C# (ký tệp).
+
+### 2026-11-16 (khuya) — L3 Lịch ký & báo cáo XONG
+- L3a (BE ace29407, app 0d8d694e): SP A0 bao_cao_tien_do, A1 da_thu_phieu, A2 phieu_thu_list, A3 phieu_thu_chi_tiet. LỆCH ĐÃ SỬA: "Đợt quá hạn"
+  lẫn đợt đã tất toán ("done".startsWith("d")) — 89 ⇒ 67 đợt trên máy ảo.
+- L3b (BE 3ab28f0b, app 6d639d85 + 1a3f4d50): user chọn "theo luồng web mới". SP B0–B3 lich_ky_list / chi_tiet / luu / xoa, B4 tim_coc,
+  B5 tim_hd, B6 tuy_chon, B7 cho_trong, B8 ca, B9 danh_muc_ma (mã chữ công ty phiên). Form app = logic web chép (SigningDrawer /
+  ShiftPickerFields / SigningFundField ⇒ hook): Nguồn Đặt cọc/HĐ → Quỹ → Điểm ký → Thủ tục → ngày (14 ngày / lịch tháng, chỗ còn) → Ca,
+  hồ sơ theo phân loại khách + tệp theo hồ sơ, phương án TT khoá theo lịch TT, đồng sở hữu, lưu = submit web (bắt buộc theo cấu hình,
+  kiểm lại chỗ ca). Bỏ "Đổi khách" (web khoá khách theo chứng từ). Duyệt / từ chối lịch: chỉ web (shim trả APP_UNSUPPORTED).
+- Đã thử: harness API thật mở từ phiếu 9E4DA56D… ⇒ payload; lưu payload trong ROLLBACK (t_lk_luu.py) ⇒ PENDING đúng. Bấm Lưu thiếu trường
+  (harness, chặn lệnh ghi) ⇒ "Vui lòng nhập: Ca book ký, Loại thủ tục". Máy ảo (tạm bật nút vì tài khoản thử không phải đại lý, đã hoàn lại):
+  mở từ phiếu cọc C7-0909 (nguồn khoá, Quỹ CĐT, điểm, thủ tục Ký TTĐC, chỗ theo ngày, 4 ca, tóm tắt lịch hẹn, hồ sơ CCCD); sửa lịch 96501
+  (nạp đủ điểm / ngày / ca); thêm mới chọn HĐ HD-C6-2309 (nạp khách, phương án TT khoá theo lịch TT); lịch tháng. KHÔNG lưu thật.
+- Chưa thấy tận mắt toast báo thiếu trường trên máy ảo (lệnh bấm Lưu thứ 2 bị chặn để tránh ghi prod) — logic web đã đúng câu báo.
+- Còn lại (L5): màn Lịch hẹn ẩn (api-beeland cũ), helper cũ lib/signing (buildUpsertPayload, availability…) không còn dùng ở form.
