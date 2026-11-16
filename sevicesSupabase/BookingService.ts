@@ -6,11 +6,10 @@ import { listResult, mergeProjectPages, pageArgs } from "../lib/listRpc";
 import {
   getCompanyCode,
   getCompanyId,
-  getEmployeeId,
   getValidSupabaseJwt,
 } from "./cloudTenant";
 import { BookingSalesConfig, isLowRiseProduct, mapPriceListItem, sortPriceLists } from "../lib/bookingPrice";
-import { getCustomersByIds, getCustomersByRefs, withCustomers } from "./customerLookup";
+import { getCustomersByRefs, withCustomers } from "./customerLookup";
 
 /** Ngày dương lịch theo giờ máy (VN) dạng YYYY-MM-DD — không dùng toISOString (UTC lệch ngày 0h–7h). */
 export const localYmd = (d: Date = new Date()) =>
@@ -52,7 +51,6 @@ export const lockVoucherMonth = (now: Date = new Date()) => {
   };
 };
 
-const LOCK_DOC_TYPE = "LOCK";
 const LOCK_STATE = {
   ACTIVE: "LOCKED",
   EXPIRED: "EXPIRED",
@@ -74,67 +72,6 @@ async function resolveProjectUid(maDA: any): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-/**
- * Resolve thời gian lock (phút) theo web SalesSettingsService.resolve:
- * bảng cloud_sales_settings, tenant = ma_ctdk (uuid), dự án = ma_da (uuid,
- * NULL = áp dụng chung). Ưu tiên dòng riêng của dự án, rồi dòng chung.
- * Điều kiện hiệu lực: ap_dung=true và tu_ngay <= today <= den_ngay.
- * Không có → mặc định 30 phút.
- */
-async function resolveLockMinutes(maDA?: any): Promise<number> {
-  try {
-    const companyId = await getCompanyId();
-    if (!companyId || !UUID_RE.test(companyId)) return DEFAULT_LOCK_MINUTES;
-
-    const params: Record<string, string> = {
-      select: "id,ma_da,tu_ngay,den_ngay,ap_dung,thoi_gian_lock",
-      ma_ctdk: `eq.${companyId}`,
-      order: "created_at.desc",
-      limit: "50",
-    };
-    if (maDA && UUID_RE.test(String(maDA))) {
-      params.or = `(ma_da.eq.${maDA},ma_da.is.null)`;
-    }
-
-    const res = await axiosApiSupabase.get("rest/v1/cloud_sales_settings", {
-      params,
-    });
-    const rows = Array.isArray(res.data) ? res.data : [];
-
-    const today = new Date().toISOString().slice(0, 10);
-    const inRange = (r: any) =>
-      r?.ap_dung !== false &&
-      (!r?.tu_ngay || r.tu_ngay <= today) &&
-      (!r?.den_ngay || r.den_ngay >= today);
-    const valid = rows.filter(inRange);
-
-    const specific =
-      maDA && UUID_RE.test(String(maDA))
-        ? valid.find((r: any) => r?.ma_da === maDA)
-        : null;
-    const global = valid.find((r: any) => !r?.ma_da);
-    const setting = specific || global || null;
-
-    const m = Number(setting?.thoi_gian_lock);
-    if (Number.isFinite(m) && m > 0) return m;
-  } catch (e) {
-    console.log("ERROR resolveLockMinutes (cloud_sales_settings):", e);
-  }
-  return DEFAULT_LOCK_MINUTES;
-}
-
-const LOCK_SELECT = [
-  "*",
-  "da:da_projects!ma_da_id(id,ten_da,ma_da_code)",
-  "sp:bds_products!ma_sp_id(id,ma_sp,ky_hieu)",
-  "san:dm_companies!ma_san_id(id,ma_dl,ten_ct,ten_ct_vt)",
-].join(",");
-
-function secondsLeft(iso?: string | null): number {
-  if (!iso) return 0;
-  return Math.max(0, Math.floor((new Date(iso).getTime() - Date.now()) / 1000));
 }
 
 /**
@@ -177,26 +114,6 @@ export function normalizeLock(r: any, index = 0) {
     thoiGianLock: lockMinutes,
     raw: r,
   };
-}
-
-async function getStaffName(): Promise<string> {
-  try {
-    const raw =
-      (await AsyncStorage.getItem("@user")) ||
-      (await AsyncStorage.getItem("user")) ||
-      "";
-    if (!raw) return "";
-    const u = JSON.parse(raw);
-    return u?.ho_ten || u?.tenNV || u?.fullName || u?.username || "";
-  } catch {
-    return "";
-  }
-}
-
-/** Lời báo lỗi của máy chủ (RAISE EXCEPTION → PostgREST response.data.message), không có thì fallback. */
-function serverMessage(error: any, fallback: string): string {
-  const m = error?.response?.data?.message;
-  return typeof m === "string" && m.trim() ? m.trim() : fallback;
 }
 
 const STATE_LABEL: Record<string, string> = {
@@ -692,23 +609,6 @@ export const BookingService = {
   getBookingEditDetail: async (bookingIdOrCode: string) => {
     const idStr = String(bookingIdOrCode || "").trim();
     if (!idStr) return { data: null };
-    if (!(await getValidSupabaseJwt())) {
-      throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-    }
-    const companyId = await getCompanyId();
-
-    // Không embed FK: schema cache thiếu quan hệ không làm mất cả phiếu.
-    // RLS lọc các bảng danh mục bằng company_id trong JWT.
-    const get = async (table: string, params: Record<string, string>) => {
-      const res = await axiosApiSupabase.get(`rest/v1/${table}`, {
-        params: { select: "*", limit: "1", ...params },
-      });
-      return Array.isArray(res.data) ? res.data[0] ?? null : null;
-    };
-    const byId = (table: string, id: unknown) =>
-      UUID_RE.test(String(id ?? ""))
-        ? get(table, { id: `eq.${id}` })
-        : Promise.resolve(null);
     const jsonObject = (value: any): Record<string, any> => {
       if (typeof value === "string") {
         try { value = JSON.parse(value); } catch { return {}; }
@@ -726,105 +626,38 @@ export const BookingService = {
     };
 
     try {
-      const isUid = UUID_RE.test(idStr);
-      // 1) Phiếu booking
-      let booking: any = null;
-      {
-        const params: Record<string, string> = {
-          select: "*",
-          loai_ct: "eq.BOOKING",
-          limit: "1",
-        };
-        if (companyId && UUID_RE.test(companyId))
-          params.ma_ctdk_id = `eq.${companyId}`;
-        if (isUid) params.id = `eq.${idStr}`;
-        else {
-          params.so_phieu = `eq.${idStr}`;
-          params.order = "created_at.desc.nullslast";
-        }
-        booking = await get("cloud_bookings", params);
-        // fallback theo ma_pgc_id
-        if (!booking && isUid) {
-          const p2 = { ...params };
-          delete p2.id;
-          p2.ma_pgc_id = `eq.${idStr}`;
-          // 1 phiếu giữ chỗ có thể có nhiều booking → lấy booking mới nhất
-          p2.order = "created_at.desc.nullslast";
-          booking = await get("cloud_bookings", p2);
-        }
-      }
-      if (!booking) return { data: null };
-
-      // 2) Vòng đời: UUID trước, số phiếu chỉ là liên kết dự phòng.
-      const pgcTenant: Record<string, string> =
-        companyId && UUID_RE.test(companyId) ? { ma_ctdk_uid: `eq.${companyId}` } : {};
-      let pgc: any = null;
-      if (UUID_RE.test(String(booking.ma_pgc_id ?? ""))) {
-        pgc = await get("cloud_pgc_phieu_giucho", {
-          ...pgcTenant, id: `eq.${booking.ma_pgc_id}`,
-        });
-      }
-      if (!pgc && booking.so_phieu) {
-        pgc = await get("cloud_pgc_phieu_giucho", {
-          ...pgcTenant, so_phieu_gc: `eq.${booking.so_phieu}`,
-        });
-      }
-
+      // 1 lời gọi fn_nv_app_booking_chi_tiet (phạm vi + che trường khách = fn_sales_doc_get của web). Lỗi ⇒ ném (UI báo lỗi tải).
+      const r = await callNv<any>("fn_nv_app_booking_chi_tiet", { p_id: idStr });
+      if (!r) return { data: null };
+      const booking: any = r.booking ?? {
+        id: null, ma_pgc_id: r.doc?.pgc?.id, so_phieu: r.doc?.pgc?.so_phieu_gc, ngay_giu_cho: r.doc?.pgc?.ngay_giu_cho,
+      };
+      const pgc: any = r.doc?.pgc ?? null;
       const ttHopDong = jsonObject(pgc?.tt_hop_dong);
-      const maDotGia = ttHopDong.MaDotGia || null;
+      const maDotGia = ttHopDong.MaDotGia || pgc?.ma_dot_gia || null;
       const maCS = ttHopDong.MaCS || pgc?.ma_cs || null;
       const sanPhamId = pgc?.san_pham_id || booking.ma_sp_id || null;
-      const [product, kh, san, policy, priceList, priceItem, status] = await Promise.all([
-        byId("bds_products", sanPhamId),
-        // Khách qua RPC (cloud_customers đã khoá đọc thẳng; như web ContractCloudService getCustomersByIds). Lỗi ⇒ null,
-        // dùng bản chụp tt_khach_hang. Khách công ty khác chỉ thấy qua chứng từ ⇒ bản giới hạn (cccd đã che).
-        getCustomersByIds([booking.khach_hang_id || pgc?.khach_hang_id])
-          .then((rows) => rows[0] ?? null)
-          .catch(() => null),
-        byId("dm_companies", pgc?.san_id || booking.ma_san_id),
-        byId("da_sales_policies", maCS),
-        // Phiếu cũ vẫn cần tên bảng giá đã hết hiệu lực.
-        byId("price_lists", maDotGia),
-        UUID_RE.test(String(maDotGia)) && UUID_RE.test(String(sanPhamId))
-          ? get("price_list_items", {
-              price_list_id: `eq.${maDotGia}`, product_id: `eq.${sanPhamId}`,
-            })
-          : Promise.resolve(null),
-        // Trạng thái theo phiếu giữ chỗ (pgc_trang_thai) — khớp fn_booking_list
-        byId("cloud_catalogs", pgc?.trang_thai_id || booking.trang_thai_id),
-      ]);
-      const projectId = pgc?.project_id || booking.ma_da_id || product?.ma_da;
+      const product: any = r.san_pham_gia ?? r.doc?.san_pham ?? null;
+      const kh: any = r.doc?.khach_hang ?? null;
+      const san: any = r.san ?? null;
+      const policy: any = r.chinh_sach ?? null;
+      const priceList: any = r.bang_gia ?? null;
+      const priceItem: any = r.gia_bang_gia ?? null;
+      const status: any = r.doc?.trang_thai ?? null;
+      const project: any = r.doc?.du_an ?? null;
       const maCSTong = ttHopDong.MaCSTong || policy?.pricing_config_id || null;
       const maTDTT = ttHopDong.MaTDTT || policy?.payment_schedule_id || null;
-      const [project, pricingConfig, paymentSchedule] = await Promise.all([
-        byId("da_projects", projectId),
-        byId("cloud_pricing_configs", maCSTong),
-        byId("da_payment_schedules", maTDTT),
-      ]);
+      const pricingConfig: any = r.cau_hinh_tinh_gia ? { ...r.cau_hinh_tinh_gia, name: r.cau_hinh_tinh_gia.ten } : null;
+      const paymentSchedule: any = r.lich_tt ?? null;
+      const settings: any = r.cai_dat ?? null;
 
-      // Schema thực tế: cloud_sales_settings.ma_da là UUID da_projects.id,
-      // không phải ma_da_code (ví dụ "2"). Không suy ra hạn từ số phút.
-      let settings: any = null;
-      if (UUID_RE.test(String(project?.id ?? ""))) {
-        const now = new Date();
-        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-        settings = await get("cloud_sales_settings", {
-          select: "thoi_gian_booking,tien_booking,tien_dat_coc,booking_uu_tien,tu_ngay,den_ngay",
-          ma_da: `eq.${project.id}`,
-          ap_dung: "is.true",
-          and: `(or(tu_ngay.is.null,tu_ngay.lte.${today}),or(den_ngay.is.null,den_ngay.gte.${today}))`,
-          order: "tu_ngay.desc.nullslast",
-        });
-      }
-
-      // Giữ bản chụp quà tặng; chỉ bổ sung danh mục nếu bản chụp thiếu.
+      // Giữ bản chụp quà tặng; thiếu thì bổ sung từ danh mục máy chủ đã trả kèm.
       const khuyenMai: any[] = Array.isArray(pgc?.khuyen_mai) ? pgc.khuyen_mai : [];
-      const promotions = await Promise.all(khuyenMai.map(async (value: any) => {
+      const catalogById = new Map<string, any>((Array.isArray(r.khuyen_mai) ? r.khuyen_mai : []).map((c: any) => [String(c.id).toLowerCase(), c]));
+      const promotions = khuyenMai.map((value: any) => {
         const km = jsonObject(value);
-        const promotionId = [km.ID, km.MaKM].find((v) => UUID_RE.test(String(v ?? "")));
-        const needsCatalog = !km.TenQuaTang || !km.TenKhuyenMai ||
-          km.SoLuong == null || km.GiaTri == null;
-        const catalog = needsCatalog ? await byId("da_promotions", promotionId) : null;
+        const promotionId = [km.ID, km.MaKM, km.id].find((v) => UUID_RE.test(String(v ?? "")));
+        const catalog = promotionId ? catalogById.get(String(promotionId).toLowerCase()) : null;
         return {
           id: promotionId ?? null,
           tenKhuyenMai: km.TenKhuyenMai || km.ten_khuyen_mai || catalog?.ten_khuyen_mai || null,
@@ -832,7 +665,7 @@ export const BookingService = {
           soLuong: numberOrNull(km.SoLuong ?? km.so_luong ?? catalog?.so_luong),
           giaTri: numberOrNull(km.GiaTri ?? km.gia_tri ?? catalog?.gia_tri),
         };
-      }));
+      });
 
       // Bản chụp khách hàng tại thời điểm lập phiếu
       const ttKH = jsonObject(pgc?.tt_khach_hang);
