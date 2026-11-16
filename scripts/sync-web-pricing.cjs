@@ -116,7 +116,8 @@ const ALLOW_PKGS = new Set(["dayjs", "react", "date-fns"]);
  * client supabase ⇒ chỉ .rpc qua bảng đối chiếu sang fn_nv_app_*; sonner ⇒ toast của app.
  */
 const SHIMS = new Set(["integrations/supabase/client", "sonner", "lib/session", "components/PriceSheet/priceSheetConstants",
-  "services/Product", "services/Project", "services/Customer"]);
+  "services/Product", "services/Project", "services/Customer", "services/CodeGenService",
+  "services/NhanVienService"]);
 /** (cũ) service chép nguyên văn — nay mọi service .ts chép được nếu cả chuỗi phụ thuộc thuần */
 const COPY_SERVICES = new Set([]);
 /**
@@ -129,7 +130,9 @@ const EXTRACT = {
   "components/Products/ContractForm/ApartmentTypeField": ["apartmentTypeName"],
 };
 /** Đường dẫn (dưới src/) KHÔNG chép: chỉ được import kiểu ⇒ thay bằng kiểu any */
-const IMPURE = [/^integrations\//, /^contexts\//, /^pages\//, /\.tsx$/, /\.js$/, /^components\/ui\//];
+const IMPURE = [/^integrations\//, /^contexts\//, /^pages\//, /\.tsx$/, /\.js$/, /^components\/ui\//,
+  // Luồng đăng nhập / menu web (icon lucide-react) — form không dùng, chỉ bị kéo qua import động
+  /^config\//, /^lib\/menuPermissions\.ts$/];
 
 function arg(name) {
   const i = process.argv.indexOf(name);
@@ -168,8 +171,12 @@ function importsOf(file, text) {
     }
     if (spec && ts.isStringLiteral(spec)) out.push({ spec: spec.text, typeOnly, start: spec.getStart(sf), end: spec.getEnd(), node: st });
   }
-  // import("x").Kieu trong khai báo kiểu ⇒ chỉ kiểu
+  // import("x") động (gọi lúc chạy) ⇒ như import chạy thật; import("x").Kieu trong khai báo kiểu ⇒ chỉ kiểu
   const walk = (n) => {
+    if (ts.isCallExpression(n) && n.expression.kind === ts.SyntaxKind.ImportKeyword && n.arguments[0] && ts.isStringLiteral(n.arguments[0])) {
+      const lit = n.arguments[0];
+      out.push({ spec: lit.text, typeOnly: false, start: lit.getStart(sf), end: lit.getEnd(), node: null, dynamic: true });
+    }
     if (ts.isImportTypeNode(n) && ts.isLiteralTypeNode(n.argument) && ts.isStringLiteral(n.argument.literal)) {
       const lit = n.argument.literal;
       const name = n.qualifier ? (ts.isIdentifier(n.qualifier) ? n.qualifier.text : n.qualifier.right.text) : null;
@@ -337,6 +344,23 @@ function collect() {
   return { files, stubs, pkgs, errors, shimsUsed, runtimeStubs };
 }
 
+/** Đổi import("@/x" | "./x") động trong đoạn code trích (đặt ở outRel) sang đường dẫn lib/web / shim / stub */
+function rewriteDynamicImports(code, fromRel, outRel, runtimeStubs) {
+  return code.replace(/import\(\s*(["'])([^"']+)\1\s*\)/g, (m, q, spec) => {
+    const target = toSrcRel(fromRel, spec);
+    if (target === null) return m;
+    const tf = resolveFile(target);
+    const tRel = keyOf(tf ? tf.rel : target);
+    let dest = tRel;
+    if (isShim(tRel)) dest = `_shims/${tRel}`;
+    else if (isExtract(tRel)) dest = `_extract/${tRel}`;
+    else if (!tf || isImpure(tf.rel)) { dest = `_stubs/${tRel}`; if (runtimeStubs && !runtimeStubs.has(tRel)) runtimeStubs.set(tRel, new Set()); }
+    let r = path.posix.relative(path.posix.dirname(outRel), dest);
+    if (!r.startsWith(".")) r = "./" + r;
+    return `import(${JSON.stringify(r)})`;
+  });
+}
+
 /** Tách thân component: câu giữ / bỏ, import cần, tên trả về */
 function planHook(hk) {
   const f = resolveFile(keyOf(hk.file));
@@ -451,7 +475,7 @@ function renderHook(hk) {
     if (named.length) lines.push(`import { ${named.join(", ")} } from ${JSON.stringify(spec)};`);
   }
   lines.push("", `export function ${hk.hook}(${plan.paramText}: any = {}) {`);
-  for (const st of plan.kept) lines.push("  " + plan.text.slice(st.getStart(plan.sf), st.getEnd()));
+  for (const st of plan.kept) lines.push("  " + rewriteDynamicImports(plan.text.slice(st.getStart(plan.sf), st.getEnd()), plan.f.rel, hk.out, null));
   lines.push(`  return { ${plan.returns.join(", ")} };`, "}");
   return lines.join("\n") + "\n";
 }
@@ -616,7 +640,7 @@ function renderComponent(ce) {
     const ctxName = pt.fn[0].toUpperCase() + pt.fn.slice(1) + "Ctx";
     lines.push("", `export interface ${ctxName} {`, ...ctxFields.map((n) => `  ${n}: any;`), "}", "",
       `export function ${pt.fn}(__ctx: ${ctxName}): any {`,
-      ctxFields.length ? `  const { ${ctxFields.join(", ")} } = __ctx;` : "", pt.code, "}");
+      ctxFields.length ? `  const { ${ctxFields.join(", ")} } = __ctx;` : "", rewriteDynamicImports(pt.code, plan.file, ce.out, null), "}");
   }
   return lines.join("\n") + "\n";
 }
@@ -700,8 +724,10 @@ function main() {
     console.log(`lib/web khớp web: ${want.size} tệp`);
     return;
   }
-  for (const e of fs.existsSync(OUT) ? fs.readdirSync(OUT) : []) if (e !== "_shims") fs.rmSync(path.join(OUT, e), { recursive: true, force: true });
+  // Chỉ ghi tệp đổi / xoá tệp thừa (không xoá cả thư mục — Metro đang chạy sẽ giữ bản cũ)
+  for (const rel of have.keys()) if (!want.has(rel)) fs.rmSync(path.join(OUT, rel), { force: true });
   for (const [rel, txt] of want) {
+    if (have.get(rel) === txt) continue;
     const p = path.join(OUT, rel);
     fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, txt);

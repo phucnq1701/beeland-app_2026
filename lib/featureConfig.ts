@@ -148,7 +148,7 @@ export function resolveHomeFeatureIds(opts: {
 }
 
 /**
- * Lập / sửa phiếu tính giá trên app TẠM KHOÁ (2026-11-16): form app chưa khớp web (Công ty bán hàng, điều kiện mức chiết khấu,
- * hạn phiếu…) ⇒ lập / sửa trên web; app vẫn xem / chia sẻ / xoá. Mở lại khi form app viết lại khớp web (docs/app-api-rieng.md L1).
+ * Khoá lập / sửa phiếu tính giá trên app (true ⇒ chỉ xem / chia sẻ / xoá, lập trên web). 2026-11-16 khoá khi form app chưa khớp web;
+ * cùng ngày MỞ LẠI: form chạy đúng logic form web chép nguyên văn (lib/web, scripts/sync-web-pricing.cjs). Bật lại true nếu cần khoá nhanh.
  */
-export const PRICE_SHEET_CREATE_LOCKED = true;
+export const PRICE_SHEET_CREATE_LOCKED = false;

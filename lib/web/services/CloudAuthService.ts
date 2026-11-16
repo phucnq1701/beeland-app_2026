@@ -151,9 +151,9 @@ export async function refreshSessionPermissions(): Promise<boolean> {
   const res = await CloudAuthService.permissions(token);
   if (res?.status !== 200) return false;
   applyCloudSession(token ? { ...res, token } : res, accountType);
-  const { resetSessionCache } = await import("@/lib/session");
+  const { resetSessionCache } = await import("../_shims/lib/session");
   resetSessionCache();
-  const { resetMenuPermissionCache } = await import("@/lib/menuPermissions");
+  const { resetMenuPermissionCache } = await import("../_stubs/lib/menuPermissions");
   resetMenuPermissionCache();
   return true;
 }
@@ -183,7 +183,7 @@ export async function ensureCloudJwt(): Promise<"ok" | "restored" | "missing"> {
   try {
     const res = await refreshCloudJwt();
     if (res?.status !== 200 || !res?.jwt) return "missing";
-    const { resetSessionCache } = await import("@/lib/session");
+    const { resetSessionCache } = await import("../_shims/lib/session");
     resetSessionCache();
     return wasLegacy ? "restored" : "ok";
   } catch {
@@ -203,7 +203,7 @@ export async function acquireCloudJwt(
     const jwt = res?.status === 200 ? String((res as any)?.jwt ?? "") : "";
     if (!jwt) return false;
     storeSessionTokens(res);
-    const { resetSessionCache } = await import("@/lib/session");
+    const { resetSessionCache } = await import("../_shims/lib/session");
     resetSessionCache();
     return true;
   } catch {

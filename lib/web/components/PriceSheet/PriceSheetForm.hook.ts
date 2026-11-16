@@ -2345,9 +2345,7 @@ export function useWebPriceSheetForm({
     let cancelled = false;
     (async () => {
       try {
-        const { generateFormCode, getProjectCodeVars } = await import(
-          "@/services/CodeGenService"
-        );
+        const { generateFormCode, getProjectCodeVars } = await import("../../_shims/services/CodeGenService");
         const maDA =
           (effectiveMaDA as any) ?? (product as any)?.MaDA ?? null;
         const projVars = await getProjectCodeVars(maDA as any);

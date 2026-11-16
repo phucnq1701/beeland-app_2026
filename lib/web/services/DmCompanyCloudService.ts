@@ -113,7 +113,7 @@ const readTenantCompanies = async (tenantId: string): Promise<DmCompanyRow[]> =>
 /** Lọc trong `rows` các công ty nhân viên đăng nhập được xem (toàn quyền → tất cả) */
 const permittedAmong = async (rows: DmCompanyRow[]): Promise<DmCompanyRow[]> => {
   const { sessionEmployeeId, sessionIsFullAccess, sessionBranchId } =
-    await import("@/lib/session");
+    await import("../_shims/lib/session");
   if (sessionIsFullAccess()) return rows;
 
   const empId = sessionEmployeeId();

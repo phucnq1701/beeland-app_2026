@@ -15,6 +15,8 @@ const unsupported = (name: string) => async () => {
 
 export const ProductService: any = new Proxy(
   {
+    /** Danh mục "Sàn giao dịch" (usePriceSheetCatalogs) — ô app không hiện (MaSan theo phiếu) ⇒ rỗng đúng dạng web */
+    getSanGiaoDichAPI: async () => ({ status: 2000, data: [] }),
     /** web Product.js getSPByBG — cùng tham số / kết quả { status, data } */
     getSPByBG: async (payload: any) => {
       const maSP = payload?.MaSP ?? payload?.maSP;

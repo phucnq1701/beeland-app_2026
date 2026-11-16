@@ -525,9 +525,9 @@ function PriceSheetEditorScreen() {
                 placeholder="Tên, SĐT, CCCD, mã khách (≥ 2 ký tự)"
                 prefix={<Search size={16} color={colors.textTertiary} />}
               />
-              {(r.customers || []).length ? (
+              {(r.customerOptions || []).length ? (
                 <View style={styles.card}>
-                  {(r.customers || []).slice(0, 30).map((k: any, i: number) => (
+                  {(r.customerOptions || []).slice(0, 30).map((k: any, i: number) => (
                     <Pressable
                       key={String(k.MaKH ?? k.ID ?? i)}
                       accessibilityRole="button"

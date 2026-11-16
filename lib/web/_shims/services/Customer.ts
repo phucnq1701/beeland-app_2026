@@ -45,7 +45,9 @@ export const CustomerService: any = guard(
       });
       return { status: 2000, data: (cloud.rows || []).map((r: any) => ({ ...r, TotalRows: cloud.total })), totalRow: cloud.total };
     },
-    DanhMuc: guard({}, "DanhMuc."),
+    // Danh mục "Quỹ danh" / "Ngân hàng" của form khách web (usePriceSheetCatalogs) — app không hiện ⇒ rỗng đúng dạng web
+    getNganHang: async () => ({ status: 2000, data: [] }),
+    DanhMuc: guard({ getQuyDanhList: async () => ({ status: 2000, data: [] }) }, "DanhMuc."),
   },
   ""
 );
