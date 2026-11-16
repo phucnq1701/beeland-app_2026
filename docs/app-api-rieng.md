@@ -81,3 +81,12 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
 - CHỜ USER: nút QR booking theo quyền web? (web: PAYMENT_QR /sales/bookings + khoá khi đổi căn chờ duyệt; admin/hanhnh/devtest MSR không có
   quyền xem /sales/bookings ⇒ sẽ mất nút QR booking trên app).
 - Còn L1: chọn / tạo khách trong form booking (customerLookup, fn_customer_get_by_ids / picker), viết lại form phiếu tính giá (2b), e2e L1.
+
+### 2026-11-16 (tối) — L1: QR booking theo quyền + chọn khách
+- User chốt: nút QR booking THEO WEB. SP 51 trả `quyen.payment_qr` (/sales/bookings) + `doi_can_cho_duyet` (đã triển khai, BE 124e0e79);
+  app 95a0daed: chi tiết booking ẩn "Thu tiền QR", màn QR khoá tạo + báo lý do. (MSR admin/hanhnh/devtest mất nút — đúng như web.)
+- SP 66 khach_hang_chon (= fn_customer_picker), 67 khach_hang_theo_id (= fn_customer_get_by_ids) — BE 8393d5a0, đã triển khai.
+  Thử rollback 6 tài khoản × 3 từ khoá + HTTP 4 tài khoản: ĐẠT. App: customerLookup qua API riêng (dùng chung booking / lịch ký /
+  phiếu tính giá / chat / báo cáo). Test 315 đạt.
+- Chưa thử trên máy ảo màn tạo booking (lệnh điều khiển máy ảo tới Lock căn / tạo booking bị chặn vì app nối dữ liệu prod).
+- "Thêm khách mới" trong form booking mở màn customer/new — vẫn ghi qua rest/v1 ⇒ làm ở L2 (Khách hàng).
