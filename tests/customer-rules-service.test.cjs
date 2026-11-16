@@ -30,6 +30,15 @@ function run(file, requireMap) {
 
 const rules = run("lib/customerRules.ts", {});
 
+/** Lỗi bộ API riêng app (services/nvApi NvApiError: message = thông báo máy chủ) */
+class NvApiError extends Error {
+  constructor(message, status = 400, code = "P0001") {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
 /** HTTP giả: tables[table] = rows | (params) => rows; ghi lại mọi lời gọi */
 function harness(tables = {}, { failGet = {}, claims = {}, deleted = [], rpc = {} } = {}) {
   const calls = [];
@@ -73,6 +82,8 @@ function harness(tables = {}, { failGet = {}, claims = {}, deleted = [], rpc = {
   };
   // Bộ API riêng app (callNv): ghi như 1 lời gọi rpc để rpcCalls() dùng chung
   const nv = {
+    NvApiError,
+    errorMessage: (e, f) => (e && typeof e.message === "string" && e.message.trim() ? e.message : f || "lỗi"),
     callNv: async (fn, body) => {
       calls.push({ method: "post", table: `rpc/${fn}`, body });
       const f = rpc[fn];
@@ -86,6 +97,7 @@ function harness(tables = {}, { failGet = {}, claims = {}, deleted = [], rpc = {
     "./axiosApi": { default: {} },
     "./cloudTenant": cloudTenant,
     "../lib/customerRules": rules,
+    "../lib/listRpc": run("lib/listRpc.ts", {}),
     "@react-native-async-storage/async-storage": {
       default: { getItem: async (k) => (k === "@user" ? JSON.stringify({ ho_ten: "NV Test" }) : null) },
     },
@@ -314,6 +326,10 @@ test("identity lock: personal signing appointment locks name and CCCD", async ()
 const raise = (message) => () => {
   throw Object.assign(new Error("Request failed with status code 400"), { response: { data: { message } } });
 };
+/** Lỗi RAISE qua bộ API riêng (callNv ⇒ NvApiError) */
+const raiseNv = (message, status = 400) => () => {
+  throw new NvApiError(message, status);
+};
 const noTableAccess = (h) =>
   assert.equal(
     h.calls.some((c) => /^(cloud_customers|cloud_customer_activities)$/.test(c.table)),
@@ -321,70 +337,79 @@ const noTableAccess = (h) =>
     "Đợt 5: không đọc / ghi thẳng bảng khách"
   );
 
-test("deleting a customer goes through fn_customer_delete; the server refusal reaches the user", async () => {
-  const h = harness({}, { rpc: { fn_customer_delete: raise("Khách hàng đã có 2 phiếu booking, không được phép xóa.") } });
+test("deleting a customer goes through fn_nv_app_khach_hang_xoa (= fn_customer_delete); the server refusal reaches the user", async () => {
+  const h = harness({}, { rpc: { fn_nv_app_khach_hang_xoa: raiseNv("Khách hàng đã có 2 phiếu booking, không được phép xóa.") } });
   const res = await h.customerService().deleteCustomer(uid(1));
   assert.equal(res.status, 400);
   assert.equal(res.message, "Khách hàng đã có 2 phiếu booking, không được phép xóa.");
-  assert.deepEqual(JSON.parse(JSON.stringify(rpcCalls(h, "fn_customer_delete")[0].body)), { p_id: uid(1) });
-  assert.equal(h.calls.some((c) => c.method === "delete"), false);
-  noTableAccess(h);
+  assert.deepEqual(JSON.parse(JSON.stringify(rpcCalls(h, "fn_nv_app_khach_hang_xoa")[0].body)), { p_id: uid(1) });
+  assert.equal(h.calls.some((c) => c.method === "get" || c.method === "delete"), false, "không đọc / xoá thẳng bảng");
 });
 
-test("customer transactions use real columns and lookups (no FK embeds)", async () => {
-  const h = harness({
-    cloud_pgc_phieu_giucho: [
-      { id: "p1", so_phieu_gc: "BK-1", giai_doan: "DATCOC", gia_tri_hd: 900, gia_tri_hd_sau_ck: 800, tien_coc: 50, da_thu: 20,
-        san_pham_id: "s1", project_id: "d1", trang_thai_id: "t1", created_at: "2026-09-01T00:00:00Z" },
-    ],
-    bds_products: [{ id: "s1", ky_hieu: "B2-608" }],
-    da_projects: [{ id: "d1", ten_da: "Dự án A" }],
-    cloud_catalogs: [{ id: "t1", item_name: "Đã cọc", color_code: "#123456" }],
+test("customer transactions: 1 call fn_nv_app_khach_hang_giao_dich (joined product / project / status), no table reads", async () => {
+  const h = harness({}, {
+    rpc: {
+      fn_nv_app_khach_hang_giao_dich: (b) =>
+        b.p_khach_hang_id === uid(1)
+          ? [{ id: "p1", so_phieu_gc: "BK-1", giai_doan: "DATCOC", gia_tri_hd: 900, gia_tri_hd_sau_ck: 800, san_pham_id: "s1", ky_hieu: "B2-608",
+               ma_sp: "M1", project_id: "d1", ten_da: "Dự án A", trang_thai_id: "t1", ten_tt: "Đã cọc", mau_tt: "#123456", created_at: "2026-09-01T00:00:00Z" }]
+          : [],
+    },
   });
   const list = await h.customerService().getCustomerTransactions(uid(1));
-  const q = h.calls.find((c) => c.table === "cloud_pgc_phieu_giucho");
-  assert.equal(q.params.select.includes("!"), false);
-  assert.equal(q.params.select.includes("tong_gia_tri"), false);
-  assert.equal(q.params.deleted_at, "is.null");
   assert.equal(list.length, 1);
   assert.equal(list[0].giaTri, 800);
   assert.equal(list[0].tenDA, "Dự án A");
   assert.equal(list[0].kyHieu, "B2-608");
   assert.equal(list[0].stageLabel, "Đặt cọc");
   assert.equal(list[0].status, "Đã cọc");
+  assert.equal(list[0].statusColor, "#123456");
+  assert.equal(h.calls.some((c) => c.method === "get"), false);
 });
 
-test("care notes go through fn_customer_activity_save (staff name, customer resolved from code)", async () => {
+test("catalogs: fn_nv_app_danh_muc (company from session); empty source list ⇒ default sources; error ⇒ []", async () => {
   const h = harness({}, {
     rpc: {
-      fn_nv_app_khach_hang_theo_id: (b) => (b.p_ma?.includes("KH-1") ? [{ id: uid(1), ma_so_kh: "KH-1" }] : []),
-      fn_customer_activity_save: () => uid(77),
+      fn_nv_app_danh_muc: (b) =>
+        b.p_loai === "trang_thai_kh" ? [{ id: uid(3), item_code: "NEW", item_name: "Mới", color_code: "blue", ghi_chu: "x" }] : [],
     },
   });
-  const res = await h.customerService().addCustomerActivity({ customerId: "KH-1", content: "Gọi tư vấn", loai: "note" });
-  assert.equal(res.status, 2000);
-  assert.equal(res.data, uid(77));
-  const p = rpcCalls(h, "fn_customer_activity_save")[0].body.p;
-  assert.equal(p.khach_hang_id, uid(1));
-  assert.equal(p.nguoi_thuc_hien, "NV Test");
-  assert.equal(p.loai, "note");
-  assert.equal("ma_ctdk" in p, false, "máy chủ tự đặt công ty");
-  const fail = harness({}, { rpc: { fn_customer_activity_save: raise("Không có quyền với bản ghi này") } });
-  const bad = await fail.customerService().addCustomerActivity({ customerId: uid(1), content: "x" });
-  assert.equal(bad.message, "Không có quyền với bản ghi này");
-  noTableAccess(h);
+  const svc = h.customerService();
+  const st = await svc.getTrangThaiCatalogs();
+  assert.deepEqual(JSON.parse(JSON.stringify(st)), [{ id: uid(3), label: "Mới", value: uid(3), color: "blue", code: "NEW", ghiChu: "x" }]);
+  const ng = await svc.getNguonCatalogs();
+  assert.equal(ng[0].id, "facebook");
+  assert.deepEqual(JSON.parse(JSON.stringify(rpcCalls(h, "fn_nv_app_danh_muc").map((c) => c.body))), [{ p_loai: "trang_thai_kh" }, { p_loai: "nguon_kh" }]);
+  const bad = harness({}, { rpc: { fn_nv_app_danh_muc: raiseNv("lỗi") } });
+  assert.equal((await bad.customerService().getTrangThaiCatalogs()).length, 0);
+  assert.equal(h.calls.some((c) => c.method === "get"), false);
 });
 
-test("care notes list uses fn_customer_activity_list", async () => {
-  const h = harness({}, { rpc: { fn_customer_activity_list: () => [{ id: "a1", loai: "call", noi_dung: "Hi", thoi_gian: "2026-10-01" }] } });
-  const list = await h.customerService().getCustomerActivities(uid(1));
-  assert.equal(list.length, 1);
-  assert.equal(list[0].noiDung, "Hi");
-  assert.equal(rpcCalls(h, "fn_customer_activity_list")[0].body.p_khach_hang_id, uid(1));
-  noTableAccess(h);
+test("list: fn_nv_app_khach_hang_list params; status code → uuid via catalog; 401 ⇒ authError; other errors are thrown", async () => {
+  const h = harness({}, {
+    rpc: {
+      fn_nv_app_danh_muc: () => [{ id: uid(3), item_code: "NEW", item_name: "Mới" }],
+      fn_nv_app_khach_hang_list: () => ({ rows: [{ id: uid(1), ten_kh: "A", ten_tt: "Mới", mau_tt: "blue" }], total: 41 }),
+    },
+  });
+  const svc = h.customerService();
+  const r = await svc.getCustomers({ search: " an ", isPersonal: true, limit: 20, offset: 0 });
+  assert.equal(r.data[0].tenKH, "A");
+  assert.equal(r.total, 41);
+  assert.equal(r.hasMore, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(rpcCalls(h, "fn_nv_app_khach_hang_list")[0].body)),
+    { p_tu_khoa: "an", p_ca_nhan: true, p_trang_thai_id: null, p_trang: 1, p_so_dong: 20 });
+  await svc.getCustomers({ maTtId: "NEW", statusLabel: "Mới" });
+  assert.equal(rpcCalls(h, "fn_nv_app_khach_hang_list")[1].body.p_trang_thai_id, uid(3), "mã trạng thái ⇒ uuid");
+  const auth = await harness({}, { rpc: { fn_nv_app_khach_hang_list: raiseNv("Phiên đăng nhập hết hạn", 401) } }).customerService().getCustomers();
+  assert.equal(auth.authError, true);
+  await assert.rejects(
+    harness({}, { rpc: { fn_nv_app_khach_hang_list: raiseNv('Bạn không có quyền "Xem" ở "Khách hàng"', 403) } }).customerService().getCustomers(),
+    /không có quyền/
+  );
 });
 
-test("detail uses fn_customer_get; code → fn_nv_app_khach_hang_theo_id first; nested status/source/company", async () => {
+test("detail uses fn_nv_app_khach_hang_chi_tiet (= fn_customer_get); code → fn_nv_app_khach_hang_theo_id first; nested status/source/company", async () => {
   const row = {
     id: uid(1), ma_so_kh: "KH-1", ten_kh: "A", is_personal: true, ma_tt_id: uid(3),
     trang_thai: { id: uid(3), item_name: "Tiềm năng", color_code: "gold" }, nguon: { id: uid(4), item_name: "Facebook" },
@@ -393,7 +418,7 @@ test("detail uses fn_customer_get; code → fn_nv_app_khach_hang_theo_id first; 
   const h = harness({}, {
     rpc: {
       fn_nv_app_khach_hang_theo_id: (b) => (b.p_ma?.includes("KH-1") ? [{ id: uid(1), ma_so_kh: "KH-1" }] : []),
-      fn_customer_get: (b) => (b.p_id === uid(1) ? row : null),
+      fn_nv_app_khach_hang_chi_tiet: (b) => (b.p_id === uid(1) ? row : null),
     },
   });
   const svc = h.customerService();
@@ -408,23 +433,23 @@ test("detail uses fn_customer_get; code → fn_nv_app_khach_hang_theo_id first; 
 });
 
 test("detail: server error is thrown with the server message (not 'not found'); limited row hides CCCD", async () => {
-  const bad = harness({}, { rpc: { fn_customer_get: raise("Bạn không có quyền xem khách hàng") } });
+  const bad = harness({}, { rpc: { fn_nv_app_khach_hang_chi_tiet: raiseNv("Bạn không có quyền xem khách hàng") } });
   await assert.rejects(bad.customerService().getCustomerDetailCloud(uid(1)), /Bạn không có quyền xem khách hàng/);
-  const lim = harness({}, { rpc: { fn_customer_get: () => ({ id: uid(1), ten_kh: "B", cccd: "********1234", limited: true }) } });
+  const lim = harness({}, { rpc: { fn_nv_app_khach_hang_chi_tiet: () => ({ id: uid(1), ten_kh: "B", cccd: "********1234", limited: true }) } });
   const d = await lim.customerService().getCustomerDetailCloud(uid(1));
   assert.equal(d.limited, true);
   assert.equal(d.cccd, "");
   assert.equal(d.cccd_masked, "********1234");
 });
 
-test("editing sends only the columns the app form manages to fn_customer_save (scoped), web-only data is kept", async () => {
-  const h = harness({}, { rpc: { fn_customer_save: () => uid(1), fn_customer_get: () => ({ id: uid(1), ma_so_kh: "KH-9" }) } });
+test("editing sends only the columns the app form manages to fn_nv_app_khach_hang_luu (scoped on the server), web-only data is kept", async () => {
+  const h = harness({}, { rpc: { fn_nv_app_khach_hang_luu: () => uid(1), fn_nv_app_khach_hang_chi_tiet: () => ({ id: uid(1), ma_so_kh: "KH-9" }) } });
   const svc = h.customerService();
   const saved = await svc.saveCustomerCloud({ id: uid(1), isPersonal: true, tenKh: "A", diDong: "0901", diaChi: "HCM" });
   assert.equal(saved.status, 2000);
   assert.equal(saved.data.ma_so_kh, "KH-9", "đọc lại dòng đã lưu");
-  const call = rpcCalls(h, "fn_customer_save")[0].body;
-  assert.equal(call.p_scoped, true);
+  const call = rpcCalls(h, "fn_nv_app_khach_hang_luu")[0].body;
+  assert.deepEqual(Object.keys(call), ["p_row"], "p_scoped do máy chủ app đặt");
   const body = call.p_row;
   assert.equal(body.id, uid(1));
   for (const k of ["ngay_sinh", "ngay_cap", "noi_cap", "so_tai_khoan", "ten_ngan_hang", "email2", "thuong_tru", "ma_qd", "ten_qd",
@@ -437,24 +462,27 @@ test("editing sends only the columns the app form manages to fn_customer_save (s
   noTableAccess(h);
 });
 
-test("creating: fn_customer_save without id / tenant / company / code (server assigns); server error reaches the user", async () => {
-  const h = harness({}, { rpc: { fn_customer_save: () => uid(5), fn_customer_get: () => ({ id: uid(5), ma_so_kh: "KH-00005" }) } });
+test("creating: fn_nv_app_khach_hang_luu without id / tenant / company / code (server assigns); server error reaches the user; 401 ⇒ needLogin", async () => {
+  const h = harness({}, { rpc: { fn_nv_app_khach_hang_luu: () => uid(5), fn_nv_app_khach_hang_chi_tiet: () => ({ id: uid(5), ma_so_kh: "KH-00005" }) } });
   const res = await h.customerService().saveCustomerCloud({ isPersonal: true, tenKh: "A", diDong: "0901" });
   assert.equal(res.status, 2000);
   assert.equal(res.data.id, uid(5));
-  const body = rpcCalls(h, "fn_customer_save")[0].body.p_row;
+  const body = rpcCalls(h, "fn_nv_app_khach_hang_luu")[0].body.p_row;
   for (const k of ["id", "ma_ctdk", "company_id", "ma_so_kh", "created_by_id"]) assert.equal(k in body, false, k);
   assert.equal(body.ten_kh, "A");
-  const bad = harness({}, { rpc: { fn_customer_save: raise("Bạn không có quyền thêm khách hàng") } });
+  const bad = harness({}, { rpc: { fn_nv_app_khach_hang_luu: raiseNv("Bạn không có quyền thêm khách hàng") } });
   const r = await bad.customerService().saveCustomerCloud({ isPersonal: true, tenKh: "A", diDong: "0901" });
   assert.equal(r.status, 5000);
   assert.equal(r.message, "Bạn không có quyền thêm khách hàng");
+  const exp = await harness({}, { rpc: { fn_nv_app_khach_hang_luu: raiseNv("Phiên đăng nhập hết hạn", 401) } })
+    .customerService().saveCustomerCloud({ isPersonal: true, tenKh: "A", diDong: "0901" });
+  assert.equal(exp.needLogin, true);
 });
 
 test("note is saved to ghi_chu on create and edit; callers without a note keep the existing one", async () => {
-  const h = harness({}, { rpc: { fn_customer_save: () => uid(1), fn_customer_get: () => ({ id: uid(1) }) } });
+  const h = harness({}, { rpc: { fn_nv_app_khach_hang_luu: () => uid(1), fn_nv_app_khach_hang_chi_tiet: () => ({ id: uid(1) }) } });
   const svc = h.customerService();
-  const rows = () => rpcCalls(h, "fn_customer_save").map((c) => c.body.p_row);
+  const rows = () => rpcCalls(h, "fn_nv_app_khach_hang_luu").map((c) => c.body.p_row);
   await svc.saveCustomerCloud({ id: uid(1), isPersonal: true, tenKh: "A", diDong: "0901", ghiChu: "Khách VIP" });
   assert.equal(rows()[0].ghi_chu, "Khách VIP");
   await svc.saveCustomerCloud({ id: uid(1), isPersonal: true, tenKh: "A", diDong: "0901", ghiChu: null });
@@ -465,11 +493,11 @@ test("note is saved to ghi_chu on create and edit; callers without a note keep t
   assert.equal(rows()[3].ghi_chu, "Mới");
 });
 
-test("delete reports success when fn_customer_delete returns", async () => {
-  const ok = harness({}, { rpc: { fn_customer_delete: () => null } });
+test("delete reports success when fn_nv_app_khach_hang_xoa returns", async () => {
+  const ok = harness({}, { rpc: { fn_nv_app_khach_hang_xoa: () => null } });
   const res = await ok.customerService().deleteCustomer(uid(1));
   assert.equal(res.status, 2000);
-  const blocked = await harness({}, { rpc: { fn_customer_delete: raise("Bạn không có quyền xóa khách hàng") } })
+  const blocked = await harness({}, { rpc: { fn_nv_app_khach_hang_xoa: raiseNv("Bạn không có quyền xóa khách hàng") } })
     .customerService()
     .deleteCustomer(uid(1));
   assert.notEqual(blocked.status, 2000);
@@ -488,10 +516,10 @@ test("pickers use fn_nv_app_khach_hang_chon (= fn_customer_picker; ≥ 2 chars, 
 });
 
 test("a failed transactions load is reported as an error, not as 'no transactions'", async () => {
-  const h = harness({}, { failGet: { cloud_pgc_phieu_giucho: true } });
+  const h = harness({}, { rpc: { fn_nv_app_khach_hang_giao_dich: raiseNv("boom", 500) } });
   const res = await h.customerService().getHopDong({ MaKH: uid(1) });
   assert.equal(res.error, true);
   assert.equal(res.data.length, 0);
-  const fine = await harness({ cloud_pgc_phieu_giucho: [] }).customerService().getHopDong({ MaKH: uid(1) });
+  const fine = await harness({}, { rpc: { fn_nv_app_khach_hang_giao_dich: () => [] } }).customerService().getHopDong({ MaKH: uid(1) });
   assert.equal(fine.error, false);
 });
