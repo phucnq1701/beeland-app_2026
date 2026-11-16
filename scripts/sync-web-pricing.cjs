@@ -72,6 +72,8 @@ const COMPONENT_EXTRACTS = [
     out: "pages/products/gia-gio-hang/phieu-tinh-gia/saveRow.ts",
     parts: [
       { kind: "range", fn: "webPriceSheetSaveRow", inside: "handlePriceSheetSaved", from: "const tt = payload?.TTHopDong", until: "row", returns: ["row"] },
+      { kind: "fn", name: "handleEdit", fn: "webHandleEdit" },
+      { kind: "fn", name: "handlePriceSheetSaved", fn: "webHandlePriceSheetSaved" },
     ],
   },
   {
@@ -255,6 +257,7 @@ function collect() {
     errors.push(...plan.errors);
     plan.imports.forEach((im) => {
       if (im.srcRel) queue.push({ rel: im.srcRel, from: ce.file + " (trích)" });
+      else if (SHIMS.has(im.spec)) shimsUsed.add(im.spec);
       else if (!ALLOW_PKGS.has(im.spec.split("/")[0])) errors.push(`${ce.file}: phần trích dùng thư viện ngoài "${im.spec}"`);
     });
   }
@@ -591,6 +594,9 @@ function renderComponent(ce) {
       const tRel = keyOf(tf ? tf.rel : im.srcRel);
       const dest = isShim(tRel) ? `_shims/${tRel}` : isExtract(tRel) ? `_extract/${tRel}` : tRel;
       spec = path.posix.relative(path.posix.dirname(ce.out), dest);
+      if (!spec.startsWith(".")) spec = "./" + spec;
+    } else if (SHIMS.has(im.spec)) {
+      spec = path.posix.relative(path.posix.dirname(ce.out), `_shims/${im.spec}`);
       if (!spec.startsWith(".")) spec = "./" + spec;
     }
     const named = [], defs = [];
