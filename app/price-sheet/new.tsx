@@ -330,7 +330,7 @@ function PriceSheetEditorScreen() {
                     rows={
                       isLow
                         ? [
-                            ["Diện tích đất", f.dienTichDat ? `${formatArea(f.dienTichDat)} m²` : null],
+                            ["Diện tích đất", f.dienTichDat ? formatArea(f.dienTichDat) : null],
                             ["Giá đất chưa VAT", money(f.rawTienDatChuaVAT)],
                             ["Tổng giá đất", money(f.rawTongTienDatVAT)],
                             ["Tiền xây dựng chưa VAT", money(f.rawThanhTienXD)],
@@ -338,7 +338,7 @@ function PriceSheetEditorScreen() {
                             ["Tổng giá trị HĐMB", money(f.rawTongGiaTriHDMB)],
                           ]
                         : [
-                            ["Diện tích thông thủy", f.dienTichThongThuy ? `${formatArea(f.dienTichThongThuy)} m²` : null],
+                            ["Diện tích thông thủy", f.dienTichThongThuy ? formatArea(f.dienTichThongThuy) : null],
                             ["Đơn giá gồm VAT", money(f.rawDonGiaDaVAT)],
                             ["Tổng giá chưa VAT", money(f.rawTongGiaChuaVAT)],
                             [`VAT (${f.tyLeVAT}%)`, money(f.rawTienVAT)],

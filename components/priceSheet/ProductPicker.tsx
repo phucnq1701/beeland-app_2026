@@ -108,7 +108,7 @@ export function ProductPicker({ onPick }: { onPick: (productId: string) => void 
                   {p.KyHieu || p.MaSP || "—"}
                 </Text>
                 <Text variant="caption" color="textSecondary" numberOfLines={1}>
-                  {[p.TenKhu, p.DienTichThongThuy ? `${formatArea(p.DienTichThongThuy)} m²` : null].filter(Boolean).join(" · ") ||
+                  {[p.TenKhu, p.DienTichThongThuy ? formatArea(p.DienTichThongThuy) : null].filter(Boolean).join(" · ") ||
                     " "}
                 </Text>
               </View>

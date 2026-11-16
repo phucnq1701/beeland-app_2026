@@ -217,7 +217,7 @@ export default function PriceSheetDetailScreen() {
             rows={[
               ["Căn", sheet.product_code],
               ["Loại", snap.productType || sheet.product_name],
-              ["Diện tích thông thủy", snap.area || sheet.area ? `${formatArea(snap.area || sheet.area)} m²` : null],
+              ["Diện tích thông thủy", snap.area || sheet.area ? formatArea(snap.area || sheet.area) : null],
               ["Chính sách", sheet.ten_chinh_sach || snap.policyName],
               ["Tiến độ thanh toán", sheet.ten_lich_tt || snap.scheduleName],
               ["Ngày ký dự kiến", tt.NgayKy ? formatDate(tt.NgayKy) : null],
