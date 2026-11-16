@@ -269,7 +269,7 @@ test("progress report: always live from the sales lifecycle, original contracts 
       // Đã thu theo phiếu: máy chủ (bảng cloud_cash_voucher_details đã khoá đọc thẳng)
       fn_pgc_collected: { [P1]: { da_thu: 60, da_thu_pbt: 0 }, [P3]: { da_thu: 0, da_thu_pbt: 0, da_chuyen_nhuong: true } },
       // Khách: RPC (bảng cloud_customers đã khoá đọc thẳng)
-      fn_customer_get_by_ids: (body) => (body.p_ids || []).includes(K1) ? [{ id: K1, ten_kh: "Khách" }] : [],
+      fn_nv_app_khach_hang_theo_id: (body) => (body.p_ids || []).includes(K1) ? [{ id: K1, ten_kh: "Khách" }] : [],
     },
   });
   const b = await life.reports().getProgress({});

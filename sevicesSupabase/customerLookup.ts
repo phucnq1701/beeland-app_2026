@@ -1,14 +1,14 @@
 /**
- * Đọc khách hàng qua RPC — như web beeland/src/services/customers/customer-lookup (Đợt 5, migration
- * 20261020000510_ds_dot5_customer_revoke: bảng cloud_customers đã khoá đọc / ghi thẳng qua PostgREST).
+ * Đọc khách hàng qua bộ API riêng app — lõi chung với web beeland/src/services/customers/customer-lookup:
  *
- * - `fn_customer_get_by_ids(p_ids, p_refs, p_with_images)`: khách trong công ty được xem ⇒ dòng đầy đủ; khách công ty khác
- *   nằm trên chứng từ người gọi thấy ⇒ bản giới hạn (`limited: true`). Ngoài cả hai ⇒ không có trong kết quả.
- *   ≤ 500 id, ≤ 50 mã / SĐT mỗi lần.
- * - `fn_customer_picker(p_search, p_limit, …)`: ô chọn khách ở màn khác, từ khoá ≥ 2 ký tự, ≤ 50 dòng.
- * Thay cho embed `kh:cloud_customers!khach_hang_id(...)` và `rest/v1/cloud_customers`.
+ * - `fn_nv_app_khach_hang_theo_id { p_ids, p_ma, p_co_anh }` (= fn_customer_get_by_ids): khách trong công ty được xem ⇒ dòng đầy đủ
+ *   (đã che theo nhóm); khách công ty khác nằm trên chứng từ người gọi thấy ⇒ bản giới hạn (`limited: true`). Ngoài cả hai ⇒ không
+ *   có trong kết quả. ≤ 500 id, ≤ 50 mã / SĐT mỗi lần.
+ * - `fn_nv_app_khach_hang_chon { p_tu_khoa, p_so_dong, p_ca_nhan }` (= fn_customer_picker): ô chọn khách ở màn khác, từ khoá ≥ 2 ký tự,
+ *   ≤ 50 dòng, không cần quyền màn Khách hàng.
+ * Công ty / phạm vi lấy từ phiên ở máy chủ.
  */
-import axiosApiSupabase from "./axiosApiSupabase";
+import { callNv } from "@/services/nvApi";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const asUid = (v: unknown): string | null => {
@@ -25,15 +25,11 @@ const chunk = <T,>(arr: T[], size: number): T[][] => {
   return out;
 };
 
-const errorMessage = (e: any, fallback: string) =>
-  e?.response?.data?.message || e?.response?.data?.hint || (e instanceof Error && e.message) || fallback;
-
 async function rpc<T = any>(fn: string, body: Record<string, any>, fallback: string): Promise<T> {
   try {
-    const res = await axiosApiSupabase.post(`rest/v1/rpc/${fn}`, body);
-    return res.data as T;
-  } catch (e) {
-    throw new Error(errorMessage(e, fallback));
+    return await callNv<T>(fn, body);
+  } catch (e: any) {
+    throw new Error((e instanceof Error && e.message) || fallback);
   }
 }
 
@@ -43,11 +39,7 @@ export async function getCustomersByIds(ids: unknown[], opts: { withImages?: boo
   if (!list.length) return [];
   const parts = await Promise.all(
     chunk(list, BATCH_IDS).map((p) =>
-      rpc<any[]>(
-        "fn_customer_get_by_ids",
-        { p_ids: p, p_refs: null, p_with_images: !!opts.withImages },
-        "Không tải được khách hàng"
-      )
+      rpc<any[]>("fn_nv_app_khach_hang_theo_id", { p_ids: p, p_co_anh: !!opts.withImages }, "Không tải được khách hàng")
     )
   );
   return parts.flatMap((p) => (Array.isArray(p) ? p : []));
@@ -59,7 +51,7 @@ export async function getCustomersByRefs(refs: unknown[]): Promise<any[]> {
   if (!list.length) return [];
   const parts = await Promise.all(
     chunk(list, BATCH_REFS).map((p) =>
-      rpc<any[]>("fn_customer_get_by_ids", { p_ids: null, p_refs: p, p_with_images: false }, "Không tải được khách hàng")
+      rpc<any[]>("fn_nv_app_khach_hang_theo_id", { p_ma: p }, "Không tải được khách hàng")
     )
   );
   return parts.flatMap((p) => (Array.isArray(p) ? p : []));
@@ -136,22 +128,16 @@ export async function withCustomers<T>(
   return input;
 }
 
-/** Ô chọn khách ở màn khác — `fn_customer_picker` (từ khoá ≥ 2 ký tự, ≤ 50 dòng). Lỗi máy chủ ném ra. */
-export async function pickCustomers(
-  keyword: string,
-  opts: { limit?: number; companyIds?: string[]; isPersonal?: boolean | null; isNoxh?: boolean | null } = {}
-): Promise<any[]> {
+/** Ô chọn khách ở màn khác — `fn_nv_app_khach_hang_chon` (từ khoá ≥ 2 ký tự, ≤ 50 dòng). Lỗi máy chủ ném ra. */
+export async function pickCustomers(keyword: string, opts: { limit?: number; isPersonal?: boolean | null } = {}): Promise<any[]> {
   const kw = String(keyword ?? "").trim();
   if (kw.length < 2) return [];
-  const companyIds = (opts.companyIds || []).map(asUid).filter(Boolean) as string[];
   const res = await rpc<any>(
-    "fn_customer_picker",
+    "fn_nv_app_khach_hang_chon",
     {
-      p_search: kw,
-      p_limit: Math.min(50, Math.max(1, opts.limit ?? 20)),
-      p_company_ids: companyIds.length ? companyIds : null,
-      p_is_personal: opts.isPersonal == null ? null : !!opts.isPersonal,
-      p_is_noxh: opts.isNoxh == null ? null : !!opts.isNoxh,
+      p_tu_khoa: kw,
+      p_so_dong: Math.min(50, Math.max(1, opts.limit ?? 20)),
+      p_ca_nhan: opts.isPersonal == null ? null : !!opts.isPersonal,
     },
     "Không thể tìm khách hàng"
   );

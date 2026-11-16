@@ -71,7 +71,17 @@ function harness(tables = {}, { failGet = {}, claims = {}, deleted = [], rpc = {
     getUserCompanyId: async () => uid(8),
     getUserCompanyIds: async () => uid(8),
   };
+  // Bộ API riêng app (callNv): ghi như 1 lời gọi rpc để rpcCalls() dùng chung
+  const nv = {
+    callNv: async (fn, body) => {
+      calls.push({ method: "post", table: `rpc/${fn}`, body });
+      const f = rpc[fn];
+      if (!f) throw new Error(`unexpected endpoint ${fn}`);
+      return await f(body);
+    },
+  };
   const map = {
+    "@/services/nvApi": nv,
     "./axiosApiSupabase": { default: http },
     "./axiosApi": { default: {} },
     "./cloudTenant": cloudTenant,
@@ -347,7 +357,7 @@ test("customer transactions use real columns and lookups (no FK embeds)", async 
 test("care notes go through fn_customer_activity_save (staff name, customer resolved from code)", async () => {
   const h = harness({}, {
     rpc: {
-      fn_customer_get_by_ids: (b) => (b.p_refs?.includes("KH-1") ? [{ id: uid(1), ma_so_kh: "KH-1" }] : []),
+      fn_nv_app_khach_hang_theo_id: (b) => (b.p_ma?.includes("KH-1") ? [{ id: uid(1), ma_so_kh: "KH-1" }] : []),
       fn_customer_activity_save: () => uid(77),
     },
   });
@@ -374,7 +384,7 @@ test("care notes list uses fn_customer_activity_list", async () => {
   noTableAccess(h);
 });
 
-test("detail uses fn_customer_get; code → fn_customer_get_by_ids first; nested status/source/company", async () => {
+test("detail uses fn_customer_get; code → fn_nv_app_khach_hang_theo_id first; nested status/source/company", async () => {
   const row = {
     id: uid(1), ma_so_kh: "KH-1", ten_kh: "A", is_personal: true, ma_tt_id: uid(3),
     trang_thai: { id: uid(3), item_name: "Tiềm năng", color_code: "gold" }, nguon: { id: uid(4), item_name: "Facebook" },
@@ -382,7 +392,7 @@ test("detail uses fn_customer_get; code → fn_customer_get_by_ids first; nested
   };
   const h = harness({}, {
     rpc: {
-      fn_customer_get_by_ids: (b) => (b.p_refs?.includes("KH-1") ? [{ id: uid(1), ma_so_kh: "KH-1" }] : []),
+      fn_nv_app_khach_hang_theo_id: (b) => (b.p_ma?.includes("KH-1") ? [{ id: uid(1), ma_so_kh: "KH-1" }] : []),
       fn_customer_get: (b) => (b.p_id === uid(1) ? row : null),
     },
   });
@@ -466,15 +476,15 @@ test("delete reports success when fn_customer_delete returns", async () => {
   assert.equal(blocked.message, "Bạn không có quyền xóa khách hàng");
 });
 
-test("pickers use fn_customer_picker (≥ 2 chars, no call below)", async () => {
-  const h = harness({}, { rpc: { fn_customer_picker: () => ({ rows: [{ id: uid(1), ten_kh: "A", ten_tt: "Mới", mau_tt: "blue" }] }) } });
+test("pickers use fn_nv_app_khach_hang_chon (= fn_customer_picker; ≥ 2 chars, no call below)", async () => {
+  const h = harness({}, { rpc: { fn_nv_app_khach_hang_chon: () => ({ rows: [{ id: uid(1), ten_kh: "A", ten_tt: "Mới", mau_tt: "blue" }] }) } });
   const svc = h.customerService();
   assert.equal((await svc.pickCustomers({ search: "a" })).data.length, 0);
-  assert.equal(rpcCalls(h, "fn_customer_picker").length, 0);
-  const r = await svc.pickCustomers({ search: "an", limit: 10 });
+  assert.equal(rpcCalls(h, "fn_nv_app_khach_hang_chon").length, 0);
+  const r = await svc.pickCustomers({ search: " an ", limit: 10, isPersonal: true });
   assert.equal(r.data[0].tenKH, "A");
   assert.equal(r.data[0].status, "Mới");
-  assert.equal(rpcCalls(h, "fn_customer_picker")[0].body.p_limit, 10);
+  assert.deepEqual(JSON.parse(JSON.stringify(rpcCalls(h, "fn_nv_app_khach_hang_chon")[0].body)), { p_tu_khoa: "an", p_so_dong: 10, p_ca_nhan: true });
 });
 
 test("a failed transactions load is reported as an error, not as 'no transactions'", async () => {
