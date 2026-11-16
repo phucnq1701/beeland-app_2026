@@ -118,8 +118,26 @@ const COMPONENT_HOOKS = [
     hook: "useWebBookingForm",
     allowMissing: [],
   },
+  {
+    // Form thêm / sửa lịch ký của web (Giao dịch › Đặt lịch ký, forwardRef + open()) — app: màn Đặt lịch ký
+    file: "pages/sales/giao-dich/dat-lich-ky/SigningDrawer.tsx",
+    component: "SigningDrawer",
+    out: "pages/sales/giao-dich/dat-lich-ky/SigningDrawer.hook.ts",
+    hook: "useWebSigningForm",
+    allowMissing: [],
+  },
+  {
+    // Ô chọn Quỹ → Thủ tục → Điểm ký → ngày → Ca + hồ sơ của form lịch ký web (DK3/DK7/DK8/DK23)
+    file: "pages/sales/giao-dich/dat-lich-ky/ShiftPickerFields.tsx",
+    component: "ShiftPickerFields",
+    out: "pages/sales/giao-dich/dat-lich-ky/ShiftPickerFields.hook.ts",
+    hook: "useWebShiftPicker",
+    allowMissing: [],
+  },
 ];
 const UI_PKG = /^(antd|lucide-react|@ant-design|react-dom|react-router|@tanstack)/;
+/** Tên lấy từ gói giao diện nhưng là thông báo (không vẽ) ⇒ shim app viết tay lib/web/_shims/<tên>.ts */
+const UI_SHIM = { "antd#message": "antdMessage" };
 const UI_PATH = [/^components\/ui\//, /^components\/UiCustoms\//];
 
 /** Thư viện ngoài được phép (đã có / thêm vào package.json của app) */
@@ -130,7 +148,7 @@ const ALLOW_PKGS = new Set(["dayjs", "react", "date-fns"]);
  */
 const SHIMS = new Set(["integrations/supabase/client", "sonner", "lib/session", "components/PriceSheet/priceSheetConstants",
   "services/Product", "services/Project", "services/Customer", "services/CodeGenService",
-  "services/NhanVienService", "services/HeThongService"]);
+  "services/NhanVienService", "services/HeThongService", "services/Agency"]);
 /** (cũ) service chép nguyên văn — nay mọi service .ts chép được nếu cả chuỗi phụ thuộc thuần */
 const COPY_SERVICES = new Set([]);
 /**
@@ -143,7 +161,8 @@ const EXTRACT = {
   "components/Products/ContractForm/ApartmentTypeField": ["apartmentTypeName"],
 };
 /** Đường dẫn (dưới src/) KHÔNG chép: chỉ được import kiểu ⇒ thay bằng kiểu any */
-const IMPURE = [/^integrations\//, /^contexts\//, /^pages\//, /\.tsx$/, /\.js$/, /^components\/ui\//,
+// pages/: chỉ chép các tệp thuần (logic trang, không giao diện) của Đặt lịch ký
+const IMPURE = [/^integrations\//, /^contexts\//, /^pages\/(?!sales\/giao-dich\/dat-lich-ky\/(types|signingSource|khoHoSo|signingFieldValues)\.ts$)/, /\.tsx$/, /\.js$/, /^components\/ui\//,
   // Luồng đăng nhập / menu web (icon lucide-react) — form không dùng, chỉ bị kéo qua import động
   /^config\/(?!fieldConfigCatalog\.ts$)/, /^lib\/menuPermissions\.ts$/];
 
@@ -298,6 +317,7 @@ function collect() {
     for (const im of plan.imports) {
       if (im.srcRel === null) {
         if (SHIMS.has(im.spec)) { shimsUsed.add(im.spec); continue; }
+        if (im.spec.startsWith("__shim:")) continue;
         if (!ALLOW_PKGS.has(im.spec.split("/")[0]) && !im.allType) errors.push(`${hk.file}: hook dùng thư viện ngoài "${im.spec}"`);
         else if (!im.allType) pkgs.add(im.spec);
         continue;
@@ -390,8 +410,18 @@ function planHook(hk) {
   const text = fs.readFileSync(f.abs, "utf8");
   const sf = ts.createSourceFile(f.abs, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const errors = [];
-  let comp = null;
-  for (const st of sf.statements) if (ts.isFunctionDeclaration(st) && st.name?.text === hk.component) comp = st;
+  let comp = null, compStmt = null;
+  for (const st of sf.statements) if (ts.isFunctionDeclaration(st) && st.name?.text === hk.component) comp = compStmt = st;
+  // const X = forwardRef((props, ref) => { … }) ⇒ thân hàm bên trong (hook nhận thêm tham số ref)
+  if (!comp)
+    for (const st of sf.statements) {
+      if (!ts.isVariableStatement(st)) continue;
+      for (const d of st.declarationList.declarations) {
+        if (!ts.isIdentifier(d.name) || d.name.text !== hk.component || !d.initializer || !ts.isCallExpression(d.initializer)) continue;
+        const fn = d.initializer.arguments[0];
+        if (fn && (ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) && fn.body && ts.isBlock(fn.body)) { comp = fn; compStmt = st; }
+      }
+    }
   if (!comp) return { errors: [`${hk.file}: không thấy component ${hk.component}`], imports: [] };
   const importOf = new Map();
   for (const st of sf.statements) {
@@ -406,6 +436,7 @@ function planHook(hk) {
   const isUiImport = (local) => {
     const m = importOf.get(local);
     if (!m || m.typeOnly) return false;
+    if (UI_SHIM[`${m.spec}#${m.imported}`]) return false;
     if (UI_PKG.test(m.spec)) return true;
     const rel = toSrcRel(f.rel, m.spec);
     if (rel === null) return false;
@@ -466,7 +497,7 @@ function planHook(hk) {
   // Khai báo cấp tệp (ngoài component: hằng, hàm, kiểu) mà phần giữ dùng ⇒ chép kèm (bắc cầu); dùng import giao diện ⇒ lỗi
   const topDecl = new Map();
   for (const st of sf.statements) {
-    if (st === comp || ts.isImportDeclaration(st)) continue;
+    if (st === comp || st === compStmt || ts.isImportDeclaration(st)) continue;
     const names = [];
     if (ts.isVariableStatement(st)) st.declarationList.declarations.forEach((d) => ts.isIdentifier(d.name) && names.push(d.name.text));
     else if ((ts.isFunctionDeclaration(st) || ts.isInterfaceDeclaration(st) || ts.isTypeAliasDeclaration(st) || ts.isEnumDeclaration(st)) && st.name) names.push(st.name.text);
@@ -492,6 +523,20 @@ function planHook(hk) {
     if (!asType) e.allType = false;
     need.set(m.spec, e);
   }
+  // Tên thay bằng shim app (vd message của antd ⇒ toast app): tách khỏi import gói giao diện
+  for (const e of [...need.values()]) {
+    for (const [local, m] of [...e.names]) {
+      const shim = UI_SHIM[`${e.spec}#${m.imported}`];
+      if (!shim) continue;
+      e.names.delete(local);
+      const key = `__shim:${shim}`;
+      const se = need.get(key) || { spec: key, names: new Map(), srcRel: null, allType: true };
+      se.names.set(local, { ...m, spec: key });
+      if (!m.typeOnly) se.allType = false;
+      need.set(key, se);
+    }
+    if (!e.names.size) need.delete(e.spec);
+  }
   // import("x") động trong phần giữ ⇒ module cần chép (bên collect xếp hàng)
   const dynamic = [];
   const walkDyn = (n) => {
@@ -500,10 +545,12 @@ function planHook(hk) {
   };
   [...kept, ...moduleStmts].forEach(walkDyn);
   const param = comp.parameters[0];
+  const refParam = comp.parameters[1];
   return {
     errors, imports: [...need.values()], kept, dropped, sf, text, f, dynamic,
     moduleStmts: sf.statements.filter((st) => moduleStmts.has(st)),
     paramText: param ? text.slice(param.name.getStart(sf), param.name.getEnd()) : "",
+    refText: refParam ? text.slice(refParam.name.getStart(sf), refParam.name.getEnd()) : "",
     returns: [...keptDecl],
   };
 }
@@ -521,8 +568,8 @@ function renderHook(hk) {
       const dest = isShim(tRel) ? `_shims/${tRel}` : isExtract(tRel) ? `_extract/${tRel}` : (isImpure(tf ? tf.rel : im.srcRel) || !tf) ? `_stubs/${tRel}` : tRel;
       spec = path.posix.relative(path.posix.dirname(hk.out), dest);
       if (!spec.startsWith(".")) spec = "./" + spec;
-    } else if (SHIMS.has(im.spec)) {
-      spec = path.posix.relative(path.posix.dirname(hk.out), `_shims/${im.spec}`);
+    } else if (SHIMS.has(im.spec) || im.spec.startsWith("__shim:")) {
+      spec = path.posix.relative(path.posix.dirname(hk.out), `_shims/${im.spec.replace(/^__shim:/, "")}`);
       if (!spec.startsWith(".")) spec = "./" + spec;
     }
     const named = [];
@@ -534,7 +581,7 @@ function renderHook(hk) {
     if (named.length) lines.push(`import { ${named.join(", ")} } from ${JSON.stringify(spec)};`);
   }
   for (const st of plan.moduleStmts) lines.push("", rewriteDynamicImports(plan.text.slice(st.getStart(plan.sf), st.getEnd()), plan.f.rel, hk.out, null));
-  lines.push("", `export function ${hk.hook}(${plan.paramText}: any = {}) {`);
+  lines.push("", `export function ${hk.hook}(${plan.paramText}: any = {}${plan.refText ? `, ${plan.refText}: any = null` : ""}) {`);
   for (const st of plan.kept) lines.push("  " + rewriteDynamicImports(plan.text.slice(st.getStart(plan.sf), st.getEnd()), plan.f.rel, hk.out, null));
   lines.push(`  return { ${plan.returns.join(", ")} };`, "}");
   return lines.join("\n") + "\n";

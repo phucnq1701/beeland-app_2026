@@ -21,7 +21,7 @@ import { type CustomerFormModalHandle } from "../../_stubs/pages/customers/quan-
 import { ProductService } from "../../_shims/services/Product";
 import { normalizeSanGiaoDichList } from "../../services/SanGiaoDichCloudService";
 import { generateCodePreview } from "../../utils/codePattern";
-import { AgencyService } from "../../_stubs/services/Agency";
+import { AgencyService } from "../../_shims/services/Agency";
 import { CustomerService } from "../../_shims/services/Customer";
 import { stampOwner } from "../../services/DataScopeService";
 import { tenant } from "../../services/CloudMirror";

@@ -42,6 +42,29 @@ export async function primeWebSession(): Promise<void> {
     type_account: fromJwt.type_account ?? u?.loai_tk ?? null,
     is_full_access: fromJwt.is_full_access ?? u?.toan_quyen ?? null,
   };
+  // Web lưu thân phiên đăng nhập ở localStorage "authUser" (maCTDK / maNV / typeAccount / họ tên) và nhiều module đọc từ đó
+  // (cloudTenant.readCloudTenant, CatalogSettingsService, booking nguoi_nhap…) ⇒ dựng bản tương đương trên localStorage trong bộ nhớ
+  // (installWebRuntime) theo phiên app. Không có localStorage (chưa cài runtime) ⇒ bỏ qua.
+  try {
+    const ls = (globalThis as any).localStorage;
+    if (ls)
+      ls.setItem(
+        "authUser",
+        JSON.stringify({
+          maCTDK: claims.ma_ctdk ?? null,
+          maNV: claims.ma_nv ?? null,
+          maCT: claims.ma_ct ?? null,
+          email: claims.email ?? null,
+          typeAccount: claims.type_account ?? null,
+          fullName: u?.ho_ten ?? null,
+          hoTen: u?.ho_ten ?? null,
+          employeeId: claims.employee_id ?? null,
+          branchId: claims.branch_id ?? null,
+        })
+      );
+  } catch {
+    // bỏ qua: chỉ là bộ nhớ phụ cho module web
+  }
 }
 
 export const resetSessionCache = () => {

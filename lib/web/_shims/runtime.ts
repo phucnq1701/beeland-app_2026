@@ -1,6 +1,7 @@
 /**
  * SHIM VIẾT TAY — môi trường tối thiểu cho module web chép ở lib/web trên React Native: localStorage / sessionStorage trong bộ nhớ
- * (web lưu cờ / bộ nhớ đệm phụ), window.addEventListener / dispatchEvent / location, CustomEvent — chỉ cài khi THIẾU.
+ * (web lưu cờ / bộ nhớ đệm phụ), window.addEventListener / dispatchEvent / location, CustomEvent, document tối giản (useFieldConfig web
+ * nghe visibilitychange: luôn "visible", không phát sự kiện) — chỉ cài khi THIẾU.
  * Gọi installWebRuntime() trước khi dùng module web (useWebPriceSheet gọi khi mở màn).
  */
 const memoryStorage = () => {
@@ -27,6 +28,8 @@ export function installWebRuntime(): void {
   if (typeof w.removeEventListener !== "function") w.removeEventListener = () => {};
   if (typeof w.dispatchEvent !== "function") w.dispatchEvent = () => true;
   if (!w.location) w.location = { pathname: "", search: "", hash: "", href: "" };
+  if (!g.document)
+    g.document = { visibilityState: "visible", addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => true };
   if (typeof g.CustomEvent !== "function")
     g.CustomEvent = class CustomEvent {
       type: string;

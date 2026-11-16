@@ -1,6 +1,6 @@
 /**
  * Bộ chạy hook React tối giản cho test node (không DOM): useState / useReducer / useEffect / useLayoutEffect / useMemo / useCallback /
- * useRef / useContext / useId. Render ⇒ chạy effect có deps đổi ⇒ setState ⇒ render lại, lặp tới khi ổn định (await các Promise
+ * useRef / useContext / useId / useImperativeHandle. Render ⇒ chạy effect có deps đổi ⇒ setState ⇒ render lại, lặp tới khi ổn định (await các Promise
  * giữa các lượt). Dùng để chạy hook chép nguyên văn từ web (lib/web) với API giả.
  *   const r = createHookRunner(); const React = r.React; … r.render(() => useX(props)); await r.settle(); r.result
  */
@@ -22,6 +22,7 @@ function createHookRunner() {
     useRef(init) { const k = i++; if (!(k in slots)) slots[k] = { current: init }; return slots[k]; },
     useMemo(fn, deps) { const k = i++; const s = slots[k]; if (!s || !deps || !same(s.deps, deps)) slots[k] = { v: fn(), deps }; return slots[k].v; },
     useCallback(fn, deps) { return React.useMemo(() => fn, deps); },
+    useImperativeHandle(ref, fn) { i++; if (ref && typeof ref === "object") ref.current = fn(); },
     useEffect(fn, deps) { const k = i++; const s = slots[k]; if (!s || !deps || !same(s.deps, deps)) { slots[k] = { deps }; effects.push({ k, fn }); } },
     useLayoutEffect(fn, deps) { return React.useEffect(fn, deps); },
     useContext(ctx) { return ctx?._currentValue; },

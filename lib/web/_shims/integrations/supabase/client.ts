@@ -52,6 +52,37 @@ export const RPC_MAP: Record<string, { fn: string; args: (a: Args | undefined) =
   fn_get_product_by_id: { fn: "fn_nv_app_san_pham_tinh_gia", args: (a) => pick(a, { p_id: "p_id" }) },
   // Lưu phiếu: duyệt vẫn trên web; p_host_form web (màn nhúng) app không dùng
   fn_price_sheet_save: { fn: "fn_nv_app_ptg_luu", args: (a) => pick(a, { p_row: "p_row" }) },
+  // Đặt lịch ký (SP B0–B8 = đúng SP web fn_signing_*; công ty / người thao tác từ phiên)
+  fn_signing_appointment_list: {
+    fn: "fn_nv_app_lich_ky_list",
+    args: (a) => pick(a, {
+      p_project_id: "p_project_id", p_search: "p_search", p_state: "p_state", p_is_personal: "p_is_personal", p_page: "p_page",
+      p_size: "p_size", p_tu_ngay: "p_tu_ngay", p_den_ngay: "p_den_ngay", p_nguon: "p_nguon",
+    }),
+  },
+  fn_signing_appointment_get: { fn: "fn_nv_app_lich_ky_chi_tiet", args: (a) => pick(a, { p_id: "p_id", p_seq: "p_seq" }) },
+  fn_signing_appointment_upsert: { fn: "fn_nv_app_lich_ky_luu", args: (a) => pick(a, { p_payload: "p_payload" }) },
+  fn_signing_appointment_delete: { fn: "fn_nv_app_lich_ky_xoa", args: (a) => pick(a, { p_ids: "p_ids" }) },
+  fn_signing_deposit_search: {
+    fn: "fn_nv_app_lich_ky_tim_coc",
+    args: (a) => pick(a, { p_search: "p_search", p_project_id: "p_project_id", p_id: "p_id", p_limit: "p_limit" }),
+  },
+  fn_signing_contract_search: { fn: "fn_nv_app_lich_ky_tim_hd", args: (a) => pick(a, { p_search: "p_search", p_project_id: "p_project_id", p_limit: "p_limit" }) },
+  fn_signing_book_options: {
+    fn: "fn_nv_app_lich_ky_tuy_chon",
+    args: (a) => pick(a, { p_ma_pgc: "p_ma_pgc", p_quy_id: "p_quy_id", p_thu_tuc: "p_thu_tuc", p_ngay: "p_ngay" }),
+  },
+  fn_signing_availability: {
+    fn: "fn_nv_app_lich_ky_cho_trong",
+    args: (a) => pick(a, {
+      p_ma_pgc: "p_ma_pgc", p_quy_id: "p_quy_id", p_thu_tuc: "p_thu_tuc", p_config_id: "p_config_id", p_tu_ngay: "p_tu_ngay", p_so_ngay: "p_so_ngay",
+    }),
+  },
+  fn_signing_shift_slots: { fn: "fn_nv_app_lich_ky_ca", args: (a) => pick(a, { p_ngay: "p_ngay", p_ma_pgc: "p_ma_pgc", p_loai_thu_tuc_id: "p_loai_thu_tuc_id" }) },
+  // Cấu hình trường hiệu lực (useFieldConfig web) + khoá sửa khách (CustomerIdentityLockService)
+  fn_field_config_effective: { fn: "fn_nv_app_cau_hinh_truong", args: () => ({}) },
+  fn_customer_has_personal_signing: { fn: "fn_nv_app_khoa_dinh_danh", args: (a) => pick(a, { p_customer_id: "p_customer_id" }) },
+  fn_customer_tx_lock: { fn: "fn_nv_app_khoa_giao_dich", args: (a) => pick(a, { p_customer_id: "p_customer_id" }) },
   // Form booking: giá căn theo bảng giá (SP 77 = đúng SP web, cùng bộ cột)
   fn_get_price_list_item_by_product: {
     fn: "fn_nv_app_gia_can_bang_gia",
@@ -113,6 +144,16 @@ const TABLES: Record<string, (f: Filters) => Promise<RpcResult>> = {
   },
   // Công ty hệ thống (mẫu chung) — app không đọc mẫu chung
   cloud_companies: async () => ({ data: [], error: null }),
+  // Danh mục: theo uuid công ty (danh mục khách / yêu cầu — fn_nv_app_danh_muc) hoặc theo mã chữ công ty (phương án TT ký, phương án TT,
+  // hình thức TT, phân loại KH — CatalogSettingsService / SalesCatalogCloud web ⇒ fn_nv_app_danh_muc_ma). Máy chủ lọc công ty phiên.
+  cloud_catalogs: async (f) => {
+    const loai = String(f.eq.catalog_type ?? "");
+    if (!loai) return unsupported("cloud_catalogs (thiếu loại)");
+    const byCode = ["phuong_an_tt_ky", "phuong_an_tt", "httt", "phan_loai_kh"].includes(loai);
+    const r = await call(byCode ? "fn_nv_app_danh_muc_ma" : "fn_nv_app_danh_muc", { p_loai: loai });
+    if (r.error || !Array.isArray(r.data)) return r;
+    return { data: r.data.map((x: any) => ({ ...x, catalog_type: loai })), error: null };
+  },
   // Quy tắc đánh mã đọc phía máy (utils/codePattern.loadCodeRules — nhánh dự phòng khi máy chủ không trả số phiếu): app không đọc,
   // số phiếu xem trước luôn lấy ở máy chủ (fn_nv_app_ma_phieu); trống ⇒ máy chủ cấp khi lưu
   cloud_code_rules: async () => ({ data: [], error: null }),
