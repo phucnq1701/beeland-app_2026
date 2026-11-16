@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/Products/ContractForm/priorOptionState.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Trạng thái đã lưu của chứng từ để form miễn kiểm như máy chủ (R-8, fix-wave F3; `_sp_option_quota_guard` B1/B2).
  * Hàm thuần: form chỉ gọi `priorDocOf` khi nạp chứng từ và trộn `priorOptionCtx` vào OptionCtx.

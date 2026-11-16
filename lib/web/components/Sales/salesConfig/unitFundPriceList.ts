@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/Sales/salesConfig/unitFundPriceList.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Quỹ căn → Bảng giá ở form chứng từ (Phiếu tính giá, Đặt cọc / Hợp đồng, Booking).
  * Spec docs/superpowers/specs/2026-11-06-quy-can-bang-gia-form-design.md:
@@ -6,7 +8,7 @@
  * - Tự chọn bảng giá ưu tiên nhỏ nhất có chứa căn (has_product, fn_get_current_price_lists); không có ⇒ giá gốc.
  * - Phiếu mới mặc định Quỹ CĐT (mã QUY_CDT).
  */
-import type { PriceListUnitFund } from "../../../_stubs/services/products/price-list";
+import type { PriceListUnitFund } from "../../../services/products/price-list";
 
 export const DEFAULT_UNIT_FUND_CODE = "QUY_CDT";
 export const NO_PRODUCT_SUFFIX = " · không có căn này";

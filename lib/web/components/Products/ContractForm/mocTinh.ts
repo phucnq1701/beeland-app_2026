@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/Products/ContractForm/mocTinh.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Mốc tính: ghép dòng chiết khấu của chính sách với vòng công thức của cấu hình tính giá
  * (cao tầng). Mốc cấu hình = vòng TIENCODINH cuối cùng; mốc chính sách = dòng tick Mốc tính,

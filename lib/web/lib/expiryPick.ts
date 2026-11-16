@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/lib/expiryPick.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Ô chọn Phiếu tính giá / Chính sách bán hàng / Lịch thanh toán ở form chứng từ: ẩn mục hết hạn tại Ngày ký của form
  * (trống ⇒ hôm nay), giữ mục đang chọn (" (hết hạn)") và hiện mục có yêu cầu ngoại lệ đã duyệt của giao dịch (" (ngoại lệ)").

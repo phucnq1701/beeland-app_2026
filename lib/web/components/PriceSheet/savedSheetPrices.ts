@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/PriceSheet/savedSheetPrices.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Các ô giá / diện tích của form phiếu tính giá, lưu nguyên vào `snapshot.formValues` để khi sửa nạp lại
  * đúng như lúc lưu (không tính lại theo công thức, không lấy lại giá của sản phẩm / bảng giá hiện tại).

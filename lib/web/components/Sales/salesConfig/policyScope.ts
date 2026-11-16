@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/Sales/salesConfig/policyScope.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Phạm vi của chính sách bán hàng trên form chứng từ (manual 121, chủ dự án 2026-11-11):
  *  - Bảng giá áp dụng (`bang_gia_ids`): chọn chính sách trước, ô Bảng giá chỉ hiện bảng giá trong danh sách; rỗng = mọi bảng giá của quỹ căn.

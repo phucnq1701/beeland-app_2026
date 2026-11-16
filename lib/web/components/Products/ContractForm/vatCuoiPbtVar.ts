@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/Products/ContractForm/vatCuoiPbtVar.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Biến "5%VAT cuối + PBT" của công thức tiến độ thanh toán cao tầng: `VATCuoiPBT`
  * = cột Q "5%VAT đợt cuối + PBT" (price_list_items.tong_gia_vat_chua_tt) của sản phẩm trong bảng giá.

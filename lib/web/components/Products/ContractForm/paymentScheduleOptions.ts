@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/Products/ContractForm/paymentScheduleOptions.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 import { displayName } from "../../Sales/salesConfig/approvedConfig";
 import { sameId } from "../../Sales/salesConfig/unitFundPriceList";
 import { scheduleInEffect } from "../../../lib/tdttHieuLuc";

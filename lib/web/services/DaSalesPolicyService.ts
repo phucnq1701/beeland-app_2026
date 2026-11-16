@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/services/DaSalesPolicyService.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * CHÍNH SÁCH BÁN HÀNG — bảng riêng `public.da_sales_policies`
  * (thay cho bảng cũ `cloud_sales_policies` đã bỏ).
@@ -13,7 +15,7 @@
  * (hàm đọc dùng chung, không chặn theo form), phiên bản ghi trong cùng giao dịch. `authenticated` không còn quyền ghi bảng qua REST.
  * `getPolicyById` giữ `fn_get_byid_sales_policy` (Phiếu tính giá / Hợp đồng dùng chung).
  */
-import type { AllocationSubmit } from "../_stubs/services/projects/sales-policy-allocation/types";
+import type { AllocationSubmit } from "./projects/sales-policy-allocation/types";
 import { supabase } from "../_shims/integrations/supabase/client";
 import { resolveProjectId, listScheduleProjects } from "./DaPaymentScheduleService";
 import { cleanCompanyIds } from "../_extract/services/system/permitted-company";

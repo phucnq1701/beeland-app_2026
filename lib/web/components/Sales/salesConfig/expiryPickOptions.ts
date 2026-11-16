@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/Sales/salesConfig/expiryPickOptions.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Options ô chọn Phiếu tính giá / Chính sách bán hàng của form chứng từ, ẩn mục hết hạn tại Ngày ký (`@/lib/expiryPick`).
  * Dùng chung ContractForm, PriceSheetForm, BookingFormDialog.

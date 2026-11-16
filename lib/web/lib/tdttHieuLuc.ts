@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/lib/tdttHieuLuc.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Hiệu lực của mẫu Tiến độ thanh toán (da_payment_schedules.tu_ngay / den_ngay, manual 110).
  * Từ ngày trống = không giới hạn đầu (mẫu cũ), Đến ngày trống = vô hạn. Hợp đồng / Phiếu tính giá chỉ cho chọn

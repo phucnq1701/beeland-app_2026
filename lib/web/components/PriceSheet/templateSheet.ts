@@ -1,5 +1,7 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/PriceSheet/templateSheet.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
-import type { PriceSheetTemplate } from "../../_stubs/services/products/price-sheet-template";
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
+import type { PriceSheetTemplate } from "../../services/products/price-sheet-template";
 
 /** Dữ liệu gieo vào form khi lập phiếu từ mẫu */
 export interface FromTemplateSeed {

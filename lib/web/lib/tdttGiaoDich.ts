@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/lib/tdttGiaoDich.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Giao dịch gắn với 1 đợt của mẫu Tiến độ thanh toán (da_payment_schedules.details[i].GiaoDich).
  * Chỉ xử lý ở client (DB lưu nguyên jsonb). Thiếu / giá trị lạ = chưa chọn (null).

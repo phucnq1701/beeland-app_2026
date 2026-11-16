@@ -41,6 +41,18 @@ const ENTRIES = [
   "lib/tdttHieuLuc",
   "lib/priceSheetExpiry",
   "utils/productType",
+  // Lớp dữ liệu + hook form dùng (chép nguyên văn; gọi máy chủ qua shim supabase.rpc ⇒ fn_nv_app_*)
+  "components/PriceSheet/savedSheetPrices",
+  "utils/pricingEngine",
+  "components/PriceSheet/print/templates/index",
+  "components/Sales/salesConfig/useUnitFundPriceList",
+  "components/Sales/salesConfig/useSalesConfigOptions",
+  "components/Sales/salesConfig/useExceptionAllowIds",
+  "components/Products/ContractForm/useOptionUsage",
+  "components/Products/ContractForm/useSalesPolicyGate",
+  "components/Products/ContractForm/disabledReasons",
+  "components/shared/salesCompanyControl",
+  "services/sales/sales-settings/index",
 ];
 
 /**
@@ -68,21 +80,21 @@ const COMPONENT_EXTRACTS = [
 ];
 
 /** Thư viện ngoài được phép (đã có / thêm vào package.json của app) */
-const ALLOW_PKGS = new Set(["dayjs"]);
+const ALLOW_PKGS = new Set(["dayjs", "react"]);
 /**
  * Module web thay bằng tệp app viết tay lib/web/_shims/<khoá>.ts (giữ nguyên khi đồng bộ, có test riêng):
  * client supabase ⇒ chỉ .rpc qua bảng đối chiếu sang fn_nv_app_*; sonner ⇒ toast của app.
  */
 const SHIMS = new Set(["integrations/supabase/client", "sonner", "lib/session"]);
-/** Service web được chép nguyên văn (chỉ gọi supabase.rpc — qua shim) */
-const COPY_SERVICES = new Set(["services/DaSalesPolicyService.ts", "services/DaPaymentScheduleService.ts"]);
+/** (cũ) service chép nguyên văn — nay mọi service .ts chép được nếu cả chuỗi phụ thuộc thuần */
+const COPY_SERVICES = new Set([]);
 /**
  * Module KHÔNG thuần nhưng có vài hàm thuần cần dùng ⇒ TRÍCH nguyên văn các khai báo đó (+ khai báo cùng tệp chúng tham chiếu)
  * sang lib/web/_extract/<khoá>.ts. Khai báo trích mà dùng import của tệp gốc ⇒ báo lỗi (phải xử lý tay).
  */
 const EXTRACT = { "services/system/permitted-company": ["cleanCompanyIds", "isUid"] };
 /** Đường dẫn (dưới src/) KHÔNG chép: chỉ được import kiểu ⇒ thay bằng kiểu any */
-const IMPURE = [/^services\//, /^integrations\//, /^hooks\//, /^contexts\//, /^pages\//, /\.tsx$/, /^components\/ui\//, /\/use[A-Z][^/]*$/];
+const IMPURE = [/^integrations\//, /^contexts\//, /^pages\//, /\.tsx$/, /\.js$/, /^components\/ui\//];
 
 function arg(name) {
   const i = process.argv.indexOf(name);
@@ -389,7 +401,8 @@ function renderComponent(ce) {
 }
 
 const HEADER = (rel) =>
-  `// ⚠️ TỰ SINH — bản chép nguyên văn web src/${rel} (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.\n`;
+  `// ⚠️ TỰ SINH — bản chép nguyên văn web src/${rel} (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.\n` +
+  `// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).\n// @ts-nocheck\n`;
 
 /** Nội dung tệp đích: đầu tệp + văn bản web với đường dẫn import đổi sang tương đối trong lib/web */
 function render(rel, file, stubs) {

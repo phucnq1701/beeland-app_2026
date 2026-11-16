@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/Sales/salesConfig/approvedConfig.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Cấu hình bán hàng chỉ dùng bản đã duyệt (`approved`): chính sách bán hàng và
  * tiến độ thanh toán `pending` không được tự điền / nạp đợt, chiết khấu.

@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/Products/ContractForm/roundVars.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Biến của một lần chiết khấu cao tầng, dùng chung cho phiếu tính giá và form
  * đặt cọc/hợp đồng để hai nơi ra cùng số.

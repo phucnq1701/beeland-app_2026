@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/lib/priceSheetExpiry.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Ngày hết hạn Phiếu tính giá (price_sheets.ngay_het_han): mặc định = hạn chính sách bán hàng (hieu_luc_den),
  * sửa được nhưng không muộn hơn hạn đó. Trống khi lưu ⇒ máy chủ điền theo chính sách.

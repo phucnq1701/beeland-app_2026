@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/lib/tdttThoiHan.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Thời hạn 1 đợt của mẫu Tiến độ thanh toán (da_payment_schedules.details[i]) theo Ngày / Tháng.
  * Khoá jsonb: LoaiThoiGian ("NGAY" | "THANG", thiếu = NGAY — dữ liệu cũ), SoNgay (ngày), SoThang (tháng).

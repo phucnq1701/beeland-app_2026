@@ -43,7 +43,36 @@ test("shim supabase: chỉ 2 hàm đọc đối chiếu sang fn_nv_app_*; hàm l
   const prj = await supabase.from("da_projects").select("id, ten_da").eq("ma_ctdk", "x").order("ten_da");
   assert.deepEqual(plain(prj.data), [{ id: "d1", ten_da: "Dự án 1", ma_da_code: "DA1" }]);
   const tbl = await supabase.from("cloud_customers").select("*");
-  assert.match(tbl.error.message, /không đọc thẳng/);
+  assert.match(tbl.error.message, /đọc thẳng bảng/);
+  const w = await supabase.from("da_projects").insert({ id: "x" });
+  assert.match(w.error.message, /ghi bảng/);
+});
+
+test("shim supabase: đổi tham số web ⇒ app (bỏ công ty), đọc bảng cấu hình tính giá qua endpoint app", async () => {
+  const nv = fakeNv((fn, a) => (fn === "fn_nv_app_cau_hinh_tinh_gia_list" ? [{ id: "c1", ma_da: undefined, form_code: "CSCAOTANG", ten: "A" }] : fn === "fn_nv_app_cau_hinh_tinh_gia_dot" ? [{ id: "r1", cau_hinh_id: "c1" }] : []));
+  const { supabase, RPC_MAP } = loadApp("lib/web/_shims/integrations/supabase/client.ts", { "@/services/nvApi": nv.mod });
+  await supabase.rpc("fn_get_current_price_lists", { p_ma_ctdk_uid: "T", p_da_project_id: "D", p_type: "Chung cư", p_product_id: "S" });
+  await supabase.rpc("fn_get_payment_schedules", { p_ma_ctdk: "T", p_company_id: "D", p_form_code: "CAOTANG" });
+  await supabase.rpc("fn_sales_setting_resolve", { p_ma_da: "D", p_at: "2026-11-16" });
+  await supabase.rpc("fn_sales_policy_option_usage", { p_policy_id: "P", p_exclude_pgc_id: null });
+  await supabase.rpc("fn_price_sheet_save", { p_row: { id: 1 }, p_host_form: "/x" });
+  assert.deepEqual(plain(nv.calls), [
+    { fn: "fn_nv_app_bang_gia_hien_hanh", args: { p_du_an_id: "D", p_loai: "Chung cư", p_san_pham_id: "S" } },
+    { fn: "fn_nv_app_lich_tt_list", args: { p_du_an_id: "D", p_form_code: "CAOTANG" } },
+    { fn: "fn_nv_app_cai_dat_ban_hang", args: { p_du_an_id: "D", p_ngay: "2026-11-16" } },
+    { fn: "fn_nv_app_tuy_chon_da_dung", args: { p_chinh_sach_id: "P", p_tru_pgc_id: null } },
+    { fn: "fn_nv_app_ptg_luu", args: { p_row: { id: 1 } } },
+  ]);
+  for (const k of Object.keys(RPC_MAP)) assert.equal(JSON.stringify(RPC_MAP[k].args({ p_ma_ctdk: "T", p_ma_ctdk_uid: "T" })).includes('"T"'), false, `${k} không gửi công ty`);
+  nv.calls.length = 0;
+  const cfg = await supabase.from("cloud_pricing_configs").select("*").eq("ma_ctdk", "T").eq("ma_da", "D").eq("form_code", "CSCAOTANG").order("created_at");
+  assert.deepEqual(plain(nv.calls[0]), { fn: "fn_nv_app_cau_hinh_tinh_gia_list", args: { p_du_an_id: "D", p_form_codes: ["CSCAOTANG"] } });
+  assert.equal(cfg.data.length, 1);
+  const shared = await supabase.from("cloud_pricing_configs").select("*").eq("la_mau_chung", true).in("ma_ctdk", ["x"]);
+  assert.deepEqual(plain(shared.data), []);
+  const rd = await supabase.from("cloud_pricing_config_rounds").select("*").eq("id", "r1").maybeSingle();
+  assert.equal(rd.data.id, "r1");
+  assert.deepEqual(plain(nv.calls[1].args), { p_id: "r1" });
 });
 
 test("shim sonner + session", async () => {
@@ -55,10 +84,13 @@ test("shim sonner + session", async () => {
   off();
   toast.error("không ai nghe");
   assert.deepEqual(got, [{ type: "warning", message: "Chính sách chờ duyệt" }, { type: "info", message: "x" }]);
-  const s = loadApp("lib/web/_shims/lib/session.ts", { "@/services/session": { getUser: async () => ({ company_id: "c1" }) } });
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const jwt = `x.${b64({ company_id: "c1", company_code: "BRG", ma_nv: "NV1", type_account: "AGENCY", is_full_access: true, per_id: "00000000-0000-0000-0000-000000000009" })}.y`;
+  const s = loadApp("lib/web/_shims/lib/session.ts", { "@/services/session": { getJwt: async () => jwt, getUser: async () => ({ company_id: "khac", branch_id: "b1" }) } });
   assert.equal(s.sessionCompanyId(), "");
   await s.primeWebSession();
-  assert.equal(s.sessionCompanyId(), "c1");
+  assert.deepEqual(plain(s.tenantScope()), { companyId: "c1", companyCode: "brg", maNV: "NV1", perId: 0, packageCode: "", branchId: "b1", isFullAccess: true, accountType: "AGENCY" });
+  assert.equal(s.sessionPermGroupUid(), "00000000-0000-0000-0000-000000000009");
 });
 
 // Phiếu thật BRG (cấu hình CSCAOTANG c6174e95…, chính sách b9e637d8…, tiến độ df434514…) — số web đã lưu, như tests/price-sheet-calc

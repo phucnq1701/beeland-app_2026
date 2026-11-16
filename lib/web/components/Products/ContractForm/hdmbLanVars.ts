@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/Products/ContractForm/hdmbLanVars.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Biến "Giá trị HĐMB lần n" của công thức tiến độ thanh toán cao tầng: `GiaTriHDMBLan{n}`, n = 1…6
  * = cột "Giá HĐMB chưa TT lần n" (price_list_items.gia_hdmb_chua_tt_lan_n) của sản phẩm trong bảng giá.

@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/lib/tdttLoaiTienDo.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Loại tiến độ của 1 đợt trong mẫu Tiến độ thanh toán (da_payment_schedules.details[i].LoaiTienDo, manual 110).
  * Khóa cố định HDMB | HDCN; null = chưa cấu hình (đợt cũ để trống, người dùng tự gắn sau).

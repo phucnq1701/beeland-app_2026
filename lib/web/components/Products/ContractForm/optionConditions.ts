@@ -1,4 +1,6 @@
 // ⚠️ TỰ SINH — bản chép nguyên văn web src/components/Products/ContractForm/optionConditions.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
 /**
  * Điều kiện áp dụng của mức chiết khấu (spec dieu-kien-chi-tiet-ck). Hàm thuần, dùng chung cho
  * Phiếu tính giá và Hợp đồng: mức không đạt hiện mờ, không tick được.
@@ -11,7 +13,7 @@ import type {
   OptionCondition,
   PolicyDiscountOption,
 } from "../../../services/DaSalesPolicyService";
-import type { PolicyKhoStock } from "../../../_stubs/services/projects/gift-warehouse/policyKho";
+import type { PolicyKhoStock } from "../../../services/projects/gift-warehouse/policyKho";
 
 // Định dạng tiền như `money` của discountOptions; không import để discountOptions dùng được module này
 const money = (n: unknown) => String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
