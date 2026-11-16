@@ -244,7 +244,11 @@ export default function ProductDetailScreen() {
   // Lập phiếu tính giá (tính năng 17): chỉ tài khoản được dùng tính năng + có quyền ADD
   const showPriceSheet = canPriceSheet && isAgencyAccount !== null && isFeatureAllowed("17", isAgencyAccount);
   const images = bannerProduct.map((b) => b?.HinhAnh).filter((u): u is string => !!u);
-  const price = Number(data?.TongGiaTriHDMB) > 0 ? formatVNDShort(data.TongGiaTriHDMB) : "Liên hệ";
+  // Giá đầu màn: giá trị HĐMB của căn; căn chưa có giá riêng ⇒ tổng theo bảng giá đang áp dụng (cùng số ở "Chi tiết giá")
+  const listPrice = Number(activePrice?.contract_total_value) > 0 ? Number(activePrice?.contract_total_value)
+    : Number(activePrice?.total_payment) > 0 ? Number(activePrice?.total_payment) : 0;
+  const heroPrice = Number(data?.TongGiaTriHDMB) > 0 ? Number(data.TongGiaTriHDMB) : listPrice;
+  const price = heroPrice > 0 ? formatVNDShort(heroPrice) : "Liên hệ";
 
   return (
     <>
