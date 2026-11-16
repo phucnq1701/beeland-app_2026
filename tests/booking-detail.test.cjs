@@ -47,6 +47,7 @@ function load(response, { fail } = {}) {
       callNv: async (fn, args) => { calls.push({ fn, args }); if (fail) throw fail; return response; },
       errorMessage: (e, f) => e?.message || f,
     },
+    "@/services/TepApi": { uploadFile: async () => "https://kho/tep.jpg" },
     "@/services/SanPhamApi": { DuAnApi: { resolveId: async (x) => x }, SanPhamApi: { detail: async () => null } },
     "@react-native-async-storage/async-storage": { default: { getItem: async () => null } },
     "./axiosApiSupabase": { default: { get: async () => assert.fail("không đọc thẳng bảng"), post: async () => assert.fail("không gọi rest/v1") } },

@@ -86,3 +86,32 @@ export function errorMessage(e: unknown, fallback = "Có lỗi xảy ra, vui lò
   const m = (e as any)?.message;
   return typeof m === "string" && m.trim() ? m : fallback;
 }
+
+/**
+ * Gửi multipart (tải tệp) tới bộ API riêng — cùng xác thực / làm mới phiên / lỗi như callNv.
+ * `makeForm` dựng FormData mới mỗi lần gửi (gửi lại sau làm mới phiên không dùng lại FormData đã đọc).
+ */
+export async function postFormNv<T = any>(fn: string, makeForm: () => FormData, opt: CallOptions = {}): Promise<T> {
+  const send = (jwt: string) => axios.post(`${NV_API_BASE}/${fn}`, makeForm(), {
+    timeout: opt.timeout ?? 120000,
+    signal: opt.signal,
+    headers: { "Content-Type": "multipart/form-data", Accept: "application/json", Authorization: `Bearer ${jwt}` },
+  });
+  const jwt = await getFreshJwt();
+  if (!jwt) throw new NvApiError("Phiên đăng nhập hết hạn, vui lòng đăng nhập lại", 401, "401");
+  try {
+    return (await send(jwt)).data as T;
+  } catch (e: any) {
+    if (e?.response?.status === 401) {
+      const next = await recoverFrom401();
+      if (next && next !== jwt) {
+        try {
+          return (await send(next)).data as T;
+        } catch (e2) {
+          throw toError(e2);
+        }
+      }
+    }
+    throw toError(e);
+  }
+}

@@ -14,6 +14,7 @@ function load(handler, { detail } = {}) {
   };
   const svc = loadTs("sevicesSupabase/BookingService.ts", { modules: {
     "@/services/nvApi": nvApi,
+    "@/services/TepApi": { uploadFile: async () => "https://kho/tep.jpg" },
     "@/services/SanPhamApi": {
       DuAnApi: { resolveId: async (x) => (String(x) === "148" ? uid(4) : /^[0-9a-f-]{36}$/.test(String(x)) ? String(x) : null) },
       SanPhamApi: { detail: async () => detail ?? null },
@@ -61,4 +62,27 @@ test("chi tiết lock + hết hạn ⇒ endpoint riêng; lỗi hết hạn khôn
   assert.equal(d.data.maSP, "SP1");
   deq(await svc.sweepExpiredLocks(), { data: [] });
   deq(calls.map((c) => c.fn), ["fn_nv_app_lock_chi_tiet", "fn_nv_app_lock_het_han"]);
+});
+
+test("chứng từ booking: đọc / lưu qua endpoint riêng; đường dẫn tương đối ghép URL gốc kho máy chủ trả", async () => {
+  const pgc = uid(2);
+  const { svc, calls } = load((fn) => fn === "fn_nv_app_booking_chung_tu_list"
+    ? { public_base_url: "https://fils.example", rows: [{ record_id: "c1", images: ["upload/a.jpg", "https://x/b.png", " "] }] }
+    : { record_id: "c9", images: ["https://kho/tep.jpg"] });
+  const list = await svc.getListImageGC({ MaPGC: pgc });
+  deq(list.data.map((x) => [x.id, x.uri, x.name]), [["c1:0", "https://fils.example/upload/a.jpg", "a.jpg"], ["c1:1", "https://x/b.png", "b.png"]]);
+  const saved = await svc.addBookingImages({ MaPGC: pgc, Images: ["https://kho/tep.jpg", ""] });
+  deq(saved, { status: 2000, data: { recordId: "c9", images: ["https://kho/tep.jpg"] } });
+  deq(calls.map((c) => [c.fn, c.args]), [["fn_nv_app_booking_chung_tu_list", { p_pgc_id: pgc }], ["fn_nv_app_booking_chung_tu_them", { p_pgc_id: pgc, p_images: ["https://kho/tep.jpg"] }]]);
+  await assert.rejects(svc.addBookingImages({ MaPGC: pgc, Images: [] }), /Chưa có ảnh/);
+});
+
+test("tiền booking cho QR: cài đặt bán hàng của dự án tại ngày giữ chỗ (máy chủ chọn như web)", async () => {
+  const { svc, calls } = load(() => ({ has_scope: true, setting: { tien_booking: 50000000.4 } }));
+  const r = await svc.resolveBookingAmount(uid(4), "2026-11-15T05:50:03Z");
+  assert.equal(r.amount, 50000000);
+  assert.equal(calls[0].fn, "fn_nv_app_cai_dat_ban_hang");
+  assert.equal(calls[0].args.p_du_an_id, uid(4));
+  assert.match(calls[0].args.p_ngay, /^2026-11-1[56]$/);
+  await assert.rejects(svc.resolveBookingAmount("x"), /chưa gắn dự án/);
 });

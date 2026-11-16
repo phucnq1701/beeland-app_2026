@@ -1,14 +1,9 @@
 import { callNv, errorMessage as nvErrorMessage } from "@/services/nvApi";
 import { DuAnApi, SanPhamApi } from "@/services/SanPhamApi";
-import axiosApiSupabase from "./axiosApiSupabase";
+import { uploadFile } from "@/services/TepApi";
 import { listResult, mergeProjectPages, pageArgs } from "../lib/listRpc";
-import {
-  getCompanyCode,
-  getCompanyId,
-  getValidSupabaseJwt,
-} from "./cloudTenant";
 import { BookingSalesConfig, isLowRiseProduct, mapPriceListItem, sortPriceLists } from "../lib/bookingPrice";
-import { getCustomersByRefs, withCustomers } from "./customerLookup";
+import { getCustomersByRefs } from "./customerLookup";
 
 /** Ngày dương lịch theo giờ máy (VN) dạng YYYY-MM-DD — không dùng toISOString (UTC lệch ngày 0h–7h). */
 export const localYmd = (d: Date = new Date()) =>
@@ -106,51 +101,6 @@ const STATE_LABEL: Record<string, string> = {
   CANCELLED: "Huỷ booking",
 };
 
-function normalizeBooking(raw: any) {
-  const kh = raw?.kh || {};
-  const da = raw?.da || {};
-  const sp = raw?.sp || {};
-  const san = raw?.san || {};
-  const tt = raw?.tt || {};
-  const tenTT: string =
-    tt?.item_name || (STATE_LABEL[raw?.state] as string) || raw?.state || "";
-  // Tổng tiền: ưu tiên tong_gia trên booking, dự phòng tổng ở phiếu giữ chỗ
-  // (nhiều phiếu web tạo không chép tong_gia sang cloud_bookings)
-  const pgc = raw?.pgc || {};
-  const tongGia =
-    raw?.tong_gia ??
-    pgc?.tong_gia_tri ??
-    pgc?.gia_tri_hd_sau_ck ??
-    pgc?.gia_tri_hd ??
-    null;
-  return {
-    ...raw,
-    id: raw?.id,
-    maPGC: raw?.ma_pgc_id || raw?.id,
-    ma_pgc_id: raw?.ma_pgc_id,
-    soPhieu: raw?.so_phieu,
-    so_phieu: raw?.so_phieu,
-    tenTT,
-    // Màu nền chuẩn của trạng thái (cloud_catalogs.color_code) — dùng để
-    // đồng bộ màu chip trạng thái giữa chi tiết và danh sách booking.
-    colorCode: tt?.color_code ?? null,
-    MaTT: tt?.item_code ?? "",
-    state: raw?.state,
-    khachHang: kh?.ten_kh || kh?.ten_cong_ty || "",
-    maSanPham: sp?.ky_hieu || sp?.ma_sp || "",
-    tenDA: da?.ten_da || "",
-    ngayGiuCho: raw?.ngay_giu_cho,
-    ngay_giu_cho: raw?.ngay_giu_cho,
-    tongGiaGomVAT: tongGia,
-    tong_gia: tongGia,
-    // thêm cho trang chi tiết
-    tien_giu_cho: raw?.tien_giu_cho,
-    da_thu: raw?.da_thu,
-    het_han_luc: raw?.het_han_luc,
-    thoi_gian_con_lai: raw?.thoi_gian_con_lai,
-    ten_san: san?.ten_ct_vt || san?.ten_ct || "",
-  };
-}
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -158,10 +108,6 @@ const UUID_RE =
 // NOTE: embed FK có thể thiếu trên schema cache -> fallback select gọn nếu 400 PGRST200
 // Khách KHÔNG embed (cloud_customers đã khoá đọc thẳng từ 2026-10-20, migration 20261020000510_ds_dot5_customer_revoke —
 // embed làm hỏng cả câu): gắn `kh` sau bằng withCustomers (RPC fn_customer_get_by_ids), như web BookingCloudService.
-const BOOKING_SELECT_FULL =
-  "id,so_phieu,state,tong_gia,tien_giu_cho,da_thu,ngay_giu_cho,ngay_nhap,het_han_luc,thoi_gian_con_lai,created_at,ma_pgc_id,khach_hang_id,ma_da_id,ma_sp_id,ma_san_id,trang_thai_id,da:da_projects!ma_da_id(id,ten_da,ma_da_code),sp:bds_products!ma_sp_id(id,ma_sp,ky_hieu),san:dm_companies!ma_san_id(id,ma_dl,ten_ct,ten_ct_vt),tt:cloud_catalogs!trang_thai_id(id,item_code,item_name,color_code)";
-const BOOKING_SELECT_SIMPLE =
-  "id,so_phieu,state,tong_gia,tien_giu_cho,da_thu,ngay_giu_cho,ngay_nhap,het_han_luc,thoi_gian_con_lai,created_at,ma_pgc_id,khach_hang_id,ma_da_id,ma_sp_id,ma_san_id,trang_thai_id";
 
 /**
  * Chuẩn hoá 1 dòng RPC fn_booking_list về shape UI đang dùng (như normalizeBooking).
@@ -229,53 +175,9 @@ async function callBookingListRpc(params: {
   }
 }
 
-/**
- * Tải 1 tệp lên kho của công ty (edge function `upload-file`, như web FileUploadService.uploadFileToCloud
- * với `folder`); lỗi thì lùi về API upload .NET cũ. Trả về đường dẫn tệp.
- */
+/** Tải 1 tệp lên kho của công ty — services/TepApi.uploadFile (fn_nv_app_tai_tep). Giữ tên cũ cho các màn đang gọi. */
 export async function uploadTenantFile(file: { uri: string; name?: string; type?: string }, folder: string) {
-  const companyCode = (await getCompanyCode()).trim().toLowerCase();
-  const name = file.name || `chung-tu-${Date.now()}.jpg`;
-  const type = file.type || "image/jpeg";
-  const rnFile = { uri: file.uri, name, type } as any;
-
-  if (companyCode) {
-    try {
-      const fd = new FormData();
-      fd.append("file", rnFile);
-      fd.append("ma_ctdk", companyCode);
-      fd.append("folder", folder);
-      const res = await axiosApiSupabase.post("functions/v1/upload-file", fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-        timeout: 120000,
-      });
-      const out = res.data ?? {};
-      if (out.error) throw new Error(out.error);
-      const value = out.provider === "DOTNET" ? out.link : out.url || out.link;
-      if (typeof value === "string" && value.trim()) return value.trim();
-      throw new Error("Máy chủ upload không trả về đường dẫn ảnh");
-    } catch (error) {
-      console.log("[uploadTenantFile] upload-file lỗi, lùi về API .NET", error);
-    }
-  }
-
-  const fd = new FormData();
-  fd.append("Image", rnFile);
-  fd.append("TenCTDK", companyCode || "beeland");
-  fd.append("Project", "beeland_admin_web");
-  const res = await fetch("https://upload.beesky.vn/api/Upload", { method: "POST", body: fd });
-  const text = await res.text().catch(() => "");
-  let parsed: any = null;
-  try {
-    parsed = text ? JSON.parse(text) : null;
-  } catch {
-    parsed = null;
-  }
-  const link = parsed?.data?.[0];
-  if (!res.ok || parsed?.status !== 2000 || !link) {
-    throw new Error(parsed?.message || `Upload thất bại (HTTP ${res.status})`);
-  }
-  return String(link);
+  return uploadFile({ ...file, name: file.name || `chung-tu-${Date.now()}.jpg` }, folder);
 }
 
 export const BookingService = {
@@ -505,74 +407,6 @@ export const BookingService = {
   },
 
   /**
-   * Lấy chi tiết 1 phiếu booking theo id hoặc so_phieu / ma_pgc
-   */
-  getBookingDetail: async (bookingIdOrCode: string) => {
-    const companyId = await getCompanyId();
-    const idStr = String(bookingIdOrCode || "").trim();
-    if (!idStr) return { data: null };
-
-    try {
-      const isUid = UUID_RE.test(idStr);
-      let query = `rest/v1/cloud_bookings?select=${BOOKING_SELECT_FULL}&loai_ct=eq.BOOKING&limit=1`;
-      if (companyId && UUID_RE.test(companyId)) {
-        query += `&ma_ctdk_id=eq.${companyId}`;
-      }
-      if (isUid) {
-        query += `&id=eq.${idStr}`;
-      } else {
-        query += `&so_phieu=eq.${idStr}`;
-      }
-
-      const res = await axiosApiSupabase.get(query);
-      const rows = Array.isArray(res.data) ? res.data : [];
-      if (rows.length > 0) {
-        return { data: normalizeBooking(await withCustomers(rows[0], { nested: [] })) };
-      }
-
-      // Fallback tìm theo ma_pgc_id nếu idStr là ma_pgc_id uuid
-      if (isUid) {
-        // 1 phiếu giữ chỗ có thể có nhiều booking (booking cũ đã huỷ + booking mới) ⇒ lấy mới nhất như web
-        let pgcQuery = `rest/v1/cloud_bookings?select=${BOOKING_SELECT_FULL}&loai_ct=eq.BOOKING&ma_pgc_id=eq.${idStr}&order=created_at.desc&limit=1`;
-        if (companyId && UUID_RE.test(companyId)) {
-          pgcQuery += `&ma_ctdk_id=eq.${companyId}`;
-        }
-        const pgcRes = await axiosApiSupabase.get(pgcQuery);
-        const pgcRows = Array.isArray(pgcRes.data) ? pgcRes.data : [];
-        if (pgcRows.length > 0) {
-          return { data: normalizeBooking(await withCustomers(pgcRows[0], { nested: [] })) };
-        }
-      }
-
-      return { data: null };
-    } catch (error: any) {
-      // PGRST200 fallback to simple select
-      try {
-        const isUid = UUID_RE.test(idStr);
-        let query = `rest/v1/cloud_bookings?select=${BOOKING_SELECT_SIMPLE}&loai_ct=eq.BOOKING&limit=1`;
-        if (companyId && UUID_RE.test(companyId)) {
-          query += `&ma_ctdk_id=eq.${companyId}`;
-        }
-        if (isUid) {
-          query += `&id=eq.${idStr}`;
-        } else {
-          query += `&so_phieu=eq.${idStr}`;
-        }
-
-        const res = await axiosApiSupabase.get(query);
-        const rows = Array.isArray(res.data) ? res.data : [];
-        if (rows.length > 0) {
-          return { data: normalizeBooking(await withCustomers(rows[0], { nested: [] })) };
-        }
-      } catch (e) {
-        console.log("ERROR getBookingDetail fallback:", e);
-      }
-      console.log("ERROR getBookingDetail:", error);
-      return { data: null };
-    }
-  },
-
-  /**
    * Chi tiết booking theo đúng mapping web BookingFormDialog.tsx +
    * BookingDocsCloudService.getBookingEditDetail.
    * Trả về 1 object gồm: phiếu (cloud_bookings + cloud_pgc_phieu_giucho),
@@ -739,30 +573,6 @@ export const BookingService = {
     }
   },
 
-  /** Danh sách trạng thái booking thay FilterService.getStatusTransaction */
-  getBookingStatus: async () => {
-    const companyId = await getCompanyId();
-    try {
-      const params: Record<string, string> = {
-        select: "id,item_code,item_name,color_code",
-        catalog_type: "eq.pgc_trang_thai",
-        order: "item_code.asc",
-      };
-      if (companyId && UUID_RE.test(companyId)) {
-        params.or = `(ma_ctdk.eq.global,ma_ctdk_uid.eq.${companyId})`;
-      }
-      const res = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
-        params,
-      });
-      return { data: Array.isArray(res.data) ? res.data : [] };
-    } catch (error) {
-      console.log("ERROR getBookingStatus:", error);
-      return { data: [] };
-    }
-  },
-
-  // ===== LOCK CĂN — cloud (cloud_bookings loai_ct=LOCK), theo web ProductLockService.ts =====
-
   /**
    * Danh sách lock — cloud_bookings loai_ct=LOCK, order ngay_giu_cho desc.
    * payload: { maDA?: string[] (ma_da_code), keyword?: string, limit?: number }
@@ -840,71 +650,19 @@ export const BookingService = {
   },
 
   getListImageGC: async (payload: { MaPGC?: string; maPGC?: string } = {}) => {
-    if (!(await getValidSupabaseJwt())) {
-      throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-    }
     const maPGC = String(payload.MaPGC ?? payload.maPGC ?? "").trim();
     if (!UUID_RE.test(maPGC)) {
       throw new Error("Thiếu UUID phiếu giữ chỗ để tải ảnh booking.");
     }
-    const companyId = (await getCompanyId()).trim();
-    if (!companyId || !UUID_RE.test(companyId)) throw new Error("Không xác định được tenant UUID.");
-
-    // Phân trang để không bỏ ảnh khi PostgREST giới hạn số dòng trả về.
-    const rows: any[] = [];
-    const pageSize = 100;
-    for (let offset = 0; ; offset += pageSize) {
-      const res = await axiosApiSupabase.get("rest/v1/cloud_generic_records", {
-        params: {
-          select: "record_id,payload,created_at",
-          endpoint: "eq.admin/hop-dong/anh-giu-cho",
-          ma_ctdk: `eq.${companyId}`,
-          "payload->>MaPGC": `eq.${maPGC}`,
-          is_deleted: "is.false",
-          order: "created_at.asc,record_id.asc",
-          limit: String(pageSize),
-          offset: String(offset),
-        },
-      });
-      if (!Array.isArray(res.data)) throw new Error("Dữ liệu ảnh booking không hợp lệ.");
-      rows.push(...res.data);
-      if (res.data.length < pageSize) break;
-    }
-
-    const paths = rows.flatMap((row) => {
-      const record = row.payload ?? {};
-      const images = Array.isArray(record.Images)
-        ? record.Images.filter((v: unknown): v is string => typeof v === "string" && !!v.trim())
-        : [];
-      const legacy = record.uri || record.Url;
-      const values = images.length ? images : typeof legacy === "string" && legacy.trim() ? [legacy] : [];
-      return values.map((value: string, index: number) => ({
-        id: `${row.record_id ?? record.ID}:${index}`,
-        recordId: String(row.record_id ?? record.ID ?? ""),
-        path: value.trim(),
-      }));
-    });
+    // fn_nv_app_booking_chung_tu_list: phạm vi phiếu như web; chỉ trả URL gốc công khai của kho (không đọc cấu hình kho)
+    const r = await callNv<{ public_base_url?: string | null; rows?: any[] }>("fn_nv_app_booking_chung_tu_list", { p_pgc_id: maPGC });
+    const paths = (r?.rows ?? []).flatMap((row: any) =>
+      (Array.isArray(row?.images) ? row.images : [])
+        .filter((v: unknown): v is string => typeof v === "string" && !!v.trim())
+        .map((value: string, index: number) => ({ id: `${row.record_id}:${index}`, recordId: String(row.record_id ?? ""), path: value.trim() })));
     if (!paths.length) return { data: [] };
-
-    let baseUrl = "https://upload.beesky.vn/";
-    if (paths.some((image) => !/^https?:\/\//i.test(image.path))) {
-      const res = await axiosApiSupabase.get("rest/v1/upload_configs", {
-        params: {
-          select: "provider,config",
-          ma_ctdk: `eq.${companyId}`,
-          ma_ct: "is.null",
-          limit: "1",
-        },
-      });
-      const configured = res.data?.[0]?.config?.public_base_url;
-      if (typeof configured === "string" && configured.trim()) {
-        if (!/^https?:\/\//i.test(configured.trim())) {
-          throw new Error("Cấu hình URL máy chủ ảnh không hợp lệ.");
-        }
-        baseUrl = configured.trim();
-      }
-      // Chỉ dùng mặc định khi không có cấu hình, không che lỗi API cấu hình.
-    }
+    const configured = String(r?.public_base_url ?? "").trim();
+    const baseUrl = /^https?:\/\//i.test(configured) ? configured : "https://upload.beesky.vn/";
     return {
       data: paths.map((image) => ({
         id: image.id,
@@ -924,24 +682,11 @@ export const BookingService = {
    */
   resolveBookingAmount: async (projectId: string, at?: string | Date | null) => {
     if (!UUID_RE.test(String(projectId || ""))) throw new Error("Booking chưa gắn dự án.");
-    if (!(await getValidSupabaseJwt())) {
-      throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-    }
-    const companyId = (await getCompanyId()).trim();
-    if (!UUID_RE.test(companyId)) throw new Error("Không xác định được tenant UUID.");
-    const res = await axiosApiSupabase.get("rest/v1/cloud_sales_settings", {
-      params: {
-        select: "id,ma_da,tu_ngay,den_ngay,ap_dung,tien_booking",
-        ma_ctdk: `eq.${companyId}`,
-        or: `(ma_da.eq.${projectId},ma_da.is.null)`,
-        order: "created_at.desc",
-        limit: "200",
-      },
-    });
-    if (!Array.isArray(res.data)) throw new Error("Dữ liệu cài đặt bán hàng không hợp lệ.");
     const when = at ? new Date(at) : new Date();
     const day = localYmd(Number.isNaN(when.getTime()) ? new Date() : when);
-    const setting = pickSalesSetting(res.data, projectId, day);
+    // fn_nv_app_cai_dat_ban_hang = fn_sales_setting_resolve của web (dự án trước, rồi dòng chung; ngày giờ VN). Lỗi ⇒ ném, không đoán.
+    const r = await callNv<{ setting?: any }>("fn_nv_app_cai_dat_ban_hang", { p_du_an_id: projectId, p_ngay: day });
+    const setting = r?.setting ?? null;
     const amount = Number(setting?.tien_booking);
     return {
       day,
@@ -963,31 +708,12 @@ export const BookingService = {
    * (cloud_generic_records, endpoint admin/hop-dong/anh-giu-cho, payload { MaPGC, Images }).
    */
   addBookingImages: async (payload: { MaPGC: string; Images: string[] }) => {
-    if (!(await getValidSupabaseJwt())) {
-      throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-    }
     const maPGC = String(payload.MaPGC ?? "").trim();
     if (!UUID_RE.test(maPGC)) throw new Error("Thiếu UUID phiếu giữ chỗ để lưu ảnh booking.");
     const images = (payload.Images || []).filter((v) => typeof v === "string" && v.trim());
     if (!images.length) throw new Error("Chưa có ảnh để lưu.");
-    const companyId = (await getCompanyId()).trim();
-    if (!companyId || !UUID_RE.test(companyId)) throw new Error("Không xác định được tenant UUID.");
-
-    const recordId = `c${Date.now()}${Math.floor(Math.random() * 1000)}`;
-    await axiosApiSupabase.post(
-      "rest/v1/cloud_generic_records",
-      {
-        ma_ctdk: companyId,
-        endpoint: "admin/hop-dong/anh-giu-cho",
-        record_id: recordId,
-        payload: { MaPGC: maPGC, Images: images, ID: recordId },
-        is_deleted: false,
-      },
-      {
-        params: { on_conflict: "ma_ctdk,endpoint,record_id" },
-        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-      }
-    );
-    return { status: 2000, data: { recordId, images } };
+    // fn_nv_app_booking_chung_tu_them: phạm vi phiếu như web, mã bản ghi máy chủ sinh, giữ khuôn { ID, MaPGC, Images }
+    const r = await callNv<{ record_id: string; images: string[] }>("fn_nv_app_booking_chung_tu_them", { p_pgc_id: maPGC, p_images: images });
+    return { status: 2000, data: { recordId: r?.record_id, images: r?.images ?? images } };
   },
 };
