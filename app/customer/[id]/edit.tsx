@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
-import { AppHeader, ErrorState, Screen, SkeletonDetail } from "@/components/ui";
+import { Lock } from "lucide-react-native";
+
+import { AppHeader, EmptyState, ErrorState, Screen, SkeletonDetail } from "@/components/ui";
 import { CustomerForm } from "@/components/customer/CustomerForm";
 import { CustomerFormValues } from "@/lib/customerRules";
-import { CustomerRulesService } from "@/sevicesSupabase/CustomerRulesService";
+import { CUSTOMER_TX_LOCK_MESSAGE, CustomerRulesService } from "@/sevicesSupabase/CustomerRulesService";
 import { CustomerService } from "@/sevicesSupabase/CustomerService";
 
 /** Chi tiết khách (fn_customer_get, đã chuẩn hoá) → giá trị form. */
@@ -33,10 +35,11 @@ function toFormValues(d: any): Partial<CustomerFormValues> {
 export default function CustomerEditScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [state, setState] = useState<{ loading: boolean; detail: any; locked: boolean; error: string | null }>({
+  const [state, setState] = useState<{ loading: boolean; detail: any; locked: boolean; txLocked: boolean; error: string | null }>({
     loading: true,
     detail: null,
     locked: false,
+    txLocked: false,
     error: null,
   });
   const [reload, setReload] = useState(0);
@@ -49,13 +52,19 @@ export default function CustomerEditScreen() {
         const found = id ? await CustomerService.getCustomerDetailCloud(String(id)) : null;
         // Bản giới hạn (khách công ty khác chỉ thấy qua chứng từ): máy chủ không cho sửa ⇒ không mở form
         const detail = found && found.limited !== true ? found : null;
-        const locked = detail?.id ? await CustomerRulesService.hasIdentityLock(String(detail.id)) : false;
+        // Khoá định danh (lịch ký cá nhân) + khoá theo giao dịch đã duyệt (web hasCustomerTxLock ⇒ form chỉ xem)
+        const [locked, txLocked] = detail?.id
+          ? await Promise.all([
+              CustomerRulesService.hasIdentityLock(String(detail.id)),
+              CustomerRulesService.hasTxLock(String(detail.id)),
+            ])
+          : [false, false];
         const error = found?.limited === true ? "Khách thuộc công ty khác – không có quyền sửa." : null;
-        if (alive) setState({ loading: false, detail, locked, error });
+        if (alive) setState({ loading: false, detail, locked, txLocked, error });
       } catch (err) {
         // Lỗi máy chủ (không quyền xem, phiên hết hạn…) hiện nguyên thông báo
         const error = err instanceof Error && err.message ? err.message : "Không tải được khách hàng.";
-        if (alive) setState({ loading: false, detail: null, locked: false, error });
+        if (alive) setState({ loading: false, detail: null, locked: false, txLocked: false, error });
       }
     })();
     return () => {
@@ -75,6 +84,23 @@ export default function CustomerEditScreen() {
           ) : (
             <ErrorState description={state.error || "Không tìm thấy khách hàng."} onRetry={() => setReload((n) => n + 1)} />
           )}
+        </Screen>
+      </>
+    );
+  }
+
+  if (state.txLocked) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <Screen header={header}>
+          <EmptyState
+            icon={Lock}
+            title="Không sửa được khách hàng"
+            description={CUSTOMER_TX_LOCK_MESSAGE}
+            actionLabel="Quay lại"
+            onAction={() => router.back()}
+          />
         </Screen>
       </>
     );

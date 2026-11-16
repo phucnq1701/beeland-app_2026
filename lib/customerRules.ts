@@ -15,13 +15,15 @@ export type ProtectionLevel = 'none' | 'low' | 'medium' | 'high';
 
 export type ProtectionRule = { enabled: boolean; mode: DuplicateMode; days?: number };
 
+/** Như web CustomerDuplicateConfigService (2026-11): tiêu chí chưa cài = không kiểm tra; không còn defaultMode / ignoreInactive */
 export type CustomerDuplicateConfig = {
-  defaultMode: DuplicateMode;
+  /** Cấu hình theo từng tiêu chí (chỉ request / block); thiếu key = không kiểm tra */
   rules: Partial<Record<DuplicateField, DuplicateMode>>;
-  ignoreInactive: boolean;
-  ownDuplicateMode: DuplicateMode;
+  /** Trùng khách do CHÍNH nhân viên đang nhập: block = không cho trùng; allow = cảnh báo vẫn cho nhập */
+  ownDuplicateMode: 'allow' | 'block';
   protectionEnabled: boolean;
   protection: Record<ProtectionRuleKey, ProtectionRule>;
+  updatedAt?: string | null;
 };
 
 export const DUPLICATE_FIELDS: { key: DuplicateField; label: string }[] = [
@@ -63,9 +65,7 @@ export const DEFAULT_PROTECTION_RULES: Record<ProtectionRuleKey, ProtectionRule>
 };
 
 export const DEFAULT_CUSTOMER_DUPLICATE: CustomerDuplicateConfig = {
-  defaultMode: 'block',
   rules: {},
-  ignoreInactive: false,
   ownDuplicateMode: 'block',
   protectionEnabled: true,
   protection: DEFAULT_PROTECTION_RULES,
@@ -74,13 +74,14 @@ export const DEFAULT_CUSTOMER_DUPLICATE: CustomerDuplicateConfig = {
 const asMode = (v: unknown): DuplicateMode | undefined =>
   v === 'allow' || v === 'request' || v === 'block' ? v : undefined;
 
+/** Như web normalizeDuplicateConfig: nhận RPC fn_customer_dup_config_get (snake_case) lẫn dạng camelCase; bỏ defaultMode / ignoreInactive */
 export function normalizeDuplicateConfig(raw: unknown): CustomerDuplicateConfig {
   const src: any = raw && typeof raw === 'object' ? raw : {};
   const rules: Partial<Record<DuplicateField, DuplicateMode>> = {};
   const srcRules = src.rules && typeof src.rules === 'object' ? src.rules : {};
   DUPLICATE_FIELDS.forEach(({ key }) => {
-    const m = asMode(srcRules[key]);
-    if (m) rules[key] = m;
+    const v = srcRules[key];
+    if (v === 'request' || v === 'block') rules[key] = v;
   });
 
   const srcProt = src.protection && typeof src.protection === 'object' ? src.protection : {};
@@ -96,19 +97,19 @@ export function normalizeDuplicateConfig(raw: unknown): CustomerDuplicateConfig 
     };
   });
 
+  const own = src.own_duplicate_mode ?? src.ownDuplicateMode;
+  const prot = src.protection_enabled ?? src.protectionEnabled;
   return {
-    defaultMode: asMode(src.defaultMode) ?? 'block',
     rules,
-    ignoreInactive: !!src.ignoreInactive,
-    ownDuplicateMode: asMode(src.ownDuplicateMode) ?? 'block',
-    protectionEnabled: typeof src.protectionEnabled === 'boolean' ? src.protectionEnabled : true,
+    ownDuplicateMode: own === 'allow' ? 'allow' : 'block',
+    protectionEnabled: typeof prot === 'boolean' ? prot : true,
     protection,
+    updatedAt: src.updated_at ?? src.updatedAt ?? null,
   };
 }
 
-/** Cách xử lý cho 1 tiêu chí (chưa cài đặt → mặc định). */
-export const modeOf = (cfg: CustomerDuplicateConfig, field: DuplicateField): DuplicateMode =>
-  cfg.rules[field] ?? cfg.defaultMode;
+/** Cách xử lý 1 tiêu chí — chưa cài = không kiểm tra = allow (web modeOf) */
+export const modeOf = (cfg: CustomerDuplicateConfig, field: DuplicateField): DuplicateMode => cfg.rules[field] ?? 'allow';
 
 const STRICTNESS: Record<DuplicateMode, number> = { allow: 0, request: 1, block: 2 };
 export const strictest = (a: DuplicateMode, b: DuplicateMode): DuplicateMode => (STRICTNESS[a] >= STRICTNESS[b] ? a : b);

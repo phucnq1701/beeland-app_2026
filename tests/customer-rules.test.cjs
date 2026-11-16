@@ -17,7 +17,7 @@ const form = (over = {}) => ({
 // Nguồn web: services/CustomerDuplicateConfigService.ts
 test("duplicate config defaults to the web defaults", () => {
   const cfg = plain(r.normalizeDuplicateConfig(null));
-  assert.equal(cfg.defaultMode, "block");
+  assert.equal("defaultMode" in cfg, false, "web bỏ defaultMode: tiêu chí chưa cài = không kiểm");
   assert.equal(cfg.ownDuplicateMode, "block");
   assert.equal(cfg.protectionEnabled, true);
   assert.deepEqual(cfg.rules, {});
@@ -33,16 +33,28 @@ test("duplicate config defaults to the web defaults", () => {
 
 test("duplicate config keeps valid values and falls back field by field", () => {
   const cfg = r.normalizeDuplicateConfig({
-    defaultMode: "allow", rules: { phone: "request", email: "weird" },
+    defaultMode: "block", rules: { phone: "request", email: "weird", cccd: "allow" },
     protection: { booking: { enabled: false, mode: "block" }, care_recent: { days: -3 } },
     protectionEnabled: "yes",
   });
-  assert.equal(cfg.defaultMode, "allow");
   assert.equal(r.modeOf(cfg, "phone"), "request");
-  assert.equal(r.modeOf(cfg, "email"), "allow", "invalid rule → default mode");
+  assert.equal(r.modeOf(cfg, "email"), "allow", "invalid rule → not checked");
+  assert.equal(r.modeOf(cfg, "tax_code"), "allow", "unset rule → not checked (web), even if old defaultMode = block");
+  assert.equal("cccd" in cfg.rules, false, "allow is not stored as a rule");
   assert.deepEqual(plain(cfg.protection.booking), { enabled: false, mode: "block" });
   assert.equal(cfg.protection.care_recent.days, 30);
   assert.equal(cfg.protectionEnabled, true);
+});
+
+test("duplicate config: RPC fn_customer_dup_config_get shape (snake_case) like the web", () => {
+  const cfg = r.normalizeDuplicateConfig({
+    rules: { cccd: "block", phone: null, email: null, tax_code: null, full_name: null },
+    own_duplicate_mode: "allow", protection_enabled: false, updated_at: "2026-11-01",
+  });
+  assert.deepEqual(plain(cfg.rules), { cccd: "block" });
+  assert.equal(cfg.ownDuplicateMode, "allow");
+  assert.equal(cfg.protectionEnabled, false);
+  assert.equal(cfg.updatedAt, "2026-11-01");
 });
 
 // Nguồn web: services/CustomerDuplicateService.ts (evaluateProtection)

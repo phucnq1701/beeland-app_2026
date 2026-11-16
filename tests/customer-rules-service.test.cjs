@@ -102,6 +102,9 @@ function harness(tables = {}, { failGet = {}, claims = {}, deleted = [], rpc = {
       default: { getItem: async (k) => (k === "@user" ? JSON.stringify({ ho_ten: "NV Test" }) : null) },
     },
   };
+  const catalog = run("lib/web/config/fieldConfigCatalog.ts", {});
+  map["@/lib/web/config/fieldConfigCatalog"] = catalog;
+  map["@/lib/web/lib/fieldConfigRules"] = run("lib/web/lib/fieldConfigRules.ts", { "../config/fieldConfigCatalog": catalog });
   const rulesExports = run("sevicesSupabase/CustomerRulesService.ts", map);
   map["./CustomerRulesService"] = rulesExports;
   map["./customerLookup"] = run("sevicesSupabase/customerLookup.ts", map);
@@ -114,25 +117,31 @@ function harness(tables = {}, { failGet = {}, claims = {}, deleted = [], rpc = {
 
 const form = (over = {}) => ({ ...rules.EMPTY_CUSTOMER_FORM, ...over });
 
-test("duplicate config: missing row or read error → web defaults", async () => {
-  const a = await harness().rulesService.getDuplicateConfig();
-  assert.equal(a.defaultMode, "block");
-  const b = await harness({}, { failGet: { cloud_catalogs: true } }).rulesService.getDuplicateConfig();
+const rpcCalls = (h, fn) => h.calls.filter((c) => c.method === "post" && c.table === `rpc/${fn}`);
+const noDirectTables = (h) => assert.equal(h.calls.some((c) => c.method !== "post"), false, "không đọc / ghi thẳng bảng");
+/** Cấu hình trùng máy chủ (fn_customer_dup_config_get, snake_case) */
+const dupCfg = (over = {}) => () => ({ rules: { cccd: null, phone: null, email: null, tax_code: null, full_name: null }, own_duplicate_mode: "block",
+  protection_enabled: true, ...over });
+
+test("duplicate config: fn_nv_app_trung_cau_hinh (= fn_customer_dup_config_get, snake_case); error / empty → web defaults", async () => {
+  const h = harness({}, { rpc: { fn_nv_app_trung_cau_hinh: dupCfg({ rules: { cccd: "block" }, own_duplicate_mode: "allow" }) } });
+  const a = await h.rulesService.getDuplicateConfig();
+  assert.deepEqual(JSON.parse(JSON.stringify(a.rules)), { cccd: "block" });
+  assert.equal(a.ownDuplicateMode, "allow");
+  assert.deepEqual(JSON.parse(JSON.stringify(rpcCalls(h, "fn_nv_app_trung_cau_hinh")[0].body)), {});
+  const b = await harness({}, { rpc: { fn_nv_app_trung_cau_hinh: () => { throw new NvApiError("boom", 500); } } }).rulesService.getDuplicateConfig();
   assert.equal(b.ownDuplicateMode, "block");
-  const h = harness({ cloud_catalogs: [{ raw: { defaultMode: "allow" } }] });
-  assert.equal((await h.rulesService.getDuplicateConfig()).defaultMode, "allow");
-  const q = h.calls[0].params;
-  assert.equal(q.ma_ctdk_uid, `eq.${tenant}`);
-  assert.equal(q.catalog_type, "eq.customer_duplicate");
-  assert.equal(q.item_code, "eq.default");
+  assert.equal(Object.keys(b.rules).length, 0);
+  const c = await harness({}, { rpc: { fn_nv_app_trung_cau_hinh: () => null } }).rulesService.getDuplicateConfig();
+  assert.equal(Object.keys(c.rules).length, 0);
+  noDirectTables(h);
 });
 
-const rpcCalls = (h, fn) => h.calls.filter((c) => c.method === "post" && c.table === `rpc/${fn}`);
-
-test("duplicate check: 1 RPC fn_customer_duplicate_check; contract stats → blocked; no locked tables read", async () => {
+test("duplicate check: 1 call fn_nv_app_trung_kiem; only configured fields; contract stats → blocked", async () => {
   const h = harness({}, {
     rpc: {
-      fn_customer_duplicate_check: () => [
+      fn_nv_app_trung_cau_hinh: dupCfg({ rules: { cccd: "block", phone: "block", email: "request" } }),
+      fn_nv_app_trung_kiem: () => [
         { id: uid(1), ten_kh: "Khách cũ", ma_so_kh: "KH-1", di_dong: "0901", in_scope: true, created_by_id: uid(2),
           owner_name: "NV Khác", created_at: "2026-01-01T00:00:00Z", fields: ["phone"],
           txn_total: 1, has_contract: true, has_deposit: false, has_booking: false, care_count: 2, last_care_at: null },
@@ -149,47 +158,46 @@ test("duplicate check: 1 RPC fn_customer_duplicate_check; contract stats → blo
   assert.equal(m.isOwn, false);
   assert.equal(m.outOfScope, false);
   assert.deepEqual([...m.fields], ["phone"]);
-  assert.equal(m.isPersonal, true);
-  const [call] = rpcCalls(h, "fn_customer_duplicate_check");
-  assert.deepEqual([...call.body.p_fields], ["cccd", "phone", "email"].filter((k) => call.body.p_values[k]));
+  const [call] = rpcCalls(h, "fn_nv_app_trung_kiem");
+  assert.deepEqual([...call.body.p_fields], ["phone"], "chỉ tiêu chí có giá trị và đã cài");
   assert.equal(call.body.p_values.phone, "0901");
   assert.equal(call.body.p_exclude_id, null);
-  for (const t of ["cloud_customers", "cloud_customer_activities", "cloud_pgc_phieu_giucho", "dm_employees"]) {
-    assert.equal(h.calls.some((c) => c.table === t), false, `${t} is not read directly`);
-  }
+  noDirectTables(h);
+});
+
+test("unset criteria are not checked (web: no rule = allow) — app no longer blocks every field by default", async () => {
+  const h = harness({}, { rpc: { fn_nv_app_trung_cau_hinh: dupCfg(), fn_nv_app_trung_kiem: () => [{ id: uid(1), fields: ["phone"] }] } });
+  const res = await h.rulesService.checkDuplicate(form({ name: "A", phone: "0901", email: "a@b.c" }));
+  assert.equal(res.mode, "allow");
+  assert.equal(rpcCalls(h, "fn_nv_app_trung_kiem").length, 0);
 });
 
 test("editing passes p_exclude_id and 'allow' fields are not sent", async () => {
-  const h = harness(
-    { cloud_catalogs: [{ raw: { defaultMode: "allow", rules: { phone: "block" } } }] },
-    { rpc: { fn_customer_duplicate_check: () => [] } }
-  );
+  const h = harness({}, { rpc: { fn_nv_app_trung_cau_hinh: dupCfg({ rules: { phone: "block" } }), fn_nv_app_trung_kiem: () => [] } });
   const res = await h.rulesService.checkDuplicate(form({ name: "A", phone: "0901", email: "a@b.c" }), uid(1));
   assert.equal(res.mode, "allow");
-  const q = rpcCalls(h, "fn_customer_duplicate_check");
+  const q = rpcCalls(h, "fn_nv_app_trung_kiem");
   assert.equal(q.length, 1);
   assert.deepEqual([...q[0].body.p_fields], ["phone"], "only the phone rule is checked");
   assert.equal(q[0].body.p_exclude_id, uid(1));
 });
 
-test("same name alone is not a duplicate (many people share a name) – no RPC call", async () => {
-  const h = harness({}, { rpc: { fn_customer_duplicate_check: () => [{ id: uid(1), fields: ["full_name"] }] } });
+test("same name alone is not a duplicate (many people share a name) – no call", async () => {
+  const h = harness({}, { rpc: { fn_nv_app_trung_cau_hinh: dupCfg(), fn_nv_app_trung_kiem: () => [{ id: uid(1), fields: ["full_name"] }] } });
   const res = await h.rulesService.checkDuplicate(form({ name: "Nguyễn Quang Phúc" }));
   assert.equal(res.mode, "allow");
-  assert.equal(rpcCalls(h, "fn_customer_duplicate_check").length, 0);
+  assert.equal(rpcCalls(h, "fn_nv_app_trung_kiem").length, 0);
 });
 
 test("own duplicate follows ownDuplicateMode", async () => {
-  const h = harness(
-    { cloud_catalogs: [{ raw: { ownDuplicateMode: "allow" } }] },
-    {
-      rpc: {
-        fn_customer_duplicate_check: () => [
-          { id: uid(1), ten_kh: "Của tôi", in_scope: true, created_by_id: ME, fields: ["phone"], has_contract: true, txn_total: 1 },
-        ],
-      },
-    }
-  );
+  const h = harness({}, {
+    rpc: {
+      fn_nv_app_trung_cau_hinh: dupCfg({ rules: { phone: "block" }, own_duplicate_mode: "allow" }),
+      fn_nv_app_trung_kiem: () => [
+        { id: uid(1), ten_kh: "Của tôi", in_scope: true, created_by_id: ME, fields: ["phone"], has_contract: true, txn_total: 1 },
+      ],
+    },
+  });
   const res = await h.rulesService.checkDuplicate(form({ name: "Của tôi", phone: "0901" }));
   assert.equal(res.mode, "allow");
   assert.equal(res.matches[0].isOwn, true);
@@ -197,8 +205,8 @@ test("own duplicate follows ownDuplicateMode", async () => {
 
 test("out-of-scope duplicate: masked, no owner; scoped save → request (transfer), always probes CCCD/phone", async () => {
   const outRow = () => [{ id: uid(3), in_scope: false, ten_kh: "N***", company_name: "Chi nhánh B", fields: ["phone"] }];
-  const cfg = { cloud_catalogs: [{ raw: { defaultMode: "allow", rules: { phone: "allow" } } }] };
-  const scoped = harness(cfg, { rpc: { fn_customer_duplicate_check: outRow } });
+  const rpc = { fn_nv_app_trung_cau_hinh: dupCfg(), fn_nv_app_trung_kiem: outRow };
+  const scoped = harness({}, { rpc });
   const res = await scoped.rulesService.checkDuplicate(form({ name: "A", phone: "0901" }), null, { scoped: true });
   assert.equal(res.mode, "request");
   const m = res.matches[0];
@@ -206,26 +214,22 @@ test("out-of-scope duplicate: masked, no owner; scoped save → request (transfe
   assert.equal(m.ownerName, null);
   assert.equal(m.ownerId, null);
   assert.equal(m.companyName, "Chi nhánh B");
-  assert.deepEqual([...rpcCalls(scoped, "fn_customer_duplicate_check")[0].body.p_fields], ["phone"]);
-  // Không scoped + tiêu chí "cho phép" ⇒ không dò
-  const plain = harness(cfg, { rpc: { fn_customer_duplicate_check: outRow } });
+  assert.deepEqual([...rpcCalls(scoped, "fn_nv_app_trung_kiem")[0].body.p_fields], ["phone"]);
+  // Không scoped + tiêu chí chưa cài ⇒ không dò
+  const plain = harness({}, { rpc });
   assert.equal((await plain.rulesService.checkDuplicate(form({ name: "A", phone: "0901" }))).mode, "allow");
-  assert.equal(rpcCalls(plain, "fn_customer_duplicate_check").length, 0);
+  assert.equal(rpcCalls(plain, "fn_nv_app_trung_kiem").length, 0);
 });
 
 test("duplicate check: server error message is surfaced", async () => {
-  const http = harness({}, {
-    rpc: {
-      fn_customer_duplicate_check: () => {
-        throw Object.assign(new Error("400"), { response: { data: { message: "Phiên đăng nhập không hợp lệ" } } });
-      },
-    },
+  const h = harness({}, {
+    rpc: { fn_nv_app_trung_cau_hinh: dupCfg({ rules: { phone: "block" } }), fn_nv_app_trung_kiem: () => { throw new NvApiError("Phiên đăng nhập không hợp lệ", 401); } },
   });
-  await assert.rejects(() => http.rulesService.checkDuplicate(form({ name: "A", phone: "0901" })), /Phiên đăng nhập không hợp lệ/);
+  await assert.rejects(() => h.rulesService.checkDuplicate(form({ name: "A", phone: "0901" })), /Phiên đăng nhập không hợp lệ/);
 });
 
-test("duplicate request goes through fn_customer_dup_request_create like the web (no direct table writes)", async () => {
-  const h = harness({}, { rpc: { fn_customer_dup_request_create: () => ({ ok: true, id: uid(77) }) } });
+test("duplicate request goes through fn_nv_app_trung_yeu_cau_tao (= fn_customer_dup_request_create, web params)", async () => {
+  const h = harness({}, { rpc: { fn_nv_app_trung_yeu_cau_tao: () => ({ ok: true, id: uid(77) }) } });
   const match = {
     customerId: uid(1), customerName: "Khách cũ", customerCode: "KH-1", phone: "0901", cccd: null,
     ownerId: uid(2), ownerName: "NV Khác", fields: ["phone"], values: { phone: "0901" },
@@ -238,7 +242,7 @@ test("duplicate request goes through fn_customer_dup_request_create like the web
   const posts = h.calls.filter((c) => c.method === "post");
   assert.equal(posts.length, 1);
   const { body } = posts[0];
-  assert.equal(posts[0].table, "rpc/fn_customer_dup_request_create");
+  assert.equal(posts[0].table, "rpc/fn_nv_app_trung_yeu_cau_tao");
   assert.deepEqual(Object.keys(body).sort(), [
     "p_existing_customer_id", "p_match_fields", "p_match_value", "p_new_payload", "p_note", "p_protection",
   ]);
@@ -250,76 +254,59 @@ test("duplicate request goes through fn_customer_dup_request_create like the web
   assert.equal(body.p_protection.level, "medium");
 });
 
-test("duplicate request RAISE message reaches the user; other dup RPCs use web names/params", async () => {
-  const fail = harness({}, {
-    rpc: {
-      fn_customer_dup_request_create: () => {
-        throw Object.assign(new Error("400"), { response: { data: { message: "Khách đã có yêu cầu chờ" } } });
-      },
-    },
-  });
-  const r = await fail.rulesService.createDuplicateRequest(
-    { customerId: uid(1), fields: [], values: {}, protection: {} }, form({ name: "A" })
-  );
+test("duplicate request RAISE message reaches the user", async () => {
+  const fail = harness({}, { rpc: { fn_nv_app_trung_yeu_cau_tao: () => { throw new NvApiError("Khách đã có yêu cầu chờ"); } } });
+  const r = await fail.rulesService.createDuplicateRequest({ customerId: uid(1), fields: [], values: {}, protection: {} }, form({ name: "A" }));
   assert.deepEqual(JSON.parse(JSON.stringify(r)), { ok: false, message: "Khách đã có yêu cầu chờ" });
-
-  const h = harness({}, {
-    rpc: {
-      fn_customer_dup_request_list: () => [{ id: uid(5) }],
-      fn_customer_dup_request_logs: () => [{ id: uid(6) }],
-      fn_customer_dup_decide: () => ({ ok: true }),
-      fn_customer_dup_request_comment: () => ({ ok: true }),
-      fn_customer_dup_request_cancel: () => ({ ok: true }),
-      fn_customer_dup_request_find_approval: () => null,
-    },
-  });
-  const svc = h.rulesService;
-  assert.equal((await svc.listDuplicateRequests({ status: "all", keyword: " a " })).length, 1);
-  assert.equal((await svc.duplicateRequestLogs(uid(5))).length, 1);
-  assert.equal((await svc.decideDuplicateRequest(uid(5), "transfer", "ok")).ok, true);
-  assert.equal((await svc.commentDuplicateRequest(uid(5), "ý kiến")).ok, true);
-  assert.equal((await svc.cancelDuplicateRequest(uid(5))).ok, true);
-  assert.equal(await svc.findDuplicateApproval(uid(1)), null);
-  const body = (fn) => JSON.parse(JSON.stringify(rpcCalls(h, fn)[0].body));
-  assert.deepEqual(body("fn_customer_dup_request_list"), { p_status: null, p_keyword: "a" });
-  assert.deepEqual(body("fn_customer_dup_request_logs"), { p_id: uid(5) });
-  assert.deepEqual(body("fn_customer_dup_decide"), { p_id: uid(5), p_decision: "transfer", p_note: "ok" });
-  assert.deepEqual(body("fn_customer_dup_request_comment"), { p_id: uid(5), p_note: "ý kiến" });
-  assert.deepEqual(body("fn_customer_dup_request_cancel"), { p_id: uid(5), p_note: null });
-  assert.deepEqual(body("fn_customer_dup_request_find_approval"), { p_customer_id: uid(1) });
 });
 
-test("form rules: required + visibility by permission group, full access sees everything", async () => {
-  const tables = {
-    cloud_required_field_configs: [
-      { form_key: "customer", required_fields: ["TenKH", "Email"], is_active: true },
-      { form_key: "customer_org", required_fields: ["MaSoThueCT"], is_active: false },
-    ],
-    cloud_field_visibility_configs: [
-      { group_uid: null, form_key: "customer", hidden_fields: ["Email"], readonly_fields: [] },
-      { group_uid: uid(30), form_key: "customer", hidden_fields: ["DiaChi"], readonly_fields: ["TenKH"] },
-      { group_uid: uid(31), form_key: "customer", hidden_fields: ["DiDong"], readonly_fields: [] },
-    ],
+test("form rules: fn_nv_app_cau_hinh_truong (= fn_field_config_effective) + web rules; agency scope; load error is thrown", async () => {
+  const eff = {
+    scope: "SYSTEM",
+    forms: {
+      customer: { required: ["TenKH", "Email", "DiaChi", "KhongCo"], hidden: ["DiaChi"], readonly: ["SoCMND"] },
+      customer_org: { required: ["MaSoThueCT"], hidden: [], readonly: [] },
+    },
   };
-  const h = harness(tables, { claims: { per_id: uid(30) } });
+  const h = harness({}, { rpc: { fn_nv_app_cau_hinh_truong: () => eff } });
   const r = await h.rulesService.getFormRules(true);
   assert.equal(r.formKey, "customer");
-  assert.deepEqual([...r.required], ["TenKH", "Email"]);
-  assert.deepEqual([...r.hidden], ["DiaChi"], "group config overrides the common one");
-  assert.deepEqual([...r.readonly], ["TenKH"]);
-  assert.equal(h.calls[0].params.ma_ctdk, "eq.beesky1");
-  const org = await harness(tables).rulesService.getFormRules(false);
-  assert.deepEqual([...org.required], [], "inactive config is ignored");
-  const full = await harness(tables, { claims: { is_full_access: true } }).rulesService.getFormRules(true);
-  assert.equal(full.hidden.size, 0);
-  const broken = await harness({}, { failGet: { cloud_required_field_configs: true } }).rulesService.getFormRules(true);
-  assert.deepEqual([...broken.required], []);
+  assert.deepEqual([...r.required], ["TenKH", "Email"], "hidden field / field not on the web form is not required");
+  assert.deepEqual([...r.hidden], ["DiaChi"]);
+  assert.deepEqual([...r.readonly], ["SoCMND"]);
+  const org = await h.rulesService.getFormRules(false);
+  assert.equal(org.formKey, "customer_org");
+  assert.deepEqual([...org.required], ["MaSoThueCT"]);
+  assert.equal(rpcCalls(h, "fn_nv_app_cau_hinh_truong").length >= 1, true);
+  noDirectTables(h);
+  const none = await harness({}, { rpc: { fn_nv_app_cau_hinh_truong: () => ({ scope: "AGENCY", forms: {} }) } }).rulesService.getFormRules(true);
+  assert.deepEqual([...none.required], []);
+  // signing: key cũ đại lý ⇒ form web "signing"; trường có điều kiện (doanh nghiệp) không vào danh sách tĩnh, trường khoá luôn bắt buộc
+  const sg = await harness({}, { rpc: { fn_nv_app_cau_hinh_truong: () => ({ scope: "AGENCY", forms: { signing: { required: ["SoDKKD"], hidden: [], readonly: [] } } }) } })
+    .rulesService.getRulesForForm("agency_signing");
+  assert.equal(sg.formKey, "signing");
+  assert.equal(sg.required.includes("SoDKKD"), false);
+  assert.equal(sg.required.includes("MaCa"), true);
 });
 
-test("identity lock: personal signing appointment locks name and CCCD", async () => {
-  assert.equal(await harness({ cloud_signing_appointments: [{ seq: 1 }] }).rulesService.hasIdentityLock(uid(1)), true);
-  assert.equal(await harness().rulesService.hasIdentityLock(uid(1)), false);
-  assert.equal(await harness({}, { failGet: { cloud_signing_appointments: true } }).rulesService.hasIdentityLock(uid(1)), false);
+test("form rules: load failure is thrown (save is blocked like the web)", async () => {
+  const bad = harness({}, { rpc: { fn_nv_app_cau_hinh_truong: () => { throw new NvApiError("boom", 500); } } });
+  await assert.rejects(bad.rulesService.getRulesForForm("customer_org"));
+});
+
+test("identity lock / transaction lock: fn_nv_app_khoa_dinh_danh / fn_nv_app_khoa_giao_dich; error → false", async () => {
+  const h = harness({}, { rpc: { fn_nv_app_khoa_dinh_danh: () => true, fn_nv_app_khoa_giao_dich: () => true } });
+  assert.equal(await h.rulesService.hasIdentityLock(uid(1)), true);
+  assert.equal(await h.rulesService.hasTxLock(uid(1)), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(rpcCalls(h, "fn_nv_app_khoa_giao_dich")[0].body)), { p_customer_id: uid(1) });
+  const off = harness({}, { rpc: { fn_nv_app_khoa_dinh_danh: () => false, fn_nv_app_khoa_giao_dich: () => false } });
+  assert.equal(await off.rulesService.hasIdentityLock(uid(1)), false);
+  assert.equal(await off.rulesService.hasTxLock(uid(1)), false);
+  const err = harness({}, { rpc: { fn_nv_app_khoa_dinh_danh: () => { throw new NvApiError("x"); }, fn_nv_app_khoa_giao_dich: () => { throw new NvApiError("x"); } } });
+  assert.equal(await err.rulesService.hasIdentityLock(uid(1)), false);
+  assert.equal(await err.rulesService.hasTxLock(uid(1)), false);
+  assert.equal(await h.rulesService.hasTxLock("KH-1"), false, "chỉ nhận uuid");
+  noDirectTables(h);
 });
 
 /** Lỗi RAISE của hàm SQL như axios trả (error.response.data.message) */

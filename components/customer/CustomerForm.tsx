@@ -25,6 +25,7 @@ import {
   CustomerRulesService,
   DuplicateMatch,
   DuplicateResult,
+  FIELD_CONFIG_LOAD_FAILED,
   FormRules,
   IDENTITY_LOCK_HINT,
 } from "@/sevicesSupabase/CustomerRulesService";
@@ -119,9 +120,12 @@ export function CustomerForm({
   useEffect(() => {
     let alive = true;
     setRules(null);
-    CustomerRulesService.getFormRules(values.isPersonal).then((r) => {
-      if (alive) setRules(r);
-    });
+    // Hiển thị (ẩn / chỉ xem / dấu *): tải lỗi ⇒ không ràng buộc (web FALLBACK); lúc lưu tải lại, lỗi thì chặn
+    CustomerRulesService.getFormRules(values.isPersonal)
+      .then((r) => {
+        if (alive) setRules(r);
+      })
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
@@ -190,13 +194,16 @@ export function CustomerForm({
   const handleSubmit = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
-    // Như web (RequiredFieldService.preload trước khi kiểm): cấu hình chưa tải xong thì chờ tải
-    const r: FormRules =
-      rules ??
-      (await CustomerRulesService.getFormRules(values.isPersonal).catch(
-        // Không đọc được cấu hình → không ràng buộc thêm (như web)
-        (): FormRules => ({ formKey: "", required: [], hidden: new Set(), readonly: new Set() })
-      ));
+    // Như web useFieldConfig.validate: luôn lấy cấu hình hiệu lực trước khi kiểm (đệm 60 giây); tải lỗi ⇒ chặn lưu
+    let r: FormRules;
+    try {
+      r = await CustomerRulesService.getFormRules(values.isPersonal);
+    } catch {
+      savingRef.current = false;
+      hapticError();
+      toast.show({ type: "error", message: FIELD_CONFIG_LOAD_FAILED });
+      return;
+    }
     const e = baseErrors(values);
     const req = checkRequired(r.required, r.hidden, values, {});
     const all: Errors = { ...req.fieldErrors, ...e };

@@ -57,6 +57,9 @@ const ENTRIES = [
   "services/CustomerCloudService",
   // Form booking (giao diện app): tiêu đề theo quỹ căn (Đặt mua chuyển nhượng)
   "lib/transferFund",
+  // Cấu hình trường (bắt buộc / ẩn / chỉ xem) — form khách hàng, lịch ký (web useFieldConfig)
+  "lib/fieldConfigRules",
+  "config/fieldConfigCatalog",
 ];
 
 /**
@@ -142,7 +145,7 @@ const EXTRACT = {
 /** Đường dẫn (dưới src/) KHÔNG chép: chỉ được import kiểu ⇒ thay bằng kiểu any */
 const IMPURE = [/^integrations\//, /^contexts\//, /^pages\//, /\.tsx$/, /\.js$/, /^components\/ui\//,
   // Luồng đăng nhập / menu web (icon lucide-react) — form không dùng, chỉ bị kéo qua import động
-  /^config\//, /^lib\/menuPermissions\.ts$/];
+  /^config\/(?!fieldConfigCatalog\.ts$)/, /^lib\/menuPermissions\.ts$/];
 
 function arg(name) {
   const i = process.argv.indexOf(name);

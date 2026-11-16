@@ -9,7 +9,7 @@ const path = require("node:path");
 
 const DIR = path.join(__dirname, "../sevicesSupabase");
 // Màn / service khách hàng do nhánh riêng chuyển sang RPC; customerLookup chỉ nhắc tên bảng trong chú thích
-const SKIP = new Set(["CustomerRulesService.ts", "CustomerRequestService.ts", "customerLookup.ts"]);
+const SKIP = new Set(["CustomerRequestService.ts", "customerLookup.ts"]);
 const LOCKED = ["cloud_customers", "cloud_cash_voucher_details", "cloud_cash_vouchers", "cloud_customer_requests", "cloud_workflows"];
 
 test("document services do not read locked tables directly or embed them", () => {
@@ -25,7 +25,7 @@ test("document services do not read locked tables directly or embed them", () =>
 });
 
 // Đã chuyển hẳn sang bộ API riêng app (api/app-nhan-vien/fn_nv_app_*): không còn Supabase (rest / functions / storage, axios Supabase)
-const MIGRATED = ["BookingService.ts", "CustomerService.ts", "DatCocService.ts", "HopDongService.ts", "PaymentGatewayService.ts",
+const MIGRATED = ["BookingService.ts", "CustomerService.ts", "CustomerRulesService.ts", "DatCocService.ts", "HopDongService.ts", "PaymentGatewayService.ts",
   "PaymentProgressService.ts", "PriceSheetService.ts", "ProductService.ts", "ProjectService.ts", "customerLookup.ts"];
 
 test("migrated services use only the app's own API (no Supabase rest / functions / storage)", () => {

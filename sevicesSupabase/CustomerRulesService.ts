@@ -1,15 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import axiosApiSupabase from "./axiosApiSupabase";
-import {
-  decodeJwtPayload,
-  getCompanyCode,
-  getCompanyId,
-  getEmployeeId,
-  getMaNv,
-  getTypeAccount,
-  getValidSupabaseJwt,
-} from "./cloudTenant";
+import { getEmployeeId, getMaNv } from "./cloudTenant";
 import {
   CustomerDuplicateConfig,
   CustomerFormValues,
@@ -25,31 +16,23 @@ import {
   protectionFromStats,
   strictest,
 } from "../lib/customerRules";
+import { callNv, errorMessage } from "@/services/nvApi";
+import { findFieldForm, fieldsForScope } from "@/lib/web/config/fieldConfigCatalog";
+import { isReadonly, isRequired, isShown } from "@/lib/web/lib/fieldConfigRules";
 
 /**
- * Đọc/ghi Supabase cho luật khách hàng – chép từ web (chỉ đọc/ghi đúng bảng, cột web đang dùng):
- *  - Trùng khách: beeland/src/services/CustomerDuplicateService.ts, CustomerDuplicateConfigService.ts,
- *    CustomerDupRequestService.ts. Đợt 5 (ds_dot5, 2026-10-20) đã khoá đọc/ghi thẳng cloud_customers,
- *    cloud_customer_activities, cloud_customer_dup_requests/_logs ⇒ chỉ qua RPC: kiểm trùng `fn_customer_duplicate_check`
- *    (1 lời gọi: khớp + số liệu bảo vệ + người phụ trách), yêu cầu trùng `fn_customer_dup_request_*` / `fn_customer_dup_decide`
- *    (người gửi / công ty / nhật ký máy chủ tự lấy từ JWT).
- *  - Bắt buộc nhập / ẩn trường: RequiredFieldService.ts, FieldVisibilityService.ts
- *  - Khoá định danh: CustomerIdentityLockService.ts
+ * Luật khách hàng — bộ API riêng app (fn_nv_app_*, lõi chung: SP app bọc đúng SP web, công ty / nhân viên / nhóm quyền từ phiên):
+ *  - Trùng khách (web CustomerDuplicateService / CustomerDuplicateConfigService / CustomerDupRequestService):
+ *    cấu hình fn_nv_app_trung_cau_hinh (= fn_customer_dup_config_get), kiểm fn_nv_app_trung_kiem (= fn_customer_duplicate_check),
+ *    gửi yêu cầu fn_nv_app_trung_yeu_cau_tao (= fn_customer_dup_request_create).
+ *  - Bắt buộc / ẩn / chỉ xem (web useFieldConfig + FieldConfigService): cấu hình hiệu lực fn_nv_app_cau_hinh_truong
+ *    (= fn_field_config_effective, theo nhóm quyền + phạm vi SYSTEM / AGENCY ở máy chủ) + luật web chép (lib/web fieldConfigRules / catalog).
+ *  - Khoá sửa (web CustomerIdentityLockService): định danh fn_nv_app_khoa_dinh_danh, theo giao dịch fn_nv_app_khoa_giao_dich.
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uid = (v: unknown): string | null => (UUID_RE.test(String(v ?? "")) ? String(v) : null);
 const str = (v: unknown) => String(v ?? "").trim();
-
-/** Mã công ty đăng ký dạng chữ thường – web `tenant()` (CloudMirror). */
-async function tenantCode(): Promise<string> {
-  return (await getCompanyCode()).trim().toLowerCase();
-}
-
-async function claims(): Promise<any> {
-  const jwt = await getValidSupabaseJwt();
-  return jwt ? decodeJwtPayload(jwt) : {};
-}
 
 /** Tên người đang đăng nhập (web currentUserName: họ tên, không có thì mã NV). */
 export async function currentUserName(): Promise<string> {
@@ -94,6 +77,26 @@ export type FormRules = {
   readonly: Set<string>;
 };
 
+/** Như web useFieldConfig LOAD_FAILED: không tải được cấu hình ⇒ chặn lưu thay vì cho qua không ràng buộc */
+export const FIELD_CONFIG_LOAD_FAILED = "Không tải được cấu hình bắt buộc nhập, vui lòng thử lại";
+
+/** Cấu hình hiệu lực (web FieldConfigService: đệm 60 giây). Lỗi ném ra. */
+let effCache: { at: number; value: { scope: "SYSTEM" | "AGENCY"; forms: Record<string, any> } } | null = null;
+async function effectiveConfig(force = false) {
+  if (!force && effCache && Date.now() - effCache.at < 60_000) return effCache.value;
+  const data = await callNv<any>("fn_nv_app_cau_hinh_truong", {});
+  if (!data || typeof data !== "object") throw new Error(FIELD_CONFIG_LOAD_FAILED);
+  const value = { scope: data.scope === "AGENCY" ? "AGENCY" : "SYSTEM", forms: data.forms && typeof data.forms === "object" ? data.forms : {} } as const;
+  effCache = { at: Date.now(), value: value as any };
+  return effCache.value;
+}
+export function clearFieldConfigCache() {
+  effCache = null;
+}
+
+/** Form web theo key app cũ: lịch ký đại lý / nội bộ cùng 1 form "signing" (phạm vi SYSTEM / AGENCY do máy chủ trả) */
+const WEB_FORM_KEY: Record<string, string> = { agency_signing: "signing", agency_customer: "customer" };
+
 const NO_RULES = (formKey: string): FormRules => ({
   formKey,
   required: [],
@@ -106,81 +109,24 @@ const arr = (v: any): string[] => (Array.isArray(v) ? v.map(String) : []);
 /** Tiêu chí máy chủ báo khách ngoài phạm vi (chỉ CCCD / SĐT – fn_customer_duplicate_check). */
 const OUT_OF_SCOPE_FIELDS: DuplicateField[] = ["cccd", "phone"];
 
-/** Yêu cầu trùng khách – web CustomerDupRequestService (DupRequestStatus / DupDecision / DupRequest / DupRequestLog). */
-export type DupRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
-export type DupDecision = "approve_new" | "use_existing" | "transfer" | "reject";
-export type DupRequest = {
-  id: string;
-  ma_ctdk: string;
-  company_id: string | null;
-  trang_thai: DupRequestStatus;
-  match_fields: string[];
-  match_value: string | null;
-  protection_level: string;
-  protection_score: number;
-  protection_detail: any;
-  existing_customer_id: string | null;
-  existing_customer_name: string | null;
-  existing_owner_id: string | null;
-  existing_owner_name: string | null;
-  last_care_at: string | null;
-  has_transaction: boolean;
-  new_customer_payload: any;
-  new_customer_name: string | null;
-  requester_id: string | null;
-  requester_name: string | null;
-  requester_note: string | null;
-  decided_by_id: string | null;
-  decided_by_name: string | null;
-  decision: DupDecision | null;
-  decision_note: string | null;
-  decided_at: string | null;
-  created_at: string;
-  /** Máy chủ trả: 'arbiter' (người phân xử) | 'requester' (người gửi). */
-  access?: "arbiter" | "requester";
-};
-export type DupRequestLog = {
-  id: string;
-  request_id: string;
-  hanh_dong: string;
-  tu_trang_thai: string | null;
-  den_trang_thai: string | null;
-  nguoi_thuc_hien: string | null;
-  ghi_chu: string | null;
-  chi_tiet: any;
-  created_at: string;
-};
-
-/** Gọi RPC; lỗi máy chủ (RAISE: quyền, ngoài phạm vi…) → Error(message) như web rpcRaw. */
+/** Gọi bộ API riêng; lỗi máy chủ (RAISE: quyền, ngoài phạm vi…) → Error(message) như web rpcRaw. */
 async function dupRpc<T = any>(fn: string, args: Record<string, unknown>, fallback: string): Promise<T> {
   try {
-    const res = await axiosApiSupabase.post(`rest/v1/rpc/${fn}`, args);
-    return res.data as T;
+    return await callNv<T>(fn, args);
   } catch (e: any) {
-    console.log(`ERROR ${fn}:`, e?.response?.data || e);
-    throw new Error(String(e?.response?.data?.message || "").trim() || fallback);
+    console.log(`ERROR ${fn}:`, errorMessage(e));
+    throw new Error(errorMessage(e, fallback) || fallback);
   }
 }
 
 export const CustomerRulesService = {
-  /** Cấu hình trùng khách (cloud_catalogs customer_duplicate/default theo uuid công ty); lỗi → mặc định web. */
+  /** Cấu hình trùng khách của công ty — fn_nv_app_trung_cau_hinh (= web CustomerDuplicateConfigService.load); lỗi → mặc định web. */
   getDuplicateConfig: async (): Promise<CustomerDuplicateConfig> => {
-    const companyId = await getCompanyId();
-    if (!uid(companyId)) return DEFAULT_CUSTOMER_DUPLICATE;
     try {
-      const res = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
-        params: {
-          select: "raw",
-          ma_ctdk_uid: `eq.${companyId}`,
-          catalog_type: "eq.customer_duplicate",
-          item_code: "eq.default",
-          limit: "1",
-        },
-      });
-      const row = Array.isArray(res.data) ? res.data[0] : null;
-      return row ? normalizeDuplicateConfig(row.raw) : DEFAULT_CUSTOMER_DUPLICATE;
+      const data = await callNv<any>("fn_nv_app_trung_cau_hinh", {});
+      return data ? normalizeDuplicateConfig(data) : DEFAULT_CUSTOMER_DUPLICATE;
     } catch (e) {
-      console.log("ERROR getDuplicateConfig:", e);
+      console.log("ERROR getDuplicateConfig:", errorMessage(e));
       return DEFAULT_CUSTOMER_DUPLICATE;
     }
   },
@@ -208,18 +154,11 @@ export const CustomerRulesService = {
     if (!fields.length) return empty;
     const scopeOnly = new Set(fields.filter((k) => modeOf(config, k) === "allow"));
 
-    let data: any;
-    try {
-      const res = await axiosApiSupabase.post("rest/v1/rpc/fn_customer_duplicate_check", {
-        p_values: vals,
-        p_fields: fields,
-        p_exclude_id: uid(excludeId) || null,
-      });
-      data = res.data;
-    } catch (e: any) {
-      console.log("ERROR checkDuplicate:", e?.response?.data || e);
-      throw new Error(e?.response?.data?.message || "Không kiểm tra được trùng khách hàng");
-    }
+    const data = await dupRpc<any>(
+      "fn_nv_app_trung_kiem",
+      { p_values: vals, p_fields: fields, p_exclude_id: uid(excludeId) || null },
+      "Không kiểm tra được trùng khách hàng"
+    );
 
     const selfId = await getEmployeeId();
     const now = Date.now();
@@ -282,7 +221,7 @@ export const CustomerRulesService = {
   ): Promise<{ ok: boolean; id?: string; message?: string }> => {
     try {
       const r = await dupRpc<{ ok?: boolean; id?: string }>(
-        "fn_customer_dup_request_create",
+        "fn_nv_app_trung_yeu_cau_tao",
         {
           p_existing_customer_id: match.customerId,
           p_match_fields: match.fields,
@@ -299,154 +238,60 @@ export const CustomerRulesService = {
     }
   },
 
-  /** Danh sách yêu cầu trùng người gọi thấy (người gửi / người phân xử) – web list. Lỗi ném ra để màn báo. */
-  listDuplicateRequests: async (params?: { status?: DupRequestStatus | "all"; keyword?: string }): Promise<DupRequest[]> => {
-    const rows = await dupRpc<DupRequest[]>(
-      "fn_customer_dup_request_list",
-      {
-        p_status: params?.status && params.status !== "all" ? params.status : null,
-        p_keyword: str(params?.keyword) || null,
-      },
-      "Không tải được danh sách yêu cầu trùng khách"
-    );
-    return Array.isArray(rows) ? rows : [];
-  },
-
-  /** Nhật ký 1 yêu cầu trùng – web logs. */
-  duplicateRequestLogs: async (requestId: string): Promise<DupRequestLog[]> => {
-    const rows = await dupRpc<DupRequestLog[]>(
-      "fn_customer_dup_request_logs",
-      { p_id: requestId },
-      "Không tải được nhật ký yêu cầu"
-    );
-    return Array.isArray(rows) ? rows : [];
-  },
-
-  /** Phân xử (quyền Sửa màn Khách hàng; chuyển giao làm trên máy chủ) – web decide → `fn_customer_dup_decide`. */
-  decideDuplicateRequest: async (
-    requestId: string,
-    decision: DupDecision,
-    note?: string
-  ): Promise<{ ok: boolean; message?: string }> => {
-    try {
-      const r = await dupRpc<{ ok?: boolean }>(
-        "fn_customer_dup_decide",
-        { p_id: requestId, p_decision: decision, p_note: note || null },
-        "Phân xử không thành công"
-      );
-      return r?.ok ? { ok: true } : { ok: false, message: "Phân xử không thành công" };
-    } catch (e: any) {
-      return { ok: false, message: e?.message || "Phân xử không thành công" };
-    }
-  },
-
-  /** Bổ sung ý kiến / ghi chú thêm – web comment. */
-  commentDuplicateRequest: async (requestId: string, note: string): Promise<{ ok: boolean; message?: string }> => {
-    try {
-      await dupRpc("fn_customer_dup_request_comment", { p_id: requestId, p_note: note }, "Không ghi được ý kiến");
-      return { ok: true };
-    } catch (e: any) {
-      return { ok: false, message: e?.message || "Không ghi được ý kiến" };
-    }
-  },
-
-  /** Người gửi rút yêu cầu đang chờ – web cancel. */
-  cancelDuplicateRequest: async (requestId: string, note?: string): Promise<{ ok: boolean; message?: string }> => {
-    try {
-      await dupRpc("fn_customer_dup_request_cancel", { p_id: requestId, p_note: note || null }, "Huỷ yêu cầu không thành công");
-      return { ok: true };
-    } catch (e: any) {
-      return { ok: false, message: e?.message || "Huỷ yêu cầu không thành công" };
-    }
-  },
-
-  /** Yêu cầu đã duyệt (cho tạo mới / chuyển giao) gần nhất của khách đang trùng – web findApprovalFor; lỗi → null. */
-  findDuplicateApproval: async (customerId: string): Promise<DupRequest | null> => {
-    try {
-      return (
-        (await dupRpc<DupRequest | null>("fn_customer_dup_request_find_approval", { p_customer_id: customerId }, "")) ||
-        null
-      );
-    } catch {
-      return null;
-    }
-  },
-
   /**
-   * Cấu hình bắt buộc nhập + ẩn/chỉ đọc trường cho form khách (cá nhân / doanh nghiệp).
-   * Lỗi đọc → không ràng buộc thêm (như web).
+   * Cấu hình bắt buộc / ẩn / chỉ xem cho form khách (cá nhân "customer" / doanh nghiệp "customer_org" như web formKeyOf;
+   * đại lý: cùng form, phạm vi AGENCY do máy chủ trả). Lỗi tải ném ra (màn lưu chặn như web).
    */
-  getFormRules: async (isPersonal: boolean): Promise<FormRules> => {
-    const isAgency = (await getTypeAccount()) === "AGENCY";
-    return CustomerRulesService.getRulesForForm(customerFormKey(isPersonal, isAgency));
-  },
+  getFormRules: async (isPersonal: boolean): Promise<FormRules> =>
+    CustomerRulesService.getRulesForForm(customerFormKey(isPersonal, false)),
 
   /**
-   * Cấu hình bắt buộc nhập + ẩn/chỉ đọc trường của 1 form theo `form_key` (web RequiredFieldService +
-   * FieldVisibilityService). Lỗi đọc → không ràng buộc thêm.
+   * Bắt buộc / ẩn / chỉ xem của 1 form theo key (web useFieldConfig): cấu hình hiệu lực của người dùng phiên + luật web
+   * (trường khoá luôn bắt buộc, không ẩn / chỉ xem; trường bị ẩn / chỉ xem không bắt buộc; trường ngoài danh mục form bỏ qua).
+   * Trường có điều kiện (when — vd chỉ doanh nghiệp ở lịch ký) không đưa vào danh sách bắt buộc tĩnh. Lỗi tải ném ra.
    */
   getRulesForForm: async (formKey: string): Promise<FormRules> => {
-    const code = await tenantCode();
-    const c = await claims();
-    let required: Record<string, any> = {};
-    try {
-      const res = await axiosApiSupabase.get("rest/v1/cloud_required_field_configs", {
-        params: { select: "form_key,required_fields,is_active", ma_ctdk: `eq.${code}` },
-      });
-      for (const r of Array.isArray(res.data) ? res.data : []) required[r.form_key] = r;
-    } catch (e) {
-      console.log("ERROR getFormRules required:", e);
-      required = {};
-    }
-    const rules = NO_RULES(formKey);
-    const cfg = required[formKey];
-    if (cfg && cfg.is_active !== false) rules.required = arr(cfg.required_fields);
-
-    // Tài khoản toàn quyền không bị ẩn trường (web FieldVisibilityService.preload)
-    if (c?.is_full_access) return rules;
-    try {
-      const groupUid = await permGroupUid(c);
-      const res = await axiosApiSupabase.get("rest/v1/cloud_field_visibility_configs", {
-        params: {
-          select: "group_uid,form_key,hidden_fields,readonly_fields,is_active",
-          ma_ctdk: `eq.${code}`,
-          form_key: `eq.${formKey}`,
-        },
-      });
-      const rows = (Array.isArray(res.data) ? res.data : [])
-        .filter((r: any) => r.is_active !== false && (!r.group_uid || (groupUid && r.group_uid === groupUid)))
-        // Cấu hình riêng của nhóm ghi đè cấu hình chung
-        .sort((a: any, b: any) => (a.group_uid ? 1 : 0) - (b.group_uid ? 1 : 0));
-      for (const r of rows) {
-        rules.hidden = new Set(arr(r.hidden_fields));
-        rules.readonly = new Set(arr(r.readonly_fields));
-      }
-    } catch (e) {
-      console.log("ERROR getFormRules visibility:", e);
-    }
+    const key = WEB_FORM_KEY[formKey] ?? formKey;
+    const rules = NO_RULES(key);
+    const form = findFieldForm(key);
+    if (!form) return rules;
+    const eff = await effectiveConfig();
+    const raw = eff.forms[key] || {};
+    const rule = { required: arr(raw.required), hidden: arr(raw.hidden), readonly: arr(raw.readonly) };
+    const fields = fieldsForScope(form, eff.scope);
+    rules.required = fields.filter((f) => !f.when && isRequired(form, rule, eff.scope, f.key)).map((f) => f.key);
+    rules.hidden = new Set(fields.filter((f) => !isShown(form, rule, eff.scope, f.key)).map((f) => f.key));
+    rules.readonly = new Set(fields.filter((f) => isReadonly(form, rule, eff.scope, f.key)).map((f) => f.key));
     return rules;
   },
 
-  /** Khách đã có lịch ký cá nhân → khoá Họ tên & CCCD (web hasPersonalSigningAppointment). */
+  /** Khách đã có lịch ký cá nhân → khoá Họ tên & CCCD — fn_nv_app_khoa_dinh_danh (= web hasPersonalSigningAppointment); lỗi → false. */
   hasIdentityLock: async (customerId: string): Promise<boolean> => {
-    const companyId = await getCompanyId();
-    if (!uid(customerId) || !uid(companyId)) return false;
+    if (!uid(customerId)) return false;
     try {
-      const res = await axiosApiSupabase.get("rest/v1/cloud_signing_appointments", {
-        params: {
-          select: "seq",
-          ma_ctdk_uid: `eq.${companyId}`,
-          is_personal: "eq.true",
-          khach_hang_id: `eq.${customerId}`,
-          limit: "1",
-        },
-      });
-      return Array.isArray(res.data) && res.data.length > 0;
+      return (await callNv<any>("fn_nv_app_khoa_dinh_danh", { p_customer_id: customerId })) === true;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Khoá sửa theo giao dịch (web hasCustomerTxLock, KG1–KG3): khách chính / đồng sở hữu của giao dịch ở 13 "Đặt cọc đã duyệt" /
+   * 14 "HĐMB đã duyệt" ⇒ form Sửa chỉ xem. Không đệm; lỗi → false (máy chủ vẫn chặn khi lưu).
+   */
+  hasTxLock: async (customerId: string): Promise<boolean> => {
+    if (!uid(customerId)) return false;
+    try {
+      return (await callNv<any>("fn_nv_app_khoa_giao_dich", { p_customer_id: customerId })) === true;
     } catch {
       return false;
     }
   },
 };
+
+/** Như web CUSTOMER_TX_LOCK_MESSAGE */
+export const CUSTOMER_TX_LOCK_MESSAGE =
+  "Khách hàng có giao dịch đang ở trạng thái Đặt cọc đã duyệt / HĐMB đã duyệt — không sửa được thông tin. Muốn thay đổi: lập phụ lục thay đổi thông tin khách hàng.";
 
 export const IDENTITY_LOCK_HINT =
   "Khách hàng đã có lịch ký — không sửa được Họ tên và Số CMND/CCCD (trừ khi xoá lịch ký)";
@@ -468,21 +313,4 @@ export function toWebCustomerPayload(v: CustomerFormValues): Record<string, any>
     MaTT: s(v.statusId),
     MaNguon: s(v.sourceId),
   };
-}
-
-/** Nhóm quyền: claim per_id (uuid) → dm_employees.perm_group_uid (web resolveGroupUid, bỏ nhánh bảng phụ). */
-async function permGroupUid(c: any): Promise<string> {
-  const fromToken = uid(c?.per_id);
-  if (fromToken) return fromToken;
-  const employeeId = await getEmployeeId();
-  if (!uid(employeeId)) return "";
-  try {
-    const res = await axiosApiSupabase.get("rest/v1/dm_employees", {
-      params: { select: "perm_group_uid", id: `eq.${employeeId}`, limit: "1" },
-    });
-    const r = Array.isArray(res.data) ? res.data[0] : null;
-    return uid(r?.perm_group_uid) || "";
-  } catch {
-    return "";
-  }
 }
