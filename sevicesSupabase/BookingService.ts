@@ -1,6 +1,5 @@
 import { callNv, errorMessage as nvErrorMessage } from "@/services/nvApi";
 import { DuAnApi, SanPhamApi } from "@/services/SanPhamApi";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import axiosApiSupabase from "./axiosApiSupabase";
 import { listResult, mergeProjectPages, pageArgs } from "../lib/listRpc";
 import {
@@ -58,21 +57,6 @@ const LOCK_STATE = {
 } as const;
 const DEFAULT_LOCK_MINUTES = 30;
 
-/** uuid dự án: đã là uuid thì dùng luôn, không thì tra da_projects theo ma_da_code (web resolveProjectId). */
-async function resolveProjectUid(maDA: any): Promise<string | null> {
-  const v = String(maDA ?? "").trim();
-  if (!v) return null;
-  if (UUID_RE.test(v)) return v;
-  try {
-    const r = await axiosApiSupabase.get("rest/v1/da_projects", {
-      params: { select: "id", ma_da_code: `eq.${v}`, limit: "1" },
-    });
-    const rows = Array.isArray(r.data) ? r.data : [];
-    return rows[0]?.id || null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * 1 phiếu lock từ fn_nv_app_lock_list / fn_nv_app_lock_chi_tiet (máy chủ tính con_lai: chỉ LOCKED còn hạn mới > 0) ⇒ dạng màn cũ.
@@ -490,28 +474,20 @@ export const BookingService = {
   getBookingSalesConfig: async (product: any): Promise<BookingSalesConfig> => {
     const empty: BookingSalesConfig = { priceListId: null, priceItem: null, policy: null };
     try {
-      const companyId = await getCompanyId();
       const productId = String(product?.ID ?? product?.id ?? product?.Id ?? "");
-      if (!UUID_RE.test(companyId || "") || !UUID_RE.test(productId)) return empty;
-      const projectId = await resolveProjectUid(product?.MaDA);
+      if (!UUID_RE.test(productId)) return empty;
+      const projectId = await DuAnApi.resolveId(product?.MaDA);
       if (!projectId) return empty;
 
       const isLow = isLowRiseProduct({ product, maSP: product?.KyHieu });
-      const rpc = async (fn: string, body: Record<string, any>): Promise<any[]> => {
-        const res = await axiosApiSupabase.post(`rest/v1/rpc/${fn}`, body);
-        return Array.isArray(res.data) ? res.data : [];
+      const list0 = async (fn: string, body: Record<string, any>): Promise<any[]> => {
+        const res = await callNv<any>(fn, body);
+        return Array.isArray(res) ? res : [];
       };
+      // Công ty lấy từ phiên ở máy chủ (cùng các hàm web dùng cho form booking)
       const [lists, policies] = await Promise.all([
-        rpc("fn_get_current_price_lists", {
-          p_ma_ctdk_uid: companyId,
-          p_da_project_id: projectId,
-          p_type: isLow ? "Thấp tầng" : "Chung cư",
-        }),
-        rpc("fn_get_sales_policies", {
-          p_ma_ctdk: companyId,
-          p_da_project_id: projectId,
-          p_form_code: isLow ? "THAPTANG" : "CAOTANG",
-        }),
+        list0("fn_nv_app_bang_gia_hien_hanh", { p_du_an_id: projectId, p_loai: isLow ? "Thấp tầng" : "Chung cư" }),
+        list0("fn_nv_app_chinh_sach_list", { p_du_an_id: projectId, p_form_code: isLow ? "THAPTANG" : "CAOTANG" }),
       ]);
       const list = sortPriceLists(lists)[0];
       if (!list?.id) return empty;
@@ -519,14 +495,11 @@ export const BookingService = {
       const policy = list.sales_policy_id
         ? policies.find((c: any) => String(c.id) === String(list.sales_policy_id)) ?? null
         : null;
-      const items = await rpc("fn_get_price_list_item_by_product", {
-        p_price_list_id: priceListId,
-        p_product_id: productId,
-        p_ma_ctdk_uid: companyId,
-      });
-      return { priceListId, priceItem: mapPriceListItem(items[0] ?? null), policy };
+      // Dòng giá theo product_id như web fn_get_price_list_item_by_product (không dò mã căn)
+      const item = await callNv<any>("fn_nv_app_gia_trong_bang_gia", { p_bang_gia_id: priceListId, p_san_pham_id: productId, p_ma_sp: null });
+      return { priceListId, priceItem: mapPriceListItem(item ?? null), policy };
     } catch (e) {
-      console.log("ERROR getBookingSalesConfig:", e);
+      console.log("ERROR getBookingSalesConfig:", nvErrorMessage(e));
       return empty;
     }
   },

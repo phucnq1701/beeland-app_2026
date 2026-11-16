@@ -175,22 +175,23 @@ test("lock voucher month starts at 00:00 Vietnam time", () => {
 test("booking sales config: the highest-priority current price list, its policy and the product's price line", async () => {
   const { service, posts } = load({
     rpc: {
-      fn_get_current_price_lists: [
+      fn_nv_app_bang_gia_hien_hanh: [
         { id: "pl-low", priority: 9, sales_policy_id: "cs9" },
         { id: "pl-top", priority: 1, sales_policy_id: "cs1" },
       ],
-      fn_get_sales_policies: [
+      fn_nv_app_chinh_sach_list: [
         { id: "cs1", pricing_config_id: "cf1", payment_schedule_id: "ps1", tien_booking: 50000000 },
         { id: "cs9" },
       ],
-      fn_get_price_list_item_by_product: [{ area: 70, unit_price: 20000000, vat_rate: 10, maintenance_rate: 2 }],
+      fn_nv_app_gia_trong_bang_gia: { area: 70, unit_price: 20000000, vat_rate: 10, maintenance_rate: 2 },
     },
   });
   const cfg = await service.getBookingSalesConfig({ ID: uid(3), MaDA: uid(4), KyHieu: "B2-608", FormCode: "CAOTANG" });
-  const call = (fn) => posts.find((p) => p.target === `rpc/${fn}`).body;
-  assert.deepEqual({ ...call("fn_get_current_price_lists") }, { p_ma_ctdk_uid: tenant, p_da_project_id: uid(4), p_type: "Chung cư" });
-  assert.deepEqual({ ...call("fn_get_sales_policies") }, { p_ma_ctdk: tenant, p_da_project_id: uid(4), p_form_code: "CAOTANG" });
-  assert.deepEqual({ ...call("fn_get_price_list_item_by_product") }, { p_price_list_id: "pl-top", p_product_id: uid(3), p_ma_ctdk_uid: tenant });
+  const call = (fn) => posts.find((p) => p.target === fn).body;
+  // Công ty lấy từ phiên ở máy chủ — app không gửi
+  assert.deepEqual({ ...call("fn_nv_app_bang_gia_hien_hanh") }, { p_du_an_id: uid(4), p_loai: "Chung cư" });
+  assert.deepEqual({ ...call("fn_nv_app_chinh_sach_list") }, { p_du_an_id: uid(4), p_form_code: "CAOTANG" });
+  assert.deepEqual({ ...call("fn_nv_app_gia_trong_bang_gia") }, { p_bang_gia_id: "pl-top", p_san_pham_id: uid(3), p_ma_sp: null });
   assert.equal(cfg.priceListId, "pl-top");
   assert.equal(cfg.policy.id, "cs1");
   assert.equal(cfg.priceItem.TongGiaChuaVAT, 1400000000);
@@ -198,14 +199,14 @@ test("booking sales config: the highest-priority current price list, its policy 
 });
 
 test("booking sales config for low-rise units and projects without a price list", async () => {
-  const low = load({ rpc: { fn_get_current_price_lists: [], fn_get_sales_policies: [] } });
+  const low = load({ rpc: { fn_nv_app_bang_gia_hien_hanh: [], fn_nv_app_chinh_sach_list: [] } });
   const cfg = await low.service.getBookingSalesConfig({ ID: uid(3), MaDA: uid(4), KyHieu: "LK-01" });
-  const pl = low.posts.find((p) => p.target === "rpc/fn_get_current_price_lists").body;
-  assert.equal(pl.p_type, "Thấp tầng");
-  assert.equal(low.posts.find((p) => p.target === "rpc/fn_get_sales_policies").body.p_form_code, "THAPTANG");
+  const pl = low.posts.find((p) => p.target === "fn_nv_app_bang_gia_hien_hanh").body;
+  assert.equal(pl.p_loai, "Thấp tầng");
+  assert.equal(low.posts.find((p) => p.target === "fn_nv_app_chinh_sach_list").body.p_form_code, "THAPTANG");
   assert.deepEqual({ ...cfg }, { priceListId: null, priceItem: null, policy: null });
-  assert.equal(low.posts.some((p) => p.target === "rpc/fn_get_price_list_item_by_product"), false);
-  const failing = load({ reject: { "rpc/fn_get_current_price_lists": new Error("x") } });
+  assert.equal(low.posts.some((p) => p.target === "fn_nv_app_gia_trong_bang_gia"), false);
+  const failing = load({ reject: { fn_nv_app_bang_gia_hien_hanh: new Error("x") } });
   assert.deepEqual({ ...(await failing.service.getBookingSalesConfig({ ID: uid(3), MaDA: uid(4) })) }, {
     priceListId: null, priceItem: null, policy: null,
   });

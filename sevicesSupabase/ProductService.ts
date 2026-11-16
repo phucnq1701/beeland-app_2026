@@ -1,12 +1,7 @@
 import { pageIndexFromOffset } from "../lib/projectScope";
-import { errorMessage } from "@/services/nvApi";
+import { callNv, errorMessage } from "@/services/nvApi";
 import { DuAnApi, SanPhamApi } from "@/services/SanPhamApi";
 
-import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyId, getValidSupabaseJwt } from "./cloudTenant";
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Detail = NonNullable<Awaited<ReturnType<typeof SanPhamApi.detail>>>;
 
@@ -92,33 +87,13 @@ export const ProductService = {
   },
 
   /**
-   * Danh sách sàn giao dịch — cloud (dm_companies is_san=true).
-   * Chuẩn hoá về { ID, MaSan, MaCT, TenSan, TenCT } khớp với normalizeSanGiaoDich trên web.
-   * TODO(phần 3 — Booking): chuyển sang API riêng cùng luồng chọn sàn của web (useAgencySan).
+   * Danh sách sàn giao dịch (fn_nv_app_san_list = web listSanGiaoDich: dm_companies cùng công ty, is_san). Chuẩn hoá về
+   * { ID, MaSan, MaCT, TenSan, TenCT, DiaChi… } khớp normalizeSanGiaoDich của web.
    */
   getSanGiaoDichAPI: async () => {
     try {
-      const companyId = await getCompanyId();
-      const validJwt = await getValidSupabaseJwt();
-      if (!validJwt) return { data: [] };
-
-      const params: Record<string, string> = {
-        select:
-          "id,ten_ct,ten_ct_vt,dia_chi,dien_thoai,fax,email,ma_so_thue,ma_dl,is_san,ap_dung,parent_id",
-        is_san: "eq.true",
-        order: "ten_ct_vt.asc",
-      };
-
-      if (companyId && UUID_RE.test(companyId)) {
-        params.tenant_company_id = `eq.${companyId}`;
-      }
-
-      const res = await axiosApiSupabase.get("rest/v1/dm_companies", {
-        params,
-      });
-
-      const rows = Array.isArray(res.data) ? res.data : [];
-      const data = rows.map((r: any) => ({
+      const rows = await callNv<any[]>("fn_nv_app_san_list", {});
+      const data = (Array.isArray(rows) ? rows : []).map((r: any) => ({
         ID: r.id,
         MaSan: r.ma_dl || r.id,
         MaCT: r.ma_dl || r.id,
@@ -128,11 +103,10 @@ export const ProductService = {
         DienThoai: r.dien_thoai || "",
         Email: r.email || "",
       }));
-
       return { data };
-    } catch (error) {
-      console.log("ERROR getSanGiaoDichAPI:", error);
-      return { data: [] };
+    } catch (e) {
+      console.log("ERROR getSanGiaoDichAPI (fn_nv_app_san_list):", errorMessage(e));
+      return { data: [], error: errorMessage(e) };
     }
   },
 };
