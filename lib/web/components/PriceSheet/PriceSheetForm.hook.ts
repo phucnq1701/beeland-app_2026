@@ -16,7 +16,7 @@ import * as DaPaymentScheduleService from "../../services/DaPaymentScheduleServi
 import { useReopenedPolicyDetails } from "../Products/ContractForm/useReopenedPolicyDetails";
 import { applySavedFigures, getPaymentFormulaVars as getPaymentFormulaVarsHelper, calculatePaymentScheduleRow as calculatePaymentScheduleRowHelper, getRestoredRoundResults as getRestoredRoundResultsHelper, recalcPaymentScheduleSequential as recalcPaymentScheduleSequentialHelper, scheduleDueDates, mapApiDetailsToFormulas as mapApiDetailsToFormulasHelper, loadRoundsFromCauHinh, mergeConfigRounds, buildRoundsFromPolicyDetails, alignSavedRows, restoredRoundExtras, refreshRoundsFromDetails, keepSavedPrintText, restoreScheduleFromRes, toSavedScheduleItem, enabledRoundsWithResults, removeScheduleRow, scheduleFormulasFromTemplate, templatePrintText } from "../Products/ContractForm/helpers";
 import { type CustomerFormModalHandle } from "../../_stubs/pages/customers/quan-ly/khach-hang/types";
-import { CustomerService } from "../../_stubs/services/Customer";
+import { CustomerService } from "../../_shims/services/Customer";
 import { toast } from "../../_shims/sonner";
 import { isLowRiseProduct } from "../../utils/productType";
 import { usePriceSheetCatalogs } from "./usePriceSheetCatalogs";

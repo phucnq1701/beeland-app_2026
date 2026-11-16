@@ -54,6 +54,7 @@ const ENTRIES = [
   "components/shared/salesCompanyControl",
   "services/sales/sales-settings/index",
   "services/priceListItem",
+  "services/CustomerCloudService",
 ];
 
 /**
@@ -115,7 +116,7 @@ const ALLOW_PKGS = new Set(["dayjs", "react", "date-fns"]);
  * client supabase ⇒ chỉ .rpc qua bảng đối chiếu sang fn_nv_app_*; sonner ⇒ toast của app.
  */
 const SHIMS = new Set(["integrations/supabase/client", "sonner", "lib/session", "components/PriceSheet/priceSheetConstants",
-  "services/Product", "services/Project"]);
+  "services/Product", "services/Project", "services/Customer"]);
 /** (cũ) service chép nguyên văn — nay mọi service .ts chép được nếu cả chuỗi phụ thuộc thuần */
 const COPY_SERVICES = new Set([]);
 /**

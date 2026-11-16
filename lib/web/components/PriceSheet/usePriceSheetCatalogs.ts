@@ -6,7 +6,7 @@ import { memoAsync } from "../../lib/apiCache";
 import { sessionCompanyId } from "../../_shims/lib/session";
 import { NhanVienService } from "../../_stubs/services/NhanVienService";
 import { ProductService } from "../../_shims/services/Product";
-import { CustomerService } from "../../_stubs/services/Customer";
+import { CustomerService } from "../../_shims/services/Customer";
 import { normalizeSanGiaoDichList } from "../../services/SanGiaoDichCloudService";
 
 /** Danh mục phụ của form phiếu tính giá (nhân viên KD, sàn giao dịch, quỹ danh, ngân hàng) */
