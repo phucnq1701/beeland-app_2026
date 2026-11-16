@@ -75,7 +75,8 @@ const UI_STRICT_FILES = [
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ["dist/*"],
+    // lib/web: bản chép nguyên văn từ web (scripts/sync-web-pricing.cjs) — không sửa / không lint theo luật app
+    ignores: ["dist/*", "lib/web/**"],
   },
   {
     files: UI_STRICT_FILES,
