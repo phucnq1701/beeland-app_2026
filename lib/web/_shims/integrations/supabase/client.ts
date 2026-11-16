@@ -48,6 +48,8 @@ export const RPC_MAP: Record<string, { fn: string; args: (a: Args | undefined) =
   },
   fn_status_catalog_list: { fn: "fn_nv_app_trang_thai_list", args: (a) => pick(a, { p_loai: "p_type" }) },
   fn_price_sheet_get: { fn: "fn_nv_app_ptg_chi_tiet", args: (a) => pick(a, { p_id: "p_id" }) },
+  // Căn cho form (web BdsProductService.getBdsProductById) — = fn_get_product_by_id, công ty từ phiên
+  fn_get_product_by_id: { fn: "fn_nv_app_san_pham_tinh_gia", args: (a) => pick(a, { p_id: "p_id" }) },
   // Lưu phiếu: duyệt vẫn trên web; p_host_form web (màn nhúng) app không dùng
   fn_price_sheet_save: { fn: "fn_nv_app_ptg_luu", args: (a) => pick(a, { p_row: "p_row" }) },
 };

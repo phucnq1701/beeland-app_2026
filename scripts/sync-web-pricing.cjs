@@ -53,6 +53,7 @@ const ENTRIES = [
   "components/Products/ContractForm/disabledReasons",
   "components/shared/salesCompanyControl",
   "services/sales/sales-settings/index",
+  "services/priceListItem",
 ];
 
 /**
@@ -65,6 +66,14 @@ const ENTRIES = [
  *                cộng các khai báo <plus> (tìm trong <inside>) ⇒ fn(ctx) trả { …returns }
  */
 const COMPONENT_EXTRACTS = [
+  {
+    // Trang Phiếu tính giá: dựng dòng gửi fn_price_sheet_save từ payload form (handlePriceSheetSaved)
+    file: "pages/products/gia-gio-hang/phieu-tinh-gia/index.tsx",
+    out: "pages/products/gia-gio-hang/phieu-tinh-gia/saveRow.ts",
+    parts: [
+      { kind: "range", fn: "webPriceSheetSaveRow", inside: "handlePriceSheetSaved", from: "const tt = payload?.TTHopDong", until: "row", returns: ["row"] },
+    ],
+  },
   {
     file: "components/PriceSheet/PriceSheetForm.tsx",
     out: "components/PriceSheet/PriceSheetForm.logic.ts",
@@ -79,20 +88,43 @@ const COMPONENT_EXTRACTS = [
   },
 ];
 
+/**
+ * COMPONENT ⇒ HOOK (nguyên văn): toàn bộ thân component web (state, ref, useEffect, handler, useMemo) thành hook React dùng được trên
+ * app — chỉ bỏ câu `return (<JSX>)` cuối và các câu dính giao diện (JSX, antd / icon / component .tsx). Props giữ nguyên tham số.
+ * Hook trả mọi tên khai báo ở thân. Câu giữ dùng tên chỉ khai báo ở câu bị bỏ ⇒ lỗi (trừ `allowMissing`).
+ * Module không thuần hook import để chạy (services .js cũ…) ⇒ stub tự sinh (gọi ⇒ log + lỗi) trừ khi có shim viết tay.
+ */
+const COMPONENT_HOOKS = [
+  {
+    file: "components/PriceSheet/PriceSheetForm.tsx",
+    component: "PriceSheetForm",
+    out: "components/PriceSheet/PriceSheetForm.hook.ts",
+    hook: "useWebPriceSheetForm",
+    allowMissing: [],
+  },
+];
+const UI_PKG = /^(antd|lucide-react|@ant-design|react-dom|react-router|@tanstack)/;
+const UI_PATH = [/^components\/ui\//, /^components\/UiCustoms\//];
+
 /** Thư viện ngoài được phép (đã có / thêm vào package.json của app) */
-const ALLOW_PKGS = new Set(["dayjs", "react"]);
+const ALLOW_PKGS = new Set(["dayjs", "react", "date-fns"]);
 /**
  * Module web thay bằng tệp app viết tay lib/web/_shims/<khoá>.ts (giữ nguyên khi đồng bộ, có test riêng):
  * client supabase ⇒ chỉ .rpc qua bảng đối chiếu sang fn_nv_app_*; sonner ⇒ toast của app.
  */
-const SHIMS = new Set(["integrations/supabase/client", "sonner", "lib/session"]);
+const SHIMS = new Set(["integrations/supabase/client", "sonner", "lib/session", "components/PriceSheet/priceSheetConstants",
+  "services/Product", "services/Project"]);
 /** (cũ) service chép nguyên văn — nay mọi service .ts chép được nếu cả chuỗi phụ thuộc thuần */
 const COPY_SERVICES = new Set([]);
 /**
  * Module KHÔNG thuần nhưng có vài hàm thuần cần dùng ⇒ TRÍCH nguyên văn các khai báo đó (+ khai báo cùng tệp chúng tham chiếu)
  * sang lib/web/_extract/<khoá>.ts. Khai báo trích mà dùng import của tệp gốc ⇒ báo lỗi (phải xử lý tay).
  */
-const EXTRACT = { "services/system/permitted-company": ["cleanCompanyIds", "isUid"] };
+const EXTRACT = {
+  "services/system/permitted-company": ["cleanCompanyIds", "isUid"],
+  "components/Products/ContractForm/InterestIncentiveFields": ["createInterestIncentiveInfo", "InterestIncentiveInfo"],
+  "components/Products/ContractForm/ApartmentTypeField": ["apartmentTypeName"],
+};
 /** Đường dẫn (dưới src/) KHÔNG chép: chỉ được import kiểu ⇒ thay bằng kiểu any */
 const IMPURE = [/^integrations\//, /^contexts\//, /^pages\//, /\.tsx$/, /\.js$/, /^components\/ui\//];
 
@@ -162,21 +194,25 @@ function extractDecls(key, names = EXTRACT[key], what = "trích nguyên văn") {
   const f = resolveFile(key);
   if (!f) return { text: "", errors: [`Không thấy ${key} để trích`] };
   const text = fs.readFileSync(f.abs, "utf8");
-  const sf = ts.createSourceFile(f.abs, text, ts.ScriptTarget.Latest, true);
+  const sf = ts.createSourceFile(f.abs, text, ts.ScriptTarget.Latest, true, f.abs.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const declOf = new Map(); // tên ⇒ câu lệnh
-  const imported = new Set();
+  const imported = new Map(); // tên ⇒ { spec, line }
   for (const st of sf.statements) {
     if (ts.isImportDeclaration(st)) {
       const cl = st.importClause;
-      if (cl?.name) imported.add(cl.name.text);
-      if (cl?.namedBindings && ts.isNamedImports(cl.namedBindings)) cl.namedBindings.elements.forEach((e) => imported.add(e.name.text));
-      if (cl?.namedBindings && ts.isNamespaceImport(cl.namedBindings)) imported.add(cl.namedBindings.name.text);
+      const spec = st.moduleSpecifier.text;
+      const put = (local, txt) => imported.set(local, { spec, txt });
+      if (cl?.name) put(cl.name.text, `import ${cl.isTypeOnly ? "type " : ""}${cl.name.text} from ${JSON.stringify(spec)};`);
+      if (cl?.namedBindings && ts.isNamedImports(cl.namedBindings))
+        cl.namedBindings.elements.forEach((e) => put(e.name.text, `import { ${cl.isTypeOnly || e.isTypeOnly ? "type " : ""}${e.propertyName ? e.propertyName.text + " as " : ""}${e.name.text} } from ${JSON.stringify(spec)};`));
+      if (cl?.namedBindings && ts.isNamespaceImport(cl.namedBindings)) put(cl.namedBindings.name.text, `import * as ${cl.namedBindings.name.text} from ${JSON.stringify(spec)};`);
     } else if (ts.isVariableStatement(st)) st.declarationList.declarations.forEach((d) => ts.isIdentifier(d.name) && declOf.set(d.name.text, st));
     else if ((ts.isFunctionDeclaration(st) || ts.isInterfaceDeclaration(st) || ts.isTypeAliasDeclaration(st) || ts.isClassDeclaration(st)) && st.name)
       declOf.set(st.name.text, st);
   }
   const want = new Set();
   const errors = [];
+  const importLines = new Set();
   const visit = (name) => {
     const st = declOf.get(name);
     if (!st) { errors.push(`${key}: không thấy khai báo ${name}`); return; }
@@ -185,17 +221,24 @@ function extractDecls(key, names = EXTRACT[key], what = "trích nguyên văn") {
     const walk = (n) => {
       if (ts.isIdentifier(n)) {
         if (n.text !== name && declOf.has(n.text) && declOf.get(n.text) !== st) visit(n.text);
-        if (imported.has(n.text)) errors.push(`${key}: ${name} dùng import ${n.text} — không trích được`);
+        const imp = imported.get(n.text);
+        if (imp) {
+          // Thư viện ngoài đã cho phép ⇒ giữ câu import; import nội bộ ⇒ không trích được (xử lý tay)
+          if (!imp.spec.startsWith(".") && !imp.spec.startsWith("@/") && ALLOW_PKGS.has(imp.spec.split("/")[0])) importLines.add(imp.txt);
+          else errors.push(`${key}: ${name} dùng import ${n.text} — không trích được`);
+        }
       }
       ts.forEachChild(n, walk);
     };
     ts.forEachChild(st, walk);
   };
   names.forEach(visit);
-  const parts = sf.statements.filter((st) => want.has(st)).map((st) => text.slice(st.getFullStart(), st.getEnd()).replace(/^\n+/, ""));
+  const parts = sf.statements.filter((st) => want.has(st)).map((st) => text.slice(st.getFullStart(), st.getEnd()).replace(/^\n+/, "")
+    // import("@/x").Kieu trỏ module không chép ⇒ any (chỉ ở phần trích kiểu)
+    .replace(/import\(\s*["']@\/[^"']+["']\s*\)(\.[A-Za-z_$][\w$]*)+/g, "any"));
   return {
     text: `// ⚠️ TỰ SINH — ${what} từ web src/${f.rel} (scripts/sync-web-pricing.cjs): ${names.join(", ")}. KHÔNG SỬA TAY.\n` +
-      parts.join("\n\n") + "\n",
+      [...importLines].join("\n") + (importLines.size ? "\n\n" : "") + parts.join("\n\n") + "\n",
     errors,
   };
 }
@@ -214,6 +257,31 @@ function collect() {
       if (im.srcRel) queue.push({ rel: im.srcRel, from: ce.file + " (trích)" });
       else if (!ALLOW_PKGS.has(im.spec.split("/")[0])) errors.push(`${ce.file}: phần trích dùng thư viện ngoài "${im.spec}"`);
     });
+  }
+  const runtimeStubs = new Map(); // khoá ⇒ Set(tên) — module không thuần hook dùng khi chạy
+  for (const hk of COMPONENT_HOOKS) {
+    const plan = planHook(hk);
+    errors.push(...plan.errors);
+    for (const im of plan.imports) {
+      if (im.srcRel === null) {
+        if (SHIMS.has(im.spec)) { shimsUsed.add(im.spec); continue; }
+        if (!ALLOW_PKGS.has(im.spec.split("/")[0]) && !im.allType) errors.push(`${hk.file}: hook dùng thư viện ngoài "${im.spec}"`);
+        else if (!im.allType) pkgs.add(im.spec);
+        continue;
+      }
+      const tf = resolveFile(im.srcRel);
+      const tRel = tf ? tf.rel : im.srcRel;
+      if (isShim(tRel)) { shimsUsed.add(keyOf(tRel)); continue; }
+      if (isExtract(tRel)) continue;
+      if (isImpure(tRel) || !tf) {
+        const key = keyOf(tRel);
+        const set = im.allType ? (stubs.get(key) || new Set()) : (runtimeStubs.get(key) || new Set());
+        for (const [, m] of im.names) set.add(m.isDefault ? "default" : m.ns ? "*" : m.imported);
+        (im.allType ? stubs : runtimeStubs).set(key, set);
+        continue;
+      }
+      queue.push({ rel: im.srcRel, from: hk.file + " (hook)" });
+    }
   }
   while (queue.length) {
     const { rel, from } = queue.shift();
@@ -236,8 +304,18 @@ function collect() {
       const tRel = tf ? tf.rel : target;
       if (isShim(tRel)) { shimsUsed.add(keyOf(tRel)); continue; }
       if (isExtract(tRel)) continue;
-      if (isImpure(tRel)) {
-        if (!im.typeOnly) { errors.push(`${f.rel}: import chạy thật từ module không thuần ${tRel}`); continue; }
+      if (isImpure(tRel) || !tf) {
+        if (!im.typeOnly) {
+          // Chạy thật từ module không thuần / .js ⇒ stub chạy thật (gọi ⇒ lỗi rõ), luồng app cần thì thêm shim
+          const key = keyOf(tRel);
+          const set = runtimeStubs.get(key) || new Set();
+          const cl = im.node?.importClause;
+          if (cl?.namedBindings && ts.isNamedImports(cl.namedBindings)) cl.namedBindings.elements.forEach((e) => set.add((e.propertyName || e.name).text));
+          if (cl?.namedBindings && ts.isNamespaceImport(cl.namedBindings)) set.add("*");
+          if (cl?.name) set.add("default");
+          runtimeStubs.set(key, set);
+          continue;
+        }
         const key = tRel.replace(/\.(tsx?)$/, "").replace(/\/index$/, "");
         const names = stubs.get(key) || new Set();
         if (im.typeName) names.add(im.typeName);
@@ -252,7 +330,143 @@ function collect() {
       queue.push({ rel: target, from: f.rel });
     }
   }
-  return { files, stubs, pkgs, errors, shimsUsed };
+  return { files, stubs, pkgs, errors, shimsUsed, runtimeStubs };
+}
+
+/** Tách thân component: câu giữ / bỏ, import cần, tên trả về */
+function planHook(hk) {
+  const f = resolveFile(keyOf(hk.file));
+  if (!f) return { errors: [`Không thấy ${hk.file}`], imports: [] };
+  const text = fs.readFileSync(f.abs, "utf8");
+  const sf = ts.createSourceFile(f.abs, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const errors = [];
+  let comp = null;
+  for (const st of sf.statements) if (ts.isFunctionDeclaration(st) && st.name?.text === hk.component) comp = st;
+  if (!comp) return { errors: [`${hk.file}: không thấy component ${hk.component}`], imports: [] };
+  const importOf = new Map();
+  for (const st of sf.statements) {
+    if (!ts.isImportDeclaration(st) || !st.importClause) continue;
+    const spec = st.moduleSpecifier.text, cl = st.importClause;
+    const add = (local, m) => importOf.set(local, { spec, ...m, typeOnly: cl.isTypeOnly || m.typeOnly });
+    if (cl.name) add(cl.name.text, { isDefault: true });
+    if (cl.namedBindings && ts.isNamespaceImport(cl.namedBindings)) add(cl.namedBindings.name.text, { ns: true });
+    if (cl.namedBindings && ts.isNamedImports(cl.namedBindings))
+      cl.namedBindings.elements.forEach((e) => add(e.name.text, { imported: (e.propertyName || e.name).text, typeOnly: e.isTypeOnly }));
+  }
+  const isUiImport = (local) => {
+    const m = importOf.get(local);
+    if (!m || m.typeOnly) return false;
+    if (UI_PKG.test(m.spec)) return true;
+    const rel = toSrcRel(f.rel, m.spec);
+    if (rel === null) return false;
+    const tf = resolveFile(rel);
+    const r = tf ? tf.rel : rel;
+    if (isShim(r) || isExtract(r)) return false;
+    return UI_PATH.some((re) => re.test(r)) || /\.tsx$/.test(r);
+  };
+  const hasJsx = (n) => { let hit = false; const w = (x) => { if (hit) return; if (ts.isJsxElement(x) || ts.isJsxSelfClosingElement(x) || ts.isJsxFragment(x)) { hit = true; return; } ts.forEachChild(x, w); }; w(n); return hit; };
+  const runtimeIds = (n) => {
+    const out = new Set();
+    const w = (x) => {
+      if (ts.isIdentifier(x)) {
+        const p = x.parent;
+        const skip = p && ((ts.isPropertyAccessExpression(p) && p.name === x) || (ts.isPropertyAssignment(p) && p.name === x) ||
+          (ts.isQualifiedName(p)) || ts.isTypeReferenceNode(p) || (ts.isBindingElement(p) && p.propertyName === x));
+        if (!skip) out.add(x.text);
+      }
+      if (ts.isTypeNode(x) && !ts.isTypeReferenceNode(x)) return; // bỏ qua kiểu
+      ts.forEachChild(x, w);
+    };
+    w(n);
+    return out;
+  };
+  const allIds = (n) => { const out = new Set(); const w = (x) => { if (ts.isIdentifier(x)) out.add(x.text); ts.forEachChild(x, w); }; w(n); return out; };
+  const declNames = (st) => {
+    const out = [];
+    const add = (b) => { if (ts.isIdentifier(b)) out.push(b.text); else if (b.elements) b.elements.forEach((e) => e.name && add(e.name)); };
+    if (ts.isVariableStatement(st)) st.declarationList.declarations.forEach((d) => add(d.name));
+    if (ts.isFunctionDeclaration(st) && st.name) out.push(st.name.text);
+    return out;
+  };
+  const stmts = comp.body.statements;
+  const last = stmts[stmts.length - 1];
+  const kept = [], dropped = [];
+  for (const st of stmts) {
+    if (st === last && ts.isReturnStatement(st)) continue;
+    const ui = hasJsx(st) || [...runtimeIds(st)].some(isUiImport);
+    (ui ? dropped : kept).push(st);
+  }
+  const keptIds = new Set(); kept.forEach((st) => allIds(st).forEach((x) => keptIds.add(x)));
+  const keptRuntime = new Set(); kept.forEach((st) => runtimeIds(st).forEach((x) => keptRuntime.add(x)));
+  const keptDecl = new Set(); kept.forEach((st) => declNames(st).forEach((n) => keptDecl.add(n)));
+  for (const st of dropped) for (const n of declNames(st))
+    if (keptIds.has(n) && !keptDecl.has(n) && !hk.allowMissing.includes(n))
+      errors.push(`${hk.file}: logic dùng "${n}" khai báo ở câu giao diện (dòng ${sf.getLineAndCharacterOfPosition(st.getStart()).line + 1})`);
+  // Import cần
+  const need = new Map();
+  for (const n of keptIds) {
+    const m = importOf.get(n);
+    if (!m) continue;
+    const e = need.get(m.spec) || { spec: m.spec, names: new Map(), srcRel: toSrcRel(f.rel, m.spec), allType: true };
+    const asType = m.typeOnly || !keptRuntime.has(n);
+    e.names.set(n, { ...m, typeOnly: asType });
+    if (!asType) e.allType = false;
+    need.set(m.spec, e);
+  }
+  const param = comp.parameters[0];
+  return {
+    errors, imports: [...need.values()], kept, dropped, sf, text, f,
+    paramText: param ? text.slice(param.name.getStart(sf), param.name.getEnd()) : "",
+    returns: [...keptDecl],
+  };
+}
+
+function renderHook(hk) {
+  const plan = planHook(hk);
+  const lines = [`// ⚠️ TỰ SINH — thân component ${hk.component} của web src/${plan.f.rel} chép NGUYÊN VĂN thành hook (scripts/sync-web-pricing.cjs).`,
+    `// Bỏ câu return JSX + ${plan.dropped.length} câu giao diện: ${plan.dropped.map((st) => plan.sf.getLineAndCharacterOfPosition(st.getStart()).line + 1).join(", ")}. KHÔNG SỬA TAY.`,
+    `// @ts-nocheck`, `/* eslint-disable */`];
+  for (const im of plan.imports) {
+    let spec = im.spec;
+    if (im.srcRel !== null) {
+      const tf = resolveFile(im.srcRel);
+      const tRel = keyOf(tf ? tf.rel : im.srcRel);
+      const dest = isShim(tRel) ? `_shims/${tRel}` : isExtract(tRel) ? `_extract/${tRel}` : (isImpure(tf ? tf.rel : im.srcRel) || !tf) ? `_stubs/${tRel}` : tRel;
+      spec = path.posix.relative(path.posix.dirname(hk.out), dest);
+      if (!spec.startsWith(".")) spec = "./" + spec;
+    } else if (SHIMS.has(im.spec)) {
+      spec = path.posix.relative(path.posix.dirname(hk.out), `_shims/${im.spec}`);
+      if (!spec.startsWith(".")) spec = "./" + spec;
+    }
+    const named = [];
+    for (const [local, m] of im.names) {
+      if (m.isDefault) lines.push(`import ${m.typeOnly ? "type " : ""}${local} from ${JSON.stringify(spec)};`);
+      else if (m.ns) lines.push(`import ${m.typeOnly ? "type " : ""}* as ${local} from ${JSON.stringify(spec)};`);
+      else named.push(`${m.typeOnly ? "type " : ""}${m.imported === local ? local : `${m.imported} as ${local}`}`);
+    }
+    if (named.length) lines.push(`import { ${named.join(", ")} } from ${JSON.stringify(spec)};`);
+  }
+  lines.push("", `export function ${hk.hook}(${plan.paramText}: any = {}) {`);
+  for (const st of plan.kept) lines.push("  " + plan.text.slice(st.getStart(plan.sf), st.getEnd()));
+  lines.push(`  return { ${plan.returns.join(", ")} };`, "}");
+  return lines.join("\n") + "\n";
+}
+
+/** Stub chạy thật cho module không thuần hook import (gọi ⇒ log + Promise lỗi / ném) */
+function renderRuntimeStub(key, names) {
+  const lines = [`// ⚠️ TỰ SINH (scripts/sync-web-pricing.cjs): stub cho web src/${key} — module không thuần, app không chép.`,
+    `// Gọi vào ⇒ log + lỗi "App không hỗ trợ" (thêm shim viết tay lib/web/_shims/${key}.ts nếu luồng app cần).`,
+    `// @ts-nocheck`,
+    `const make = (path: string): any => new Proxy(function () {}, {`,
+    `  get: (_t, k) => (k === "then" ? undefined : make(\`\${path}.\${String(k)}\`)),`,
+    `  apply: () => { console.log(\`[lib/web stub] app không hỗ trợ \${path}\`); return Promise.reject(new Error(\`App không hỗ trợ \${path}\`)); },`,
+    `});`];
+  for (const n of [...names].sort()) {
+    if (n === "*") continue;
+    if (n === "default") lines.push(`export default make(${JSON.stringify(key + ".default")});`);
+    else lines.push(`export const ${n}: any = make(${JSON.stringify(key + "." + n)});`, `export type ${n} = any;`);
+  }
+  return lines.join("\n") + "\n";
 }
 
 const JS_GLOBALS = new Set(["Number", "Math", "String", "Array", "Object", "undefined", "console", "isFinite", "JSON", "Boolean", "Date",
@@ -413,7 +627,7 @@ function render(rel, file, stubs) {
     if (target === null && !SHIMS.has(im.spec)) continue;
     const tf = target === null ? null : resolveFile(target);
     const tRel = target === null ? im.spec : (tf ? tf.rel : target).replace(/\.(tsx?)$/, "").replace(/\/index$/, "");
-    const dest = isShim(tRel) ? `_shims/${tRel}` : isExtract(tRel) ? `_extract/${tRel}` : isImpure(tf ? tf.rel : target) ? `_stubs/${tRel}` : tRel;
+    const dest = isShim(tRel) ? `_shims/${tRel}` : isExtract(tRel) ? `_extract/${tRel}` : (target !== null && (!tf || isImpure(tf.rel))) ? `_stubs/${tRel}` : tRel;
     let r = path.posix.relative(path.posix.dirname(rel), dest);
     if (!r.startsWith(".")) r = "./" + r;
     edits.push({ start: im.start, end: im.end, val: JSON.stringify(r) });
@@ -433,24 +647,32 @@ function renderStub(key, names) {
 
 function main() {
   if (!fs.existsSync(SRC)) { console.error(`Không thấy repo web: ${SRC}`); process.exit(2); }
-  const { files, stubs, pkgs, errors, shimsUsed } = collect();
+  const { files, stubs, pkgs, errors, shimsUsed, runtimeStubs } = collect();
   for (const k of shimsUsed) if (!fs.existsSync(path.join(OUT, "_shims", k + ".ts"))) errors.push(`Thiếu shim viết tay lib/web/_shims/${k}.ts`);
   if (PLAN) {
     console.log(`shim viết tay: ${[...shimsUsed].join(", ") || "-"}`);
     console.log(`${files.size} module:`); [...files.keys()].sort().forEach((k) => console.log("  " + k));
     console.log(`kiểu thay thế:`); [...stubs].forEach(([k, v]) => console.log(`  ${k}: ${[...v].join(", ")}`));
     console.log(`thư viện ngoài: ${[...pkgs].join(", ") || "-"}`);
+    console.log(`stub chạy thật (gọi ⇒ lỗi):`); [...runtimeStubs].forEach(([k, v]) => console.log(`  ${k}: ${[...v].join(", ")}`));
   }
   if (errors.length) { console.error("LỖI:\n  " + errors.join("\n  ")); process.exit(1); }
   if (PLAN) return;
   const want = new Map();
   for (const [rel, f] of files) want.set(rel, render(rel, f, stubs));
   for (const [key, names] of stubs) {
+    if (runtimeStubs.has(key)) continue;
     const list = [...names].filter((n) => n !== "*" && n !== "default").sort();
     const ex = extractDecls(key, list, "kiểu trích nguyên văn (module không thuần)");
     want.set(`_stubs/${key}.ts`, ex.errors.length ? renderStub(key, names) : ex.text);
   }
   for (const ce of COMPONENT_EXTRACTS) want.set(ce.out, renderComponent(ce));
+  for (const hk of COMPONENT_HOOKS) want.set(hk.out, renderHook(hk));
+  for (const [key, names] of runtimeStubs) {
+    // Vừa cần kiểu vừa cần chạy ⇒ stub chạy thật kèm kiểu any (tệp @ts-nocheck)
+    const all = new Set([...names, ...(stubs.get(key) || [])]);
+    want.set(`_stubs/${key}.ts`, renderRuntimeStub(key, all));
+  }
   for (const key of Object.keys(EXTRACT)) {
     const ex = extractDecls(key);
     if (ex.errors.length) { console.error("LỖI trích:\n  " + ex.errors.join("\n  ")); process.exit(1); }
