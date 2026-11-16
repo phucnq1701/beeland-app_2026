@@ -5,7 +5,7 @@ import { CalendarCheck, QrCode } from "lucide-react-native";
 
 import { SalesDocDetail } from "@/components/sales/SalesDocDetail";
 import { BottomActionBar, Button } from "@/components/ui";
-import { canCreateDepositQr } from "@/lib/depositQr";
+import { canOfferDepositQr } from "@/lib/depositQr";
 import { isFeatureAllowed } from "@/lib/featureConfig";
 import { radius } from "@/theme";
 import { formatArea, formatDate, formatVND } from "@/lib/format";
@@ -77,8 +77,8 @@ export default function DepositDetailScreen() {
   );
 
   const h = header || {};
-  // Như web: chỉ phiếu đặt cọc chờ duyệt (còn tiền cọc phải thu) mới có QR thanh toán
-  const canCollect = !loading && canCreateDepositQr(h);
+  // Như web: quyền PAYMENT_QR + phiếu chờ duyệt còn tiền cọc phải thu, không đang chờ duyệt đổi căn / hoàn cọc
+  const canCollect = !loading && canOfferDepositQr(h);
   // Lịch ký khoá theo uuid PHIẾU GIỮ CHỖ (pgc_id), không phải id phiếu cọc (web openSigningForDeposit)
   const pgcId = String(h.PhieuGiuChoId ?? "");
   const goToSigning = () =>

@@ -1,14 +1,13 @@
-import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyCode, getCompanyId } from "./cloudTenant";
-import { ScheduleRow, allocatePaidToSchedule, mapScheduleRpcRow, pgcVoucherTotal } from "../lib/paymentMath";
+import { callNv, errorMessage } from "@/services/nvApi";
+import { ScheduleRow, mapScheduleRpcRow, pgcVoucherTotal } from "../lib/paymentMath";
 
 /**
  * Lịch thanh toán + phiếu thu của MỘT phiếu (đặt cọc / hợp đồng) – y hệt web ContractDetail
- * (dùng chung cho cọc: DepositContractManagement mở ContractDetail type="DATCOC"):
- *  - Lịch: fn_contract_payment_schedule (ContractScheduleService); rỗng → lịch lưu `lich_tt_hd`
- *    (parent_code = uuid phiếu giữ chỗ) + phân bổ tổng tiền các phiếu thu (allocatePaidToSchedule).
- *  - Phiếu thu: fn_cash_vouchers_by_pgc (CashVoucherService.listVouchersByPgc), tiền = so_tien_pgc.
- * pgcId luôn là uuid PHIẾU GIỮ CHỖ (không phải uuid cọc / hợp đồng).
+ * (dùng chung cho cọc: DepositContractManagement mở ContractDetail type="DATCOC"), qua bộ API riêng app:
+ *  - Lịch: fn_nv_app_lich_tt_phieu = fn_contract_payment_schedule của web (máy chủ tự đọc lịch lưu `lich_tt_hd`, phân bổ phiếu thu,
+ *    số tiền điều chỉnh). Như web: không còn tự dựng lịch dự phòng ở máy.
+ *  - Phiếu thu: fn_nv_app_phieu_thu_phieu = fn_cash_vouchers_by_pgc (THU), tiền = so_tien_pgc.
+ * Công ty lấy từ phiên ở máy chủ. `pgcId`: uuid phiếu giữ chỗ — hoặc uuid hợp đồng / phiếu cọc (máy chủ tự quy về phiếu giữ chỗ).
  */
 
 export type Receipt = {
@@ -26,91 +25,18 @@ export type Receipt = {
 
 const n = (v: any) => Number(v || 0) || 0;
 
-/** Dòng lịch lưu trên cloud_catalogs → dòng lịch (web normalizeScheduleRow). */
-function normalizeStoredRow(r: any, index: number) {
-  const soTien = r?.SoTien ?? r?.PhaiThu ?? r?.TuongUng;
-  const phaiThu = r?.PhaiThu ?? soTien;
-  return {
-    DotTT: r?.DotTT ?? r?.Dot ?? index + 1,
-    DotTTText: r?.DotTTText ?? r?.KieuThanhToan ?? "",
-    NgayTT: r?.NgayTT ?? null,
-    TyLeTT: n(r?.TyLeTT),
-    PhaiThu: n(phaiThu),
-    // Web chỉ phân bổ PBT theo PhaiThuPBT (không lấy PhiBT)
-    PhaiThuPBT: n(r?.PhaiThuPBT),
-    DaThu: n(r?.DaThu ?? r?.SoTienDaTT),
-    DienGiai: r?.DienGiai ?? r?.GhiChu ?? "",
-  };
-}
-
-async function rpcVouchers(pgcId: string): Promise<any[]> {
-  const companyId = await getCompanyId();
-  const res = await axiosApiSupabase.post("rest/v1/rpc/fn_cash_vouchers_by_pgc", {
-    p_ma_ctdk_uid: companyId,
-    p_pgc_id: pgcId,
-    p_loai: "THU",
-  });
-  return Array.isArray(res.data) ? res.data : [];
-}
-
 export const PaymentProgressService = {
-  /** Lịch thanh toán từng đợt kèm Đã thu / Còn lại (gốc và phí bảo trì). */
+  /** Lịch thanh toán từng đợt kèm Đã thu / Còn lại (gốc và phí bảo trì). Lỗi tải ⇒ error (không giả lịch rỗng là "chưa có lịch"). */
   getSchedule: async (
     pgcId: string | null | undefined
-  ): Promise<{ rows: ScheduleRow[]; source: "server" | "fallback" | "none"; error?: boolean }> => {
+  ): Promise<{ rows: ScheduleRow[]; source: "server" | "none"; error?: boolean }> => {
     if (!pgcId) return { rows: [], source: "none" };
-    const companyId = await getCompanyId();
     try {
-      const res = await axiosApiSupabase.post("rest/v1/rpc/fn_contract_payment_schedule", {
-        p_ma_ctdk_uid: companyId,
-        p_pgc_id: pgcId,
-      });
-      const rows = (Array.isArray(res.data) ? res.data : []).map(mapScheduleRpcRow);
-      if (rows.length) return { rows, source: "server" };
+      const data = await callNv<any[]>("fn_nv_app_lich_tt_phieu", { p_id: pgcId });
+      const rows = (Array.isArray(data) ? data : []).map(mapScheduleRpcRow);
+      return { rows, source: rows.length ? "server" : "none" };
     } catch (e) {
-      // Web: lỗi hàm máy chủ → coi như rỗng, chuyển sang lịch dự phòng
-      console.log("WARN fn_contract_payment_schedule:", e);
-    }
-
-    // Dự phòng như web: lịch lưu (cloud_catalogs lọc theo mã công ty chữ thường – ContractCloudService) +
-    // phân bổ tổng tiền phiếu thu (web cộng TOÀN BỘ tờ phiếu – spec 0.2)
-    try {
-      const code = (await getCompanyCode()).trim().toLowerCase();
-      const r = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
-        params: {
-          select: "raw",
-          ma_ctdk: `eq.${code}`,
-          catalog_type: "eq.lich_tt_hd",
-          parent_code: `eq.${pgcId}`,
-        },
-      });
-      const stored = (Array.isArray(r.data) ? r.data : [])
-        .map((x: any, i: number) => normalizeStoredRow(x?.raw || {}, i))
-        .sort((a: any, b: any) => Number(a.DotTT || 0) - Number(b.DotTT || 0));
-      if (!stored.length) return { rows: [], source: "none" };
-      // Không đọc được phiếu thu → hiện lịch lưu như cũ, không phân bổ (như web)
-      let allocated: any[] = stored.map((x: any) => ({ ...x, DaThuPBT: 0 }));
-      try {
-        const totalPaid = (await rpcVouchers(pgcId)).reduce((s, v) => s + n(v?.so_tien), 0);
-        allocated = allocatePaidToSchedule(stored, totalPaid);
-      } catch {}
-      const rows: ScheduleRow[] = allocated.map((x: any) => ({
-        DotTT: Number(x.DotTT) || 0,
-        DotTTText: x.DotTTText || `Đợt ${x.DotTT}`,
-        NgayTT: x.NgayTT,
-        TyLeTT: x.TyLeTT,
-        PhaiThu: x.PhaiThu,
-        DaThu: x.DaThu,
-        ConLai: x.PhaiThu - x.DaThu,
-        PhaiThuPBT: x.PhaiThuPBT,
-        PhiBT: x.PhaiThuPBT,
-        DaThuPBT: x.DaThuPBT,
-        ConNoPBT: x.PhaiThuPBT - x.DaThuPBT,
-        DienGiai: x.DienGiai,
-      }));
-      return { rows, source: "fallback" };
-    } catch (e) {
-      console.log("ERROR payment schedule fallback:", e);
+      console.log("ERROR fn_nv_app_lich_tt_phieu:", errorMessage(e));
       return { rows: [], source: "none", error: true };
     }
   },
@@ -121,7 +47,8 @@ export const PaymentProgressService = {
   ): Promise<{ rows: Receipt[]; total: number; error: boolean }> => {
     if (!pgcId) return { rows: [], total: 0, error: false };
     try {
-      const raw = await rpcVouchers(pgcId);
+      const data = await callNv<any[]>("fn_nv_app_phieu_thu_phieu", { p_id: pgcId });
+      const raw = Array.isArray(data) ? data : [];
       const rows: Receipt[] = raw.map((v: any) => ({
         id: String(v?.id ?? v?.so_phieu ?? ""),
         soPhieu: v?.so_phieu || "",
@@ -134,7 +61,7 @@ export const PaymentProgressService = {
       }));
       return { rows, total: pgcVoucherTotal(raw), error: false };
     } catch (e) {
-      console.log("ERROR fn_cash_vouchers_by_pgc:", e);
+      console.log("ERROR fn_nv_app_phieu_thu_phieu:", errorMessage(e));
       return { rows: [], total: 0, error: true };
     }
   },

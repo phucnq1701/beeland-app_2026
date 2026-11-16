@@ -1,48 +1,11 @@
-import axiosApiSupabase from "./axiosApiSupabase";
-import { getValidSupabaseJwt } from "./cloudTenant";
-import { vnDayBound } from "./DatCocService";
+import { callNv, errorMessage } from "@/services/nvApi";
+import { listPgcStatuses, selectedProjectUuids, vnDayBound } from "./DatCocService";
 import { listResult, mergeProjectPages, pageArgs } from "../lib/listRpc";
 import { PaymentProgressService } from "./PaymentProgressService";
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** DuAn có thể là mảng hoặc chuỗi ",a,b," → mảng id sạch. */
-function parseProjectIds(raw: any): string[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) {
-    return raw.map((x) => String(x).trim()).filter(Boolean);
-  }
-  return String(raw)
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-/** ma_da_code → da_projects.id (uuid). Bỏ qua nếu đã là uuid. */
-async function resolveProjectUuids(ids: string[]): Promise<string[]> {
-  const uuids: string[] = [];
-  for (const id of ids) {
-    if (UUID_RE.test(id)) {
-      uuids.push(id);
-      continue;
-    }
-    try {
-      const r = await axiosApiSupabase.get("rest/v1/da_projects", {
-        params: { select: "id", ma_da_code: `eq.${id}`, limit: "1" },
-      });
-      const rows = Array.isArray(r.data) ? r.data : [];
-      if (rows[0]?.id) uuids.push(rows[0].id);
-    } catch {
-      // bỏ qua lỗi resolve từng dự án
-    }
-  }
-  return uuids;
-}
-
 const num = (v: any) => (v == null ? null : Number(v));
 
-/** 1 dòng fn_contract_list → dữ liệu màn hình – y hệt web ContractListService.mapRow (HĐMB). */
+/** 1 dòng fn_sale_contract_list → dữ liệu màn hình – y hệt web ContractListService.mapRow (HĐMB). */
 function mapContractRow(r: any) {
   const hd = r?.tt_hop_dong || {};
   return {
@@ -94,139 +57,65 @@ function mapContractRow(r: any) {
   };
 }
 
-/** Lấy phieu_giu_cho_id (pgc id) từ cloud_contracts.id (MaPGC). */
-async function resolvePgcId(maPGC: string): Promise<string> {
-  if (!maPGC) return "";
-  if (UUID_RE.test(maPGC)) {
-    try {
-      const r = await axiosApiSupabase.get("rest/v1/cloud_contracts", {
-        params: {
-          select: "phieu_giu_cho_id",
-          id: `eq.${maPGC}`,
-          limit: "1",
-        },
-      });
-      const row = Array.isArray(r.data) ? r.data[0] : null;
-      if (row?.phieu_giu_cho_id) return row.phieu_giu_cho_id;
-    } catch (e) {
-      console.log("ERROR resolvePgcId:", e);
-    }
-  }
-  return "";
-}
-
-/** uuid phiếu giữ chỗ của hợp đồng: dòng danh sách đã có PhieuGiuChoId, không thì tra cloud_contracts. */
-async function pgcOf(payload: any): Promise<string> {
-  const direct = payload?.PhieuGiuChoId ?? payload?.pgcId;
-  if (direct) return String(direct);
-  return resolvePgcId(String(payload?.MaPGC ?? payload?.maPGC ?? payload?.id ?? ""));
+/** Khoá phiếu của hợp đồng: uuid phiếu giữ chỗ nếu dòng đã có, không thì uuid hợp đồng (máy chủ tự quy về phiếu giữ chỗ). */
+function pgcOf(payload: any): string {
+  return String(payload?.PhieuGiuChoId ?? payload?.pgcId ?? payload?.MaPGC ?? payload?.maPGC ?? payload?.id ?? "").trim();
 }
 
 /**
- * HỢP ĐỒNG — cloud, y hệt web:
- * - Danh sách: fn_sale_contract_list (ContractListService.listSaleContractPage) – lọc/tìm/phân trang/"Đã thu" + phạm vi dưới máy chủ.
- * - Trạng thái: cloud_catalogs catalog_type='pgc_trang_thai' (ma_ctdk='global').
- * - Lịch thanh toán + phiếu thu: PaymentProgressService (fn_contract_payment_schedule, fn_cash_vouchers_by_pgc).
+ * HỢP ĐỒNG qua bộ API riêng app (lõi chung web):
+ * - Danh sách: fn_nv_app_hop_dong_list = fn_sale_contract_list màn DS Hợp đồng (HĐMB gốc, bỏ chuyển nhượng) — lọc/tìm/phân trang/
+ *   "Đã thu" + phạm vi ở máy chủ.
+ * - Trạng thái: fn_nv_app_trang_thai_list (pgc_trang_thai).
+ * - Lịch thanh toán + phiếu thu: PaymentProgressService.
  */
 export const HopDongService = {
-  /**
-   * Danh sách hợp đồng mua bán gốc (không gồm chuyển nhượng – như web Contract.filter).
-   * filter: { TuNgay, DenNgay, DuAn, MaTT, inputSearch, Offset (trang, từ 1), Limit, TransferOnly }
-   */
+  /** Danh sách hợp đồng mua bán gốc. filter: { TuNgay, DenNgay, DuAn, MaTT, inputSearch, Offset (trang, từ 1), Limit } */
   get: async (filter: any = {}) => {
-    const validJwt = await getValidSupabaseJwt();
-    if (!validJwt) return { data: [], totalRows: 0 };
     try {
       const limit = Math.min(5000, Math.max(1, Number(filter?.Limit ?? filter?.limit ?? 50)));
       const page = Math.max(1, Number(filter?.Offset ?? filter?.offset ?? 1));
-      const projectIds = parseProjectIds(filter?.DuAn ?? filter?.duAn ?? filter?.projectId);
-      const projectUuids = projectIds.length ? await resolveProjectUuids(projectIds) : [];
+      const projects = await selectedProjectUuids(filter);
       // Có chọn dự án nhưng không đổi ra uuid → không có dữ liệu hợp lệ (như web)
-      if (projectIds.length && !projectUuids.length) return { data: [], totalRows: 0 };
+      if (projects && projects.length === 0) return { data: [], totalRows: 0 };
       const maTT = Number(filter?.MaTT ?? 0) || 0;
-      // fn_sale_contract_list (web useSaleContractList → listSaleContractPage, migration 20261014201500): công ty +
-      // phạm vi (dự án, công ty / sàn, "chỉ dữ liệu của tôi") lấy từ JWT ở máy chủ; p_project_id 1 uuid; trả { rows, total }.
-      // Thay fn_contract_list(p_ma_ctdk_uid, …) – bản cũ chỉ còn giữ tạm cho frontend cũ.
       const base = {
-        p_search: String(filter?.inputSearch ?? filter?.keyword ?? "").trim() || null,
+        p_tu_khoa: String(filter?.inputSearch ?? filter?.keyword ?? "").trim() || null,
         p_tu_ngay: vnDayBound(filter?.TuNgay ?? filter?.tuNgay, false),
         p_den_ngay: vnDayBound(filter?.DenNgay ?? filter?.denNgay, true),
         p_ma_tt: maTT > 0 ? maTT : null,
-        p_transfer_only: filter?.TransferOnly === true,
       };
       const call = async (projectId: string | null, p: number, size: number) => {
-        const res = await axiosApiSupabase.post("rest/v1/rpc/fn_sale_contract_list", {
-          ...base,
-          p_project_id: projectId,
-          ...pageArgs(p, size),
-        });
-        return listResult(res.data);
+        const pa = pageArgs(p, size);
+        const res = await callNv<any>("fn_nv_app_hop_dong_list", { ...base, p_du_an_id: projectId, p_trang: pa.p_page, p_so_dong: pa.p_size });
+        return listResult(res);
       };
       let result: { rows: any[]; total: number };
-      if (projectUuids.length > 1) {
+      if (projects && projects.length > 1) {
         // Chọn nhiều dự án: hàm chỉ nhận 1 dự án ⇒ gọi từng dự án rồi gộp đúng trang (thứ tự như máy chủ: ngày ký mới trước)
-        const pages = await Promise.all(projectUuids.map((id) => call(id, 1, page * limit)));
+        const pages = await Promise.all(projects.map((id) => call(id, 1, page * limit)));
         result = mergeProjectPages(pages, page, limit, (r: any) => r?.ngay_ky ?? r?.ngay_nhap ?? r?.created_at);
       } else {
-        result = await call(projectUuids[0] ?? null, page, limit);
+        result = await call(projects?.[0] ?? null, page, limit);
       }
-      const data = result.rows.map(mapContractRow);
-      return { data, totalRows: result.total };
+      return { data: result.rows.map(mapContractRow), totalRows: result.total };
     } catch (error) {
-      console.log("ERROR HopDongService.get (fn_sale_contract_list):", error);
+      console.log("ERROR fn_nv_app_hop_dong_list:", errorMessage(error));
       return { data: [], totalRows: 0, error: true };
     }
   },
 
-  getTT: async (_payload: any = {}) => {
-    const validJwt = await getValidSupabaseJwt();
-    if (!validJwt) {
-      console.log("[Contract] chưa có cloud_jwt, bỏ qua getTT");
-      return { data: [] };
-    }
-
-    try {
-      const res = await axiosApiSupabase.get("rest/v1/cloud_catalogs", {
-        params: {
-          select: "id,item_code,item_name,color_code",
-          catalog_type: "eq.pgc_trang_thai",
-          ma_ctdk: "eq.global",
-          order: "item_code.asc",
-          limit: "100",
-        },
-      });
-      const rows = Array.isArray(res.data) ? res.data : [];
-      const data = rows.map((r: any) => {
-        const code = r?.item_code;
-        const num = Number(code);
-        return {
-          MaTT: Number.isFinite(num) ? num : code,
-          TenTT: r?.item_name || "",
-          ColorWeb: r?.color_code || "#9CA3AF",
-          _raw: r,
-        };
-      });
-      return { data };
-    } catch (error) {
-      console.log(
-        "ERROR HopDongService.getTT (cloud_catalogs pgc_trang_thai):",
-        error
-      );
-      return { data: [] };
-    }
-  },
+  getTT: async (_payload: any = {}) => listPgcStatuses(),
 
   /** Lịch thanh toán của hợp đồng (theo phiếu giữ chỗ) – PaymentProgressService.getSchedule. */
   getDetailLTT: async (payload: any = {}) => {
-    const pgcId = await pgcOf(payload);
-    const res = await PaymentProgressService.getSchedule(pgcId);
+    const res = await PaymentProgressService.getSchedule(pgcOf(payload));
     return { data: res.rows, source: res.source, error: !!res.error };
   },
 
   /** Phiếu thu của hợp đồng (phần thuộc hợp đồng) – PaymentProgressService.getReceipts. */
   getDetailLST: async (payload: any = {}) => {
-    const pgcId = await pgcOf(payload);
-    const res = await PaymentProgressService.getReceipts(pgcId);
+    const res = await PaymentProgressService.getReceipts(pgcOf(payload));
     return { data: res.rows, total: res.total, error: res.error };
   },
 };

@@ -1,8 +1,8 @@
 /* global __dirname */
-// Dịch vụ cọc / hợp đồng / báo cáo gọi đúng hàm máy chủ & bảng như web:
-//  DepositListService (fn_deposit_list), ContractListService (fn_contract_list),
-//  ContractScheduleService (fn_contract_payment_schedule), CashVoucherService (fn_cash_vouchers_by_pgc,
-//  fn_cash_voucher_list), AccountingCloudService (listDebtsCloudFirst – TIENDO).
+// Dịch vụ cọc / hợp đồng / báo cáo gọi đúng hàm máy chủ như web:
+//  cọc / HĐ / lịch TT / phiếu thu theo phiếu ⇒ bộ API riêng app (fn_nv_app_* bọc fn_deposit_list, fn_sale_contract_list,
+//  fn_contract_payment_schedule, fn_cash_vouchers_by_pgc — công ty từ phiên ở máy chủ);
+//  báo cáo (ReportService – còn ở luồng L3) vẫn fn_cash_voucher_list / vòng đời phiếu.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -44,6 +44,7 @@ function harness({ rpc = {}, tables = {}, failRpc = {}, typeAccount = "SYSTEM", 
     },
     post: async (url, body) => {
       const fn = url.replace("rest/v1/rpc/", "");
+      if (fn.startsWith("fn_nv_app_")) throw new Error("fn_nv_app_* phải qua callNv");
       calls.push({ method: "rpc", fn, body });
       if (failRpc[fn]) throw new Error("boom");
       const r = rpc[fn];
@@ -58,7 +59,19 @@ function harness({ rpc = {}, tables = {}, failRpc = {}, typeAccount = "SYSTEM", 
     getCompanyCode: async () => "BeeSky1",
     getEmployeeId: async () => uid(7),
   };
+  const nv = {
+    callNv: async (fn, args) => {
+      calls.push({ method: "nv", fn, body: args });
+      if (failRpc[fn]) throw new Error("boom");
+      const r = rpc[fn];
+      return typeof r === "function" ? r(args) : r ?? [];
+    },
+    errorMessage: (e, f) => e?.message || f,
+  };
   const map = {
+    "@/services/nvApi": nv,
+    "@/services/SanPhamApi": { DuAnApi: { resolveId: async (x) => (String(x).startsWith("CODE-") ? null : x) } },
+    "../lib/format": { formatDirections: (a, b) => [a, b].filter(Boolean).join(" / ") },
     "./axiosApiSupabase": { default: http },
     "./cloudTenant": cloudTenant,
     "../lib/paymentMath": math,
@@ -84,20 +97,14 @@ function harness({ rpc = {}, tables = {}, failRpc = {}, typeAccount = "SYSTEM", 
   };
 }
 
-test("deposit list: fn_deposit_list like the web, both response shapes", async () => {
-  const row = { id: "dc1", pgc_id: "pgc1", so_phieu: "DC-1", ten_kh: "Khách", ky_hieu: "A-1", gia_tri_hd: 900, tien_coc: 50, da_thu: 20, total_count: 7 };
+test("deposit list: fn_nv_app_dat_coc_list (= fn_deposit_list màn Đặt cọc), both response shapes", async () => {
+  const row = { id: "dc1", pgc_id: "pgc1", so_phieu: "DC-1", ten_kh: "Khách", ky_hieu: "A-1", gia_tri_hd: 900, tien_coc: 50, da_thu: 20, total_count: 7,
+    chi_xem: true, TrangThaiHoan: "CHO_DUYET" };
   for (const shape of [{ rows: [row], total: 7 }, { rows: [row], total_count: 7 }, [row]]) {
-    const h = harness({ rpc: { fn_deposit_list: shape } });
+    const h = harness({ rpc: { fn_nv_app_dat_coc_list: shape } });
     const res = await h.deposits().get({ Offset: 2, Limit: 10, inputSearch: " DC " });
-    const body = h.calls.find((c) => c.fn === "fn_deposit_list").body;
-    // Bản mới (2026-10-14): công ty từ JWT, trang/kích thước thay offset/limit
-    assert.equal("p_ma_ctdk_uid" in body, false);
-    assert.equal(body.p_search, "DC");
-    assert.equal(body.p_project_id, null);
-    assert.equal(body.p_tu_ngay, null, "no date filter → null like the web");
-    assert.equal(body.p_den_ngay, null);
-    assert.equal(body.p_page, 2);
-    assert.equal(body.p_size, 10);
+    const body = h.calls.find((c) => c.fn === "fn_nv_app_dat_coc_list").body;
+    assert.deepEqual(plain(body), { p_tu_khoa: "DC", p_tu_ngay: null, p_den_ngay: null, p_ma_tt: null, p_du_an_id: null, p_trang: 2, p_so_dong: 10 });
     assert.equal(res.totalRows, 7);
     const d = res.data[0];
     assert.equal(d.MaPGC, "pgc1");
@@ -105,72 +112,125 @@ test("deposit list: fn_deposit_list like the web, both response shapes", async (
     assert.equal(d.TongGiaTriHDMB, 900, "falls back to gia_tri_hd");
     assert.equal(d.KhachHang, "Khách");
     assert.equal(d.MaSanPham, "A-1");
+    assert.equal(d.ChiXem, true);
+    assert.equal(d.TrangThaiHoan, "CHO_DUYET");
   }
-  const h = harness({ rpc: { fn_deposit_list: [] } });
-  await h.deposits().get({ TuNgay: "2026-09-01", DenNgay: "2026-09-30" });
-  const body = h.calls.find((c) => c.fn === "fn_deposit_list").body;
+  const h = harness({ rpc: { fn_nv_app_dat_coc_list: [] } });
+  await h.deposits().get({ TuNgay: "2026-09-01", DenNgay: "2026-09-30", MaTT: 8 });
+  const body = h.calls.find((c) => c.fn === "fn_nv_app_dat_coc_list").body;
   assert.equal(body.p_tu_ngay, "2026-09-01T00:00:00.000+07:00");
   assert.equal(body.p_den_ngay, "2026-09-30T23:59:59.999+07:00");
+  assert.equal(body.p_ma_tt, 8);
+  assert.equal(h.calls.some((c) => c.method !== "nv"), false, "không gọi rest/v1");
 });
 
-test("contract list: fn_sale_contract_list (HĐMB gốc, như web listSaleContractPage) with server-side paid amount", async () => {
+test("contract list: fn_nv_app_hop_dong_list (= fn_sale_contract_list màn DS HĐ) with server-side paid amount", async () => {
   const h = harness({
-    rpc: { fn_sale_contract_list: { rows: [{ id: "hd1", pgc_id: "pgc1", so_hd: "HD-1", ten_kh: "Khách", gia_tri_hd_sau_ck: 800, gia_tri_hd: 900, da_thu: 300, ten_tt: "Đã ký", color_code: "#123456" }], total: 3 } },
+    rpc: { fn_nv_app_hop_dong_list: { rows: [{ id: "hd1", pgc_id: "pgc1", so_hd: "HD-1", ten_kh: "Khách", gia_tri_hd_sau_ck: 800, gia_tri_hd: 900, da_thu: 300, ten_tt: "Đã ký", color_code: "#123456" }], total: 3 } },
   });
   const res = await h.contracts().get({ Offset: 2, Limit: 20, inputSearch: " HD " });
-  const body = h.calls.find((c) => c.fn === "fn_sale_contract_list").body;
-  assert.equal(body.p_transfer_only, false);
-  assert.equal(body.p_search, "HD");
-  assert.equal(body.p_project_id, null);
-  assert.equal(body.p_page, 2);
-  assert.equal(body.p_size, 20);
-  assert.equal("p_ma_ctdk_uid" in body, false, "company comes from the JWT");
+  const body = h.calls.find((c) => c.fn === "fn_nv_app_hop_dong_list").body;
+  assert.deepEqual(plain(body), { p_tu_khoa: "HD", p_tu_ngay: null, p_den_ngay: null, p_ma_tt: null, p_du_an_id: null, p_trang: 2, p_so_dong: 20 });
   assert.equal(res.totalRows, 3);
   assert.equal(res.data[0].SoHDMB, "HD-1");
   assert.equal(res.data[0].PhieuGiuChoId, "pgc1");
   assert.equal(res.data[0].TongGiaTriHDMB, 800);
   assert.equal(res.data[0].DaThu, 300);
+  assert.equal(h.calls.some((c) => c.method !== "nv"), false);
 });
 
-test("payment schedule: server function first", async () => {
-  const h = harness({ rpc: { fn_contract_payment_schedule: [{ dot_tt: 1, phai_thu: 100, da_thu: 40, con_lai: 60 }] } });
+test("payment schedule: fn_nv_app_lich_tt_phieu (máy chủ tính cả lịch lưu) — không dựng dự phòng ở máy; lỗi ⇒ error", async () => {
+  const h = harness({ rpc: { fn_nv_app_lich_tt_phieu: [{ dot_tt: 1, phai_thu: 100, da_thu: 40, con_lai: 60 }] } });
   const res = await h.progress.getSchedule("pgc1");
-  assert.deepEqual(plain(h.calls[0].body), { p_ma_ctdk_uid: tenant, p_pgc_id: "pgc1" });
+  assert.deepEqual(plain(h.calls), [{ method: "nv", fn: "fn_nv_app_lich_tt_phieu", body: { p_id: "pgc1" } }]);
   assert.equal(res.rows[0].ConLai, 60);
   assert.equal(res.source, "server");
+  const empty = harness({ rpc: { fn_nv_app_lich_tt_phieu: [] } });
+  const e = await empty.progress.getSchedule("pgc1");
+  assert.equal(e.rows.length, 0);
+  assert.equal(e.source, "none");
+  assert.equal(empty.calls.length, 1, "không đọc lich_tt_hd / phiếu thu để tự phân bổ");
+  const bad = harness({ failRpc: { fn_nv_app_lich_tt_phieu: true } });
+  assert.equal((await bad.progress.getSchedule("pgc1")).error, true);
+  assert.deepEqual(plain(await bad.progress.getSchedule(null)), { rows: [], source: "none" });
 });
 
-test("payment schedule fallback: stored schedule of the sales doc + web allocation of whole receipts", async () => {
+test("receipts of one sales doc: fn_nv_app_phieu_thu_phieu, own share only", async () => {
   const h = harness({
-    rpc: {
-      fn_contract_payment_schedule: [],
-      fn_cash_vouchers_by_pgc: [{ so_tien: 150, so_tien_pgc: 100 }],
-    },
-    tables: {
-      cloud_catalogs: [{ raw: { DotTT: 2, SoTien: 200 } }, { raw: { DotTT: 1, SoTien: 100, PhaiThuPBT: 10 } }],
-    },
-  });
-  const res = await h.progress.getSchedule("pgc1");
-  const q = h.calls.find((c) => c.table === "cloud_catalogs").params;
-  assert.equal(q.parent_code, "eq.pgc1", "parent is the sales doc (phiếu giữ chỗ) like the web");
-  assert.equal(q.catalog_type, "eq.lich_tt_hd");
-  assert.equal(q.ma_ctdk, "eq.beesky1", "web filters stored schedules by the lowercase company code");
-  assert.equal(res.source, "fallback");
-  assert.deepEqual(plain(res.rows.map((r) => [r.DotTT, r.DaThu, r.ConLai, r.DaThuPBT])), [[1, 100, 0, 0], [2, 50, 150, 0]]);
-});
-
-test("receipts of one sales doc: fn_cash_vouchers_by_pgc, own share only", async () => {
-  const h = harness({
-    rpc: { fn_cash_vouchers_by_pgc: [{ id: "v1", so_phieu: "PT-1", ngay_phieu: "2026-09-02", so_tien: 1000, so_tien_pgc: 300, dien_giai: "Đợt 1", hinh_thuc: "CK" }] },
+    rpc: { fn_nv_app_phieu_thu_phieu: [{ id: "v1", so_phieu: "PT-1", ngay_phieu: "2026-09-02", so_tien: 1000, so_tien_pgc: 300, dien_giai: "Đợt 1", hinh_thuc: "CK" }] },
   });
   const res = await h.progress.getReceipts("pgc1");
-  assert.deepEqual(plain(h.calls[0].body), { p_ma_ctdk_uid: tenant, p_pgc_id: "pgc1", p_loai: "THU" });
+  assert.deepEqual(plain(h.calls[0]), { method: "nv", fn: "fn_nv_app_phieu_thu_phieu", body: { p_id: "pgc1" } });
   assert.equal(res.total, 300);
   assert.equal(res.rows[0].soTien, 300);
   assert.equal(res.rows[0].soPhieu, "PT-1");
-  const bad = harness({ failRpc: { fn_cash_vouchers_by_pgc: true } });
+  const bad = harness({ failRpc: { fn_nv_app_phieu_thu_phieu: true } });
   const err = await bad.progress.getReceipts("pgc1");
   assert.equal(err.error, true);
+});
+
+test("contract detail: thiếu uuid phiếu giữ chỗ ⇒ gửi uuid hợp đồng (máy chủ tự quy đổi), không tra cloud_contracts", async () => {
+  const h = harness({ rpc: { fn_nv_app_lich_tt_phieu: [], fn_nv_app_phieu_thu_phieu: [] } });
+  await h.contracts().getDetailLTT({ PhieuGiuChoId: null, MaPGC: "hd1" });
+  await h.contracts().getDetailLST({ PhieuGiuChoId: "pgc9", MaPGC: "hd1" });
+  assert.deepEqual(plain(h.calls.map((c) => [c.fn, c.body.p_id])), [["fn_nv_app_lich_tt_phieu", "hd1"], ["fn_nv_app_phieu_thu_phieu", "pgc9"]]);
+});
+
+test("deposit detail: 1 lời gọi đầu phiếu + lịch + phiếu thu song song; dòng mới nhất, khách của chứng từ, loại căn / hướng, cờ QR", async () => {
+  const h = harness({
+    rpc: {
+      fn_nv_app_dat_coc_chi_tiet: {
+        dong: { id: "dc1", pgc_id: "pgc1", so_phieu: "DC-1", ma_tt: "8", ten_tt: "Đặt cọc chờ duyệt", tien_coc: 100, da_thu: 30, TrangThaiHoan: null },
+        doc: { ok: true, pgc: { phi_bao_tri: 7, gia_tri_hd: 900 }, khach_hang: { ten_kh: "Khách", email: "a@b", cccd: "0**", dia_chi: "HN", ma_so_kh: "KH1", dien_thoai: "09" } },
+        san_pham: { ma_sp: "SP1", ky_hieu: "A-1", loai_can: "2PN", huong_cua: "Đông", huong_bc: "Tây" },
+        doi_can_cho_duyet: false, quyen: { payment_qr: true },
+      },
+      fn_nv_app_lich_tt_phieu: [{ dot_tt: 1, phai_thu: 100 }],
+      fn_nv_app_phieu_thu_phieu: [{ id: "v1", so_tien_pgc: 30 }],
+    },
+  });
+  const r = await h.deposits().getDepositDetail({ row: { PhieuGiuChoId: "pgc1", TenTT: "cũ", MaTT: 6 } });
+  assert.deepEqual(plain(h.calls.map((c) => [c.fn, c.body])),
+    [["fn_nv_app_dat_coc_chi_tiet", { p_id: "pgc1" }], ["fn_nv_app_lich_tt_phieu", { p_id: "pgc1" }], ["fn_nv_app_phieu_thu_phieu", { p_id: "pgc1" }]]);
+  const d = r.data;
+  assert.equal(d.TenTT, "Đặt cọc chờ duyệt", "trạng thái hiện tại thắng dòng cũ");
+  assert.equal(d.MaTT, 8);
+  assert.equal(d.Email, "a@b");
+  assert.equal(d.SoCMND, "0**", "đã che ở máy chủ");
+  assert.equal(d.LoaiCanHo, "2PN");
+  assert.equal(d.Huong, "Đông / Tây");
+  assert.equal(d.PhiBaoTri, 7);
+  assert.equal(d.QuyenQR, true);
+  assert.equal(d.DoiCanChoDuyet, false);
+  assert.equal(depositQr.canOfferDepositQr(d), true);
+  assert.equal(r.tongDaThu, 30);
+  assert.equal(r.lichTT.length, 1);
+
+  const fail = harness({ failRpc: { fn_nv_app_dat_coc_chi_tiet: true } });
+  const f = await fail.deposits().getDepositDetail({ row: { ID: "dc1", TenTT: "Đặt cọc chờ duyệt", TienCoc: 100, DaThu: 0 } });
+  assert.equal(fail.calls[0].body.p_id, "dc1", "không có phiếu giữ chỗ ⇒ id phiếu cọc");
+  assert.equal(f.data.QuyenQR, false, "lỗi tải ⇒ khoá QR (fail-closed)");
+  assert.equal(depositQr.canOfferDepositQr(f.data), false);
+});
+
+test("QR cọc như web: quyền PAYMENT_QR + chờ duyệt + còn tiền, không đổi căn / hoàn cọc chờ duyệt", () => {
+  const ok = { TenTT: "Đặt cọc chờ duyệt", MaTT: 8, TienCoc: 100, DaThu: 0, QuyenQR: true };
+  assert.equal(depositQr.canOfferDepositQr(ok), true);
+  assert.equal(depositQr.canOfferDepositQr({ ...ok, QuyenQR: false }), false);
+  assert.equal(depositQr.canOfferDepositQr({ ...ok, QuyenQR: undefined }), false);
+  assert.equal(depositQr.canOfferDepositQr({ ...ok, DoiCanChoDuyet: true }), false);
+  assert.equal(depositQr.canOfferDepositQr({ ...ok, TrangThaiHoan: "CHO_DUYET" }), false);
+  assert.equal(depositQr.canOfferDepositQr({ ...ok, TrangThaiHoan: "DA_HOAN" }), true);
+  assert.equal(depositQr.canOfferDepositQr({ ...ok, DaThu: 100 }), false);
+});
+
+test("status filter: fn_nv_app_trang_thai_list (màu theo công ty như web), bỏ mã trống", async () => {
+  const h = harness({ rpc: { fn_nv_app_trang_thai_list: [{ id: "a", item_code: "8", item_name: "Đặt cọc chờ duyệt", color_code: "#111" }, { id: "b", item_code: "", item_name: "x" }] } });
+  const r = await h.deposits().getTT();
+  assert.deepEqual(plain(h.calls[0].body), { p_loai: "pgc_trang_thai" });
+  assert.deepEqual(plain(r.data.map((x) => [x.MaTT, x.TenTT, x.ColorWeb])), [[8, "Đặt cọc chờ duyệt", "#111"]]);
+  await h.contracts().getTT();
+  assert.equal(h.calls[1].fn, "fn_nv_app_trang_thai_list");
 });
 
 test("receipt report: fn_cash_voucher_list THU for the period", async () => {
@@ -249,37 +309,27 @@ test("receipt report counts original contracts only (web Phiếu thu default GOC
   assert.equal(h.calls.find((c) => c.fn === "fn_cash_voucher_list").body.p_contract_type, "GOC");
 });
 
-test("deposits: project scope is enforced by the server; one project → p_project_id, several → one call each, merged", async () => {
-  // Đại lý không còn tự lọc phía app: fn_deposit_list bản mới áp _da_project_scope() theo JWT
-  const agency = harness({ typeAccount: "AGENCY", scope: [], rpc: { fn_deposit_list: { rows: [], total: 0 } } });
+test("deposits: project scope is enforced by the server; one project → p_du_an_id, several → one call each, merged; unknown code → empty", async () => {
+  const agency = harness({ typeAccount: "AGENCY", scope: [], rpc: { fn_nv_app_dat_coc_list: { rows: [], total: 0 } } });
   await agency.deposits().get({});
-  assert.equal(agency.calls.find((c) => c.fn === "fn_deposit_list").body.p_project_id, null);
+  assert.equal(agency.calls.find((c) => c.fn === "fn_nv_app_dat_coc_list").body.p_du_an_id, null);
 
-  const one = harness({ rpc: { fn_deposit_list: { rows: [], total: 0 } } });
+  const one = harness({ rpc: { fn_nv_app_dat_coc_list: { rows: [], total: 0 } } });
   await one.deposits().get({ DuAn: uid(4) });
-  assert.equal(one.calls.find((c) => c.fn === "fn_deposit_list").body.p_project_id, uid(4));
+  assert.equal(one.calls.find((c) => c.fn === "fn_nv_app_dat_coc_list").body.p_du_an_id, uid(4));
 
   const many = harness({
-    rpc: { fn_deposit_list: { rows: [{ id: "d1", ngay_coc: "2026-10-02T00:00:00Z" }, { id: "d2", ngay_coc: "2026-10-01T00:00:00Z" }], total: 2 } },
+    rpc: { fn_nv_app_dat_coc_list: { rows: [{ id: "d1", ngay_coc: "2026-10-02T00:00:00Z" }, { id: "d2", ngay_coc: "2026-10-01T00:00:00Z" }], total: 2 } },
   });
   const res = await many.deposits().get({ DuAn: [uid(4), uid(5)], Offset: 1, Limit: 3 });
-  const calls = many.calls.filter((c) => c.fn === "fn_deposit_list");
-  assert.deepEqual(plain(calls.map((c) => c.body.p_project_id)), [uid(4), uid(5)]);
-  assert.deepEqual(plain(calls.map((c) => [c.body.p_page, c.body.p_size])), [[1, 3], [1, 3]]);
+  const calls = many.calls.filter((c) => c.fn === "fn_nv_app_dat_coc_list");
+  assert.deepEqual(plain(calls.map((c) => c.body.p_du_an_id)), [uid(4), uid(5)]);
+  assert.deepEqual(plain(calls.map((c) => [c.body.p_trang, c.body.p_so_dong])), [[1, 3], [1, 3]]);
   assert.equal(res.totalRows, 4);
   assert.deepEqual(plain(res.data.map((d) => d.ID)), ["d1", "d2"], "same rows from both calls are de-duplicated");
-});
 
-test("schedule fallback like the web: company code filter, PBT only from PhaiThuPBT, raw rows when receipts fail", async () => {
-  const h = harness({
-    rpc: { fn_contract_payment_schedule: [] },
-    failRpc: { fn_cash_vouchers_by_pgc: true },
-    tables: { cloud_catalogs: [{ raw: { DotTT: 1, SoTien: 100, PhiBT: 9, DaThu: 30 } }] },
-  });
-  const res = await h.progress.getSchedule("pgc1");
-  const q = h.calls.find((c) => c.table === "cloud_catalogs").params;
-  assert.equal(q.ma_ctdk, "eq.beesky1");
-  assert.equal(res.rows[0].PhaiThuPBT, 0);
-  assert.equal(res.rows[0].DaThu, 30, "receipts failed → stored values shown as-is");
-  assert.equal(res.rows[0].ConLai, 70);
+  const none = harness({ rpc: { fn_nv_app_dat_coc_list: { rows: [{ id: "x" }], total: 1 } } });
+  const z = await none.deposits().get({ DuAn: "CODE-404" });
+  assert.equal(z.totalRows, 0);
+  assert.equal(none.calls.length, 0, "chọn dự án không tra được ⇒ không gọi (như web)");
 });

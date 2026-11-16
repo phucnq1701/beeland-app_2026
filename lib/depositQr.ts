@@ -40,8 +40,26 @@ export function depositQrAmount(row: { TienCoc?: unknown; DaThu?: unknown } | nu
   return remain > 0 ? Math.round(remain) : 0;
 }
 
-export function canCreateDepositQr(
-  row: { TenTT?: unknown; MaTT?: unknown; TienCoc?: unknown; DaThu?: unknown } | null | undefined
-): boolean {
+type QrRow = {
+  TenTT?: unknown;
+  MaTT?: unknown;
+  TienCoc?: unknown;
+  DaThu?: unknown;
+  /** Đang có yêu cầu đổi căn chờ duyệt (web isChangePending) */
+  DoiCanChoDuyet?: unknown;
+  /** Phiếu hoàn cọc gần nhất (web isRefundPending: CHO_DUYET) */
+  TrangThaiHoan?: unknown;
+  /** Quyền PAYMENT_QR form Đặt cọc (máy chủ trả trong chi tiết cọc) */
+  QuyenQR?: unknown;
+};
+
+/** Phiếu được lập QR: chờ duyệt, còn tiền cọc phải thu, không đang chờ duyệt đổi căn / hoàn cọc (web depositColumns disabled). */
+export function canCreateDepositQr(row: QrRow | null | undefined): boolean {
+  if (row?.DoiCanChoDuyet === true || row?.TrangThaiHoan === "CHO_DUYET") return false;
   return isPendingDeposit(row) && depositQrAmount(row) > 0;
+}
+
+/** Hiện nút / cho lập QR: như trên + có quyền PAYMENT_QR (web hidden: !can("PAYMENT_QR")) — thiếu thông tin quyền ⇒ không (fail-closed). */
+export function canOfferDepositQr(row: QrRow | null | undefined): boolean {
+  return row?.QuyenQR === true && canCreateDepositQr(row);
 }
