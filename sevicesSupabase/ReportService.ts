@@ -1,5 +1,3 @@
-import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyId } from "./cloudTenant";
 import { HopDongService } from "./HopDongService";
 import { rpcRows } from "./DatCocService";
 import { VoucherDetail, toVoucherDetail } from "../lib/reportDetail";
@@ -11,13 +9,16 @@ import {
   toProgressRow,
 } from "../lib/paymentMath";
 import { customerMapByIds } from "./customerLookup";
+import { callNv } from "@/services/nvApi";
+import { DuAnApi } from "@/services/SanPhamApi";
 
 /**
- * Báo cáo tính trên Cloud – như web (không gọi API cũ `api/bao-cao/*`):
- *  - Thu tiền:   fn_cash_voucher_list (CashVoucherService.listVouchers, loại THU)
- *  - Hợp đồng:   fn_contract_list (ContractListService) theo ngày ký
- *  - Tiến độ:    như DebtProgressReport mặc định (contractType GOC): luôn dựng từ vòng đời phiếu,
- *                chỉ hợp đồng gốc (listDebtSummaryFromLifecycle + listInstallmentsFromLifecycle, không đọc cloud_debts)
+ * Báo cáo — bộ API riêng app (fn_nv_app_*, lõi chung web), như web (không gọi API cũ `api/bao-cao/*`):
+ *  - Thu tiền:   fn_nv_app_phieu_thu_list (= fn_cash_voucher_list loại THU, hợp đồng gốc) + chi tiết fn_nv_app_phieu_thu_chi_tiet
+ *  - Hợp đồng:   HopDongService (fn_nv_app_hop_dong_list = fn_sale_contract_list) theo ngày ký
+ *  - Tiến độ:    như DebtProgressReport mặc định (hợp đồng gốc): phiếu gốc fn_nv_app_bao_cao_tien_do (máy chủ lọc phạm vi, nối trạng
+ *                thái / căn / dự án / số chứng từ) + đã thu fn_nv_app_da_thu_phieu (= fn_pgc_collected); đợt / quá hạn dựng phía máy
+ *                như web (lib/paymentMath). Khách: fn_nv_app_khach_hang_theo_id (che trường ở máy chủ).
  *  - Sắp đến hạn / quá hạn theo agingOf của DebtProgressReport.
  * Kỳ lọc: from/to dạng YYYY-MM-DD (giờ VN). projectId: uuid hoặc mã dự án.
  */
@@ -44,101 +45,46 @@ async function projectUuid(key: string | null | undefined): Promise<string | nul
   if (!k) return null;
   if (UUID_RE.test(k)) return k;
   try {
-    const r = await axiosApiSupabase.get("rest/v1/da_projects", {
-      params: { select: "id", ma_da_code: `eq.${k}`, limit: "1" },
-    });
-    return (Array.isArray(r.data) ? r.data[0]?.id : null) || null;
+    return await DuAnApi.resolveId(k);
   } catch {
     return null;
   }
 }
 
-/** Tra bảng theo danh sách id, chia nhóm 100 id/lần (URL không quá dài). Lỗi → ném ra để báo lỗi, không im lặng. */
-async function byIds(table: string, select: string, ids: string[]): Promise<Record<string, any>> {
-  const list = [...new Set(ids.filter(Boolean))];
-  const out: Record<string, any> = {};
-  for (let i = 0; i < list.length; i += 100) {
-    const chunk = list.slice(i, i + 100);
-    const r = await axiosApiSupabase.get(`rest/v1/${table}`, { params: { select, id: `in.(${chunk.join(",")})` } });
-    (Array.isArray(r.data) ? r.data : []).forEach((x: any) => (out[String(x.id)] = x));
-  }
-  return out;
-}
-
-/** Công nợ tổng hợp từng phiếu dựng từ bảng vòng đời (web listDebtSummaryFromLifecycle, không embed FK). */
+/** Công nợ tổng hợp từng phiếu gốc (web listDebtSummaryFromLifecycle) — 1 lời gọi máy chủ + đã thu + khách. */
 async function lifecycleParents(projectKey: string | null): Promise<any[]> {
-  const companyId = await getCompanyId();
-  if (!UUID_RE.test(str(companyId))) return [];
-  const res = await axiosApiSupabase.get("rest/v1/cloud_pgc_phieu_giucho", {
-    params: {
-      select:
-        "id,giai_doan,so_phieu_gc,san_pham_id,project_id,khach_hang_id,trang_thai_id,san_id,gia_tri_hd,gia_tri_hd_sau_ck,da_thu,phi_bao_tri,lich_thanh_toan,tt_hop_dong,payload,updated_at",
-      ma_ctdk_uid: `eq.${companyId}`,
-      deleted_at: "is.null",
-      giai_doan: "in.(DATCOC,HDGV,HDMB)",
-      // Web DebtProgressReport mặc định contractType "GOC": chỉ hợp đồng gốc (không gồm chuyển nhượng)
-      ma_hd_goc: "is.null",
-      order: "updated_at.desc",
-      limit: "5000",
-    },
-  });
-  const docs: any[] = Array.isArray(res.data) ? res.data : [];
-  const ids = docs.map((d) => String(d.id));
-
-  const [statuses, products, customers, depositsRes, contractsRes, paid] = await Promise.all([
-    byIds("cloud_catalogs", "id,item_code,item_name", docs.map((d) => str(d.trang_thai_id))),
-    byIds("bds_products", "id,ma_sp,ky_hieu,ma_da", docs.map((d) => str(d.san_pham_id))),
-    // Khách qua RPC fn_customer_get_by_ids (cloud_customers đã khoá đọc thẳng từ 2026-10-20; web
-    // listDebtSummaryFromLifecycle → withCustomers). Lỗi ⇒ map rỗng: báo cáo vẫn hiện, chỉ thiếu tên khách.
-    customerMapByIds(docs.map((d) => d.khach_hang_id)),
-    byPgc("cloud_deposits", "phieu_giu_cho_id,so_phieu", ids),
-    byPgc("cloud_contracts", "phieu_giu_cho_id,so_hdmb", ids),
-    collectedByPgc(ids),
-  ]);
-  // Dự án lấy theo phiếu, thiếu thì theo sản phẩm (web enrichProjectFromProducts)
-  const projects = await byIds(
-    "da_projects",
-    "id,ten_da,ma_da_code",
-    docs.map((d) => str(d.project_id || products[str(d.san_pham_id)]?.ma_da))
-  );
-
-  // Số chứng từ: số phiếu cọc, số hợp đồng ghi đè sau (như web)
-  const docNo = new Map<string, string>();
-  depositsRes.forEach((x: any) => {
-    if (x.phieu_giu_cho_id && x.so_phieu) docNo.set(String(x.phieu_giu_cho_id), x.so_phieu);
-  });
-  contractsRes.forEach((x: any) => {
-    if (x.phieu_giu_cho_id && x.so_hdmb) docNo.set(String(x.phieu_giu_cho_id), x.so_hdmb);
-  });
-
   const projectUid = projectKey ? await projectUuid(projectKey) : null;
+  if (projectKey && !projectUid) return [];
+  const docs = await callNv<any[]>("fn_nv_app_bao_cao_tien_do", { p_du_an_id: projectUid });
+  const list: any[] = Array.isArray(docs) ? docs : [];
+  const [customers, paid] = await Promise.all([
+    // Lỗi tra khách ⇒ map rỗng: báo cáo vẫn hiện, chỉ thiếu tên khách (như trước)
+    customerMapByIds(list.map((d) => d.khach_hang_id)),
+    collectedByPgc(list.map((d) => String(d.id))),
+  ]);
 
-  return docs
+  return list
     .map((r) => {
-      const tt = statuses[str(r.trang_thai_id)] || {};
-      const sp = products[str(r.san_pham_id)] || {};
-      const pid = str(r.project_id || sp.ma_da);
-      const da = projects[pid] || {};
       const kh = customers.get(str(r.khach_hang_id).toLowerCase()) || {};
-      const payload = r.payload || {};
-      const hd = r.tt_hop_dong || payload.TTHopDong || {};
+      const hd = r.tt_hop_dong || r.payload_tt_hop_dong || {};
       const giaTri = n(r.gia_tri_hd_sau_ck) || n(r.gia_tri_hd);
-      const soHD = docNo.get(String(r.id)) || r.so_phieu_gc || String(r.id);
+      // Số chứng từ: số hợp đồng > số phiếu cọc > số phiếu giữ chỗ (như web)
+      const soHD = r.so_hdmb || r.so_phieu_coc || r.so_phieu_gc || String(r.id);
       // Máy chủ có khoá ⇒ đúng số máy chủ (kể cả 0); không có khoá mới dùng `da_thu` lưu trên phiếu (web)
       const p = paid.get(String(r.id));
       const daThu = p ? p.daThu : n(r.da_thu);
       const tenTT =
-        tt.item_name || (r.giai_doan === "HDMB" ? "Hợp đồng mua bán" : r.giai_doan === "HDGV" ? "HĐ Góp vốn" : "Đặt cọc");
+        r.tt_name || (r.giai_doan === "HDMB" ? "Hợp đồng mua bán" : r.giai_doan === "HDGV" ? "HĐ Góp vốn" : "Đặt cọc");
       return {
         // Bỏ phiếu huỷ / thanh lý và HĐ gốc đã chuyển nhượng (D4-10, cờ máy chủ — web isTransferred)
-        _dropped: isDroppedStatus(tt.item_name || "") || p?.daChuyenNhuong === true,
+        _dropped: isDroppedStatus(r.tt_name || "") || p?.daChuyenNhuong === true,
         MaPGC: r.id,
         GiaiDoan: r.giai_doan,
         SoHD: soHD,
-        MaDA: da.ma_da_code ?? pid ?? null,
-        ProjectId: pid || null,
-        TenDA: da.ten_da ?? null,
-        KyHieu: sp.ky_hieu ?? null,
+        MaDA: r.ma_da_code ?? r.project_id ?? null,
+        ProjectId: r.project_id || null,
+        TenDA: r.ten_da ?? null,
+        KyHieu: r.ky_hieu ?? null,
         HoTenKH: kh.ten_kh ?? kh.ten_cong_ty ?? null,
         DiDong: kh.dien_thoai ?? null,
         TenTT: tenTT,
@@ -150,29 +96,15 @@ async function lifecycleParents(projectKey: string | null): Promise<any[]> {
         PhiBaoTri: Math.round(n(r.phi_bao_tri)),
         DaThuPBT: Math.round(p?.daThuPBT || 0),
         LichThanhToan:
-          (Array.isArray(r.lich_thanh_toan) && r.lich_thanh_toan.length ? r.lich_thanh_toan : null) ||
           (Array.isArray(hd.LichThanhToan) ? hd.LichThanhToan : null) ||
-          (Array.isArray(payload.LichThanhToan) ? payload.LichThanhToan : []),
+          (Array.isArray(r.payload_lich_thanh_toan) ? r.payload_lich_thanh_toan : []),
       };
     })
-    .filter((r) => !r._dropped)
-    .filter((r) => !projectKey || r.ProjectId === projectUid || String(r.MaDA ?? "") === projectKey);
-}
-
-/** Dòng bảng con theo uuid phiếu giữ chỗ (chia nhóm 100). */
-async function byPgc(table: string, select: string, pgcIds: string[]): Promise<any[]> {
-  const out: any[] = [];
-  for (let i = 0; i < pgcIds.length; i += 100) {
-    const r = await axiosApiSupabase.get(`rest/v1/${table}`, {
-      params: { select, phieu_giu_cho_id: `in.(${pgcIds.slice(i, i + 100).join(",")})` },
-    });
-    out.push(...(Array.isArray(r.data) ? r.data : []));
-  }
-  return out;
+    .filter((r) => !r._dropped);
 }
 
 /**
- * Đã thu theo phiếu giữ chỗ — RPC fn_pgc_collected (web AccountingCloudService.sumReceiptsByPgc). Bảng
+ * Đã thu theo phiếu giữ chỗ — fn_nv_app_da_thu_phieu (= fn_pgc_collected, web AccountingCloudService.sumReceiptsByPgc). Bảng
  * cloud_cash_voucher_details đã khoá đọc thẳng nên không cộng dòng phiếu thu ở app nữa. Máy chủ tính cả bí danh HĐ / cọc,
  * phần kế thừa HĐ gốc, bỏ tiền lãi; HĐ gốc đã chuyển nhượng ⇒ `daChuyenNhuong` (tiền = 0). ≤ 20 000 phiếu / lần.
  * Lỗi ném ra (báo lỗi, không im lặng).
@@ -184,8 +116,8 @@ async function collectedByPgc(
   const ids = [...new Set(pgcIds.map((v) => str(v).trim()).filter((v) => UUID_RE.test(v)))];
   for (let i = 0; i < ids.length; i += 20000) {
     try {
-      const r = await axiosApiSupabase.post("rest/v1/rpc/fn_pgc_collected", { p_pgc_ids: ids.slice(i, i + 20000) });
-      Object.entries((r.data as Record<string, any>) || {}).forEach(([id, v]) => {
+      const data = await callNv<Record<string, any>>("fn_nv_app_da_thu_phieu", { p_pgc_ids: ids.slice(i, i + 20000) });
+      Object.entries(data || {}).forEach(([id, v]) => {
         map.set(String(id), {
           daThu: Math.round(n(v?.da_thu)),
           daThuPBT: Math.round(n(v?.da_thu_pbt)),
@@ -193,12 +125,14 @@ async function collectedByPgc(
         });
       });
     } catch (e) {
-      console.log("ERROR fn_pgc_collected:", e);
+      console.log("ERROR fn_nv_app_da_thu_phieu:", e);
       throw e;
     }
   }
   return map;
 }
+
+const OVERDUE = new Set(["d30", "d60", "d90", "d90p"]);
 
 const inRange = (date: any, f: ReportFilter) => {
   // Đợt chưa có ngày: web giữ lại (không lọc được theo ngày)
@@ -215,19 +149,15 @@ export const ReportService = {
     try {
       const pid = await projectUuid(f.projectId);
       if (f.projectId && !pid) return { rows: [], total: 0 };
-      const res = await axiosApiSupabase.post("rest/v1/rpc/fn_cash_voucher_list", {
-        p_loai: "THU",
-        p_project_ids: pid ? [pid] : null,
+      // Như màn Phiếu thu web: loại THU, mặc định hợp đồng gốc (máy chủ app cố định)
+      const res = await callNv<any>("fn_nv_app_phieu_thu_list", {
+        p_du_an_id: pid,
         p_tu_ngay: f.from || null,
         p_den_ngay: f.to || null,
-        p_keyword: null,
-        // Như màn Phiếu thu web: mặc định hợp đồng gốc
-        p_contract_type: "GOC",
-        p_company_ids: null,
-        p_page_index: 1,
-        p_page_size: 5000,
+        p_trang: 1,
+        p_so_dong: 5000,
       });
-      const { rows } = rpcRows(res.data);
+      const { rows } = rpcRows(res);
       const list: ReceiptRow[] = rows.map((r: any) => ({
         id: str(r.id),
         soPhieu: str(r.so_phieu),
@@ -278,7 +208,8 @@ export const ReportService = {
         ngayTT: x.NgayTT,
       }));
       const rows = source.map((s) => s.row);
-      const overdue = rows.filter((r) => agingOf(r).startsWith("d"));
+      // Quá hạn = d30 / d60 / d90 / d90p ("done" = đã tất toán cũng bắt đầu bằng "d" — trước đây lọt vào danh sách quá hạn)
+      const overdue = rows.filter((r) => OVERDUE.has(agingOf(r)));
       const upcoming = source
         .filter((s) => agingOf(s.row) === "current" && inRange(s.ngayTT, f))
         .map((s) => s.row);
@@ -295,13 +226,12 @@ export const ReportService = {
    */
   getVoucher: async (id: string): Promise<{ data: VoucherDetail | null; error?: boolean }> => {
     try {
-      const res = await axiosApiSupabase.post("rest/v1/rpc/fn_cash_voucher_get_by_id", { p_id: String(id) });
-      // PostgREST: jsonb trả thẳng object; phòng trường hợp bọc mảng / bọc theo tên hàm
-      const raw = Array.isArray(res.data) ? res.data[0] : res.data;
+      const data = await callNv<any>("fn_nv_app_phieu_thu_chi_tiet", { p_id: String(id) });
+      const raw = Array.isArray(data) ? data[0] : data;
       const json = raw?.fn_cash_voucher_get_by_id ?? raw;
       return { data: toVoucherDetail(json) };
     } catch (e) {
-      console.log("ERROR fn_cash_voucher_get_by_id:", e);
+      console.log("ERROR fn_nv_app_phieu_thu_chi_tiet:", e);
       return { data: null, error: true };
     }
   },

@@ -2,7 +2,7 @@
 // Dịch vụ cọc / hợp đồng / báo cáo gọi đúng hàm máy chủ như web:
 //  cọc / HĐ / lịch TT / phiếu thu theo phiếu ⇒ bộ API riêng app (fn_nv_app_* bọc fn_deposit_list, fn_sale_contract_list,
 //  fn_contract_payment_schedule, fn_cash_vouchers_by_pgc — công ty từ phiên ở máy chủ);
-//  báo cáo (ReportService – còn ở luồng L3) vẫn fn_cash_voucher_list / vòng đời phiếu.
+//  báo cáo (ReportService, L3): fn_nv_app_phieu_thu_list / bao_cao_tien_do / da_thu_phieu / phieu_thu_chi_tiet.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -77,6 +77,7 @@ function harness({ rpc = {}, tables = {}, failRpc = {}, typeAccount = "SYSTEM", 
     "../lib/paymentMath": math,
     "../lib/depositQr": depositQr,
     "../lib/listRpc": listRpc,
+    "../lib/reportDetail": run("lib/reportDetail.ts", {}),
     "./ProjectService": { ProjectService: { getProjects: async () => ({ data: scope }) } },
     "@react-native-async-storage/async-storage": { default: { getItem: async () => null } },
   };
@@ -233,80 +234,68 @@ test("status filter: fn_nv_app_trang_thai_list (màu theo công ty như web), b�
   assert.equal(h.calls[1].fn, "fn_nv_app_trang_thai_list");
 });
 
-test("receipt report: fn_cash_voucher_list THU for the period", async () => {
+test("receipt report: fn_nv_app_phieu_thu_list (= fn_cash_voucher_list THU, GOC fixed on the server) for the period", async () => {
   const h = harness({
-    rpc: { fn_cash_voucher_list: { rows: [{ id: "v1", so_phieu: "PT-1", ngay_phieu: "2026-09-02", so_tien: 500, khach: { ten_kh: "Khách" }, du_an: { ten_da: "DA" } }], total_count: 1 } },
+    rpc: { fn_nv_app_phieu_thu_list: { rows: [{ id: "v1", so_phieu: "PT-1", ngay_phieu: "2026-09-02", so_tien: 500, khach: { ten_kh: "Khách" }, du_an: { ten_da: "DA" } }], total_count: 1 } },
   });
   const res = await h.reports().getReceipts({ from: "2026-09-01", to: "2026-09-30", projectId: uid(4) });
-  const body = h.calls.find((c) => c.fn === "fn_cash_voucher_list").body;
-  assert.equal(body.p_loai, "THU");
-  assert.equal(body.p_tu_ngay, "2026-09-01");
-  assert.equal(body.p_den_ngay, "2026-09-30");
-  assert.deepEqual(plain(body.p_project_ids), [uid(4)]);
+  const body = h.calls.find((c) => c.fn === "fn_nv_app_phieu_thu_list").body;
+  assert.deepEqual(plain(body), { p_du_an_id: uid(4), p_tu_ngay: "2026-09-01", p_den_ngay: "2026-09-30", p_trang: 1, p_so_dong: 5000 });
   assert.equal(res.total, 500);
   assert.equal(res.rows[0].tenKH, "Khách");
+  assert.equal(h.calls.some((c) => c.method === "get" || c.method === "rpc"), false, "không gọi Supabase");
+  const unknown = await h.reports().getReceipts({ projectId: "CODE-X" });
+  assert.equal(unknown.rows.length, 0, "mã dự án không tra được ⇒ rỗng");
 });
 
-test("progress report: always live from the sales lifecycle, original contracts only (web default GOC)", async () => {
-  const P1 = uid(101), P2 = uid(102), P3 = uid(103), K1 = uid(201);
+test("progress report: 1 call fn_nv_app_bao_cao_tien_do (original contracts, server scope) + paid fn_nv_app_da_thu_phieu + customers", async () => {
+  const P1 = uid(101), P2 = uid(102), P3 = uid(103), P4 = uid(104), K1 = uid(201);
   const life = harness({
-    tables: {
-      cloud_debts: [{ ma_cong_no: "TIENDO:1", raw: { SoHDMB: "STALE" } }],
-      cloud_pgc_phieu_giucho: [
-        { id: P1, giai_doan: "HDMB", so_phieu_gc: "BK-1", san_pham_id: "s1", project_id: "d1", khach_hang_id: K1, trang_thai_id: "t1",
-          gia_tri_hd: 300, da_thu: 0, lich_thanh_toan: [{ DotTT: 1, SoTien: 100, NgayTT: "2020-01-01" }, { DotTT: 2, SoTien: 200, NgayTT: "2999-01-01" }, { DotTT: 3, SoTien: 10 }] },
-        { id: P2, giai_doan: "DATCOC", trang_thai_id: "t2", lich_thanh_toan: [{ DotTT: 1, SoTien: 50, NgayTT: "2020-01-01" }] },
-        // HĐ gốc đã chuyển nhượng (cờ máy chủ) ⇒ bỏ như web
-        { id: P3, giai_doan: "HDMB", trang_thai_id: "t1", lich_thanh_toan: [{ DotTT: 1, SoTien: 70, NgayTT: "2020-01-01" }] },
-      ],
-      cloud_catalogs: [{ id: "t1", item_name: "Đã ký" }, { id: "t2", item_name: "Đã hủy" }],
-      cloud_contracts: [{ phieu_giu_cho_id: P1, so_hdmb: "HD-1" }],
-      cloud_deposits: [],
-      bds_products: [{ id: "s1", ky_hieu: "A-1" }],
-      da_projects: [{ id: "d1", ten_da: "Dự án A" }],
-    },
     rpc: {
-      // Đã thu theo phiếu: máy chủ (bảng cloud_cash_voucher_details đã khoá đọc thẳng)
-      fn_pgc_collected: { [P1]: { da_thu: 60, da_thu_pbt: 0 }, [P3]: { da_thu: 0, da_thu_pbt: 0, da_chuyen_nhuong: true } },
-      // Khách: RPC (bảng cloud_customers đã khoá đọc thẳng)
+      fn_nv_app_bao_cao_tien_do: () => [
+        { id: P1, giai_doan: "HDMB", so_phieu_gc: "BK-1", so_hdmb: "HD-1", so_phieu_coc: "DC-1", san_pham_id: "s1", ky_hieu: "A-1", project_id: "d1",
+          ten_da: "Dự án A", khach_hang_id: K1, trang_thai_id: "t1", tt_name: "Đã ký", gia_tri_hd: 300, da_thu: 0,
+          tt_hop_dong: { LichThanhToan: [{ DotTT: 1, SoTien: 100, NgayTT: "2020-01-01" }, { DotTT: 2, SoTien: 200, NgayTT: "2999-01-01" }, { DotTT: 3, SoTien: 10 }] } },
+        { id: P2, giai_doan: "DATCOC", trang_thai_id: "t2", tt_name: "Đã hủy", payload_lich_thanh_toan: [{ DotTT: 1, SoTien: 50, NgayTT: "2020-01-01" }] },
+        // HĐ gốc đã chuyển nhượng (cờ máy chủ) ⇒ bỏ như web
+        { id: P3, giai_doan: "HDMB", trang_thai_id: "t1", tt_name: "Đã ký", payload_lich_thanh_toan: [{ DotTT: 1, SoTien: 70, NgayTT: "2020-01-01" }] },
+        // Đợt quá ngày nhưng đã trả đủ ⇒ "done", không phải quá hạn
+        { id: P4, giai_doan: "HDMB", trang_thai_id: "t1", tt_name: "Đã ký", gia_tri_hd: 40, payload_lich_thanh_toan: [{ DotTT: 1, SoTien: 40, NgayTT: "2020-01-01" }] },
+      ],
+      fn_nv_app_da_thu_phieu: { [P1]: { da_thu: 60, da_thu_pbt: 0 }, [P3]: { da_thu: 0, da_thu_pbt: 0, da_chuyen_nhuong: true }, [P4]: { da_thu: 40, da_thu_pbt: 0 } },
       fn_nv_app_khach_hang_theo_id: (body) => (body.p_ids || []).includes(K1) ? [{ id: K1, ten_kh: "Khách" }] : [],
     },
   });
   const b = await life.reports().getProgress({});
-  assert.equal(life.calls.some((c) => c.table === "cloud_debts"), false, "the stale mirror is not used");
-  assert.equal(life.calls.some((c) => c.table === "cloud_customers" || c.table === "cloud_cash_voucher_details"), false,
-    "locked tables are not read directly");
-  assert.deepEqual(plain(life.calls.find((c) => c.fn === "fn_pgc_collected").body.p_pgc_ids), [P1, P2, P3]);
-  const pq = life.calls.find((c) => c.table === "cloud_pgc_phieu_giucho").params;
-  assert.equal(pq.ma_ctdk_uid, `eq.${tenant}`);
-  assert.equal(pq.deleted_at, "is.null");
-  assert.equal(pq.giai_doan, "in.(DATCOC,HDGV,HDMB)");
-  assert.equal(pq.ma_hd_goc, "is.null", "original contracts only");
-  assert.equal(b.rows.length, 3, "cancelled doc and transferred original dropped");
+  assert.equal(life.calls.some((c) => c.method === "get" || c.method === "rpc"), false, "không đọc thẳng bảng / Supabase");
+  assert.deepEqual(plain(life.calls.find((c) => c.fn === "fn_nv_app_bao_cao_tien_do").body), { p_du_an_id: null });
+  assert.deepEqual(plain(life.calls.find((c) => c.fn === "fn_nv_app_da_thu_phieu").body.p_pgc_ids), [P1, P2, P3, P4]);
+  assert.equal(b.rows.length, 4, "cancelled doc and transferred original dropped");
   const first = b.rows.find((r) => r.ngayDenHan === "2020-01-01");
   assert.deepEqual([first.soHD, first.tenDA, first.kyHieu, first.hoTenKH, first.daThu, first.conLai], ["HD-1", "Dự án A", "A-1", "Khách", 60, 40]);
-  assert.equal(b.overdue.length, 1);
+  assert.equal(b.overdue.length, 1, "paid-off installment past its date is not overdue");
   const due = await life.reports().getProgress({ from: "2998-12-01", to: "2999-12-31" });
   assert.deepEqual(plain(due.upcoming.map((r) => r.conLai).sort((x, y) => x - y)), [10, 200], "undated installments stay like the web");
+  await life.reports().getProgress({ projectId: uid(5) });
+  assert.equal(life.calls.filter((c) => c.fn === "fn_nv_app_bao_cao_tien_do").pop().body.p_du_an_id, uid(5));
 });
 
-test("progress report fails loudly when a lookup fails (no silent wrong figures)", async () => {
+test("progress report fails loudly when the paid lookup fails (no silent wrong figures)", async () => {
   const h = harness({
-    tables: {
-      cloud_pgc_phieu_giucho: [{ id: "p1", giai_doan: "HDMB", trang_thai_id: "t1", lich_thanh_toan: [{ DotTT: 1, SoTien: 1, NgayTT: "2020-01-01" }] }],
-      cloud_catalogs: () => {
-        throw new Error("url too long");
-      },
-    },
+    rpc: { fn_nv_app_bao_cao_tien_do: () => [{ id: uid(1), giai_doan: "HDMB", tt_name: "Đã ký", payload_lich_thanh_toan: [{ DotTT: 1, SoTien: 1, NgayTT: "2020-01-01" }] }] },
+    failRpc: { fn_nv_app_da_thu_phieu: true },
   });
   const res = await h.reports().getProgress({});
   assert.equal(res.error, true);
 });
 
-test("receipt report counts original contracts only (web Phiếu thu default GOC)", async () => {
-  const h = harness({ rpc: { fn_cash_voucher_list: { rows: [], total_count: 0 } } });
-  await h.reports().getReceipts({ from: "2026-09-01", to: "2026-09-30" });
-  assert.equal(h.calls.find((c) => c.fn === "fn_cash_voucher_list").body.p_contract_type, "GOC");
+test("voucher detail: fn_nv_app_phieu_thu_chi_tiet (= fn_cash_voucher_get_by_id)", async () => {
+  const h = harness({ rpc: { fn_nv_app_phieu_thu_chi_tiet: { id: "v1", so_phieu: "PT-1", so_tien: 500, chi_tiet: [] } } });
+  const res = await h.reports().getVoucher("v1");
+  assert.deepEqual(plain(h.calls[0].body), { p_id: "v1" });
+  assert.equal(res.error, undefined);
+  const bad = await harness({ failRpc: { fn_nv_app_phieu_thu_chi_tiet: true } }).reports().getVoucher("v1");
+  assert.equal(bad.error, true);
 });
 
 test("deposits: project scope is enforced by the server; one project → p_du_an_id, several → one call each, merged; unknown code → empty", async () => {

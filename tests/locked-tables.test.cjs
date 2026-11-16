@@ -26,7 +26,7 @@ test("document services do not read locked tables directly or embed them", () =>
 
 // Đã chuyển hẳn sang bộ API riêng app (api/app-nhan-vien/fn_nv_app_*): không còn gọi Supabase (rest / functions, axios Supabase).
 // ("/storage/v1/" chỉ còn trong hàm đổi URL ký nội bộ → địa chỉ công khai, không phải lời gọi)
-const MIGRATED = ["BookingService.ts", "CustomerService.ts", "CustomerRulesService.ts", "CustomerRequestService.ts", "DatCocService.ts", "HopDongService.ts", "PaymentGatewayService.ts",
+const MIGRATED = ["BookingService.ts", "CustomerService.ts", "CustomerRulesService.ts", "CustomerRequestService.ts", "ReportService.ts", "DatCocService.ts", "HopDongService.ts", "PaymentGatewayService.ts",
   "PaymentProgressService.ts", "PriceSheetService.ts", "ProductService.ts", "ProjectService.ts", "customerLookup.ts"];
 
 test("migrated services use only the app's own API (no Supabase rest / functions / storage)", () => {
