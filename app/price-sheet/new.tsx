@@ -1,14 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Check, FileText, Gift, RefreshCw } from "lucide-react-native";
+import { Check, FileText, Search, User } from "lucide-react-native";
 
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
-import { CustomerPicker } from "@/components/priceSheet/CustomerPicker";
-import { InfoCard, money, PriceHero, ScheduleList } from "@/components/priceSheet/PriceSheetBlocks";
 import { ProductPicker } from "@/components/priceSheet/ProductPicker";
-import { RoundEditor } from "@/components/priceSheet/RoundEditor";
-import { usePriceSheetDraft } from "@/components/priceSheet/usePriceSheetDraft";
+import { InfoCard, money, PriceHero, ScheduleList } from "@/components/priceSheet/PriceSheetBlocks";
+import { useWebPriceSheet } from "@/components/priceSheet/useWebPriceSheet";
+import { WebRoundCard } from "@/components/priceSheet/WebRoundCard";
 import {
   AppHeader,
   BottomActionBar,
@@ -20,28 +19,35 @@ import {
   MoneyText,
   ProgressSteps,
   Screen,
+  SegmentedControl,
   SelectField,
   SkeletonDetail,
   Text,
   TextField,
-  useToast,
 } from "@/components/ui";
-import { formatArea, formatNumberVN, parseVND } from "@/lib/format";
-import { hapticError, hapticSuccess } from "@/lib/haptics";
-import { dueDateFor } from "@/lib/priceSheetSchedule";
-import { colors, elevation, radius, space } from "@/theme";
+import { formatArea, maskPhone } from "@/lib/format";
+import { hapticError } from "@/lib/haptics";
 import { PRICE_SHEET_CREATE_LOCKED } from "@/lib/featureConfig";
+import { applyPicked } from "@/lib/web/components/Products/ContractForm/discountOptions";
+import { paymentScheduleOptions, scheduleOutOfUnitFund } from "@/lib/web/components/Products/ContractForm/paymentScheduleOptions";
+import { policyGateReason } from "@/lib/web/components/Products/ContractForm/disabledReasons";
+import { onSalesCompanyChange } from "@/lib/web/components/Products/ContractForm/useSalesPolicyGate";
+import { policyOutOfUnitFund, policyPickOptions, POLICY_OUT_OF_UNIT_FUND_WARNING } from "@/lib/web/components/Sales/salesConfig/expiryPickOptions";
+import { priceListOptionsForPolicy } from "@/lib/web/components/Sales/salesConfig/policyScope";
+import { policyExpiryDate } from "@/lib/web/lib/priceSheetExpiry";
+import { isLowRiseProduct } from "@/lib/web/utils/productType";
+import { toast as webToast } from "@/lib/web/_shims/sonner";
+import { colors, radius, space } from "@/theme";
 
-const STEPS = ["Căn hộ", "Chính sách", "Thanh toán", "Khách & quà"] as const;
+const STEPS = ["Căn & chính sách", "Lịch thanh toán", "Khách hàng"] as const;
 const NONE = "__none__";
 
 /**
- * Lập / sửa phiếu tính giá (rút gọn từ form 5 bước của web – beeland/src/components/PriceSheet/PriceSheetForm.tsx):
- * căn + bảng giá → chính sách + vòng chiết khấu → tiến độ thanh toán → khách (không bắt buộc) + quà tặng → lưu.
- * Không có trên app: người đồng sở hữu, ưu đãi lãi suất, 360 khách hàng, sửa tay dòng lịch, tạo từ chứng từ.
- * Params: `productId` (căn có sẵn) hoặc `sheetId` (sửa phiếu nháp đơn giản).
+ * Lập / sửa phiếu tính giá trên app — luồng app (3 bước), logic ĐÚNG form web: mọi dữ liệu / thao tác gọi vào form web chép nguyên văn
+ * (useWebPriceSheet ⇒ lib/web useWebPriceSheetForm): quỹ căn ⇒ bảng giá, công ty bán hàng, chính sách (trước bảng giá), tùy chọn chiết
+ * khấu theo điều kiện / phân bổ / tồn kho, tiến độ, ngày tính / ngày hết hạn (≤ hạn chính sách), tính giá, lưu (máy chủ cấp số phiếu).
+ * Duyệt phiếu vẫn trên web. Params: `productId` (lập cho căn) hoặc `sheetId` (sửa).
  */
-/** Lập / sửa phiếu tạm khoá trên app (lib/featureConfig PRICE_SHEET_CREATE_LOCKED) — lối vào cũ / liên kết ⇒ báo lập trên web. */
 export default function PriceSheetEditorRoute() {
   const router = useRouter();
   if (PRICE_SHEET_CREATE_LOCKED) {
@@ -58,124 +64,144 @@ export default function PriceSheetEditorRoute() {
       </Screen>
     );
   }
-  return <PriceSheetEditorScreen />;
+  return <PriceSheetEditorEntry />;
 }
+
+/** Không có căn / phiếu (nút "+" danh sách) ⇒ chọn căn trước (như web PriceSheetProductPicker), rồi mở form */
+function PriceSheetEditorEntry() {
+  const router = useRouter();
+  const { productId, sheetId } = useLocalSearchParams<{ productId?: string; sheetId?: string }>();
+  if (productId || sheetId) return <PriceSheetEditorScreen />;
+  return (
+    <Screen header={<AppHeader variant="soft" title="Lập phiếu tính giá" />} padded={false}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={styles.body}>
+        <ProductPicker onPick={(id) => router.replace({ pathname: "/price-sheet/new", params: { productId: String(id) } })} />
+      </View>
+    </Screen>
+  );
+}
+
+/** Ô chọn của web (value / label / disabled) ⇒ SelectField app: bỏ mục khoá (trừ mục đang chọn), thêm mục "không chọn" khi cho xoá */
+function toSelect(opts: any[] | undefined, current: unknown, noneLabel?: string) {
+  const cur = current == null ? "" : String(current);
+  const list = (opts || [])
+    .filter((o: any) => !o?.disabled || String(o?.value) === cur)
+    .map((o: any) => ({ value: String(o.value), label: String(o.label ?? o.value), description: o.description || undefined }));
+  return noneLabel ? [{ value: NONE, label: noneLabel }, ...list] : list;
+}
+
+const toDate = (v: any): Date | null => {
+  if (!v) return null;
+  const d = v instanceof Date ? v : new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+};
+const ymd = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 function PriceSheetEditorScreen() {
   const router = useRouter();
-  const toast = useToast();
   const { productId, sheetId } = useLocalSearchParams<{ productId?: string; sheetId?: string }>();
-  const d = usePriceSheetDraft();
+  const { ready, error, form: r, editingSheet, closed } = useWebPriceSheet({
+    productId: productId ? String(productId) : null,
+    sheetId: sheetId ? String(sheetId) : null,
+  });
   const [step, setStep] = useState(0);
-  const [initError, setInitError] = useState<string | null>(null);
-  const [initializing, setInitializing] = useState(!!(productId || sheetId));
-  const [saving, setSaving] = useState(false);
-  const [mismatch, setMismatch] = useState(false);
-  const savingRef = useRef(false);
-  const checkedMismatch = useRef(false);
+  const [search, setSearch] = useState("");
   const isEdit = !!sheetId;
+  const navigated = useRef(false);
 
-  const start = async (fn: () => Promise<any>) => {
-    setInitError(null);
-    setInitializing(true);
-    try {
-      await fn();
-    } catch (e: any) {
-      setInitError(e?.message || "Không tải được dữ liệu");
-    } finally {
-      setInitializing(false);
-    }
-  };
-
-  const startNewAndWarn = async (id: string) => {
-    const { warning } = await d.startNew(id);
-    if (warning) toast.show({ type: "error", message: warning });
-  };
-
+  // Form đóng sau khi lưu (web onOpenChange(false)) ⇒ sang chi tiết phiếu vừa lưu / quay lại
   useEffect(() => {
-    if (sheetId) {
-      void start(async () => {
-        const { blocked } = await d.startEdit(String(sheetId));
-        if (blocked) throw new Error(blocked);
-      });
-    } else if (productId) {
-      void start(() => startNewAndWarn(String(productId)));
-    }
+    if (!closed || navigated.current) return;
+    navigated.current = true;
+    const id = closed.saved?.id;
+    if (id && !isEdit) router.replace({ pathname: "/price-sheet/[id]", params: { id: String(id) } });
+    else router.back();
+  }, [closed, isEdit, router]);
+
+  // Tìm khách: đúng ô tìm của web (effect web tự gọi CustomerService.getList theo customerSearch + loại khách)
+  useEffect(() => {
+    const t = setTimeout(() => r?.setCustomerSearch?.(search.trim()), 300);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productId, sheetId]);
+  }, [search]);
 
-  // Sửa phiếu: tính lại lệch số đã lưu (cấu hình / chính sách đã đổi) → báo để người dùng kiểm tra
-  useEffect(() => {
-    if (!isEdit || checkedMismatch.current || !d.calc || !d.editing || d.busy) return;
-    checkedMismatch.current = true;
-    const saved = Number(d.editing.snapshot?.totals?.totalContractValue ?? d.editing.base_price) || 0;
-    setMismatch(Math.abs(saved - (Number(d.calc.tongGiaTriHD) || 0)) > 1);
-  }, [isEdit, d.calc, d.editing, d.busy]);
+  const fd = r?.formData || {};
+  const product = r?.product;
+  const isLow = !!r && isLowRiseProduct({ loaiSP: fd.loaiSP, product, maSP: fd.maSanPham });
+  const c = r?.calculations || {};
+  const total = isLow ? c.tongGiaTriHDMB : c.tongGiaTriHD;
+  const listed = Number(fd.rawTongGomPBT) || Number(fd.rawTongGiaTriHDMB) || 0;
+  const policyRow = r?.selectedPolicyRow;
+  const gate = r?.gate || {};
 
-  const f = d.form;
-  const c = d.calc;
-  const isLow = !!f?.isLowRise;
-  const total = c ? (isLow ? c.tongGiaTriHDMB : c.tongGiaTriHD) : 0;
-  const listed = f ? Number(f.rawTongGomPBT) || Number(f.rawTongGiaTriHDMB) || 0 : 0;
-
-  const priceListOptions = useMemo(
-    () => [
-      { value: NONE, label: "Không theo bảng giá (giá sản phẩm)" },
-      ...d.config.priceLists.map((b: any) => ({ value: String(b.id), label: b.name || "Bảng giá" })),
-    ],
-    [d.config.priceLists]
-  );
   const policyOptions = useMemo(
-    () => [{ value: NONE, label: "Không áp dụng chính sách" }, ...d.config.policies.map((p) => ({ value: p.id, label: p.name }))],
-    [d.config.policies]
+    () =>
+      r
+        ? toSelect(
+            policyPickOptions(r.chinhSachBH, {
+              isLow,
+              ngay: fd.ngayKy,
+              selectedId: r.selectedPolicyId,
+              allowIds: r.exceptionIds?.CSBH,
+              quyCanId: r.unitFund?.quyCanId,
+              toaId: r.criteria?.toaId,
+            }),
+            r.selectedPolicyId,
+            "-- Không chọn chính sách --"
+          )
+        : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [r?.chinhSachBH, isLow, fd.ngayKy, r?.selectedPolicyId, r?.exceptionIds, r?.unitFund?.quyCanId, r?.criteria?.toaId]
+  );
+  const priceListOptions = useMemo(
+    () =>
+      r
+        ? toSelect(
+            priceListOptionsForPolicy(
+              r.unitFund?.priceListOptions,
+              (r.chinhSachBH || []).find(
+                (x: any) => String(x?.ID ?? x?.id ?? "").toLowerCase() === String(r.selectedPolicyId ?? "").toLowerCase()
+              ),
+              r.selectedPriceListId
+            ),
+            r.selectedPriceListId,
+            "-- Không theo bảng giá --"
+          )
+        : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [r?.unitFund?.priceListOptions, r?.chinhSachBH, r?.selectedPolicyId, r?.selectedPriceListId]
   );
   const scheduleOptions = useMemo(
-    () => [{ value: NONE, label: "Chưa chọn" }, ...d.config.schedules.map((s) => ({ value: s.id, label: s.name }))],
-    [d.config.schedules]
+    () =>
+      r
+        ? toSelect(
+            paymentScheduleOptions(r.lichThanhToan, r.unitFund?.quyCanId, r.selectedTemplateId, { ngay: fd.ngayKy }, r.exceptionIds?.TDTT),
+            r.selectedTemplateId
+          )
+        : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [r?.lichThanhToan, r?.unitFund?.quyCanId, r?.selectedTemplateId, fd.ngayKy, r?.exceptionIds]
   );
-  const configName = useMemo(
-    () => d.config.policyConfigs.find((x: any) => String(x.ID) === String(d.policyConfigId))?.Name || "",
-    [d.config.policyConfigs, d.policyConfigId]
-  );
-
-  /** Gọi thao tác chọn (bảng giá / chính sách / tiến độ) – lỗi máy chủ hiện toast */
-  const act = (p: Promise<any>) =>
-    p.catch((e: any) => toast.show({ type: "error", message: e?.message || "Không tải được dữ liệu" }));
-
-  const save = async () => {
-    if (savingRef.current || d.busy) return;
-    if (!d.product || !c) {
-      hapticError();
-      toast.show({ type: "error", message: "Chưa chọn căn" });
-      setStep(0);
-      return;
-    }
-    savingRef.current = true;
-    setSaving(true);
-    try {
-      const saved = await d.save();
-      hapticSuccess();
-      toast.show({ type: "success", message: isEdit ? "Đã cập nhật phiếu tính giá" : "Đã lưu phiếu tính giá" });
-      if (isEdit) router.back();
-      else router.replace({ pathname: "/price-sheet/[id]", params: { id: saved.id } });
-    } catch (e: any) {
-      hapticError();
-      toast.show({ type: "error", message: e?.message || "Không thể lưu phiếu tính giá" });
-    } finally {
-      savingRef.current = false;
-      setSaving(false);
-    }
-  };
 
   const header = (
     <AppHeader
       variant="soft"
       title={isEdit ? "Sửa phiếu tính giá" : "Lập phiếu tính giá"}
-      subtitle={d.product ? [d.product.KyHieu, d.product.TenDA].filter(Boolean).join(" · ") : undefined}
+      subtitle={product ? [product.KyHieu, product.TenDA].filter(Boolean).join(" · ") : undefined}
     />
   );
 
-  if (initializing) {
+  if (error) {
+    return (
+      <Screen header={header} padded={false}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ErrorState title={isEdit ? "Không mở được phiếu" : "Không tải được căn"} description={error} onRetry={() => router.back()} />
+      </Screen>
+    );
+  }
+  if (!ready || !r) {
     return (
       <Screen header={header} padded={false}>
         <Stack.Screen options={{ headerShown: false }} />
@@ -185,71 +211,79 @@ function PriceSheetEditorScreen() {
       </Screen>
     );
   }
-  if (initError) {
-    return (
-      <Screen header={header} padded={false}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <ErrorState
-          title={isEdit ? "Không sửa được phiếu trên app" : "Không tải được căn"}
-          description={initError}
-          onRetry={() => {
-            if (isEdit) return router.back();
-            if (productId) return void start(() => startNewAndWarn(String(productId)));
-            setInitError(null);
-            d.reset();
-          }}
-        />
-      </Screen>
-    );
-  }
 
-  const busyText =
-    d.busy === "priceList"
+  const busyText = r.loadingPolicies
+    ? "Đang nạp chính sách / bảng giá…"
+    : r.loadingPriceList
       ? "Đang nạp giá theo bảng giá…"
-      : d.busy === "policy"
-        ? "Đang nạp chính sách…"
-        : d.busy === "schedule"
-          ? "Đang nạp tiến độ thanh toán…"
-          : d.busy === "product"
-            ? "Đang nạp căn…"
-            : null;
+      : r.loadingSchedule
+        ? "Đang nạp tiến độ thanh toán…"
+        : r.loadingPriceCalc
+          ? "Đang dựng bảng chiết khấu…"
+          : null;
+
+  /** Đổi chính sách: lịch đã sửa ⇒ hỏi như web requestSelectCSBH */
+  const pickPolicy = async (v: string | null) => {
+    r.policyPickedRef.current = v;
+    if (!v || !r.isScheduleDirty()) return void r.handleSelectCSBH(v as any);
+    const ok = await confirm({
+      title: "Nạp lại tiến độ thanh toán?",
+      message:
+        "Bạn đã chỉnh sửa tiến độ thanh toán hiện tại. Đổi chính sách bán hàng sẽ nạp lại tiến độ theo chính sách mới và ghi đè các chỉnh sửa này.",
+      confirmText: "Nạp lại tiến độ",
+      cancelText: "Giữ tiến độ hiện tại",
+    });
+    void r.handleSelectCSBH(v, ok ? undefined : { keepSchedule: true });
+  };
+
+  const changeUnitFund = (v: string) => {
+    if (!v) return;
+    r.unitFund.change(String(v));
+    if (scheduleOutOfUnitFund(r.lichThanhToan, String(v), r.selectedTemplateId))
+      webToast.warning("Lịch thanh toán đang chọn không thuộc quỹ căn này, vui lòng chọn lại lịch thanh toán");
+    if (policyOutOfUnitFund(r.chinhSachBH, String(v), r.selectedPolicyId)) webToast.warning(POLICY_OUT_OF_UNIT_FUND_WARNING);
+  };
+
+  const updateRound = (idx: number, fn: (x: any) => any, financial = true) => {
+    if (financial) r.markFinancialEdited();
+    r.setPolicyRounds((prev: any[]) => prev.map((x, i) => (i === idx ? fn(x) : x)));
+  };
+
+  const dueDates: (string | null)[] = r.dueDatesOf ? r.dueDatesOf(r.paymentSchedule || []) : [];
+  const enabledRounds = (r.policyRounds || []).map((x: any, i: number) => ({ x, i }));
+  const pendingOptions = !!r.reopenDetails?.pending;
+  const customerName = fd.customerType === "business" ? fd.TenCongTy : fd.TenKH;
+
+  const save = async () => {
+    if (r.isSaving) return;
+    try {
+      await r.handleSave(false);
+    } catch (e: any) {
+      hapticError();
+      webToast.error(e?.message || "Không thể lưu phiếu tính giá");
+    }
+  };
 
   const footer = (
     <BottomActionBar>
       <View style={styles.footer}>
-        {c ? (
-          <View style={styles.footerSum}>
-            <Text variant="caption" color="textSecondary">
-              Tổng HĐMB sau CK
-            </Text>
-            <MoneyText value={total} variant="subhead" weight="bold" />
-          </View>
-        ) : null}
+        <View style={styles.footerSum}>
+          <Text variant="caption" color="textSecondary">
+            Tổng giá trị HĐMB
+          </Text>
+          <MoneyText value={Number(total) || 0} variant="subhead" weight="bold" />
+        </View>
         <View style={styles.footerBtns}>
-          {step > 0 ? (
-            <Button title="Quay lại" variant="secondary" onPress={() => setStep(step - 1)} style={styles.flex} />
-          ) : null}
+          {step > 0 ? <Button title="Quay lại" variant="secondary" onPress={() => setStep(step - 1)} style={styles.flex} /> : null}
           {step < STEPS.length - 1 ? (
-            <Button
-              title="Tiếp tục"
-              onPress={() => {
-                if (!d.product) {
-                  hapticError();
-                  toast.show({ type: "error", message: "Chọn căn để tiếp tục" });
-                  return;
-                }
-                setStep(step + 1);
-              }}
-              disabled={!d.product}
-              style={styles.flex}
-            />
+            <Button title="Tiếp tục" onPress={() => setStep(step + 1)} style={styles.flex} />
           ) : (
             <Button
               title={isEdit ? "Lưu thay đổi" : "Lưu phiếu"}
               icon={Check}
               onPress={save}
-              loading={saving}
-              disabled={!!d.busy}
+              loading={!!r.isSaving}
+              disabled={!!busyText || pendingOptions}
               style={styles.flex}
             />
           )}
@@ -272,125 +306,156 @@ function PriceSheetEditorScreen() {
               </Text>
             </View>
           ) : null}
-          {mismatch ? (
-            <View style={[styles.notice, styles.warn]}>
-              <Text variant="caption" color="onWarningSubtle">
-                Số tiền tính lại theo cấu hình hiện tại khác số đã lưu (cấu hình / chính sách có thể đã đổi). Kiểm tra lại
-                trước khi lưu.
-              </Text>
-            </View>
-          ) : null}
 
           {step === 0 ? (
-            !d.product ? (
-              <ProductPicker onPick={(id) => void start(() => startNewAndWarn(id))} />
-            ) : (
-              <>
-                <PriceHero total={total} listed={listed} discount={c?.tienChietKhau} discountPercent={c?.totalDiscountPercent}>
-                  <View style={styles.heroHead}>
-                    <View style={styles.flex}>
-                      <Text variant="heading" color={colors.showcase.text}>
-                        {d.product.KyHieu || d.product.MaSP}
-                      </Text>
-                      <Text variant="caption" color={colors.showcase.textMuted}>
-                        {[d.product.TenDA, isLow ? "Thấp tầng" : "Cao tầng"].filter(Boolean).join(" · ")}
-                      </Text>
-                    </View>
-                    {!isEdit ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Đổi căn"
-                        hitSlop={8}
-                        onPress={async () => {
-                          const ok = await confirm({ title: "Đổi căn?", message: "Dữ liệu đang nhập sẽ được tính lại cho căn mới." });
-                          if (ok) d.reset();
-                        }}
-                        style={styles.change}
-                      >
-                        <RefreshCw size={14} color={colors.showcase.text} />
-                        <Text variant="label" color={colors.showcase.text}>
-                          Đổi căn
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                </PriceHero>
+            <>
+              <PriceHero total={Number(total) || 0} listed={listed} discount={c.tienChietKhau} discountPercent={c.totalDiscountPercent}>
+                <View style={styles.heroHead}>
+                  <Text variant="heading" color={colors.showcase.text}>
+                    {product?.KyHieu || fd.maSanPham}
+                  </Text>
+                  <Text variant="caption" color={colors.showcase.textMuted}>
+                    {[fd.duAn || product?.TenDA, isLow ? "Thấp tầng" : "Cao tầng"].filter(Boolean).join(" · ")}
+                  </Text>
+                </View>
+              </PriceHero>
+
+              <View style={styles.card}>
                 <SelectField
-                  label="Bảng giá"
-                  value={d.priceListId ?? NONE}
-                  options={priceListOptions}
-                  onChange={(v) => void act(d.selectPriceList(v === NONE ? null : v))}
-                  sheetTitle="Chọn bảng giá"
-                  variant="raised"
-                  loading={d.busy === "priceList"}
+                  label="Quỹ căn"
+                  required
+                  variant="soft"
+                  value={r.unitFund?.quyCanId ? String(r.unitFund.quyCanId) : null}
+                  options={(r.unitFund?.funds || []).map((q: any) => ({ value: String(q.id), label: q.name }))}
+                  onChange={(v) => changeUnitFund(String(v))}
+                  placeholder="-- Chọn quỹ căn --"
+                  sheetTitle="Chọn quỹ căn"
                 />
-                {f ? (
-                  <InfoCard
-                    title="Giá niêm yết"
-                    rows={
-                      isLow
-                        ? [
-                            ["Diện tích đất", f.dienTichDat ? formatArea(f.dienTichDat) : null],
-                            ["Giá đất chưa VAT", money(f.rawTienDatChuaVAT)],
-                            ["Tổng giá đất", money(f.rawTongTienDatVAT)],
-                            ["Tiền xây dựng chưa VAT", money(f.rawThanhTienXD)],
-                            ["Tổng tiền xây dựng gồm VAT", money(f.rawTongGiaXDVAT)],
-                            ["Tổng giá trị HĐMB", money(f.rawTongGiaTriHDMB)],
-                          ]
-                        : [
-                            ["Diện tích thông thủy", f.dienTichThongThuy ? formatArea(f.dienTichThongThuy) : null],
-                            ["Đơn giá gồm VAT", money(f.rawDonGiaDaVAT)],
-                            ["Tổng giá chưa VAT", money(f.rawTongGiaChuaVAT)],
-                            [`VAT (${f.tyLeVAT}%)`, money(f.rawTienVAT)],
-                            ["Tổng giá gồm VAT", money(f.rawTongGiaDaVAT)],
-                            [`Kinh phí bảo trì (${f.tyLePBT}%)`, money(f.rawTienPhiBaoTri)],
-                            ["Tổng gồm VAT + KPBT", money(f.rawTongGomPBT)],
-                          ]
+                {r.salesCompanyRule?.show ? (
+                  <SelectField
+                    label="Công ty bán hàng"
+                    required={!!r.salesCompanyRequired}
+                    variant="soft"
+                    disabled={!!r.salesCompanyLocked}
+                    value={r.congTyBanHangId ? String(r.congTyBanHangId) : null}
+                    options={toSelect(r.salesCompanyOptions, r.congTyBanHangId, r.salesCompanyRequired ? undefined : "-- Không chọn --")}
+                    onChange={(v) =>
+                      onSalesCompanyChange(r.congTyBanHangId, v === NONE ? undefined : String(v), r.setCongTyBanHangId, r.markCompanyChanged)
                     }
+                    placeholder="Chọn công ty bán hàng"
+                    sheetTitle="Chọn công ty bán hàng"
                   />
                 ) : null}
-              </>
-            )
-          ) : null}
-
-          {step === 1 && c ? (
-            <>
-              <SelectField
-                label="Chính sách bán hàng"
-                value={d.policyId ?? NONE}
-                options={policyOptions}
-                onChange={(v) => void act(d.selectPolicy(v === NONE ? null : v))}
-                sheetTitle="Chọn chính sách"
-                variant="raised"
-                loading={d.busy === "policy"}
-              />
-              {configName ? (
+                <SelectField
+                  label="Chính sách bán hàng"
+                  variant="soft"
+                  disabled={!!gate.locked}
+                  value={r.selectedPolicyId ? String(r.selectedPolicyId) : NONE}
+                  options={policyOptions}
+                  onChange={(v) => void pickPolicy(v === NONE ? null : String(v))}
+                  sheetTitle="Chọn chính sách"
+                  loading={!!r.loadingPriceCalc}
+                />
+                {gate.locked ? (
+                  <Text variant="caption" color="textSecondary">
+                    {policyGateReason(gate, "chính sách bán hàng", r.salesCompanyLoadFailed)}
+                  </Text>
+                ) : null}
+                <SelectField
+                  label="Bảng giá"
+                  variant="soft"
+                  value={r.selectedPriceListId ? String(r.selectedPriceListId) : NONE}
+                  options={priceListOptions}
+                  onChange={(v) => void r.handleBG(v === NONE ? undefined : String(v))}
+                  sheetTitle="Chọn bảng giá"
+                  loading={!!r.loadingPriceList}
+                />
+                <SelectField
+                  label="Lịch thanh toán"
+                  variant="soft"
+                  disabled={!!gate.locked}
+                  value={r.selectedTemplateId ? String(r.selectedTemplateId) : null}
+                  options={scheduleOptions}
+                  onChange={(v) => void r.handleTemplateSelect(String(v))}
+                  placeholder="-- Chọn lịch thanh toán --"
+                  sheetTitle="Chọn lịch thanh toán"
+                  loading={!!r.loadingSchedule}
+                />
+                <View style={styles.row2}>
+                  <View style={styles.flex}>
+                    <DateField
+                      label="Ngày tính"
+                      variant="soft"
+                      value={toDate(fd.ngayKy)}
+                      onChange={(d) => r.setFormData({ ...r.formData, ngayKy: d })}
+                    />
+                  </View>
+                  {r.sections?.expiry ? (
+                    <View style={styles.flex}>
+                      <DateField
+                        label="Ngày hết hạn"
+                        variant="soft"
+                        value={toDate(fd.ngayHetHan)}
+                        maximumDate={toDate(policyExpiryDate(policyRow)) || undefined}
+                        onChange={(d) => r.setFormData({ ...r.formData, ngayHetHan: ymd(d) })}
+                      />
+                    </View>
+                  ) : null}
+                </View>
                 <Text variant="caption" color="textSecondary">
-                  Cấu hình tính giá: {configName}
+                  Số phiếu: {fd.soHopDong || editingSheet?.sheet_code || "máy chủ tự cấp khi lưu"}
                 </Text>
-              ) : null}
-              {d.rounds.length ? (
+              </View>
+
+              <InfoCard
+                title="Giá niêm yết"
+                rows={
+                  isLow
+                    ? [
+                        ["Diện tích đất", fd.dienTichDat ? formatArea(fd.dienTichDat) : null],
+                        ["Giá đất chưa VAT", money(fd.rawTienDatChuaVAT)],
+                        ["Tổng giá đất", money(fd.rawTongTienDatVAT)],
+                        ["Tiền xây dựng chưa VAT", money(fd.rawThanhTienXD)],
+                        ["Tổng tiền xây dựng gồm VAT", money(fd.rawTongGiaXDVAT)],
+                        ["Tổng giá trị HĐMB", money(fd.rawTongGiaTriHDMB)],
+                      ]
+                    : [
+                        ["Diện tích thông thủy", fd.dienTichThongThuy ? formatArea(fd.dienTichThongThuy) : null],
+                        ["Tổng giá chưa VAT", money(fd.rawTongGiaChuaVAT)],
+                        [`VAT (${fd.tyLeVAT ?? 10}%)`, money(fd.rawTienVAT)],
+                        ["Tổng giá gồm VAT", money(fd.rawTongGiaDaVAT)],
+                        [`Kinh phí bảo trì (${fd.tyLePBT ?? 2}%)`, money(fd.rawTienPhiBaoTri)],
+                        ["Tổng gồm VAT + KPBT", money(fd.rawTongGomPBT)],
+                      ]
+                }
+              />
+
+              {enabledRounds.length ? (
                 <>
                   <HomeSectionHeader title="Chiết khấu áp dụng" />
-                  {d.rounds.map((r, i) => (
-                    <RoundEditor
-                      key={r.key}
+                  {enabledRounds.map(({ x, i }: any) => (
+                    <WebRoundCard
+                      key={String(x.key ?? i)}
                       index={i}
-                      round={r}
-                      result={c.roundResults[i]}
-                      isLowRise={isLow}
-                      onChange={(patch) => d.updateRound(i, patch)}
+                      round={x}
+                      tongCK={Math.round(c.roundResults?.[i]?.tongCK ?? 0)}
+                      ctx={r.optionCtx}
+                      pending={pendingOptions}
+                      onToggle={() => updateRound(i, (y) => ({ ...y, enabled: !y.enabled }), false)}
+                      onPercent={(v) => updateRound(i, (y) => ({ ...y, discountPercent: v }))}
+                      onCash={(v) => updateRound(i, (y) => ({ ...y, tienCK: v }))}
+                      onPick={(picked) => updateRound(i, (y) => applyPicked(y, picked))}
                     />
                   ))}
                 </>
-              ) : d.policyId && !d.busy ? (
+              ) : r.selectedPolicyId && !busyText ? (
                 <View style={[styles.notice, styles.info]}>
                   <Text variant="caption" color="onInfoSubtle">
-                    Chính sách chưa có cấu hình vòng chiết khấu – giá giữ nguyên giá niêm yết.
+                    Chính sách chưa có dòng chiết khấu – giá giữ nguyên giá niêm yết.
                   </Text>
                 </View>
               ) : null}
-              <PriceHero total={total} listed={listed} discount={c.tienChietKhau} discountPercent={c.totalDiscountPercent} />
+
               <InfoCard
                 title="Sau chiết khấu"
                 rows={
@@ -412,95 +477,84 @@ function PriceSheetEditorScreen() {
             </>
           ) : null}
 
-          {step === 2 && f ? (
+          {step === 1 ? (
             <>
-              <SelectField
-                label="Tiến độ thanh toán"
-                value={d.templateId ?? NONE}
-                options={scheduleOptions}
-                onChange={(v) => void act(d.selectTemplate(v === NONE ? null : v))}
-                sheetTitle="Chọn tiến độ thanh toán"
-                variant="raised"
-                loading={d.busy === "schedule"}
-              />
-              <View style={styles.row2}>
-                <DateField label="Ngày ký dự kiến" value={f.ngayKy} onChange={(date) => d.updateForm({ ngayKy: date })} variant="soft" />
-              </View>
-              <TextField
-                label="Tiền cọc"
-                variant="soft"
-                keyboardType="number-pad"
-                value={f.tienCoc ? formatNumberVN(f.tienCoc) : ""}
-                onChangeText={(t) => d.updateForm({ tienCoc: parseVND(t) ?? 0 })}
-                suffix={<Text color="textSecondary">₫</Text>}
-              />
+              <InfoCard title="Tiền cọc" rows={[["Theo cài đặt bán hàng", money(fd.tienCoc)]]} />
               <ScheduleList
-                emptyText="Chọn tiến độ thanh toán để dựng lịch các đợt."
-                items={d.schedule.map((r) => ({
-                  name: r.kieuThanhToan,
-                  ratio: r.tyLeTT,
-                  dueDate: dueDateFor(r, f.ngayKy),
-                  vat: r.tienVAT,
-                  maintenance: r.tienBaoTri,
-                  total: r.tongGiaTri,
+                emptyText="Chọn lịch thanh toán ở bước 1 để dựng các đợt."
+                items={(r.paymentSchedule || []).map((row: any, i: number) => ({
+                  name: row.kieuThanhToan,
+                  ratio: row.tyLeTT,
+                  dueDate: dueDates[i] ?? null,
+                  base: row.soTien,
+                  vat: row.tienVAT,
+                  maintenance: row.tienBaoTri,
+                  total: row.tongGiaTri,
                 }))}
               />
             </>
           ) : null}
 
-          {step === 3 && f ? (
+          {step === 2 ? (
             <>
               <HomeSectionHeader title="Khách hàng (không bắt buộc)" />
-              <CustomerPicker value={d.customer} onChange={d.setCustomer} />
-              {d.config.promotions.length ? (
-                <>
-                  <HomeSectionHeader title="Quà tặng" />
-                  <View style={styles.card}>
-                    {d.config.promotions.map((p, i) => {
-                      const on = d.promotions.some((x) => x.ID === p.ID);
-                      return (
-                        <Pressable
-                          key={p.ID}
-                          accessibilityRole="checkbox"
-                          accessibilityState={{ checked: on }}
-                          onPress={() => d.togglePromotion(p)}
-                          style={({ pressed }) => [
-                            styles.promo,
-                            i < d.config.promotions.length - 1 ? styles.divider : null,
-                            pressed ? styles.pressed : null,
-                          ]}
-                        >
-                          <View style={[styles.check, on ? styles.checkOn : null]}>
-                            {on ? <Check size={14} color={colors.onPrimary} /> : <Gift size={14} color={colors.textTertiary} />}
-                          </View>
-                          <Text variant="body" style={styles.flex} numberOfLines={2}>
-                            {p.TenQuaTang}
-                            {p.SoLuong ? ` × ${p.SoLuong}` : ""}
-                          </Text>
-                          {p.GiaTri ? <MoneyText value={p.GiaTri} variant="caption" /> : null}
-                        </Pressable>
-                      );
-                    })}
+              <SegmentedControl
+                options={[
+                  { value: "individual", label: "Cá nhân" },
+                  { value: "business", label: "Doanh nghiệp" },
+                ]}
+                value={fd.customerType || "individual"}
+                onChange={(v) => r.setFormData({ ...r.formData, customerType: v })}
+              />
+              {customerName ? (
+                <View style={styles.picked}>
+                  <User size={18} color={colors.primary} />
+                  <View style={styles.flex}>
+                    <Text variant="subhead">{customerName}</Text>
+                    <Text variant="caption" color="textSecondary">
+                      {[fd.MaSoKH, maskPhone(fd.DiDong || fd.DienThoaiCT)].filter(Boolean).join(" · ")}
+                    </Text>
                   </View>
-                </>
+                </View>
               ) : null}
               <TextField
-                label="Ghi chú"
+                label="Tìm khách hàng"
                 variant="soft"
-                multiline
-                value={f.ghiChu}
-                onChangeText={(t) => d.updateForm({ ghiChu: t })}
-                placeholder="Ghi chú cho phiếu"
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Tên, SĐT, CCCD, mã khách (≥ 2 ký tự)"
+                prefix={<Search size={16} color={colors.textTertiary} />}
               />
+              {(r.customers || []).length ? (
+                <View style={styles.card}>
+                  {(r.customers || []).slice(0, 30).map((k: any, i: number) => (
+                    <Pressable
+                      key={String(k.MaKH ?? k.ID ?? i)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Chọn ${k.TenKH || k.TenCongTy || ""}`}
+                      onPress={() => {
+                        r.handleCustomerSelect(k);
+                        setSearch("");
+                      }}
+                      style={({ pressed }) => [styles.cust, pressed ? styles.pressed : null]}
+                    >
+                      <Text variant="body">{fd.customerType === "business" ? k.TenCongTy || k.TenKH : k.TenKH}</Text>
+                      <Text variant="caption" color="textSecondary">
+                        {[k.MaSoKH, maskPhone(k.DiDong)].filter(Boolean).join(" · ")}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
               <InfoCard
                 title="Tóm tắt"
                 rows={[
-                  ["Căn", d.product?.KyHieu],
-                  ["Chính sách", d.policyName || "Không áp dụng"],
-                  ["Tiến độ", d.templateName || null],
-                  ["Chiết khấu", money(c?.tienChietKhau)],
+                  ["Căn", product?.KyHieu || fd.maSanPham],
+                  ["Chính sách", policyRow?.TenChinhSach || policyRow?.ten_cs || "Không áp dụng"],
+                  ["Chiết khấu", money(c.tienChietKhau)],
                   ["Tổng giá trị HĐMB", money(total)],
-                  ["Tiền cọc", money(f.tienCoc)],
+                  ["Tiền cọc", money(fd.tienCoc)],
+                  ["Ngày hết hạn", fd.ngayHetHan ? String(fd.ngayHetHan).split("-").reverse().join("/") : null],
                 ]}
               />
             </>
@@ -516,41 +570,20 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   row2: { flexDirection: "row", gap: space.sm },
   heroHead: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.md,
+    gap: space.xs,
     marginBottom: space.md,
     paddingBottom: space.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.showcase.surface,
   },
-  change: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.xs,
-    paddingHorizontal: space.md,
-    minHeight: 32,
-    borderRadius: radius.full,
-    backgroundColor: colors.showcase.surface,
-  },
   busy: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  card: { padding: space.lg, gap: space.md, borderRadius: radius.xxl, backgroundColor: colors.surface },
   notice: { padding: space.md, borderRadius: radius.lg, gap: space.xs },
-  warn: { backgroundColor: colors.warningSubtle },
   info: { backgroundColor: colors.infoSubtle },
   footer: { flex: 1, gap: space.sm },
   footerSum: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   footerBtns: { flexDirection: "row", gap: space.sm },
-  card: { borderRadius: radius.xxl, backgroundColor: colors.surface, ...elevation.soft, overflow: "hidden" },
-  promo: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 52, paddingHorizontal: space.lg, paddingVertical: space.sm },
-  divider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  pressed: { backgroundColor: colors.surfaceMuted },
-  check: {
-    width: 24,
-    height: 24,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surfaceMuted,
-  },
-  checkOn: { backgroundColor: colors.primary },
+  picked: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface },
+  cust: { paddingVertical: space.sm, gap: 2 },
+  pressed: { opacity: 0.7 },
 });

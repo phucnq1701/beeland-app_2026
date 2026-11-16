@@ -81,6 +81,8 @@ export type PriceListItem = {
   DonGiaXD: number;
   ThanhTienXD: number;
   GiaTriHD: number;
+  /** Giá naked của bảng giá (web BookingFormDialog: null khi trống) */
+  GiaNaked: number | null;
 };
 
 /** Dòng giá của sản phẩm trong bảng giá (fn_get_price_list_item_by_product) → các khoản giá như web. */
@@ -116,6 +118,7 @@ export function mapPriceListItem(row: any): PriceListItem | null {
     DonGiaXD: num(row.construction_unit_price),
     ThanhTienXD: constructionAmount,
     GiaTriHD: row.contract_total_value != null ? num(row.contract_total_value) : totalPayment,
+    GiaNaked: row.naked_price == null || row.naked_price === "" ? null : Number(row.naked_price),
   };
 }
 

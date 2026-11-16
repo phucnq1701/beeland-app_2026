@@ -1,3 +1,4 @@
+import { PRICE_SHEET_CREATE_LOCKED } from "@/lib/featureConfig";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -268,14 +269,15 @@ export default function PriceSheetDetailScreen() {
       </Screen>
 
       <BottomSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title="Thao tác">
-        {/* Duyệt / từ chối và lập / sửa phiếu tạm làm trên web (2026-11-16): app chỉ xem, chia sẻ, xoá */}
+        {/* Duyệt / từ chối làm trên web; sửa theo quyền EDIT như web (máy chủ chặn phiếu đang / đã duyệt) */}
         {perms.edit ? (
           <SheetOption
             icon={Pencil}
-            label="Sửa phiếu (trên web)"
+            label={PRICE_SHEET_CREATE_LOCKED ? "Sửa phiếu (trên web)" : "Sửa phiếu"}
             onPress={() => {
               setMenuOpen(false);
-              toast.show({ type: "info", message: "Sửa phiếu tính giá trên web — app tạm chỉ xem phiếu" });
+              if (PRICE_SHEET_CREATE_LOCKED) toast.show({ type: "info", message: "Sửa phiếu tính giá trên web — app tạm chỉ xem phiếu" });
+              else if (sheet) router.push({ pathname: "/price-sheet/new", params: { sheetId: String(sheet.id) } });
             }}
           />
         ) : null}

@@ -1,3 +1,4 @@
+import { PRICE_SHEET_CREATE_LOCKED } from "@/lib/featureConfig";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
@@ -244,8 +245,11 @@ export default function PriceSheetsScreen({ embedded }: { embedded?: boolean } =
                   icon={Plus}
                   variant="soft"
                   accessibilityLabel="Lập phiếu tính giá"
-                  // Tạm khoá lập phiếu trên app (2026-11-16) tới khi form khớp web — lập trên web
-                  onPress={() => toast.show({ type: "info", message: "Lập phiếu tính giá trên web — app tạm chỉ xem phiếu" })}
+                  onPress={() =>
+                    PRICE_SHEET_CREATE_LOCKED
+                      ? toast.show({ type: "info", message: "Lập phiếu tính giá trên web — app tạm chỉ xem phiếu" })
+                      : router.push("/price-sheet/new")
+                  }
                 />
               ) : null
             }
