@@ -54,3 +54,14 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
 ### 2026-11-16 — L1: phiếu tính giá + cấu hình bán hàng (BE)
 - 16 SP mới đã lên BEELAND26 (20–22, 24–36; bỏ 23 duyệt — duyệt để web). BE commit 67c7a037. So HTTP app ↔ web (5 tài khoản): giống hệt.
 - Quyết định user: duyệt phiếu tính giá tạm để web; lập / sửa phiếu tạm khoá trên app ("lập trên web") tới khi form khớp web.
+
+### 2026-11-16 — L1: lock căn + booking (BE xong, app đang nối)
+- App: phiếu tính giá chuyển API riêng (commit 11a3d219): bỏ Duyệt / Từ chối (duyệt trên web), khoá Lập / Sửa
+  (`PRICE_SHEET_CREATE_LOCKED` trong lib/featureConfig.ts) — mở lại khi viết lại form khớp web (cuối L1).
+- BE 4c5a197e: SP 40–43 lock (tạo 1 giao dịch, list, chi tiết, hết hạn = fn_product_lock_expire_due trả căn về 2),
+  50 booking_tao (máy chủ điền công ty / người nhập / ngày / tiền giữ chỗ / hạn như web), 51 booking_chi_tiet (1 lời gọi,
+  phạm vi + che = fn_sales_doc_get), 52 booking_list. Đã lên BEELAND26; thử rollback: lock 2→18, hết hạn 18→2, booking
+  tiền / hạn đúng cài đặt dù app gửi số sai.
+- Việc tiếp (app): BookingService createLock / listProductLocks / getLockDetailCloud / sweepExpiredLocks / createBooking /
+  listBookings / getBookingEditDetail ⇒ fn_nv_app_*; rồi: chứng từ booking (ảnh), QR thanh toán (payment-gateway), sàn GD,
+  cấu hình bán hàng của form booking, Đặt cọc (list / chi tiết / QR), Hợp đồng, Tiến độ TT, chọn / tạo khách trong booking.
