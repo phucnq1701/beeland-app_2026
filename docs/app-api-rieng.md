@@ -30,8 +30,8 @@ xuyên luồng trên máy ảo, xong mới sang luồng sau.
 | # | Luồng | Gồm | Trạng thái |
 |---|---|---|---|
 | L0 | Đăng nhập & phiên | đăng nhập / làm mới / đăng xuất / hết phiên, Face ID kiểm MK, hồ sơ | XONG (chờ deploy API) |
-| L1 | Bán hàng từ căn | Dự án → Sản phẩm (DS / lưới / tổng quan) → Chi tiết căn ✔ · Lock căn → Căn đã lock → Tạo booking (chọn / tạo khách, sàn, giá theo bảng giá & chính sách, ảnh chứng từ, QR thanh toán) → DS / chi tiết Booking → Đặt cọc (DS / chi tiết / QR) → Hợp đồng + tiến độ TT · Phiếu tính giá: xem / xoá / lịch sử (duyệt: web; lập / sửa: tạm khoá, viết lại form khớp web ở cuối luồng) | ĐANG LÀM (DA/SP xong; BE phiếu tính giá + cấu hình bán hàng xong) |
-| L2 | Khách hàng | DS / chi tiết / thêm / sửa, trùng khách, yêu cầu KH, luật nhập | |
+| L1 | Bán hàng từ căn | Dự án → Sản phẩm (DS / lưới / tổng quan) → Chi tiết căn ✔ · Lock căn → Căn đã lock → Tạo booking (chọn / tạo khách, sàn, giá theo bảng giá & chính sách, ảnh chứng từ, QR thanh toán) → DS / chi tiết Booking → Đặt cọc (DS / chi tiết / QR) → Hợp đồng + tiến độ TT · Phiếu tính giá: xem / xoá / lịch sử (duyệt: web; lập / sửa: tạm khoá, viết lại form khớp web ở cuối luồng) | XONG 16-11 (booking thật BK-BF228DD95B đạt; chờ deploy API) |
+| L2 | Khách hàng | DS / chi tiết / thêm / sửa, trùng khách, yêu cầu KH, luật nhập | XONG 16-11 (SP 78–96; chờ deploy API) |
 | L3 | Lịch ký & báo cáo | đặt lịch ký (đại lý), lịch hẹn (ẩn), báo cáo | |
 | L4 | Liên lạc & tài khoản | chat, thông báo, tài liệu / ảnh, đổi-quên MK, xoá TK, realtime, upload chung | |
 | L5 | Dọn & test toàn bộ | bỏ sevicesSupabase / sevices cũ, đổi khoá lưu, kịch bản e2e toàn app | |
@@ -136,3 +136,21 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
   chưa có sửa booking (app không có luồng sửa). Quy trình bán hàng sau booking (triggerSalesProcess ⇒ av2_jobs): app không chạy — bước "booking"
   của BRG trỏ workflow đã xoá, job cuối 2026-09-09 ⇒ web hiện cũng không chạy được; khi bật lại cần endpoint riêng.
 - Còn lại của lớp cũ (dọn ở L5): BookingService.createBooking / getBookingSalesConfig, lib/bookingPayload, lib/bookingPrice, lib/agencySan.bookingSan.
+
+### 2026-11-16 (đêm) — L1 chốt + L2 Khách hàng XONG
+- L1: bấm Giữ chỗ thật trên máy ảo (user cho phép) ⇒ BK-BF228DD95B (C6-2301, [DEMO] Kim Ngọc Anh, CTBH AN PHÚ, 50 tr, 30 phút) —
+  DB đúng (PENDING, căn 11, nhật ký BOOKING_CREATE), vào thẳng chi tiết thu tiền. Phiếu thử này CÒN trên prod (Chờ duyệt).
+- L2a (BE 0df4b35e, app fc3ea77a): SP 78 danh_muc, 79–82 khach_hang_list / chi_tiet / luu / xoa (bọc usp_customer_*), 83 khach_hang_giao_dich
+  (luật quyền xem khách + phạm vi giao dịch web). Bỏ đọc cloud_catalogs có lần thử KHÔNG lọc công ty.
+- L2b (BE 16e86564, app 1582c3a9): SP 84 cau_hinh_truong (fn_field_config_effective), 85 trung_cau_hinh, 86 trung_kiem, 87 trung_yeu_cau_tao,
+  88 khoa_dinh_danh, 89 khoa_giao_dich. LỆCH ĐÃ SỬA THEO WEB: (1) cấu hình trùng — app đọc bảng cũ (rỗng) ⇒ mặc định defaultMode = block
+  (chặn mọi tiêu chí); nay = web (chưa cài = không kiểm, BRG: CCCD chặn); (2) bắt buộc / ẩn / chỉ xem — app đọc 2 bảng cũ web đã bỏ, nay
+  fn_field_config_effective + luật web chép (lib/web fieldConfigRules / catalog); tải lỗi lúc lưu ⇒ chặn như web; (3) khoá sửa theo giao dịch
+  (Đặt cọc / HĐMB đã duyệt) — app chưa có, nay màn Sửa báo khoá. Lịch ký (L3) dùng chung getRulesForForm: trường có điều kiện (doanh nghiệp)
+  chưa kiểm phía app ⇒ xem lại ở L3.
+- L2c (BE 135fb46b, app b3311ec0): SP 90–95 yeu_cau_* (bọc fn_customer_request_*; 91 kèm SoHD), 96 nhan_vien_list; endpoint C#
+  fn_nv_app_yeu_cau_tep_ky ký tệp drive-files CHỈ khi yêu cầu xem được + tệp thuộc ListAttach (edge web không kiểm). Tài khoản MSR không
+  có quyền "Yêu cầu khách hàng" (lời máy chủ hiện nguyên).
+- Test: t_kh2.py / t_kh3.py / t_yc.py (rollback, nhiều tài khoản) app = web; HTTP app = web; app 319 test; máy ảo: DS khách / lọc trạng thái /
+  chi tiết / giao dịch / Sửa bị khoá / form Thêm khách / DS + chi tiết yêu cầu.
+- API thật cần build + restart cho endpoint mới SP 76–96 + 2 endpoint C# (ký tệp).
