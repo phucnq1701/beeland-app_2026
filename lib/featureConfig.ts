@@ -146,3 +146,9 @@ export function resolveHomeFeatureIds(opts: {
   const valid = normalizeSelection({ selectedIds: saved }, visible, []);
   return valid.length ? valid.slice(0, opts.max) : defaults;
 }
+
+/**
+ * Lập / sửa phiếu tính giá trên app TẠM KHOÁ (2026-11-16): form app chưa khớp web (Công ty bán hàng, điều kiện mức chiết khấu,
+ * hạn phiếu…) ⇒ lập / sửa trên web; app vẫn xem / chia sẻ / xoá. Mở lại khi form app viết lại khớp web (docs/app-api-rieng.md L1).
+ */
+export const PRICE_SHEET_CREATE_LOCKED = true;

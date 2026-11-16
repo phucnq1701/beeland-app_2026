@@ -23,18 +23,18 @@ phải đụng SP/bảng/endpoint web đang dùng thì DỪNG hỏi.
 - Đọc/nạp thử SP: chỉ qua q.py (rollback). Không chạy lặp bộ nạp lớn (log đầy 9002).
 - Triển khai thật: chỉ đối tượng MỚI (`usp_nv_app_*`, `_nv_app_*`), không ALTER đối tượng web.
 
-## Các phần (làm lần lượt, xong phần nào test kỹ phần đó)
-| # | Phần | Trạng thái |
-|---|---|---|
-| 0 | Hạ tầng: client app gọi `/api/app-nhan-vien/*`, đăng nhập/làm mới phiên/đăng xuất, khung C# + SP | XONG code + test (chờ deploy API) |
-| 1 | Dự án + Sản phẩm (danh sách, bộ lọc, sơ đồ, chi tiết, ảnh, đếm ngược khoá, giá đang áp dụng) | XONG; SP đã lên BEELAND26 16-11; chờ deploy API; sàn GD chuyển sang phần 3 |
-| 2 | Phiếu tính giá | |
-| 3 | Booking / Khoá căn / Đặt cọc / Hợp đồng / Tiến độ TT / Cổng thanh toán | |
-| 4 | Lịch ký / Lịch hẹn / Báo cáo | |
-| 5 | Khách hàng / Yêu cầu KH / Luật nhập / Trùng khách | |
-| 6 | Tài liệu / Thông báo / Hồ sơ / Đổi-quên MK / Xoá tài khoản | |
-| 7 | Chat / Upload / Kho tệp / Realtime | |
-| 8 | Dọn code chết + test toàn bộ | |
+## Thứ tự làm — THEO LUỒNG (16-11: user dặn làm liền mạch từng luồng, không rời rạc; giữ nguyên luồng app, không thêm luồng web mới)
+App chủ yếu dùng để bán hàng (lock → booking → đặt cọc). Mỗi luồng làm trọn: SP (lõi chung) → so với web → C# → app → test
+xuyên luồng trên máy ảo, xong mới sang luồng sau.
+
+| # | Luồng | Gồm | Trạng thái |
+|---|---|---|---|
+| L0 | Đăng nhập & phiên | đăng nhập / làm mới / đăng xuất / hết phiên, Face ID kiểm MK, hồ sơ | XONG (chờ deploy API) |
+| L1 | Bán hàng từ căn | Dự án → Sản phẩm (DS / lưới / tổng quan) → Chi tiết căn ✔ · Lock căn → Căn đã lock → Tạo booking (chọn / tạo khách, sàn, giá theo bảng giá & chính sách, ảnh chứng từ, QR thanh toán) → DS / chi tiết Booking → Đặt cọc (DS / chi tiết / QR) → Hợp đồng + tiến độ TT · Phiếu tính giá: xem / xoá / lịch sử (duyệt: web; lập / sửa: tạm khoá, viết lại form khớp web ở cuối luồng) | ĐANG LÀM (DA/SP xong; BE phiếu tính giá + cấu hình bán hàng xong) |
+| L2 | Khách hàng | DS / chi tiết / thêm / sửa, trùng khách, yêu cầu KH, luật nhập | |
+| L3 | Lịch ký & báo cáo | đặt lịch ký (đại lý), lịch hẹn (ẩn), báo cáo | |
+| L4 | Liên lạc & tài khoản | chat, thông báo, tài liệu / ảnh, đổi-quên MK, xoá TK, realtime, upload chung | |
+| L5 | Dọn & test toàn bộ | bỏ sevicesSupabase / sevices cũ, đổi khoá lưu, kịch bản e2e toàn app | |
 
 Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-inventory/` (A sản phẩm, B bán hàng, C khách hàng, D lõi).
 
@@ -50,3 +50,7 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
   Dự án / Sản phẩm (danh sách, khu, trạng thái, sơ đồ, chi tiết + ảnh + giá + lock) qua API riêng. Test 304 đạt, tsc sạch.
 - Lệch web chờ quyết định: nút Lock / Booking ở chi tiết căn — web ẩn theo nhóm quyền (LOCK/BOOKING của /products/high-rise|low-rise),
   app đang hiện cho mọi người khi căn "Mở bán". API đã trả `quyen`.
+
+### 2026-11-16 — L1: phiếu tính giá + cấu hình bán hàng (BE)
+- 16 SP mới đã lên BEELAND26 (20–22, 24–36; bỏ 23 duyệt — duyệt để web). BE commit 67c7a037. So HTTP app ↔ web (5 tài khoản): giống hệt.
+- Quyết định user: duyệt phiếu tính giá tạm để web; lập / sửa phiếu tạm khoá trên app ("lập trên web") tới khi form khớp web.

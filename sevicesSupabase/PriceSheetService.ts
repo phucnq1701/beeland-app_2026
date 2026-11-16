@@ -9,11 +9,12 @@
  *    (fn_get_byid_payment_schedule), BdsProductService.getBdsProductById (fn_get_product_by_id),
  *    Product.getSPByBG (price_list_items)
  * Lỗi máy chủ (RAISE EXCEPTION: thiếu quyền, ngoài phạm vi…) → Error mang thông điệp của máy chủ.
+ * 2026-11-16: gọi bộ API riêng app (fn_nv_app_ptg_* / cấu hình bán hàng — bọc đúng các hàm web trên, công ty lấy từ phiên).
+ * Duyệt / từ chối phiếu làm trên web.
  */
-import axiosApiSupabase from "./axiosApiSupabase";
-import { getCompanyId } from "./cloudTenant";
 import { sortPriceLists } from "@/lib/bookingPrice";
 import { mapProductRow } from "@/lib/priceSheetPayload";
+import { callNv, errorMessage as nvError } from "@/services/nvApi";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uid = (v: any): string | null => {
@@ -21,33 +22,28 @@ const uid = (v: any): string | null => {
   return UUID_RE.test(s) ? s : null;
 };
 
-const errorMessage = (e: any, fallback: string) =>
-  e?.response?.data?.message || e?.response?.data?.hint || (e instanceof Error && e.message) || fallback;
-
-async function rpc<T = any>(fn: string, body: Record<string, any>, fallback: string): Promise<T> {
+/** Gọi API riêng app (fn_nv_app_*) — lỗi máy chủ ⇒ Error mang thông điệp nghiệp vụ (thiếu quyền, ngoài phạm vi, đang duyệt…). */
+async function nv<T = any>(fn: string, body: Record<string, any>, fallback: string): Promise<T> {
   try {
-    const res = await axiosApiSupabase.post(`rest/v1/rpc/${fn}`, body);
-    return res.data as T;
+    return await callNv<T>(fn, body);
   } catch (e) {
-    throw new Error(errorMessage(e, fallback));
+    throw new Error(nvError(e, fallback));
   }
 }
 
-/** RPC trả danh sách – lỗi thì rỗng (như web fetchSalesConfigOptions) */
-async function rpcList(fn: string, body: Record<string, any>): Promise<any[]> {
+/** Danh sách cấu hình bán hàng — lỗi thì rỗng (như web fetchSalesConfigOptions) */
+async function nvList(fn: string, body: Record<string, any>): Promise<any[]> {
   try {
-    const res = await axiosApiSupabase.post(`rest/v1/rpc/${fn}`, body);
-    return Array.isArray(res.data) ? res.data : [];
+    const res = await callNv<any>(fn, body);
+    return Array.isArray(res) ? res : [];
   } catch (e) {
-    console.log(`[PriceSheet] ${fn} lỗi`, errorMessage(e, ""));
+    console.log(`[PriceSheet] ${fn} lỗi`, nvError(e, ""));
     return [];
   }
 }
 
-async function rest(table: string, params: Record<string, string>): Promise<any[]> {
-  const res = await axiosApiSupabase.get(`rest/v1/${table}`, { params });
-  return Array.isArray(res.data) ? res.data : [];
-}
+export type PriceSheetFeature = "ADD" | "EDIT" | "DELETE" | "APPROVE";
+const PRICE_SHEET_FORM = "/products/price-sheet";
 
 export type PriceSheetStatus = "draft" | "sent" | "approved" | "rejected";
 
@@ -108,8 +104,8 @@ export interface PriceSheetListParams {
 export const PriceSheetService = {
   async list(p: PriceSheetListParams = {}) {
     const res: any =
-      (await rpc(
-        "fn_price_sheet_list",
+      (await nv(
+        "fn_nv_app_ptg_list",
         {
           p: {
             project_id: uid(p.projectId),
@@ -133,57 +129,50 @@ export const PriceSheetService = {
   /** Bản đầy đủ (payload / snapshot) */
   async get(id: string): Promise<PriceSheetRow | null> {
     if (!uid(id)) return null;
-    return (await rpc("fn_price_sheet_get", { p_id: id }, "Không tải được phiếu tính giá")) || null;
+    return (await nv("fn_nv_app_ptg_chi_tiet", { p_id: id }, "Không tải được phiếu tính giá")) || null;
   },
 
   /** Tạo (row không id) / sửa phiếu – 1 RPC, máy chủ ghi phiên bản + giá gốc căn */
   async save(row: any): Promise<PriceSheetRow> {
     const { created_at, ...rest } = row || {};
-    return rpc("fn_price_sheet_save", { p_row: rest, p_host_form: null }, "Không thể lưu phiếu tính giá");
-  },
-
-  async setStatus(ids: string[], status: "approved" | "rejected", reason?: string): Promise<PriceSheetRow[]> {
-    const rows = await rpc<any[]>(
-      "fn_price_sheet_set_status",
-      { p_ids: ids, p_status: status, p_reason: reason ?? null },
-      "Không thể cập nhật trạng thái phiếu"
-    );
-    return Array.isArray(rows) ? rows : [];
+    return nv("fn_nv_app_ptg_luu", { p_row: rest }, "Không thể lưu phiếu tính giá");
   },
 
   /** Xoá mềm (khôi phục / xoá vĩnh viễn làm trên web) */
   async remove(ids: string[]) {
-    await rpc("fn_price_sheet_delete", { p_ids: ids }, "Không thể xóa phiếu tính giá");
+    await nv("fn_nv_app_ptg_xoa", { p_ids: ids }, "Không thể xóa phiếu tính giá");
   },
 
   async versions(sheetId: string): Promise<PriceSheetVersion[]> {
     if (!uid(sheetId)) return [];
-    const rows = await rpc<any[]>("fn_price_sheet_versions", { p_sheet_id: sheetId }, "Không tải được lịch sử phiên bản");
+    const rows = await nv<any[]>("fn_nv_app_ptg_phien_ban", { p_sheet_id: sheetId }, "Không tải được lịch sử phiên bản");
     return Array.isArray(rows) ? rows : [];
   },
 
   /**
-   * Quyền chức năng ở form Phiếu tính giá (/products/price-sheet) – app_has_perm_any, cùng hàm máy chủ dùng để chặn.
-   * Chỉ để ẩn/hiện nút; lỗi mạng ⇒ coi như có (máy chủ vẫn chặn khi thao tác).
+   * Quyền chức năng ở form Phiếu tính giá (/products/price-sheet) theo nhóm quyền — fn_nv_app_quyen (1 lần cho mọi chức năng,
+   * lõi app_has_perm như web usePerm). Lỗi / chưa tải ⇒ không có quyền (fail-closed như web; máy chủ vẫn chặn khi thao tác).
    */
-  async hasPerm(feature: "ADD" | "EDIT" | "DELETE" | "APPROVE"): Promise<boolean> {
+  async perms(): Promise<Record<PriceSheetFeature, boolean>> {
     try {
-      const res = await axiosApiSupabase.post("rest/v1/rpc/app_has_perm_any", {
-        p_forms: ["/products/price-sheet"],
-        p_feature: feature,
+      const r = await callNv<Record<string, boolean>>("fn_nv_app_quyen", {
+        p_form: PRICE_SHEET_FORM, p_chuc_nang: ["ADD", "EDIT", "DELETE", "APPROVE"],
       });
-      return res.data === true;
+      return { ADD: r?.ADD === true, EDIT: r?.EDIT === true, DELETE: r?.DELETE === true, APPROVE: r?.APPROVE === true };
     } catch {
-      return true;
+      return { ADD: false, EDIT: false, DELETE: false, APPROVE: false };
     }
+  },
+
+  async hasPerm(feature: PriceSheetFeature): Promise<boolean> {
+    return (await PriceSheetService.perms())[feature];
   },
 
   /* ----------------------------- Sản phẩm ----------------------------- */
 
   /** Chi tiết căn (hình dạng mapBdsProduct của web, dùng cho form + snapshot.product) */
   async getProduct(id: string): Promise<any | null> {
-    const companyId = await getCompanyId();
-    const data = await rpc("fn_get_product_by_id", { p_id: String(id), p_ma_ctdk: uid(companyId) }, "Không tải được sản phẩm");
+    const data = await nv("fn_nv_app_san_pham_tinh_gia", { p_id: String(id) }, "Không tải được sản phẩm");
     return data ? mapProductRow(data) : null;
   },
 
@@ -191,23 +180,11 @@ export const PriceSheetService = {
   async getPriceListItem(priceListId: string, product: any): Promise<any | null> {
     if (!uid(priceListId)) return null;
     try {
-      if (uid(product?.id)) {
-        const rows = await rest("price_list_items", {
-          select: "*",
-          price_list_id: `eq.${priceListId}`,
-          product_id: `eq.${product.id}`,
-          limit: "1",
-        });
-        if (rows[0]) return rows[0];
-      }
-      const key = String(product?.MaSP ?? "").trim().toLowerCase();
-      if (!key) return null;
-      const rows = await rest("price_list_items", { select: "*", price_list_id: `eq.${priceListId}` });
-      return (
-        rows.find((r) =>
-          [r.product_code, r.unit_no, r.id].map((v) => String(v ?? "").trim().toLowerCase()).includes(key)
-        ) || null
-      );
+      return await nv("fn_nv_app_gia_trong_bang_gia", {
+        p_bang_gia_id: priceListId,
+        p_san_pham_id: uid(product?.id ?? product?.ID),
+        p_ma_sp: String(product?.MaSP ?? "").trim() || null,
+      }, "Không tải được giá trong bảng giá");
     } catch {
       return null;
     }
@@ -217,20 +194,15 @@ export const PriceSheetService = {
 
   /** Bảng giá (sắp priority), chính sách, tiến độ, quà tặng, cấu hình CSBH theo dự án + loại – fetchSalesConfigOptions */
   async getSalesConfig(projectId: string, isLow: boolean) {
-    const companyId = uid(await getCompanyId());
     const pid = uid(projectId);
     const empty = { priceLists: [] as any[], policies: [] as any[], schedules: [] as any[], promotions: [] as any[], policyConfigs: [] as any[] };
-    if (!companyId || !pid) return empty;
+    if (!pid) return empty;
     const formCode = isLow ? "THAPTANG" : "CAOTANG";
     const [lists, policies, schedules, promotions, policyConfigs] = await Promise.all([
-      rpcList("fn_get_current_price_lists", {
-        p_ma_ctdk_uid: companyId,
-        p_da_project_id: pid,
-        p_type: isLow ? "Thấp tầng" : "Chung cư",
-      }),
-      rpcList("fn_get_sales_policies", { p_ma_ctdk: companyId, p_da_project_id: pid, p_form_code: formCode }),
-      rpcList("fn_get_payment_schedules", { p_ma_ctdk: companyId, p_company_id: pid, p_form_code: formCode }),
-      rpcList("fn_get_promotions", { p_da_project_id: pid }),
+      nvList("fn_nv_app_bang_gia_hien_hanh", { p_du_an_id: pid, p_loai: isLow ? "Thấp tầng" : "Chung cư" }),
+      nvList("fn_nv_app_chinh_sach_list", { p_du_an_id: pid, p_form_code: formCode }),
+      nvList("fn_nv_app_lich_tt_list", { p_du_an_id: pid, p_form_code: formCode }),
+      nvList("fn_nv_app_khuyen_mai_list", { p_du_an_id: pid }),
       PriceSheetService.listPricingConfigs(pid, isLow ? "CSTHAPTANG" : "CSCAOTANG"),
     ]);
     return {
@@ -254,25 +226,14 @@ export const PriceSheetService = {
 
   /** cloud_pricing_configs của dự án theo biểu mẫu (PricingConfigCloudService.list) */
   async listPricingConfigs(projectId: string, formCode: string): Promise<any[]> {
-    const companyId = uid(await getCompanyId());
-    if (!companyId || !uid(projectId)) return [];
-    try {
-      const rows = await rest("cloud_pricing_configs", {
-        select: "id,ten,status,detail,form_code",
-        ma_ctdk: `eq.${companyId}`,
-        ma_da: `eq.${projectId}`,
-        form_code: `eq.${formCode}`,
-        order: "created_at.asc",
-      });
-      return rows.map((r) => ({
-        ID: r.id,
-        Name: r.ten ?? "",
-        Status: !!r.status,
-        Detail: Array.isArray(r.detail) ? r.detail : [],
-      }));
-    } catch {
-      return [];
-    }
+    if (!uid(projectId)) return [];
+    const rows = await nvList("fn_nv_app_cau_hinh_tinh_gia_list", { p_du_an_id: projectId, p_form_codes: [formCode] });
+    return rows.map((r) => ({
+      ID: r.id,
+      Name: r.ten ?? "",
+      Status: !!r.status,
+      Detail: Array.isArray(r.detail) ? r.detail : [],
+    }));
   },
 
   /**
@@ -286,26 +247,18 @@ export const PriceSheetService = {
   /** Các vòng chiết khấu của cấu hình CSBH (cloud_pricing_config_rounds, sắp order_by) */
   async getConfigRounds(configId: string): Promise<any[]> {
     if (!uid(configId)) return [];
-    try {
-      const rows = await rest("cloud_pricing_config_rounds", {
-        select: "id,ten,order_by,details",
-        cau_hinh_id: `eq.${configId}`,
-        order: "order_by.asc",
-      });
-      return rows.map((r) => ({
-        ID: r.id,
-        Name: r.ten ?? "",
-        Details: Array.isArray(r.details) ? r.details : [],
-      }));
-    } catch {
-      return [];
-    }
+    const rows = await nvList("fn_nv_app_cau_hinh_tinh_gia_dot", { p_cau_hinh_id: configId });
+    return rows.map((r) => ({
+      ID: r.id,
+      Name: r.ten ?? "",
+      Details: Array.isArray(r.details) ? r.details : [],
+    }));
   },
 
   /** Chi tiết chính sách – fn_get_byid_sales_policy (dòng chiết khấu + cấu hình tính giá + tiến độ liên kết) */
   async getPolicy(id: string) {
     if (!uid(id)) return null;
-    const data = await rpc<any>("fn_get_byid_sales_policy", { p_id: id }, "Không tải được chính sách bán hàng");
+    const data = await nv<any>("fn_nv_app_chinh_sach_chi_tiet", { p_id: id }, "Không tải được chính sách bán hàng");
     const raw = Array.isArray(data) ? data[0] : data?.row ?? (data?.ok === false ? null : data);
     if (!raw?.id) return null;
     return {
@@ -320,7 +273,7 @@ export const PriceSheetService = {
   /** Chi tiết tiến độ thanh toán – fn_get_byid_payment_schedule (details đã chuẩn hoá như normalizeDetails) */
   async getSchedule(id: string) {
     if (!uid(id)) return null;
-    const data = await rpc<any>("fn_get_byid_payment_schedule", { p_id: id }, "Không tải được tiến độ thanh toán");
+    const data = await nv<any>("fn_nv_app_lich_tt_chi_tiet", { p_id: id }, "Không tải được tiến độ thanh toán");
     const row = Array.isArray(data) ? data[0] ?? null : data?.row ?? (data?.ok === false ? null : data ?? null);
     if (!row?.id) return null;
     const isLow = String(row.form_code || "").toUpperCase().includes("THAP");

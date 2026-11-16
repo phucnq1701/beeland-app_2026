@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Check, Gift, RefreshCw } from "lucide-react-native";
+import { Check, FileText, Gift, RefreshCw } from "lucide-react-native";
 
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import { CustomerPicker } from "@/components/priceSheet/CustomerPicker";
@@ -15,6 +15,7 @@ import {
   Button,
   confirm,
   DateField,
+  EmptyState,
   ErrorState,
   MoneyText,
   ProgressSteps,
@@ -29,6 +30,7 @@ import { formatArea, formatNumberVN, parseVND } from "@/lib/format";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { dueDateFor } from "@/lib/priceSheetSchedule";
 import { colors, elevation, radius, space } from "@/theme";
+import { PRICE_SHEET_CREATE_LOCKED } from "@/lib/featureConfig";
 
 const STEPS = ["Căn hộ", "Chính sách", "Thanh toán", "Khách & quà"] as const;
 const NONE = "__none__";
@@ -39,7 +41,27 @@ const NONE = "__none__";
  * Không có trên app: người đồng sở hữu, ưu đãi lãi suất, 360 khách hàng, sửa tay dòng lịch, tạo từ chứng từ.
  * Params: `productId` (căn có sẵn) hoặc `sheetId` (sửa phiếu nháp đơn giản).
  */
-export default function PriceSheetEditorScreen() {
+/** Lập / sửa phiếu tạm khoá trên app (lib/featureConfig PRICE_SHEET_CREATE_LOCKED) — lối vào cũ / liên kết ⇒ báo lập trên web. */
+export default function PriceSheetEditorRoute() {
+  const router = useRouter();
+  if (PRICE_SHEET_CREATE_LOCKED) {
+    return (
+      <Screen header={<AppHeader variant="soft" title="Phiếu tính giá" />}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <EmptyState
+          icon={FileText}
+          title="Lập / sửa phiếu tính giá trên web"
+          description="App tạm chỉ xem phiếu tính giá. Vui lòng lập hoặc sửa phiếu trên web."
+          actionLabel="Quay lại"
+          onAction={() => router.back()}
+        />
+      </Screen>
+    );
+  }
+  return <PriceSheetEditorScreen />;
+}
+
+function PriceSheetEditorScreen() {
   const router = useRouter();
   const toast = useToast();
   const { productId, sheetId } = useLocalSearchParams<{ productId?: string; sheetId?: string }>();

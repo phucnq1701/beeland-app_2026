@@ -22,7 +22,7 @@ import {
 import { formatCountdown } from "@/lib/countdown";
 import { formatVNDShort } from "@/lib/format";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
-import { isFeatureAllowed } from "@/lib/featureConfig";
+import { isFeatureAllowed, PRICE_SHEET_CREATE_LOCKED } from "@/lib/featureConfig";
 import { isOpenForSale, OPEN_FOR_SALE_MESSAGE } from "@/lib/productStatus";
 import { colors, elevation, radius, space } from "@/theme";
 import { BookingService } from "@/sevicesSupabase/BookingService";
@@ -242,7 +242,8 @@ export default function ProductDetailScreen() {
   };
 
   // Lập phiếu tính giá (tính năng 17): chỉ tài khoản được dùng tính năng + có quyền ADD
-  const showPriceSheet = canPriceSheet && isAgencyAccount !== null && isFeatureAllowed("17", isAgencyAccount);
+  // Tạm khoá lập phiếu trên app (2026-11-16) tới khi form khớp web ⇒ ẩn lối vào; bật lại: bỏ `PRICE_SHEET_CREATE_LOCKED`
+  const showPriceSheet = !PRICE_SHEET_CREATE_LOCKED && canPriceSheet && isAgencyAccount !== null && isFeatureAllowed("17", isAgencyAccount);
   const images = bannerProduct.map((b) => b?.HinhAnh).filter((u): u is string => !!u);
   // Giá đầu màn: giá trị HĐMB của căn; căn chưa có giá riêng ⇒ tổng theo bảng giá đang áp dụng (cùng số ở "Chi tiết giá")
   const listPrice = Number(activePrice?.contract_total_value) > 0 ? Number(activePrice?.contract_total_value)

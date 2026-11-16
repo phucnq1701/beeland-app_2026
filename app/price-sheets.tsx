@@ -18,6 +18,7 @@ import {
   SkeletonList,
   StatusBadge,
   Text,
+  useToast,
 } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { PRICE_SHEET_STATUSES, priceSheetStatus } from "@/lib/priceSheetStatus";
@@ -38,6 +39,7 @@ type Stats = { draft: number; sent: number; approved: number; rejected: number }
  */
 export default function PriceSheetsScreen({ embedded }: { embedded?: boolean } = {}) {
   const router = useRouter();
+  const toast = useToast();
   const [query, setQuery] = useState("");
   const debounced = useDebouncedValue(query, 300);
   const [projects, setProjects] = useState<{ value: string; label: string }[]>([]);
@@ -68,7 +70,7 @@ export default function PriceSheetsScreen({ embedded }: { embedded?: boolean } =
         )
       )
       .catch(() => setProjects([]));
-    PriceSheetService.hasPerm("ADD").then(setCanAdd);
+    PriceSheetService.perms().then((p) => setCanAdd(p.ADD));
   }, []);
 
   const filter = useMemo(
@@ -242,7 +244,8 @@ export default function PriceSheetsScreen({ embedded }: { embedded?: boolean } =
                   icon={Plus}
                   variant="soft"
                   accessibilityLabel="Lập phiếu tính giá"
-                  onPress={() => router.push("/price-sheet/new")}
+                  // Tạm khoá lập phiếu trên app (2026-11-16) tới khi form khớp web — lập trên web
+                  onPress={() => toast.show({ type: "info", message: "Lập phiếu tính giá trên web — app tạm chỉ xem phiếu" })}
                 />
               ) : null
             }

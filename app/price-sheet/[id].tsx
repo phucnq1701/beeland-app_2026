@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { Ban, Check, History, MoreHorizontal, Pencil, Share2, Trash2 } from "lucide-react-native";
+import { History, MoreHorizontal, Pencil, Share2, Trash2 } from "lucide-react-native";
 
 import { DiscountList, InfoCard, money, PriceHero, ScheduleList } from "@/components/priceSheet/PriceSheetBlocks";
 import { sharePriceSheetPdf } from "@/components/priceSheet/sharePriceSheetPdf";
@@ -18,12 +18,10 @@ import {
   SkeletonDetail,
   StatusBadge,
   Text,
-  TextField,
   useToast,
 } from "@/components/ui";
 import { formatArea, formatDate, formatDateTime } from "@/lib/format";
-import { appEditBlockReason } from "@/lib/priceSheetPayload";
-import { canApprove, canReject, priceSheetStatus } from "@/lib/priceSheetStatus";
+import { priceSheetStatus } from "@/lib/priceSheetStatus";
 import { PriceSheetService, type PriceSheetRow } from "@/sevicesSupabase/PriceSheetService";
 import { colors, space } from "@/theme";
 
@@ -43,10 +41,7 @@ export default function PriceSheetDetailScreen() {
   const [error, setError] = useState(false);
   const [perms, setPerms] = useState<Perms>({ edit: false, del: false, approve: false });
   const [menuOpen, setMenuOpen] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [reason, setReason] = useState("");
-  const [reasonError, setReasonError] = useState<string | null>(null);
-  const [acting, setActing] = useState<null | "share" | "approve" | "reject" | "delete">(null);
+  const [acting, setActing] = useState<null | "share" | "delete">(null);
   const actingRef = useRef(false);
   const firstFocus = useRef(true);
 
@@ -69,11 +64,7 @@ export default function PriceSheetDetailScreen() {
 
   useEffect(() => {
     void load();
-    Promise.all([
-      PriceSheetService.hasPerm("EDIT"),
-      PriceSheetService.hasPerm("DELETE"),
-      PriceSheetService.hasPerm("APPROVE"),
-    ]).then(([edit, del, approve]) => setPerms({ edit, del, approve }));
+    PriceSheetService.perms().then((p) => setPerms({ edit: p.EDIT, del: p.DELETE, approve: p.APPROVE }));
   }, [load]);
 
   // Quay lại từ màn sửa → nạp lại
@@ -103,36 +94,6 @@ export default function PriceSheetDetailScreen() {
   };
 
   const share = () => run("share", async () => sharePriceSheetPdf(sheet));
-
-  const approve = async () => {
-    setMenuOpen(false);
-    const ok = await confirm({
-      title: "Duyệt phiếu tính giá?",
-      message: "Phiếu sau khi duyệt sẽ chuyển sang trạng thái Đã duyệt.",
-      confirmText: "Duyệt",
-    });
-    if (!ok || !sheet) return;
-    await run("approve", async () => {
-      const [row] = await PriceSheetService.setStatus([sheet.id], "approved");
-      if (row) setSheet((s) => (s ? { ...s, ...row } : s));
-      toast.show({ type: "success", message: "Đã duyệt phiếu tính giá" });
-    });
-  };
-
-  const reject = async () => {
-    if (!reason.trim()) {
-      setReasonError("Vui lòng nhập lý do từ chối");
-      return;
-    }
-    if (!sheet) return;
-    await run("reject", async () => {
-      const [row] = await PriceSheetService.setStatus([sheet.id], "rejected", reason.trim());
-      if (row) setSheet((s) => (s ? { ...s, ...row } : s));
-      setRejectOpen(false);
-      setReason("");
-      toast.show({ type: "success", message: "Đã từ chối phiếu tính giá" });
-    });
-  };
 
   const remove = async () => {
     setMenuOpen(false);
@@ -174,7 +135,6 @@ export default function PriceSheetDetailScreen() {
   const tt = sheet.payload?.TTHopDong || {};
   const g = tt.GiaTriHopDong || {};
   const st = priceSheetStatus(sheet.status);
-  const editBlock = appEditBlockReason(sheet);
   const total = t.totalContractValue ?? sheet.gia_tri_hd_sau_ck ?? sheet.base_price;
   const discounts: any[] = Array.isArray(snap.discounts) ? snap.discounts : [];
   const lich: any[] = Array.isArray(sheet.payload?.LichThanhToan) ? sheet.payload.LichThanhToan : [];
@@ -308,53 +268,20 @@ export default function PriceSheetDetailScreen() {
       </Screen>
 
       <BottomSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title="Thao tác">
-        {perms.approve && canApprove(sheet.status) ? <SheetOption icon={Check} label="Duyệt" onPress={approve} /> : null}
-        {perms.approve && canReject(sheet.status) ? (
-          <SheetOption
-            icon={Ban}
-            label="Từ chối"
-            destructive
-            onPress={() => {
-              setMenuOpen(false);
-              setReasonError(null);
-              setRejectOpen(true);
-            }}
-          />
-        ) : null}
+        {/* Duyệt / từ chối và lập / sửa phiếu tạm làm trên web (2026-11-16): app chỉ xem, chia sẻ, xoá */}
         {perms.edit ? (
           <SheetOption
             icon={Pencil}
-            label={editBlock ? `Sửa (${editBlock})` : "Sửa"}
+            label="Sửa phiếu (trên web)"
             onPress={() => {
               setMenuOpen(false);
-              if (editBlock) {
-                toast.show({ type: "info", message: editBlock });
-                return;
-              }
-              router.push({ pathname: "/price-sheet/new", params: { sheetId: sheet.id } });
+              toast.show({ type: "info", message: "Sửa phiếu tính giá trên web — app tạm chỉ xem phiếu" });
             }}
           />
         ) : null}
         {perms.del ? <SheetOption icon={Trash2} label="Xoá" destructive onPress={remove} /> : null}
       </BottomSheet>
 
-      <BottomSheet visible={rejectOpen} onClose={() => setRejectOpen(false)} title="Từ chối phiếu tính giá">
-        <View style={styles.sheetBody}>
-          <TextField
-            label="Lý do từ chối"
-            required
-            multiline
-            value={reason}
-            onChangeText={(v) => {
-              setReason(v);
-              if (reasonError) setReasonError(null);
-            }}
-            error={reasonError}
-            placeholder="Nhập lý do"
-          />
-          <Button title="Từ chối" variant="danger" onPress={reject} loading={acting === "reject"} fullWidth />
-        </View>
-      </BottomSheet>
     </>
   );
 }
