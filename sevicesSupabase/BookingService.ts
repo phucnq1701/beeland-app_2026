@@ -530,6 +530,9 @@ export const BookingService = {
           ngayNhap: booking.ngay_nhap,
           hetHanLuc: booking.het_han_luc,
           giaiDoan: pgc?.giai_doan ?? null,
+          // Nút "Tạo QR thanh toán" như web: quyền PAYMENT_QR màn Booking; khoá khi đang chờ duyệt đổi căn
+          quyenQR: r.quyen?.payment_qr === true,
+          doiCanChoDuyet: r.doi_can_cho_duyet === true,
           nhanVien: booking.nhan_vien,
           ghiChu: booking.ghi_chu,
           // Header

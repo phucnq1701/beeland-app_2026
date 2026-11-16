@@ -135,3 +135,14 @@ test("không thấy (null) khác lỗi tải (ném)", async () => {
   await assert.rejects(load(fixture(), { fail: new Error("Không tìm thấy phiếu giữ chỗ trong phạm vi") }).service.getBookingEditDetail(uid(1)), /phạm vi/);
   assert.equal((await load(fixture()).service.getBookingEditDetail("  ")).data, null);
 });
+
+test("nút QR như web: quyền PAYMENT_QR màn Booking + đổi căn chờ duyệt (thiếu ⇒ không quyền)", async () => {
+  const r = fixture();
+  let { data } = await load(r).service.getBookingEditDetail(uid(1));
+  assert.equal(data.quyenQR, false, "máy chủ không trả quyền ⇒ khoá");
+  r.quyen = { payment_qr: true };
+  r.doi_can_cho_duyet = true;
+  ({ data } = await load(r).service.getBookingEditDetail(uid(1)));
+  assert.equal(data.quyenQR, true);
+  assert.equal(data.doiCanChoDuyet, true);
+});

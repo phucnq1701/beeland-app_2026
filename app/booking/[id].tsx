@@ -287,7 +287,8 @@ export default function BookingDetailScreen() {
     Date.now()
   );
   // Hết hạn giữ chỗ thì không thu tiền được nữa (màn QR cũng không cho tạo mã).
-  const canCollect = isActiveBooking && !progress.paid && !progress.expired;
+  // Như web: quyền PAYMENT_QR màn Booking + không đang chờ duyệt đổi căn
+  const canCollect = isActiveBooking && !progress.paid && !progress.expired && data?.quyenQR === true && !data?.doiCanChoDuyet;
   // Chỉ booking đã huỷ mới khoá tải chứng từ; mọi trạng thái khác đều được tải lên.
   const canUploadDocs = !progress.cancelled;
 
