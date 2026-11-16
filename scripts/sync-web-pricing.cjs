@@ -127,6 +127,14 @@ const COMPONENT_HOOKS = [
     allowMissing: [],
   },
   {
+    // Ô Quỹ đầu form lịch ký web (DK23): mặc định Quỹ CĐT / quỹ của cấu hình đang lưu
+    file: "pages/sales/giao-dich/dat-lich-ky/SigningFundField.tsx",
+    component: "SigningFundField",
+    out: "pages/sales/giao-dich/dat-lich-ky/SigningFundField.hook.ts",
+    hook: "useWebSigningFund",
+    allowMissing: [],
+  },
+  {
     // Ô chọn Quỹ → Thủ tục → Điểm ký → ngày → Ca + hồ sơ của form lịch ký web (DK3/DK7/DK8/DK23)
     file: "pages/sales/giao-dich/dat-lich-ky/ShiftPickerFields.tsx",
     component: "ShiftPickerFields",
@@ -159,6 +167,8 @@ const EXTRACT = {
   "services/system/permitted-company": ["cleanCompanyIds", "isUid"],
   "components/Products/ContractForm/InterestIncentiveFields": ["createInterestIncentiveInfo", "InterestIncentiveInfo"],
   "components/Products/ContractForm/ApartmentTypeField": ["apartmentTypeName"],
+  // Đổi quỹ ⇒ bỏ điểm ký / thủ tục / ca (ô Quỹ web)
+  "pages/sales/giao-dich/dat-lich-ky/SigningFundField": ["RESET_THEO_QUY"],
 };
 /** Đường dẫn (dưới src/) KHÔNG chép: chỉ được import kiểu ⇒ thay bằng kiểu any */
 // pages/: chỉ chép các tệp thuần (logic trang, không giao diện) của Đặt lịch ký
