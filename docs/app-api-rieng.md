@@ -119,3 +119,20 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
   cũ khi sửa); "Lưu & gửi duyệt" không có (duyệt trên web).
 - Web đổi form ⇒ `node scripts/sync-web-pricing.cjs` (test web-pricing báo lệch); RPC mới chưa có trong RPC_MAP ⇒ log "app không hỗ trợ".
 - Ghi nhớ khác: form booking web đã đổi nhiều (Công ty bán hàng, bỏ quà / ưu tiên, chính sách trước bảng giá) — app booking chưa theo.
+
+### 2026-11-16 (đêm) — L1 3: form booking = chép nguyên form web (BookingFormDialog → useWebBookingForm)
+- BE (đã nạp BEELAND26, API local đã restart; API thật cần build + restart): SP 76 `ma_phieu` (= usp_generate_form_code, công ty từ phiên;
+  CHỈ ĐỌC — _form_code_next_p khoá + đọc bộ đếm / số lớn nhất, không UPDATE; test t_ma_phieu.py 24/24 khớp + bộ đếm không đổi),
+  SP 77 `gia_can_bang_gia` (= usp_get_price_list_item_by_product, HTTP app = web từng byte). BE 8530ef7b.
+- App 381e8d8f: hook web chép (khai báo cấp module + import động); shim: addBookingAPI (body web ⇒ fn_nv_app_booking_tao, báo phiếu vừa tạo),
+  CodeGenService (số phiếu xem trước + {TenDA} viết tắt), bảng bds_products (+ `.or`), cloud_code_rules rỗng, HeThongService.CaiDat rỗng.
+  Màn create.tsx giữ luồng app (căn / lock ⇒ form; Thêm mới khách ⇒ customer/new ⇒ handleCustomerSaved; lưu xong vào chi tiết thu tiền),
+  thêm ô như web: Công ty bán hàng (bắt buộc theo tài khoản), Đại lý phân phối lọc theo CTBH, Quỹ căn (khoá), Chính sách (lọc tòa / quỹ / hạn),
+  Bảng giá theo chính sách, giá theo bảng giá. Test 309 đạt.
+- Đã thử: mô phỏng bấm Lưu với API thật (e2e_booking_form.cjs, chặn lệnh ghi) ⇒ payload; lưu payload đó trong ROLLBACK (t_bk_luu.py) ⇒
+  phiếu Chờ duyệt, căn sang 11, đủ CTBH / quỹ / đại lý / chính sách, rollback xong căn vẫn Mở bán. Máy ảo: mở form C6-2301, chọn khách,
+  CTBH AN PHÚ ⇒ 3 đại lý — CHƯA bấm Giữ chỗ thật (ghi prod).
+- Khác web có chủ đích: thứ tự ô CTBH trước Đại lý (CTBH lọc đại lý); căn chưa có tổng giá HĐ ⇒ HIỂN THỊ giá trị HĐ theo bảng giá (lưu không đổi);
+  chưa có sửa booking (app không có luồng sửa). Quy trình bán hàng sau booking (triggerSalesProcess ⇒ av2_jobs): app không chạy — bước "booking"
+  của BRG trỏ workflow đã xoá, job cuối 2026-09-09 ⇒ web hiện cũng không chạy được; khi bật lại cần endpoint riêng.
+- Còn lại của lớp cũ (dọn ở L5): BookingService.createBooking / getBookingSalesConfig, lib/bookingPayload, lib/bookingPrice, lib/agencySan.bookingSan.
