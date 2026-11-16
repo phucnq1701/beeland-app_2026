@@ -103,26 +103,6 @@ const bookingInput = {
   DonGiaDat: 0, TongGiaDat: 0, DonGiaXD: 0, ThanhTienXD: 0,
 };
 
-test("createLock stops and creates no lock row when the product transaction is rejected", async () => {
-  const { service, posts } = load({
-    reject: { "rpc/fn_product_transaction": pgError('Sản phẩm đang ở trạng thái "Booking chờ duyệt"') },
-  });
-  const res = await service.createLock({ maSP: "SP01", kyHieu: "B2-608", maDA: uid(4) });
-  assert.equal(res.status, 5000);
-  assert.equal(res.message, 'Sản phẩm đang ở trạng thái "Booking chờ duyệt"');
-  assert.equal(posts.some((p) => p.target === "cloud_bookings"), false, "no LOCK row inserted");
-});
-
-test("createLock inserts the lock row after the product transaction succeeds", async () => {
-  const { service, posts } = load();
-  const res = await service.createLock({ maSP: "SP01", kyHieu: "B2-608", maDA: uid(4), minutes: 15 });
-  assert.equal(res.status, 2000);
-  assert.equal(res.data, 900);
-  assert.deepEqual(posts.map((p) => p.target), ["rpc/fn_product_transaction", "cloud_bookings"]);
-  assert.equal(posts[0].body.p_require_codes[0], "2");
-  assert.equal(posts[1].body.loai_ct, "LOCK");
-});
-
 test("createBooking goes through fn_booking_create only, like the web", async () => {
   const { service, posts } = load({
     rpcResult: { phieu_giu_cho_id: uid(200), booking_id: uid(201), so_phieu: "BK-ABC123" },
@@ -179,16 +159,6 @@ test("lock voucher month starts at 00:00 Vietnam time", () => {
   assert.deepEqual({ ...d }, { yyyy: 2026, mm: "12", fromIso: "2026-11-30T17:00:00.000Z" });
 });
 
-test("createLock counts this month's locks from 00:00 Vietnam time", async () => {
-  const { service, gets } = loadWithGets();
-  const res = await service.createLock({ maSP: "SP01", kyHieu: "B2-608", maDA: uid(4), minutes: 15 });
-  assert.equal(res.status, 2000);
-  const count = gets.find((g) => g.table === "cloud_bookings" && g.params.loai_ct === "eq.LOCK");
-  const { lockVoucherMonth } = loadExports();
-  assert.equal(count.params.created_at, `gte.${lockVoucherMonth(new Date()).fromIso}`);
-});
-
-// Cấu hình bán hàng web tự chọn khi mở form booking (useSalesConfigOptions + BookingFormDialog)
 test("booking sales config: the highest-priority current price list, its policy and the product's price line", async () => {
   const { service, posts } = load({
     rpc: {

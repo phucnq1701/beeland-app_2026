@@ -211,12 +211,8 @@ export default function ProductDetailScreen() {
     lockInFlight.current = true;
     setLocking(true);
     try {
-      // Tạo lock cloud: RPC đổi SP (2→18) + insert phiếu LOCK
-      const res = await BookingService.createLock({
-        maSP: id,
-        kyHieu: data?.KyHieu,
-        maDA: data?.MaDA,
-      });
+      // 1 lời gọi máy chủ (fn_nv_app_lock_tao): phút lock, số phiếu, 2 ⇒ 18 + phiếu LOCK cùng giao dịch
+      const res = await BookingService.createLock({ sanPhamId: data?.ID, maSP: id });
 
       if (res?.status === 2000) {
         const seconds = res?.data || 0;

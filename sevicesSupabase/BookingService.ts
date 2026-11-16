@@ -1,3 +1,5 @@
+import { callNv, errorMessage as nvErrorMessage } from "@/services/nvApi";
+import { DuAnApi, SanPhamApi } from "@/services/SanPhamApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axiosApiSupabase from "./axiosApiSupabase";
 import { listResult, mergeProjectPages, pageArgs } from "../lib/listRpc";
@@ -135,48 +137,41 @@ function secondsLeft(iso?: string | null): number {
   return Math.max(0, Math.floor((new Date(iso).getTime() - Date.now()) / 1000));
 }
 
-function normalizeLock(r: any, index = 0) {
-  const conLai = secondsLeft(r?.het_han_luc);
+/**
+ * 1 phiếu lock từ fn_nv_app_lock_list / fn_nv_app_lock_chi_tiet (máy chủ tính con_lai: chỉ LOCKED còn hạn mới > 0) ⇒ dạng màn cũ.
+ * maSP = mã SP (chi tiết) hoặc uuid căn (danh sách) — màn chi tiết căn nhận cả hai.
+ */
+export function normalizeLock(r: any, index = 0) {
+  const conLai = Math.max(0, Number(r?.con_lai) || 0);
   const active = r?.state === LOCK_STATE.ACTIVE && conLai > 0;
-  // Tổng thời gian lock (phút) = het_han - ngay_giu_cho, mặc định 30
   let lockMinutes = DEFAULT_LOCK_MINUTES;
-  try {
-    const start = new Date(r?.ngay_giu_cho).getTime();
-    const end = new Date(r?.het_han_luc).getTime();
-    if (start > 0 && end > start) {
-      lockMinutes = Math.max(1, Math.round((end - start) / 60000));
-    }
-  } catch {}
+  const start = new Date(r?.ngay_lock ?? "").getTime();
+  const end = new Date(r?.het_han_luc ?? "").getTime();
+  if (start > 0 && end > start) lockMinutes = Math.max(1, Math.round((end - start) / 60000));
+  const maSP = r?.ma_sp ?? r?.ma_sp_id ?? null;
   return {
     id: r?.id,
     ID: r?.id,
     STT: index + 1,
     SoPhieu: r?.so_phieu,
     so_phieu: r?.so_phieu,
-    TenDA: r?.da?.ten_da ?? null,
-    tenDA: r?.da?.ten_da ?? null,
-    MaDA: r?.da?.ma_da_code ?? null,
-    MaSP: r?.sp?.ma_sp ?? null,
-    maSP: r?.sp?.ma_sp ?? null,
-    KyHieu: r?.sp?.ky_hieu ?? null,
-    kyHieu: r?.sp?.ky_hieu ?? null,
-    ThoiGianLock: r?.ngay_giu_cho,
-    ngayLock: r?.ngay_giu_cho,
+    TenDA: r?.ten_da ?? null,
+    tenDA: r?.ten_da ?? null,
+    MaDA: r?.ma_da ?? null,
+    MaSP: maSP,
+    maSP,
+    sanPhamId: r?.ma_sp_id ?? null,
+    KyHieu: r?.ky_hieu ?? null,
+    kyHieu: r?.ky_hieu ?? null,
+    ThoiGianLock: r?.ngay_lock,
+    ngayLock: r?.ngay_lock,
     NgayHetHan: r?.het_han_luc,
     ThoiGianConLai: conLai,
     NhanVienNhap: r?.nhan_vien ?? null,
-    TenCT: r?.san?.ten_ct_vt ?? r?.san?.ten_ct ?? null,
+    TenCT: r?.ten_san ?? null,
     State: r?.state,
-    TinhTrang: active
-      ? "active"
-      : r?.state === LOCK_STATE.RELEASED
-        ? "released"
-        : "expired",
-    TenTT: active
-      ? "Đang lock"
-      : r?.state === LOCK_STATE.RELEASED
-        ? "Đã giải phóng"
-        : "Hết hạn",
+    TinhTrang: active ? "active" : r?.state === LOCK_STATE.RELEASED ? "released" : "expired",
+    TenTT: active ? "Đang lock" : r?.state === LOCK_STATE.RELEASED ? "Đã giải phóng" : "Hết hạn",
     // tương thích UI cũ: thoiGianConLai (phút, cho list), thoiGianLock (tổng phút)
     thoiGianConLai: Math.ceil(conLai / 60),
     thoiGianLock: lockMinutes,
@@ -1121,331 +1116,78 @@ export const BookingService = {
    * Danh sách lock — cloud_bookings loai_ct=LOCK, order ngay_giu_cho desc.
    * payload: { maDA?: string[] (ma_da_code), keyword?: string, limit?: number }
    */
-  listProductLocks: async (payload: any = {}) => {
-    const companyId = await getCompanyId();
-    const validJwt = await getValidSupabaseJwt();
-    if (!validJwt || !companyId || !UUID_RE.test(companyId)) {
-      console.log("[Lock] chưa có cloud_jwt/company_id hợp lệ");
-      return { data: [] };
-    }
-
-    try {
-      const params: Record<string, string> = {
-        select: LOCK_SELECT,
-        ma_ctdk_id: `eq.${companyId}`,
-        loai_ct: `eq.${LOCK_DOC_TYPE}`,
-        order: "ngay_giu_cho.desc.nullslast",
-        limit: String(payload?.limit ?? 500),
-      };
-
-      // Lọc dự án: maDA có thể là mảng ma_da_code → resolve sang uuid
-      const maDAs: string[] = Array.isArray(payload?.maDA)
-        ? payload.maDA
-        : payload?.maDA
-          ? [payload.maDA]
-          : [];
-      if (maDAs.length > 0) {
-        const uids: string[] = [];
-        for (const code of maDAs) {
-          const v = String(code).trim();
-          if (UUID_RE.test(v)) {
-            uids.push(v);
-            continue;
-          }
-          try {
-            const r = await axiosApiSupabase.get("rest/v1/da_projects", {
-              params: { select: "id", ma_da_code: `eq.${v}`, limit: "1" },
-            });
-            const rows = Array.isArray(r.data) ? r.data : [];
-            if (rows[0]?.id) uids.push(rows[0].id);
-          } catch {}
-        }
-        if (uids.length > 0) params.ma_da_id = `in.(${uids.join(",")})`;
-      }
-
-      const kw = String(payload?.keyword ?? "").trim();
-      if (kw) params.so_phieu = `ilike.*${kw.replace(/[,()]/g, "")}*`;
-
-      const res = await axiosApiSupabase.get("rest/v1/cloud_bookings", {
-        params,
-      });
-      const rows = Array.isArray(res.data) ? res.data : [];
-      return { data: rows.map((r: any, i: number) => normalizeLock(r, i)) };
-    } catch (error) {
-      console.log("ERROR listProductLocks:", error);
-      return { data: [] };
-    }
-  },
-
   /**
-   * Chi tiết 1 phiếu lock theo id + lịch sử lock cùng căn (tối đa 50).
+   * Danh sách phiếu lock (fn_nv_app_lock_list = fn_product_lock_list của web: phạm vi chứng từ /sales/locks + dự án được gán,
+   * tìm theo số phiếu / ký hiệu / mã SP). payload: { maDA?: mã dự án | uuid | mảng, keyword?, limit? }.
+   * Nhiều dự án ⇒ gọi từng dự án rồi gộp (máy chủ nhận 1 dự án / lần).
    */
-  getLockDetailCloud: async (payload: any = {}) => {
-    const companyId = await getCompanyId();
-    const validJwt = await getValidSupabaseJwt();
-    if (!validJwt || !companyId || !UUID_RE.test(companyId)) {
-      return { data: null, history: [] };
-    }
-
+  listProductLocks: async (payload: any = {}) => {
     try {
-      const id = payload?.ID ?? payload?.id;
-      if (!id) return { data: null, history: [] };
+      const raw: any[] = Array.isArray(payload?.maDA) ? payload.maDA : payload?.maDA != null && payload?.maDA !== "" ? [payload.maDA] : [];
+      const ids = (await Promise.all(raw.map((x) => DuAnApi.resolveId(x)))).filter((x): x is string => !!x);
+      if (raw.length > 0 && ids.length === 0) return { data: [] };
+      const size = Math.max(1, Math.min(5000, Number(payload?.limit ?? 500) || 500));
+      const kw = String(payload?.keyword ?? "").trim() || null;
+      const targets: (string | null)[] = ids.length ? ids : [null];
+      const pages = await Promise.all(targets.map((pid) =>
+        callNv<{ rows: any[] }>("fn_nv_app_lock_list", { p_du_an_id: pid, p_tu_khoa: kw, p_trang: 1, p_so_dong: size })));
+      const rows = pages.flatMap((p) => p?.rows ?? []);
+      rows.sort((x, y) => String(y?.ngay_lock ?? "").localeCompare(String(x?.ngay_lock ?? "")));
+      return { data: rows.slice(0, size).map((r: any, i: number) => normalizeLock(r, i)) };
+    } catch (e) {
+      console.log("ERROR listProductLocks (fn_nv_app_lock_list):", nvErrorMessage(e));
+      return { data: [], error: nvErrorMessage(e) };
+    }
+  },
 
-      const res = await axiosApiSupabase.get("rest/v1/cloud_bookings", {
-        params: {
-          select: LOCK_SELECT,
-          ma_ctdk_id: `eq.${companyId}`,
-          loai_ct: `eq.${LOCK_DOC_TYPE}`,
-          id: `eq.${id}`,
-          limit: "1",
-        },
-      });
-      const rows = Array.isArray(res.data) ? res.data : [];
-      if (rows.length === 0) return { data: null, history: [] };
-
-      const detail = normalizeLock(rows[0], 0);
-      const maSpId = rows[0]?.ma_sp_id;
-
-      // Lịch sử lock cùng căn
-      let history: any[] = [];
-      if (maSpId) {
-        try {
-          const h = await axiosApiSupabase.get("rest/v1/cloud_bookings", {
-            params: {
-              select:
-                "id,so_phieu,state,ngay_giu_cho,het_han_luc,nhan_vien,san:dm_companies!ma_san_id(ten_ct,ten_ct_vt)",
-              ma_ctdk_id: `eq.${companyId}`,
-              loai_ct: `eq.${LOCK_DOC_TYPE}`,
-              ma_sp_id: `eq.${maSpId}`,
-              order: "ngay_giu_cho.desc",
-              limit: "50",
-            },
-          });
-          history = Array.isArray(h.data) ? h.data : [];
-        } catch (e) {
-          console.log("ERROR lock history:", e);
-        }
-      }
-
-      return { data: detail, history };
-    } catch (error) {
-      console.log("ERROR getLockDetailCloud:", error);
-      return { data: null, history: [] };
+  /** Chi tiết 1 phiếu lock (fn_nv_app_lock_chi_tiet — phạm vi như web). */
+  getLockDetailCloud: async (payload: any = {}) => {
+    const id = payload?.ID ?? payload?.id;
+    if (!id) return { data: null };
+    try {
+      const r = await callNv<any>("fn_nv_app_lock_chi_tiet", { p_id: String(id) });
+      return { data: r ? normalizeLock(r, 0) : null };
+    } catch (e) {
+      console.log("ERROR getLockDetailCloud (fn_nv_app_lock_chi_tiet):", nvErrorMessage(e));
+      return { data: null, error: nvErrorMessage(e) };
     }
   },
 
   /**
-   * Tạo lock mới: đổi trạng thái SP qua RPC fn_product_transaction
-   * (2 Mở bán → 18 Đã Lock); chỉ khi thành công mới insert phiếu LOCK.
-   * payload: { maSP, kyHieu, maDA (uuid hoặc ma_da_code), minutes? }
-   * Trả { status: 2000, data: seconds } giống legacy để UI cũ dùng được.
+   * Lock căn — 1 lời gọi fn_nv_app_lock_tao (máy chủ: phút lock theo cài đặt bán hàng, số phiếu không trùng, 2 ⇒ 18 + phiếu
+   * LOCK trong cùng giao dịch). payload: { sanPhamId (uuid) | maSP }. Trả { status: 2000, data: giây, soPhieu } như bản cũ.
    */
   createLock: async (payload: any = {}) => {
-    const companyId = await getCompanyId();
-    const validJwt = await getValidSupabaseJwt();
-    if (!validJwt || !companyId || !UUID_RE.test(companyId)) {
-      return { status: 5000, message: "Chưa đăng nhập cloud" };
-    }
-
     try {
-      const maSP = payload?.maSP ?? payload?.MaSP;
-      const kyHieu = payload?.kyHieu ?? payload?.KyHieu;
-      if (!maSP && !kyHieu) return { status: 5000, message: "Thiếu mã sản phẩm" };
-
-      // Resolve uuid sản phẩm
-      let spUid: string | null = null;
-      let spRow: any = null;
-      try {
-        const q: Record<string, string> = {
-          select: "id,ma_sp,ky_hieu,ma_da",
-          limit: "1",
-        };
-        if (maSP) q.ma_sp = `eq.${maSP}`;
-        else q.ky_hieu = `eq.${kyHieu}`;
-        const r = await axiosApiSupabase.get("rest/v1/bds_products", {
-          params: q,
-        });
-        const rows = Array.isArray(r.data) ? r.data : [];
-        spRow = rows[0] || null;
-        spUid = spRow?.id || null;
-      } catch {}
-      if (!spUid) return { status: 5000, message: "Không tìm thấy sản phẩm" };
-
-      // Resolve uuid dự án
-      let daUid: string | null = spRow?.ma_da || null;
-      const maDA = payload?.maDA ?? payload?.MaDA;
-      if (!daUid && maDA) {
-        const v = String(maDA).trim();
-        if (UUID_RE.test(v)) daUid = v;
-        else {
-          try {
-            const r = await axiosApiSupabase.get("rest/v1/da_projects", {
-              params: { select: "id", ma_da_code: `eq.${v}`, limit: "1" },
-            });
-            const rows = Array.isArray(r.data) ? r.data : [];
-            daUid = rows[0]?.id || null;
-          } catch {}
-        }
+      let spId = String(payload?.sanPhamId ?? payload?.ID ?? "").trim();
+      if (!UUID_RE.test(spId)) {
+        const key = String(payload?.maSP ?? payload?.MaSP ?? payload?.kyHieu ?? payload?.KyHieu ?? "").trim();
+        if (!key) return { status: 5000, message: "Thiếu mã sản phẩm" };
+        const d = await SanPhamApi.detail(key);
+        spId = d?.product?.ID ?? "";
+        if (!spId) return { status: 5000, message: "Không tìm thấy sản phẩm" };
       }
-
-      // Thời gian lock: payload minutes > 0 → cấu hình dự án → mặc định 30 phút
-      let lockMinutes = Number(payload?.minutes ?? payload?.Minutes ?? 0);
-      if (!Number.isFinite(lockMinutes) || lockMinutes <= 0) {
-        lockMinutes = await resolveLockMinutes(daUid);
-      }
-
-      const now = new Date();
-      const hetHan = new Date(now.getTime() + lockMinutes * 60000);
-      const staff = await getStaffName();
-
-      // Số phiếu: KyHieu/YYYY/MM/STT (đếm lock trong tháng, tháng theo giờ VN như web)
-      const { yyyy, mm, fromIso: from } = lockVoucherMonth(now);
-      let soPhieu = `${kyHieu || maSP}/${yyyy}/${mm}/1`;
-      try {
-        const c = await axiosApiSupabase.get("rest/v1/cloud_bookings", {
-          params: {
-            select: "id",
-            ma_ctdk_id: `eq.${companyId}`,
-            loai_ct: `eq.${LOCK_DOC_TYPE}`,
-            created_at: `gte.${from}`,
-          },
-          headers: { Prefer: "count=exact" },
-        });
-        const range = (c.headers?.["content-range"] as string) || "";
-        const count = range.includes("/")
-          ? Number(range.split("/").pop()) || 0
-          : 0;
-        soPhieu = `${kyHieu || maSP}/${yyyy}/${mm}/${count + 1}`;
-      } catch {}
-
-      // 1) Đổi trạng thái SP qua RPC (2 → 18). Hệ thống từ chối (căn không còn "Mở bán"…) → DỪNG,
-      //    không tạo phiếu lock – như web CloudWriteService.lockProductCloudFirst.
-      try {
-        await axiosApiSupabase.post("rest/v1/rpc/fn_product_transaction", {
-          p_san_pham_id: spUid,
-          p_action: "LOCK_CREATE",
-          p_next_product_code: "18",
-          p_require_codes: ["2"],
-          p_phieu_id: null,
-          p_next_pgc_code: null,
-          p_so_phieu: soPhieu,
-          p_note: `Lock căn đến ${hetHan.toISOString()}`,
-          p_user: staff || null,
-        });
-      } catch (e) {
-        console.log("ERROR lock RPC:", e);
-        return { status: 5000, message: serverMessage(e, "Không lock được căn này") };
-      }
-
-      // 2) Insert phiếu LOCK
-      await axiosApiSupabase.post("rest/v1/cloud_bookings", {
-        ma_ctdk_id: companyId,
-        loai_ct: LOCK_DOC_TYPE,
-        so_phieu: soPhieu,
-        ma_da_id: daUid,
-        ma_sp_id: spUid,
-        state: LOCK_STATE.ACTIVE,
-        ngay_giu_cho: now.toISOString(),
-        ngay_nhap: now.toISOString(),
-        het_han_luc: hetHan.toISOString(),
-        nhan_vien: staff,
-        ghi_chu: `Lock căn đến ${hetHan.toISOString()}`,
-      });
-
-      return { status: 2000, data: lockMinutes * 60, soPhieu };
-    } catch (error) {
-      console.log("ERROR createLock:", error);
-      return { status: 5000, message: "Tạo lock thất bại" };
+      const r = await callNv<any>("fn_nv_app_lock_tao", { p_san_pham_id: spId });
+      return { status: 2000, data: Number(r?.so_giay) || 0, soPhieu: r?.so_phieu ?? null, lockId: r?.id ?? null };
+    } catch (e) {
+      return { status: 5000, message: nvErrorMessage(e, "Không lock được căn này") };
     }
   },
 
   /**
-   * Hủy lock: update state (RELEASED/EXPIRED) + tính lại trạng thái SP
-   * (trả về '2' Mở bán nếu đang '18').
-   */
-  releaseLock: async (payload: any = {}) => {
-    const validJwt = await getValidSupabaseJwt();
-    if (!validJwt) return { status: 5000, message: "Chưa đăng nhập cloud" };
-
-    try {
-      const id = payload?.ID ?? payload?.id;
-      const state =
-        payload?.state === LOCK_STATE.RELEASED
-          ? LOCK_STATE.RELEASED
-          : LOCK_STATE.EXPIRED;
-      if (!id) return { status: 5000, message: "Thiếu ID phiếu lock" };
-
-      await axiosApiSupabase.patch(`rest/v1/cloud_bookings?id=eq.${id}`, {
-        state,
-        updated_at: new Date().toISOString(),
-      });
-
-      // Tính lại trạng thái SP (trả về Mở bán nếu đang Đã Lock)
-      const staff = await getStaffName();
-      try {
-        await axiosApiSupabase.post("rest/v1/rpc/fn_product_transaction", {
-          p_san_pham_id: payload?.ma_sp_id ?? null,
-          p_action: "LOCK_RELEASE",
-          p_next_product_code: "2",
-          p_require_codes: ["18"],
-          p_phieu_id: id,
-          p_next_pgc_code: null,
-          p_so_phieu: payload?.so_phieu ?? null,
-          p_note:
-            state === LOCK_STATE.RELEASED
-              ? "Giải phóng lock căn"
-              : "Hết thời gian lock căn",
-          p_user: staff || null,
-        });
-      } catch (e) {
-        console.log("ERROR lock release RPC:", e);
-      }
-
-      return { status: 2000 };
-    } catch (error) {
-      console.log("ERROR releaseLock:", error);
-      return { status: 5000, message: "Hủy lock thất bại" };
-    }
-  },
-
-  /**
-   * Quét lock hết hạn lúc load màn: state=LOCKED AND het_han_luc < now → EXPIRED.
+   * Hết hạn lock: máy chủ chuyển phiếu LOCKED quá hạn sang EXPIRED và TRẢ CĂN về trạng thái thực tế (fn_nv_app_lock_het_han =
+   * fn_product_lock_expire_due của web; job nền 5 phút vẫn chạy). Lỗi ⇒ bỏ qua (không chặn màn).
    */
   sweepExpiredLocks: async () => {
-    const companyId = await getCompanyId();
-    const validJwt = await getValidSupabaseJwt();
-    if (!validJwt || !companyId || !UUID_RE.test(companyId)) return;
-
     try {
-      const now = new Date().toISOString();
-      const res = await axiosApiSupabase.get("rest/v1/cloud_bookings", {
-        params: {
-          select: "id,ma_sp_id,so_phieu",
-          ma_ctdk_id: `eq.${companyId}`,
-          loai_ct: `eq.${LOCK_DOC_TYPE}`,
-          state: `eq.${LOCK_STATE.ACTIVE}`,
-          het_han_luc: `lt.${now}`,
-          limit: "200",
-        },
-      });
-      const rows = Array.isArray(res.data) ? res.data : [];
-      for (const r of rows) {
-        try {
-          await axiosApiSupabase.patch(
-            `rest/v1/cloud_bookings?id=eq.${r.id}`,
-            { state: LOCK_STATE.EXPIRED, updated_at: now }
-          );
-        } catch {}
-      }
-      if (rows.length > 0) {
-        console.log(`[Lock] đã quét ${rows.length} lock hết hạn`);
-      }
-    } catch (error) {
-      console.log("ERROR sweepExpiredLocks:", error);
+      const ids = await callNv<any[]>("fn_nv_app_lock_het_han", {});
+      return { data: Array.isArray(ids) ? ids : [] };
+    } catch (e) {
+      console.log("sweepExpiredLocks (fn_nv_app_lock_het_han):", nvErrorMessage(e));
+      return { data: [] };
     }
   },
 
-  /** Ảnh booking trên self-host; MaPGC là UUID vòng đời, không phải số phiếu. */
   getListImageGC: async (payload: { MaPGC?: string; maPGC?: string } = {}) => {
     if (!(await getValidSupabaseJwt())) {
       throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
