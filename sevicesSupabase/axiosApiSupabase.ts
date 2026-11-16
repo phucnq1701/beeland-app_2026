@@ -1,6 +1,6 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getFreshJwt } from "@/services/session";
+import { getFreshJwt, recoverFrom401 } from "@/services/session";
 import { API_URL } from "@/services/config";
 
 /**
@@ -69,12 +69,15 @@ axiosApiSupabase.interceptors.response.use(
         `[API Error] ${error.config?.url} - Status: ${error.response?.status}`
       );
       console.log("[API Error Data]", JSON.stringify(error.response?.data));
-      const msg = JSON.stringify(error.response?.data || "");
-      // JWT hết hạn: hướng dẫn đăng nhập lại, không retry vòng lặp
-      if (error.response?.status === 401 && msg.includes("JWT expired")) {
-        console.log(
-          "[Auth] PGRST303 JWT expired -> vui lòng đăng nhập lại để lấy cloud_jwt mới. Tạm thời request đã fallback anon-key nhưng RLS có thể trả rỗng."
-        );
+      // 401 ở rest/v1 (JWT hết hạn / không hợp lệ): làm mới phiên 1 lần rồi gửi lại (như services/nvApi.ts)
+      const cfg: any = error.config;
+      if (error.response?.status === 401 && cfg && !cfg.__nvRetried && String(cfg.url || "").startsWith("rest/v1")) {
+        cfg.__nvRetried = true;
+        const next = await recoverFrom401();
+        if (next) {
+          cfg.headers = { ...(cfg.headers || {}), Authorization: `Bearer ${next}` };
+          return axiosApiSupabase.request(cfg);
+        }
       }
     }
     return Promise.reject(error);
