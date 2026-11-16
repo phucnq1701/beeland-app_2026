@@ -184,7 +184,7 @@ export default function RequestFormScreen() {
       setFromCustomer(byCustomer);
       setLocked(lockedFields(byCustomer, d));
       const [att, label] = await Promise.all([
-        CustomerRequestService.resolveAttachments(d.attachments).catch(() =>
+        CustomerRequestService.resolveAttachments(d.attachments, d.id).catch(() =>
           d.attachments.map((v) => ({ stored: v, url: "", fileName: v.split("/").pop() || "Tệp", image: false })),
         ),
         CustomerRequestService.contractLabel(d.contractId, d.contractCode),

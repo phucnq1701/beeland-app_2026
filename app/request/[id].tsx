@@ -74,7 +74,7 @@ export default function RequestDetailScreen() {
         }
         setError(null);
         const [att, label] = await Promise.all([
-          CustomerRequestService.resolveAttachments(d.attachments).catch(() => [] as ResolvedAttachment[]),
+          CustomerRequestService.resolveAttachments(d.attachments, d.id).catch(() => [] as ResolvedAttachment[]),
           CustomerRequestService.contractLabel(d.contractId, d.contractCode),
         ]);
         setFiles(att);
