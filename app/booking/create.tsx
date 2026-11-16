@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import React, { useEffect, useMemo, useRef } from "react";
+import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Building2, Check, UserPlus, UserX } from "lucide-react-native";
+import { Building2, UserPlus, UserX, X } from "lucide-react-native";
 
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
-
+import { useWebBooking } from "@/components/booking/useWebBooking";
 import {
   AppHeader,
   Avatar,
@@ -16,47 +16,17 @@ import {
   SelectField,
   SkeletonList,
   Text,
-  useToast,
 } from "@/components/ui";
-import { hapticError, hapticSuccess } from "@/lib/haptics";
+import { hapticSuccess } from "@/lib/haptics";
 import { formatVND, formatVNDShort, maskPhone } from "@/lib/format";
-import { buildBookingPayload } from "@/lib/bookingPayload";
-import { agencySanId, bookingSan } from "@/lib/agencySan";
-import { BookingSalesConfig, pickPrice, policyBookingAmount } from "@/lib/bookingPrice";
-import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { AGENCY_FIXED_REASON, salesCompanyLockReason } from "@/lib/web/components/Products/ContractForm/disabledReasons";
+import { policyConfigPickOptions } from "@/lib/web/components/Sales/salesConfig/expiryPickOptions";
+import { priceListOptionsForPolicy } from "@/lib/web/components/Sales/salesConfig/policyScope";
+import { bookingFormTitle, fundCodeOf } from "@/lib/web/lib/transferFund";
 import { colors, elevation, radius, space } from "@/theme";
-import { BookingService } from "@/sevicesSupabase/BookingService";
-import { CustomerService as CustomerSupabaseService } from "@/sevicesSupabase/CustomerService";
-import { ProductService } from "@/sevicesSupabase/ProductService";
-import { getBranchId, getTypeAccount } from "@/sevicesSupabase/cloudTenant";
 
-type BookingCustomer = {
-  id?: string;
-  maKH: string;
-  tenKH: string;
-  diDong: string;
-  type?: string;
-  company?: string | null;
-  email?: string;
-  cccd?: string;
-  diaChi?: string;
-  taxCode?: string;
-  status?: string;
-};
-
-type SanGiaoDich = {
-  ID: string;
-  MaSan: string;
-  MaCT?: string;
-  TenSan: string;
-  TenCT?: string;
-  DiaChi?: string;
-  DienThoai?: string;
-  Email?: string;
-};
-
-/** Giá trị "không qua sàn" trong SelectField (sàn là tuỳ chọn). */
-const NO_SAN = "__none__";
+/** Giá trị "không chọn" trong SelectField */
+const NONE = "__none__";
 
 function parseJsonParam(value: unknown) {
   if (!value || Array.isArray(value)) return null;
@@ -67,286 +37,58 @@ function parseJsonParam(value: unknown) {
   }
 }
 
-function normalizeCustomer(item: any): BookingCustomer {
-  const raw = item?.raw || {};
-  const isBusiness =
-    item?.type === "business" ||
-    item?.is_personal === false ||
-    raw?.is_personal === false;
-
+/** Khách vừa tạo ở customer/new (dòng fn_customer_get) ⇒ dạng web CustomerFormModal trả về (handleCustomerSaved) */
+function toWebSavedCustomer(c: any) {
+  const raw = c?.raw || {};
+  const id = [c?.id, raw?.id, c?.MaKH].map((x) => (x == null ? "" : String(x))).find((x) => x.includes("-")) ?? "";
   return {
-    id: item?.id ?? raw?.id ?? "",
-    // Quy chuẩn: query theo id (uuid). Ưu tiên UUID thật; chỉ fallback về
-    // ma_so_kh (vd "KH-00006") khi chưa có id — BookingService sẽ tự resolve
-    // uuid từ ma_so_kh.
-    maKH: String(
-      item?.id && String(item.id).includes("-")
-        ? item.id
-        : raw?.id && String(raw.id).includes("-")
-          ? raw.id
-          : item?.ma_kh ?? raw?.MaKH ?? item?.id ?? raw?.id ?? ""
-    ),
-    tenKH: (item?.ho_ten ?? raw?.TenKH ?? item?.ten_kh ?? raw?.ten_kh ?? "")
-      .toString()
-      .trim(),
-    diDong: String(item?.dien_thoai ?? raw?.DiDong ?? item?.di_dong ?? ""),
-    email: String(item?.email ?? raw?.Email ?? ""),
-    cccd: String(item?.cccd ?? raw?.SoCMND ?? ""),
-    diaChi: String(item?.dia_chi ?? raw?.DiaChi ?? ""),
-    company: raw?.TenCongTy ?? item?.ten_cong_ty ?? null,
-    taxCode: String(item?.taxCode ?? raw?.MaSoThue ?? ""),
-    type: isBusiness ? "business" : "personal",
-    status: item?.status ?? raw?.status ?? "",
+    MaKH: id,
+    MaSoKH: c?.ma_so_kh ?? raw?.ma_so_kh ?? c?.MaSoKH ?? null,
+    TenKH: c?.ho_ten ?? raw?.TenKH ?? c?.ten_kh ?? c?.TenKH ?? "",
+    TenCongTy: raw?.TenCongTy ?? c?.ten_cong_ty ?? "",
+    SoCMND: c?.cccd ?? raw?.SoCMND ?? c?.SoCMND ?? "",
+    DiDong: c?.dien_thoai ?? raw?.DiDong ?? c?.di_dong ?? c?.DiDong ?? "",
+    Email: c?.email ?? raw?.Email ?? c?.Email ?? "",
+    DiaChi: c?.dia_chi ?? raw?.DiaChi ?? c?.DiaChi ?? "",
   };
 }
 
-const customerKey = (c: BookingCustomer) => c.maKH || c.id || c.tenKH;
-
+/**
+ * Tạo booking — luồng app giữ nguyên (từ chi tiết căn / phiếu lock; chọn khách, "Thêm mới" sang màn tạo khách rồi quay về; lưu xong vào
+ * thẳng chi tiết booking để thu tiền), logic ĐÚNG form web BookingFormDialog (useWebBooking ⇒ lib/web useWebBookingForm): số phiếu theo quy
+ * tắc đánh mã, khách hàng (fn_customer_picker, ≥ 2 ký tự), đại lý phân phối theo công ty bán hàng, quỹ căn (khoá), chính sách trước bảng
+ * giá (lọc theo quỹ căn / tòa / hạn), giá theo bảng giá, tiền + thời gian giữ chỗ theo chính sách / cài đặt bán hàng.
+ */
 export default function CreateBookingScreen() {
   const router = useRouter();
-  const toast = useToast();
   const { dataBooking, newCustomer } = useLocalSearchParams();
-
-  const bookingData = parseJsonParam(dataBooking);
-  // KH vừa tạo ở customer/new (dòng fn_customer_get) → chuẩn hoá về BookingCustomer
-  const parsedNewCustomer = parseJsonParam(newCustomer);
-  const initialNewCustomer = parsedNewCustomer ? normalizeCustomer(parsedNewCustomer) : null;
   const bookingParam = typeof dataBooking === "string" ? dataBooking : "";
+  const bookingData = useMemo(() => parseJsonParam(dataBooking), [dataBooking]);
 
-  const [selectedCustomer, setSelectedCustomer] =
-    useState<BookingCustomer | null>(initialNewCustomer);
-  const [selectedSan, setSelectedSan] = useState<SanGiaoDich | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const debouncedQuery = useDebouncedValue(searchQuery, 300);
-  const [dataKH, setDataKH] = useState<BookingCustomer[]>([]);
-  const [sanList, setSanList] = useState<SanGiaoDich[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingSan, setLoadingSan] = useState(false);
-  const [creatingBooking, setCreatingBooking] = useState(false);
-  // Đại lý: sàn = sàn của tài khoản (branch_id), ô Sàn khoá – như web BookingFormDialog (useAgencySan)
-  const [isAgency, setIsAgency] = useState(false);
-  const [agencySan, setAgencySan] = useState<string | null>(null);
-  const [customerError, setCustomerError] = useState<string | null>(null);
-  // Chặn gửi trùng ngay cả khi người dùng bấm 2 lần trước khi màn kịp vẽ lại
-  const submitting = useRef(false);
+  const { ready, error, form: r, created } = useWebBooking({ bookingData });
+  const navigated = useRef(false);
 
-  // Bảng giá / chính sách web tự chọn cho căn này (giá booking lấy theo bảng giá, thiếu thì giá sản phẩm)
-  const [salesConfig, setSalesConfig] = useState<BookingSalesConfig | null>(null);
-  const salesConfigTask = useRef<Promise<BookingSalesConfig> | null>(null);
-  const loadSalesConfig = () => {
-    if (!salesConfigTask.current) {
-      salesConfigTask.current = BookingService.getBookingSalesConfig(bookingData);
-      void salesConfigTask.current.then(setSalesConfig);
-    }
-    return salesConfigTask.current;
-  };
+  // Lưu xong (form web gọi onSuccess) ⇒ vào thẳng chi tiết booking vừa tạo để thu tiền (spec D8)
   useEffect(() => {
-    void loadSalesConfig();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!created || navigated.current) return;
+    navigated.current = true;
+    hapticSuccess();
+    if (created.BookingId) router.replace({ pathname: "/booking/[id]", params: { id: String(created.BookingId) } });
+    else router.replace("/bookings");
+  }, [created, router]);
 
-  // Quay về từ customer/new (router.dismissTo giữ nguyên màn này, chỉ đổi param) → chọn KH mới
+  // Quay về từ customer/new (router.dismissTo giữ màn này, chỉ đổi param) ⇒ chọn khách mới như web handleCustomerSaved
+  const appliedNewCustomer = useRef<string | null>(null);
   useEffect(() => {
-    if (!newCustomer) return;
+    if (!ready || !r || !newCustomer || appliedNewCustomer.current === String(newCustomer)) return;
     const parsed = parseJsonParam(newCustomer);
-    if (parsed) {
-      setSelectedCustomer(normalizeCustomer(parsed));
-      setCustomerError(null);
-    }
-  }, [newCustomer]);
+    if (!parsed) return;
+    appliedNewCustomer.current = String(newCustomer);
+    r.handleCustomerSaved(toWebSavedCustomer(parsed));
+  }, [ready, r, newCustomer]);
 
-  // Lấy danh sách sàn giao dịch từ dm_companies (is_san=true)
-  const loadSanList = async () => {
-    setLoadingSan(true);
-    try {
-      const [res, typeAccount, branchId] = await Promise.all([
-        ProductService.getSanGiaoDichAPI(),
-        getTypeAccount().catch(() => ""),
-        getBranchId().catch(() => ""),
-      ]);
-      const list: SanGiaoDich[] = Array.isArray(res?.data) ? res.data : [];
-      setSanList(list);
-      const agency = String(typeAccount).toUpperCase() === "AGENCY";
-      setIsAgency(agency);
-      setAgencySan(agencySanId(typeAccount, branchId));
-      // Đại lý không chọn sàn – bỏ qua sàn gợi ý từ sản phẩm
-      if (agency) return;
-
-      // Nếu sản phẩm hoặc bookingData đã chỉ định sàn thì auto select
-      const spMaSan = bookingData?.MaSan || bookingData?.ma_san || bookingData?.san_giao_dich;
-      if (spMaSan && list.length > 0) {
-        const found = list.find(
-          (s) =>
-            s.ID === spMaSan ||
-            s.MaSan === spMaSan ||
-            s.TenSan?.toLowerCase() === String(spMaSan).toLowerCase()
-        );
-        if (found) {
-          setSelectedSan(found);
-        }
-      }
-    } catch (error) {
-      console.log("Error loading san giao dich:", error);
-    } finally {
-      setLoadingSan(false);
-    }
-  };
-
-  const handleSelectCustomer = (customer: BookingCustomer) => {
-    setSelectedCustomer(customer);
-    setCustomerError(null);
-  };
-
-  const handleSelectSan = (san: SanGiaoDich | null) => {
-    setSelectedSan(san);
-  };
-
-  const handleContinue = async () => {
-    // Sàn của sản phẩm được tự chọn khi danh sách sàn tải xong → chờ để không gửi MaSan rỗng
-    if (submitting.current || loadingSan) return;
-    if (!selectedCustomer) {
-      setCustomerError("Vui lòng chọn khách hàng");
-      hapticError();
-      return;
-    }
-    if (!selectedCustomer.maKH) {
-      setCustomerError("Khách hàng chưa có mã để ghép vào booking");
-      hapticError();
-      return;
-    }
-
-    try {
-      submitting.current = true;
-      setCreatingBooking(true);
-
-      // Đại lý luôn ghi sàn của mình (web enforceAgencySan); không xác định được sàn ⇒ không tạo
-      const san = bookingSan({ isAgency, agencySan, selected: selectedSan, sanList });
-      if (!san.ok) {
-        hapticError();
-        toast.show({ type: "error", message: san.message });
-        return;
-      }
-
-      // Payload theo chuẩn BookingService.createBooking (trường giá như web)
-      const sales = salesConfig ?? (await loadSalesConfig());
-      const initDataBooking = buildBookingPayload(bookingData, selectedCustomer, san.san, sales);
-
-      const resultBooking = await BookingService.createBooking(initDataBooking);
-
-      if (resultBooking?.status === 2000) {
-        hapticSuccess();
-        toast.show({
-          type: "success",
-          message: `Đã tạo booking cho ${selectedCustomer.tenKH || "khách hàng"}`,
-        });
-        // Vào thẳng chi tiết booking vừa tạo để thu tiền luôn (spec D8)
-        if (resultBooking?.id) {
-          router.replace({
-            pathname: "/booking/[id]",
-            params: { id: String(resultBooking.id) },
-          });
-        } else {
-          router.replace("/bookings");
-        }
-      } else {
-        hapticError();
-        toast.show({ type: "error", message: resultBooking?.message || "Không thể tạo booking" });
-      }
-    } catch (error: any) {
-      console.log("createBooking error:", error);
-      hapticError();
-      toast.show({ type: "error", message: error?.message || "Không thể tạo booking" });
-    } finally {
-      submitting.current = false;
-      setCreatingBooking(false);
-    }
-  };
-
-  // Ô chọn khách như web BookingFormDialog: fn_customer_picker (từ khoá ≥ 2 ký tự, ≤ 50 dòng, không cần quyền màn Khách hàng)
-  const loadData = async (search = "") => {
-    setLoading(true);
-    try {
-      const res = await CustomerSupabaseService.pickCustomers({ search, limit: 50 });
-      const list = Array.isArray(res?.data) ? res.data : [];
-      setDataKH(list.map((customer) => normalizeCustomer(customer)));
-    } catch (error) {
-      console.log("ERROR getCustomers:", error);
-      setDataKH([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (bookingData) {
-      const statusName = String(
-        bookingData?.TenTT ||
-        bookingData?.ten_tt ||
-        bookingData?.TrangThai ||
-        bookingData?.status ||
-        ""
-      )
-        .toLowerCase()
-        .trim();
-      const isBooking =
-        statusName.includes("booking") ||
-        statusName.includes("chờ duyệt") ||
-        statusName.includes("cho duyet") ||
-        statusName.includes("đã book") ||
-        statusName.includes("da book") ||
-        statusName.includes("giữ chỗ") ||
-        statusName.includes("giu cho") ||
-        String(bookingData?.MaTT) === "5" ||
-        String(bookingData?.MaTT) === "6";
-
-      // Lỗi chặn → giữ Alert (spec 4.5)
-      if (isBooking) {
-        Alert.alert(
-          "Thông báo",
-          "Sản phẩm này đã có người booking rồi, người sau không được phép booking nữa.",
-          [
-            {
-              text: "Quay lại",
-              onPress: () => router.back(),
-            },
-          ]
-        );
-      }
-    }
-
-    loadSanList();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Tải danh sách KH lúc mở màn và mỗi khi từ khoá đứng yên 300ms
-  useEffect(() => {
-    loadData(debouncedQuery);
-  }, [debouncedQuery]);
-
-  // KH vừa tạo mới (quay về từ customer/new) có thể chưa nằm trong kết quả tìm kiếm → ghim lên đầu
-  const customers = useMemo(() => {
-    if (!selectedCustomer) return dataKH;
-    const inList = dataKH.some((c) => customerKey(c) === customerKey(selectedCustomer));
-    return inList ? dataKH : [selectedCustomer, ...dataKH];
-  }, [dataKH, selectedCustomer]);
-
-  const sanOptions = useMemo(
-    () => [
-      { value: NO_SAN, label: "Không qua sàn" },
-      ...sanList.map((s) => ({ value: s.ID || s.MaSan, label: s.TenSan, description: s.DiaChi || undefined })),
-    ],
-    [sanList]
-  );
-
-  const productPrice = bookingData?.TongGiaTriHDMB ?? bookingData?.TongGomPBT ?? bookingData?.TongGiaGomVAT;
-  // Giá hiển thị = giá sẽ ghi vào booking (bảng giá trước, như web)
-  const unitPrice = salesConfig?.priceItem ? pickPrice(salesConfig.priceItem.TongGiaGomPBT, productPrice) : productPrice;
-  const holdAmount =
-    policyBookingAmount(salesConfig?.policy ?? null) ?? bookingData?.TienGiuCho ?? bookingData?.TienBooking ?? null;
-
-  // Danh sách khách cuộn trong khung cao tối đa ~nửa màn hình → ô Sàn và nút Tạo booking luôn gần tay
   const { height: windowHeight } = useWindowDimensions();
-  const listMaxHeight = Math.round(windowHeight * 0.5);
+  const listMaxHeight = Math.round(windowHeight * 0.45);
 
   const openNewCustomer = () => {
     const params: Record<string, string> = { returnToBooking: "1" };
@@ -354,23 +96,84 @@ export default function CreateBookingScreen() {
     router.push({ pathname: "/customer/new", params });
   };
 
+  const header = (
+    <AppHeader
+      variant="soft"
+      title={r ? bookingFormTitle(false, fundCodeOf(r.unitFund?.funds, r.unitFund?.quyCanId)) : "Tạo booking"}
+    />
+  );
+
+  if (error) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <Screen header={header}>
+          <EmptyState icon={UserX} title="Không mở được form booking" description={error} />
+        </Screen>
+      </>
+    );
+  }
+  if (!ready || !r || created) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <Screen header={header}>
+          <SkeletonList count={5} />
+        </Screen>
+      </>
+    );
+  }
+
+  // Ô chọn như web: chính sách (ẩn hết hạn / khác quỹ căn / không áp dụng cho tòa của căn), bảng giá theo chính sách đang chọn
+  const policyRaw = r.salesConfig.policies.find((o: any) => o.value === r.policyId)?.raw;
+  const policyOptions = [
+    { value: NONE, label: "-- Không chọn chính sách --" },
+    ...policyConfigPickOptions(r.salesConfig.policies, null, r.policyId, r.exceptionIds?.CSBH, r.unitFund.quyCanId, r.data?.MaKhu ?? null),
+  ];
+  const priceListOptions = [
+    { value: NONE, label: "-- Không chọn bảng giá --" },
+    ...priceListOptionsForPolicy(r.unitFund.priceListOptions, policyRaw, r.priceListId).map((o: any) => ({
+      value: String(o.value),
+      label: String(o.label ?? o.value),
+    })),
+  ];
+  const agencyOptions = [
+    ...(r.agencyLocked ? [] : [{ value: NONE, label: "-- Không chọn đại lý --" }]),
+    ...r.agencyOptions.map((s: any) => ({ value: String(s.ID), label: s.TenCT })),
+    // Đại lý của tài khoản không có trong danh sách vẫn hiện (như web)
+    ...(r.maSan && !r.agencyOptions.some((s: any) => String(s.ID).toLowerCase() === r.maSan.toLowerCase())
+      ? [{ value: r.maSan, label: r.listSan.find((s: any) => String(s.ID).toLowerCase() === r.maSan.toLowerCase())?.TenCT ?? `Đại lý #${r.maSan}` }]
+      : []),
+  ];
+  const companyOptions = [
+    ...(r.salesCompanyLocked || r.salesCompanyRequired ? [] : [{ value: NONE, label: "-- Không chọn --" }]),
+    ...(r.salesCompanyOptions || []).map((o: any) => ({ value: String(o.value), label: String(o.label ?? o.value) })),
+  ];
+  const companyReason = salesCompanyLockReason(!!r.salesCompanyLocked, !!r.salesCompanyRequired);
+  const noAgencyHint = !r.agencyLocked && r.congTyBanHangId && r.agencyOptions.length === 0;
+  // Hiển thị: căn chưa có tổng giá HĐ (web hiện "—") ⇒ lấy giá trị HĐ theo bảng giá đang chọn (như màn booking cũ của app); chỉ để xem
+  const contractValue = Number(r.data?.TongGiaTriHDMB) || Number(r.priceInfo?.GiaTriHD) || 0;
+  const unitPrice = Number(r.price) || contractValue;
+  const selected = r.selectedCustomer;
+  const query = String(r.searchQuery ?? "");
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <Screen
         keyboardAware
         padded={false}
-        header={<AppHeader variant="soft" title="Tạo booking" />}
+        header={header}
         footer={
           <BottomActionBar>
             <View style={styles.footer}>
-              {holdAmount ? (
+              {r.tienGiuChoHienThi ? (
                 <View style={styles.footerRow}>
                   <Text variant="caption" color="textSecondary">
                     Tiền giữ chỗ
                   </Text>
                   <Text variant="subhead" numeric>
-                    {formatVND(holdAmount)}
+                    {formatVND(r.tienGiuChoHienThi)}
                   </Text>
                 </View>
               ) : null}
@@ -378,10 +181,10 @@ export default function CreateBookingScreen() {
                 size="lg"
                 fullWidth
                 style={styles.pill}
-                title={loadingSan ? "Đang tải sàn giao dịch…" : "Tạo booking"}
-                loading={creatingBooking}
-                disabled={loadingSan}
-                onPress={handleContinue}
+                title={r.loading ? "Đang tải dữ liệu sản phẩm…" : `Giữ chỗ ${r.code || ""}`.trim()}
+                loading={!!r.submitting}
+                disabled={!!r.submitting || !!r.loading || !r.isValid}
+                onPress={() => void r.handleSubmit()}
               />
             </View>
           </BottomActionBar>
@@ -395,10 +198,12 @@ export default function CreateBookingScreen() {
             </View>
             <View style={styles.flex}>
               <Text variant="heading" color={colors.showcase.text} numberOfLines={1}>
-                {bookingData?.KyHieu || "Sản phẩm"}
+                {r.code || "Sản phẩm"}
               </Text>
               <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
-                {bookingData?.TenDA || "—"}
+                {[r.projectName || "—", r.floor != null && r.floor !== "" ? `Tầng ${r.floor}` : null, r.area ? `${r.area} m²` : null]
+                  .filter(Boolean)
+                  .join(" • ")}
               </Text>
             </View>
             {unitPrice ? (
@@ -408,112 +213,183 @@ export default function CreateBookingScreen() {
             ) : null}
           </View>
 
-          <HomeSectionHeader
-            title="Khách hàng *"
-            actionLabel="Thêm mới"
-            actionIcon={UserPlus}
-            onAction={openNewCustomer}
-          />
-          {customerError ? (
-            <Text variant="caption" color="danger" accessibilityLiveRegion="polite">
-              {customerError}
-            </Text>
-          ) : null}
-          <SearchBar value={searchQuery} onChangeText={setSearchQuery} placeholder="Tên, SĐT hoặc mã KH" variant="soft" />
-
-          <View style={[styles.customerCard, { maxHeight: listMaxHeight }]}>
-            {loading && customers.length === 0 ? (
-              <SkeletonList count={4} />
-            ) : customers.length === 0 ? (
-              <View style={styles.emptyWrap}>
-                {debouncedQuery.trim().length < 2 ? (
-                  <EmptyState icon={UserX} title="Tìm khách hàng" description="Nhập tên / SĐT / CCCD (ít nhất 2 ký tự) hoặc bấm Thêm mới." />
-                ) : (
-                  <EmptyState icon={UserX} title="Không tìm thấy khách hàng" description="Thử từ khoá khác hoặc bấm Thêm mới." />
-                )}
-              </View>
-            ) : (
-              <ScrollView
-                nestedScrollEnabled
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator
-                accessibilityRole="radiogroup"
-              >
-                {customers.map((customer, i) => {
-                  const selected = !!selectedCustomer && customerKey(selectedCustomer) === customerKey(customer);
-                  return (
-                    <CustomerOption
-                      key={customerKey(customer)}
-                      customer={customer}
-                      selected={selected}
-                      last={i === customers.length - 1}
-                      onPress={() => handleSelectCustomer(customer)}
-                    />
-                  );
-                })}
-              </ScrollView>
-            )}
+          {/* Số phiếu / tiền / thời gian giữ chỗ (như dòng tóm tắt của web) */}
+          <View style={styles.card}>
+            <Meta label="Số phiếu giữ chỗ" value={r.bookingCode || "Tự cấp khi lưu"} />
+            <Meta label="Tổng giá HĐ" value={contractValue ? formatVNDShort(contractValue) : "—"} />
+            <Meta label="Thời gian giữ chỗ" value={r.tgBooking ? `${r.tgBooking} phút` : "—"} />
+            <Meta label="Tiền giữ chỗ" value={r.tienGiuChoHienThi ? formatVND(r.tienGiuChoHienThi) : "—"} />
           </View>
 
-          <SelectField
-            label="Sàn giao dịch"
-            sheetTitle="Chọn sàn giao dịch"
-            value={isAgency ? agencySan ?? NO_SAN : selectedSan ? selectedSan.ID || selectedSan.MaSan : NO_SAN}
-            options={isAgencyOptions(isAgency, agencySan, sanOptions)}
-            loading={loadingSan}
-            disabled={isAgency}
-            onChange={(v) =>
-              handleSelectSan(v === NO_SAN ? null : sanList.find((s) => (s.ID || s.MaSan) === v) ?? null)
-            }
-            variant="raised"
-          />
+          <HomeSectionHeader title="Khách hàng *" actionLabel="Thêm mới" actionIcon={UserPlus} onAction={openNewCustomer} />
+          {selected ? (
+            <View style={[styles.customerCard, styles.selectedRow]}>
+              <Avatar name={selected.tenKH || "?"} size={40} round />
+              <View style={styles.flex}>
+                <Text variant="subhead" numberOfLines={1}>
+                  {selected.tenKH || "(Chưa có tên)"}
+                </Text>
+                <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                  {[selected.soCMND, maskPhone(selected.diDong)].filter(Boolean).join(" · ") || "—"}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Bỏ chọn khách hàng"
+                hitSlop={10}
+                onPress={() => r.clearCustomer()}
+                style={({ pressed }) => [styles.clear, pressed ? styles.pressed : null]}
+              >
+                <X size={18} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              <SearchBar value={query} onChangeText={r.setSearchQuery} placeholder="Nhập tên / SĐT / CCCD để tìm" variant="soft" />
+              <View style={[styles.customerCard, { maxHeight: listMaxHeight }]}>
+                {r.searching && r.results.length === 0 ? (
+                  <SkeletonList count={3} />
+                ) : r.results.length === 0 ? (
+                  <View style={styles.emptyWrap}>
+                    {query.trim().length < 2 ? (
+                      <EmptyState icon={UserX} title="Tìm khách hàng" description="Nhập tên / SĐT / CCCD (ít nhất 2 ký tự) hoặc bấm Thêm mới." />
+                    ) : (
+                      <EmptyState icon={UserX} title="Không tìm thấy khách hàng" description="Thử từ khoá khác hoặc bấm Thêm mới." />
+                    )}
+                  </View>
+                ) : (
+                  <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
+                    {r.results.map((c: any, i: number) => (
+                      <CustomerOption key={String(c.value)} customer={c} last={i === r.results.length - 1} onPress={() => r.handleSelectCustomer(c)} />
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            </>
+          )}
+
+          <HomeSectionHeader title="Thông tin phiếu" />
+          <View style={styles.card}>
+            <SelectField
+              label="Công ty bán hàng"
+              required={!!r.salesCompanyRequired}
+              variant="soft"
+              disabled={!!r.salesCompanyLocked}
+              value={r.congTyBanHangId ? String(r.congTyBanHangId) : r.salesCompanyLocked || r.salesCompanyRequired ? null : NONE}
+              options={companyOptions}
+              onChange={(v) => r.handleChangeCongTyBanHang(v === NONE ? null : String(v))}
+              placeholder="Chọn công ty bán hàng"
+              sheetTitle="Chọn công ty bán hàng"
+            />
+            {companyReason ? <Hint text={companyReason} /> : null}
+            <SelectField
+              label="Đại lý phân phối"
+              variant="soft"
+              disabled={!!r.agencyLocked}
+              value={r.maSan ? String(r.maSan) : r.agencyLocked ? null : NONE}
+              options={agencyOptions}
+              onChange={(v) => r.setMaSan(v === NONE ? "" : String(v))}
+              placeholder={noAgencyHint ? "Công ty bán hàng chưa có đại lý phân phối" : "Chọn đại lý phân phối"}
+              sheetTitle="Chọn đại lý phân phối"
+            />
+            {r.agencyLocked ? <Hint text={AGENCY_FIXED_REASON} /> : noAgencyHint ? <Hint text="Công ty bán hàng chưa có đại lý phân phối" /> : null}
+          </View>
+
+          <HomeSectionHeader title="Chính sách & cấu hình bán hàng" />
+          <View style={styles.card}>
+            <Hint text="Chỉ lưu lựa chọn để dùng lại khi lên phiếu đặt cọc / hợp đồng" />
+            {r.policyTienBooking ? <Hint text={`Tiền booking theo chính sách: ${formatVND(r.policyTienBooking)}`} /> : null}
+            <SelectField
+              label="Quỹ căn"
+              variant="soft"
+              disabled={!!r.unitFund.locked}
+              value={r.unitFund.quyCanId ? String(r.unitFund.quyCanId) : null}
+              options={(r.unitFund.funds || []).map((q: any) => ({ value: String(q.id), label: q.name }))}
+              onChange={(v) => v && r.unitFund.change(String(v))}
+              placeholder="-- Chọn quỹ căn --"
+              sheetTitle="Chọn quỹ căn"
+            />
+            {r.unitFund.locked && r.unitFund.lockReason ? <Hint text={r.unitFund.lockReason} /> : null}
+            <SelectField
+              label="Chính sách bán hàng"
+              variant="soft"
+              loading={!!r.salesConfig.loading}
+              value={r.policyId ? String(r.policyId) : NONE}
+              options={policyOptions}
+              onChange={(v) => r.handleSelectPolicy(v === NONE ? undefined : String(v))}
+              sheetTitle="Chọn chính sách bán hàng"
+            />
+            <SelectField
+              label="Bảng giá"
+              variant="soft"
+              loading={!!r.salesConfig.loading}
+              value={r.priceListId ? String(r.priceListId) : NONE}
+              options={priceListOptions}
+              onChange={(v) => r.changePriceList(v === NONE ? undefined : String(v))}
+              sheetTitle="Chọn bảng giá"
+            />
+          </View>
+
+          <HomeSectionHeader title="Giá sản phẩm theo bảng giá" />
+          <View style={styles.card}>
+            <Hint text={r.priceListId ? "Giá lấy từ bảng giá đang chọn (chỉ để xem)" : "Chọn bảng giá để xem giá sản phẩm"} />
+            {r.loadingPriceInfo ? (
+              <SkeletonList count={2} />
+            ) : (
+              <View style={styles.grid}>
+                {(r.priceInfoItems || []).map((it: any) => (
+                  <View key={it.label} style={styles.gridItem}>
+                    <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                      {it.label}
+                    </Text>
+                    <Text variant="label" numeric numberOfLines={1}>
+                      {it.value}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
         </View>
       </Screen>
     </>
   );
 }
 
-/** Đại lý: ô Sàn khoá, chỉ hiện sàn của tài khoản (chưa xác định được ⇒ nhãn báo lỗi thay vì "Không qua sàn"). */
-function isAgencyOptions(
-  isAgency: boolean,
-  agencySan: string | null,
-  sanOptions: { value: string; label: string; description?: string }[]
-) {
-  if (!isAgency) return sanOptions;
-  if (!agencySan) return [{ value: NO_SAN, label: "Chưa xác định được sàn của tài khoản" }];
-  const own = sanOptions.find((o) => o.value === agencySan);
-  return [own ?? { value: agencySan, label: "Sàn của tài khoản" }];
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.metaRow}>
+      <Text variant="caption" color="textSecondary">
+        {label}
+      </Text>
+      <Text variant="label" numeric numberOfLines={1} style={styles.metaValue}>
+        {value}
+      </Text>
+    </View>
+  );
 }
 
-function CustomerOption({
-  customer,
-  selected,
-  last,
-  onPress,
-}: {
-  customer: BookingCustomer;
-  selected: boolean;
-  last: boolean;
-  onPress: () => void;
-}) {
-  const sub = [maskPhone(customer.diDong), customer.company].filter(Boolean).join(" · ");
+function Hint({ text }: { text: string }) {
+  return (
+    <Text variant="caption" color="textSecondary">
+      {text}
+    </Text>
+  );
+}
+
+function CustomerOption({ customer, last, onPress }: { customer: any; last: boolean; onPress: () => void }) {
+  const sub = [customer.soCMND, maskPhone(customer.diDong)].filter(Boolean).join(" · ");
   return (
     <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected, checked: selected }}
-      accessibilityLabel={`${customer.tenKH}${sub ? ", " + sub : ""}`}
+      accessibilityRole="button"
+      accessibilityLabel={`${customer.tenKH || "Khách hàng"}${sub ? ", " + sub : ""}`}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.option,
-        last ? styles.optionLast : null,
-        selected ? styles.optionSelected : null,
-        pressed && !selected ? styles.optionPressed : null,
-      ]}
+      style={({ pressed }) => [styles.option, last ? styles.optionLast : null, pressed ? styles.optionPressed : null]}
     >
       <Avatar name={customer.tenKH || "?"} size={40} round />
       <View style={styles.flex}>
         <Text variant="subhead" numberOfLines={1}>
-          {customer.tenKH || "—"}
+          {customer.tenKH || "(Chưa có tên)"}
         </Text>
         {sub ? (
           <Text variant="caption" color="textSecondary" numberOfLines={1}>
@@ -521,16 +397,14 @@ function CustomerOption({
           </Text>
         ) : null}
       </View>
-      <View style={[styles.radio, selected ? styles.radioOn : null]}>
-        {selected ? <Check size={14} color={colors.onPrimary} strokeWidth={3} /> : null}
-      </View>
+      <View style={styles.radio} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  body: { paddingHorizontal: space.xl, paddingTop: space.sm, paddingBottom: space.xl, gap: space.md },
   pill: { borderRadius: radius.full },
   unit: {
     flexDirection: "row",
@@ -550,13 +424,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // Khung trắng bo tròn chứa danh sách khách (cuộn bên trong, cao tối đa ~nửa màn hình)
-  customerCard: {
-    borderRadius: radius.xxl,
-    overflow: "hidden",
-    backgroundColor: colors.surface,
-    ...elevation.soft,
-  },
+  card: { padding: space.lg, gap: space.md, borderRadius: radius.xxl, backgroundColor: colors.surface, ...elevation.soft },
+  metaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.md },
+  metaValue: { flexShrink: 1, textAlign: "right" },
+  customerCard: { borderRadius: radius.xxl, overflow: "hidden", backgroundColor: colors.surface, ...elevation.soft },
+  selectedRow: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, backgroundColor: colors.primarySubtle },
+  clear: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
+  pressed: { opacity: 0.7 },
   emptyWrap: { paddingVertical: space.lg },
   option: {
     flexDirection: "row",
@@ -569,7 +443,6 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   optionLast: { borderBottomWidth: 0 },
-  optionSelected: { backgroundColor: colors.primarySubtle },
   optionPressed: { backgroundColor: colors.surfaceMuted },
   radio: {
     width: 24,
@@ -580,7 +453,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  radioOn: { borderColor: colors.primary, backgroundColor: colors.primary },
+  grid: { flexDirection: "row", flexWrap: "wrap", rowGap: space.md },
+  gridItem: { width: "50%", paddingRight: space.sm, gap: 2 },
   footer: { flex: 1, gap: space.sm },
   footerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
 });

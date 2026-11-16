@@ -41,7 +41,7 @@ test("shim supabase: chỉ 2 hàm đọc đối chiếu sang fn_nv_app_*; hàm l
   assert.match(bad.error.message, /không hỗ trợ/);
   assert.equal(nv.calls.length, 2, "hàm lạ không gọi máy chủ");
   const prj = await supabase.from("da_projects").select("id, ten_da").eq("ma_ctdk", "x").order("ten_da");
-  assert.deepEqual(plain(prj.data), [{ id: "d1", ten_da: "Dự án 1", ma_da_code: "DA1" }]);
+  assert.deepEqual(plain(prj.data), [{ id: "d1", ten_da: "Dự án 1", ten_viet_tat: null, ma_da_code: "DA1" }]);
   const tbl = await supabase.from("cloud_customers").select("*");
   assert.match(tbl.error.message, /đọc thẳng bảng/);
   const w = await supabase.from("da_projects").insert({ id: "x" });
@@ -73,6 +73,72 @@ test("shim supabase: đổi tham số web ⇒ app (bỏ công ty), đọc bảng
   const rd = await supabase.from("cloud_pricing_config_rounds").select("*").eq("id", "r1").maybeSingle();
   assert.equal(rd.data.id, "r1");
   assert.deepEqual(plain(nv.calls[1].args), { p_id: "r1" });
+});
+
+test("shim supabase (form booking): giá căn theo bảng giá = SP web, bds_products theo uuid / .or(ma_sp, ky_hieu)", async () => {
+  const nv = fakeNv((fn, a) =>
+    fn === "fn_nv_app_gia_can_bang_gia" ? [{ id: "i1" }]
+    : fn === "fn_nv_app_san_pham_tinh_gia" ? (a.p_id === "C6-2301" || a.p_id === "u1" ? { id: "u1", ma_da: "d1", ma_sp: "M1", ky_hieu: "C6-2301" } : null)
+    : null);
+  const { supabase } = loadApp("lib/web/_shims/integrations/supabase/client.ts", { "@/services/nvApi": nv.mod });
+  const pi = await supabase.rpc("fn_get_price_list_item_by_product", { p_price_list_id: "B", p_product_id: "u1", p_ma_ctdk_uid: "T" });
+  assert.deepEqual(plain(nv.calls[0]), { fn: "fn_nv_app_gia_can_bang_gia", args: { p_price_list_id: "B", p_product_id: "u1" } });
+  assert.deepEqual(plain(pi.data), [{ id: "i1" }]);
+  const da = await supabase.from("bds_products").select("ma_da").eq("id", "u1").limit(1).maybeSingle();
+  assert.equal(da.data.ma_da, "d1");
+  nv.calls.length = 0;
+  const byCode = await supabase.from("bds_products").select("id").eq("ma_ctdk", "T").limit(1).or("ma_sp.eq.XX,ky_hieu.eq.C6-2301").maybeSingle();
+  assert.equal(byCode.data.id, "u1", "khớp ký hiệu");
+  assert.deepEqual(nv.calls.map((c) => c.args.p_id), ["XX", "C6-2301"], "thử lần lượt từng khoá");
+  const none = await supabase.from("bds_products").select("id").or("ma_sp.eq.ZZ").maybeSingle();
+  assert.equal(none.data, null);
+  const nokey = await supabase.from("bds_products").select("id");
+  assert.match(nokey.error.message, /thiếu khoá/);
+});
+
+test("shim CodeGenService: số phiếu xem trước qua fn_nv_app_ma_phieu (như web: bỏ biến rỗng, viết hoa), {TenDA} = tên viết tắt", async () => {
+  const nv = fakeNv((fn, a) =>
+    fn === "fn_nv_app_ma_phieu" ? (a.p_form_code === "BOOKING" ? "BK-CS-2026-0001" : null)
+    : fn === "fn_nv_app_du_an_list" ? { rows: [{ id: "11111111-1111-4111-8111-111111111111", ten_da: "Capital Square 2", ten_viet_tat: "CS", ma_da_code: "CS2" }, { id: "22222222-2222-4222-8222-222222222222", ten_da: "Dự án B", ten_viet_tat: "", ma_da_code: "B" }] }
+    : null);
+  const fakes = { "@/services/nvApi": nv.mod };
+  fakes["../integrations/supabase/client"] = loadApp("lib/web/_shims/integrations/supabase/client.ts", fakes);
+  const cg = loadApp("lib/web/_shims/services/CodeGenService.ts", fakes);
+  assert.equal(await cg.generateFormCode("booking", { MaSP: "C1-1001", TenDA: "CS", Rong: "  ", Null: null }), "BK-CS-2026-0001");
+  assert.deepEqual(plain(nv.calls[0]), { fn: "fn_nv_app_ma_phieu", args: { p_form_code: "BOOKING", p_vars: { MaSP: "C1-1001", TenDA: "CS" } } });
+  assert.equal(await cg.generateFormCode("KHONGCO", {}), null, "chưa cấu hình ⇒ null");
+  assert.equal(await cg.projectTenDA("11111111-1111-4111-8111-111111111111", "x"), "CS");
+  assert.equal(await cg.projectTenDA("B", "x"), "Dự án B", "không có viết tắt ⇒ tên đầy đủ");
+  assert.equal(await cg.projectTenDA(null, "Dự phòng"), "Dự phòng");
+  assert.deepEqual(plain(await cg.getProjectCodeVars("CS2")), { TenDA: "CS", MaDA: "CS2" });
+});
+
+test("shim ProductService.addBookingAPI: body như web ⇒ fn_nv_app_booking_tao, báo phiếu vừa tạo; lỗi ⇒ status 500 + lời máy chủ", async () => {
+  let fail = false;
+  const nv = fakeNv((fn) => {
+    if (fail) throw new Error("Sản phẩm đang ở trạng thái \"HĐMB\" nên không lập được phiếu giữ chỗ");
+    return fn === "fn_nv_app_booking_tao" ? { phieu_giu_cho_id: "G1", booking_id: "B1", so_phieu: "BK-1" } : null;
+  });
+  const mod = loadApp("lib/web/_shims/services/Product.ts", { "@/services/nvApi": nv.mod });
+  const got = [];
+  const off = mod.onWebBookingCreated((c) => got.push(c.BookingId));
+  const res = await mod.ProductService.addBookingAPI({
+    SanPhamId: "S", MaSP: "M", KyHieu: "K", MaKH: "KH", MaSan: "SAN", SoPhieu: "", TienGiuCho: "50,000,000", MaDotGia: "BG", MaCS: "CS",
+    MaCSTong: "CT", KhuyenMai: [{ ID: "km1" }], Payload: { TTHopDong: { CongTyBanHangId: "CT1" } }, LockId: "L1", TongGiaGomVAT: "100", GiaNaked: 90,
+  });
+  const body = nv.calls[0].args.p_payload;
+  assert.equal(nv.calls[0].fn, "fn_nv_app_booking_tao");
+  assert.equal(body.san_pham_id, "S"); assert.equal(body.khach_hang_id, "KH"); assert.equal(body.san_id, "SAN");
+  assert.equal(body.tien_giu_cho, 50000000); assert.deepEqual(plain(body.promotion_ids), ["km1"]);
+  assert.deepEqual(plain(body.tt_hop_dong), { CongTyBanHangId: "CT1" }); assert.equal(body.lock_id, "L1");
+  assert.equal(body.gia.gia_tri_hd, 100, "thiếu tổng gồm PBT ⇒ tổng gồm VAT (như web)"); assert.equal(body.gia.gia_naked, 90);
+  assert.equal("ma_ctdk_uid" in body, false, "công ty do máy chủ app lấy từ phiên");
+  assert.equal(res.status, 2000); assert.equal(res.data.BookingId, "B1"); assert.equal(res.data.SoPhieu, "BK-1");
+  assert.deepEqual(got, ["B1"]);
+  off(); fail = true;
+  const bad = await mod.ProductService.addBookingAPI({ SanPhamId: "S" });
+  assert.equal(bad.status, 500); assert.match(bad.message, /HĐMB/);
+  assert.deepEqual(got, ["B1"], "lỗi ⇒ không báo tạo");
 });
 
 test("shim sonner + session", async () => {

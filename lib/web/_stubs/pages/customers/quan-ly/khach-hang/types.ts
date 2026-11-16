@@ -29,7 +29,7 @@ export interface Customer {
   ChucVu: string | null;
   VanBanUQ: string | null;
 
-  /** Tỉnh/TP + Phường/Xã thường trú (mã provinces.open-api.vn v2, cột ma_tinh / ma_xa — QH5) */
+  /** Tỉnh/TP + Phường/Xã thường trú (id danh mục tb_dm_tinh / tb_dm_xa — GET /api/fn/dia-gioi, cột ma_tinh / ma_xa — QH5) */
   MaTinh?: string | null;
   MaXa?: string | null;
   /** HĐ liên quan (cloud_contracts.id) + nhãn máy chủ trả khi đọc (QH2–QH3) */
@@ -115,7 +115,7 @@ export interface NewCustomerData {
   /** Danh sách người được ủy quyền */
   NguoiUyQuyenList?: AuthorizedPerson[];
 
-  /** Tỉnh/TP + Phường/Xã thường trú (mã provinces.open-api.vn v2, cột ma_tinh / ma_xa — QH5) */
+  /** Tỉnh/TP + Phường/Xã thường trú (id danh mục tb_dm_tinh / tb_dm_xa — GET /api/fn/dia-gioi, cột ma_tinh / ma_xa — QH5) */
   MaTinh?: string | null;
   MaXa?: string | null;
   /** HĐ liên quan (cloud_contracts.id) + nhãn máy chủ trả khi đọc (QH2–QH3) */

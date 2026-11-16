@@ -52,6 +52,11 @@ export const RPC_MAP: Record<string, { fn: string; args: (a: Args | undefined) =
   fn_get_product_by_id: { fn: "fn_nv_app_san_pham_tinh_gia", args: (a) => pick(a, { p_id: "p_id" }) },
   // Lưu phiếu: duyệt vẫn trên web; p_host_form web (màn nhúng) app không dùng
   fn_price_sheet_save: { fn: "fn_nv_app_ptg_luu", args: (a) => pick(a, { p_row: "p_row" }) },
+  // Form booking: giá căn theo bảng giá (SP 77 = đúng SP web, cùng bộ cột)
+  fn_get_price_list_item_by_product: {
+    fn: "fn_nv_app_gia_can_bang_gia",
+    args: (a) => pick(a, { p_price_list_id: "p_price_list_id", p_product_id: "p_product_id" }),
+  },
 };
 
 const unsupported = (what: string): RpcResult => {
@@ -73,7 +78,7 @@ async function rpc(name: string, args?: Args): Promise<RpcResult> {
   return call(m.fn, m.args(args));
 }
 
-type Filters = { eq: Record<string, unknown>; in: Record<string, unknown[]> };
+type Filters = { eq: Record<string, unknown>; in: Record<string, unknown[]>; or: [string, string][] };
 
 /** Bảng đọc được: dựng từ endpoint app trả đúng cột thô của bảng (lọc lại theo eq/in phía máy cho chắc) */
 const TABLES: Record<string, (f: Filters) => Promise<RpcResult>> = {
@@ -81,7 +86,15 @@ const TABLES: Record<string, (f: Filters) => Promise<RpcResult>> = {
   da_projects: async () => {
     try {
       const { rows } = await DuAnApi.list({ size: 1000 });
-      return { data: rows.map((p: any) => ({ id: p.id, ten_da: p.ten_da ?? p.TenDA ?? "", ma_da_code: p.ma_da_code ?? p.MaDA ?? null })), error: null };
+      return {
+        data: rows.map((p: any) => ({
+          id: p.id,
+          ten_da: p.ten_da ?? p.TenDA ?? "",
+          ten_viet_tat: p.ten_viet_tat ?? null,
+          ma_da_code: p.ma_da_code ?? p.MaDA ?? null,
+        })),
+        error: null,
+      };
     } catch (e: any) {
       return { data: null, error: { message: errorMessage(e) } };
     }
@@ -100,18 +113,41 @@ const TABLES: Record<string, (f: Filters) => Promise<RpcResult>> = {
   },
   // Công ty hệ thống (mẫu chung) — app không đọc mẫu chung
   cloud_companies: async () => ({ data: [], error: null }),
+  // Quy tắc đánh mã đọc phía máy (utils/codePattern.loadCodeRules — nhánh dự phòng khi máy chủ không trả số phiếu): app không đọc,
+  // số phiếu xem trước luôn lấy ở máy chủ (fn_nv_app_ma_phieu); trống ⇒ máy chủ cấp khi lưu
+  cloud_code_rules: async () => ({ data: [], error: null }),
+  // Căn theo uuid / ma_sp / ký hiệu (salesDocsCloud.resolveProductUid / resolveProjectUidByProduct, BdsProductService.resolveBdsProductId):
+  // fn_get_product_by_id của web (cột thô bds_products, công ty + phạm vi đại lý ở SP) — lọc lại eq / or phía máy
+  bds_products: async (f) => {
+    const keys = [f.eq.id, ...f.or.map(([, v]) => v)].filter((v) => v != null && String(v).trim() !== "");
+    for (const k of keys) {
+      const r = await call("fn_nv_app_san_pham_tinh_gia", { p_id: String(k) });
+      if (r.error) return r;
+      if (r.data) return { data: [r.data], error: null };
+    }
+    return keys.length ? { data: [], error: null } : unsupported("bds_products (thiếu khoá)");
+  },
 };
 
 const applyFilters = (rows: any[], f: Filters) =>
   rows.filter(
     (r) =>
       Object.entries(f.eq).every(([k, v]) => r?.[k] === undefined || String(r[k]).toLowerCase() === String(v).toLowerCase()) &&
-      Object.entries(f.in).every(([k, vs]) => r?.[k] === undefined || vs.map((v) => String(v).toLowerCase()).includes(String(r[k]).toLowerCase()))
+      Object.entries(f.in).every(([k, vs]) => r?.[k] === undefined || vs.map((v) => String(v).toLowerCase()).includes(String(r[k]).toLowerCase())) &&
+      (f.or.length === 0 || f.or.some(([k, v]) => r?.[k] !== undefined && String(r[k]).toLowerCase() === String(v).toLowerCase()))
   );
+
+/** `.or("a.eq.x,b.eq.y")` của PostgREST — chỉ dạng eq */
+const parseOr = (expr: string): [string, string][] =>
+  String(expr || "")
+    .split(",")
+    .map((p) => p.match(/^([\w]+)\.eq\.(.*)$/))
+    .filter(Boolean)
+    .map((m) => [m![1], m![2]] as [string, string]);
 
 /** Bộ dựng truy vấn tối giản: select / eq / in / order / limit / maybeSingle / single / await — chỉ đọc */
 function from(table: string) {
-  const f: Filters = { eq: {}, in: {} };
+  const f: Filters = { eq: {}, in: {}, or: [] };
   let write = false;
   const run = async (): Promise<RpcResult> => {
     if (write) return unsupported(`ghi bảng ${table}`);
@@ -131,6 +167,7 @@ function from(table: string) {
     range: () => q,
     eq: (col: string, v: unknown) => ((f.eq[col] = v), q),
     in: (col: string, vs: unknown[]) => ((f.in[col] = Array.isArray(vs) ? vs : []), q),
+    or: (expr: string) => ((f.or = [...f.or, ...parseOr(expr)]), q),
     insert: () => ((write = true), q),
     update: () => ((write = true), q),
     upsert: () => ((write = true), q),

@@ -55,6 +55,8 @@ const ENTRIES = [
   "services/sales/sales-settings/index",
   "services/priceListItem",
   "services/CustomerCloudService",
+  // Form booking (giao diện app): tiêu đề theo quỹ căn (Đặt mua chuyển nhượng)
+  "lib/transferFund",
 ];
 
 /**
@@ -105,6 +107,14 @@ const COMPONENT_HOOKS = [
     hook: "useWebPriceSheetForm",
     allowMissing: [],
   },
+  {
+    // Form tạo / sửa booking giữ chỗ của web (Sản phẩm › Booking) — app: màn Tạo booking
+    file: "components/Products/BookingFormDialog.tsx",
+    component: "BookingFormDialog",
+    out: "components/Products/BookingFormDialog.hook.ts",
+    hook: "useWebBookingForm",
+    allowMissing: [],
+  },
 ];
 const UI_PKG = /^(antd|lucide-react|@ant-design|react-dom|react-router|@tanstack)/;
 const UI_PATH = [/^components\/ui\//, /^components\/UiCustoms\//];
@@ -117,7 +127,7 @@ const ALLOW_PKGS = new Set(["dayjs", "react", "date-fns"]);
  */
 const SHIMS = new Set(["integrations/supabase/client", "sonner", "lib/session", "components/PriceSheet/priceSheetConstants",
   "services/Product", "services/Project", "services/Customer", "services/CodeGenService",
-  "services/NhanVienService"]);
+  "services/NhanVienService", "services/HeThongService"]);
 /** (cũ) service chép nguyên văn — nay mọi service .ts chép được nếu cả chuỗi phụ thuộc thuần */
 const COPY_SERVICES = new Set([]);
 /**
@@ -273,6 +283,15 @@ function collect() {
   for (const hk of COMPONENT_HOOKS) {
     const plan = planHook(hk);
     errors.push(...plan.errors);
+    for (const spec of plan.dynamic || []) {
+      const target = toSrcRel(plan.f.rel, spec);
+      if (target === null) continue;
+      const tf = resolveFile(target);
+      const tRel = tf ? tf.rel : target;
+      if (isShim(tRel) || isExtract(tRel)) { if (isShim(tRel)) shimsUsed.add(keyOf(tRel)); continue; }
+      if (!tf || isImpure(tRel)) { if (!runtimeStubs.has(keyOf(tRel))) runtimeStubs.set(keyOf(tRel), new Set()); continue; }
+      queue.push({ rel: target, from: hk.file + " (hook, import động)" });
+    }
     for (const im of plan.imports) {
       if (im.srcRel === null) {
         if (SHIMS.has(im.spec)) { shimsUsed.add(im.spec); continue; }
@@ -441,9 +460,46 @@ function planHook(hk) {
     if (!asType) e.allType = false;
     need.set(m.spec, e);
   }
+  // Khai báo cấp tệp (ngoài component: hằng, hàm, kiểu) mà phần giữ dùng ⇒ chép kèm (bắc cầu); dùng import giao diện ⇒ lỗi
+  const topDecl = new Map();
+  for (const st of sf.statements) {
+    if (st === comp || ts.isImportDeclaration(st)) continue;
+    const names = [];
+    if (ts.isVariableStatement(st)) st.declarationList.declarations.forEach((d) => ts.isIdentifier(d.name) && names.push(d.name.text));
+    else if ((ts.isFunctionDeclaration(st) || ts.isInterfaceDeclaration(st) || ts.isTypeAliasDeclaration(st) || ts.isEnumDeclaration(st)) && st.name) names.push(st.name.text);
+    names.forEach((n) => topDecl.set(n, st));
+  }
+  const moduleStmts = new Set();
+  const visitTop = (n) => {
+    const st = topDecl.get(n);
+    if (!st || moduleStmts.has(st)) return;
+    if (hasJsx(st) || [...runtimeIds(st)].some(isUiImport)) { errors.push(`${hk.file}: logic dùng "${n}" (cấp tệp) dính giao diện`); return; }
+    moduleStmts.add(st);
+    allIds(st).forEach((x) => { keptIds.add(x); if (topDecl.has(x)) visitTop(x); });
+    runtimeIds(st).forEach((x) => keptRuntime.add(x));
+  };
+  [...keptIds].forEach((x) => topDecl.has(x) && !keptDecl.has(x) && visitTop(x));
+  // Import đã có ⇒ tính lại cho câu cấp tệp vừa thêm
+  for (const n of keptIds) {
+    const m = importOf.get(n);
+    if (!m || need.get(m.spec)?.names.has(n)) continue;
+    const e = need.get(m.spec) || { spec: m.spec, names: new Map(), srcRel: toSrcRel(f.rel, m.spec), allType: true };
+    const asType = m.typeOnly || !keptRuntime.has(n);
+    e.names.set(n, { ...m, typeOnly: asType });
+    if (!asType) e.allType = false;
+    need.set(m.spec, e);
+  }
+  // import("x") động trong phần giữ ⇒ module cần chép (bên collect xếp hàng)
+  const dynamic = [];
+  const walkDyn = (n) => {
+    if (ts.isCallExpression(n) && n.expression.kind === ts.SyntaxKind.ImportKeyword && n.arguments[0] && ts.isStringLiteral(n.arguments[0])) dynamic.push(n.arguments[0].text);
+    ts.forEachChild(n, walkDyn);
+  };
+  [...kept, ...moduleStmts].forEach(walkDyn);
   const param = comp.parameters[0];
   return {
-    errors, imports: [...need.values()], kept, dropped, sf, text, f,
+    errors, imports: [...need.values()], kept, dropped, sf, text, f, dynamic,
+    moduleStmts: sf.statements.filter((st) => moduleStmts.has(st)),
     paramText: param ? text.slice(param.name.getStart(sf), param.name.getEnd()) : "",
     returns: [...keptDecl],
   };
@@ -474,6 +530,7 @@ function renderHook(hk) {
     }
     if (named.length) lines.push(`import { ${named.join(", ")} } from ${JSON.stringify(spec)};`);
   }
+  for (const st of plan.moduleStmts) lines.push("", rewriteDynamicImports(plan.text.slice(st.getStart(plan.sf), st.getEnd()), plan.f.rel, hk.out, null));
   lines.push("", `export function ${hk.hook}(${plan.paramText}: any = {}) {`);
   for (const st of plan.kept) lines.push("  " + rewriteDynamicImports(plan.text.slice(st.getStart(plan.sf), st.getEnd()), plan.f.rel, hk.out, null));
   lines.push(`  return { ${plan.returns.join(", ")} };`, "}");
