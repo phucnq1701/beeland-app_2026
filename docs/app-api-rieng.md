@@ -33,7 +33,7 @@ xuyên luồng trên máy ảo, xong mới sang luồng sau.
 | L1 | Bán hàng từ căn | Dự án → Sản phẩm (DS / lưới / tổng quan) → Chi tiết căn ✔ · Lock căn → Căn đã lock → Tạo booking (chọn / tạo khách, sàn, giá theo bảng giá & chính sách, ảnh chứng từ, QR thanh toán) → DS / chi tiết Booking → Đặt cọc (DS / chi tiết / QR) → Hợp đồng + tiến độ TT · Phiếu tính giá: xem / xoá / lịch sử (duyệt: web; lập / sửa: tạm khoá, viết lại form khớp web ở cuối luồng) | XONG 16-11 (booking thật BK-BF228DD95B đạt; chờ deploy API) |
 | L2 | Khách hàng | DS / chi tiết / thêm / sửa, trùng khách, yêu cầu KH, luật nhập | XONG 16-11 (SP 78–96; chờ deploy API) |
 | L3 | Lịch ký & báo cáo | đặt lịch ký (đại lý), lịch hẹn (ẩn), báo cáo | XONG 16-11 (SP A0–A3, B0–B9; lịch hẹn ẩn để L5; chờ deploy API) |
-| L4 | Liên lạc & tài khoản | chat, thông báo, tài liệu / ảnh, đổi-quên MK, xoá TK, realtime, upload chung | |
+| L4 | Liên lạc & tài khoản | chat, thông báo, tài liệu / ảnh, đổi-quên MK, xoá TK, realtime, upload chung | XONG 16-11 (SP C0–E6; tệp chat chưa thử được ở API local; chờ deploy API) |
 | L5 | Dọn & test toàn bộ | bỏ sevicesSupabase / sevices cũ, đổi khoá lưu, kịch bản e2e toàn app | |
 
 Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-inventory/` (A sản phẩm, B bán hàng, C khách hàng, D lõi).
@@ -169,3 +169,20 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
   (nạp đủ điểm / ngày / ca); thêm mới chọn HĐ HD-C6-2309 (nạp khách, phương án TT khoá theo lịch TT); lịch tháng. KHÔNG lưu thật.
 - Chưa thấy tận mắt toast báo thiếu trường trên máy ảo (lệnh bấm Lưu thứ 2 bị chặn để tránh ghi prod) — logic web đã đúng câu báo.
 - Còn lại (L5): màn Lịch hẹn ẩn (api-beeland cũ), helper cũ lib/signing (buildUpsertPayload, availability…) không còn dùng ở form.
+
+### 2026-11-16 (khuya) — L4 Liên lạc & tài khoản XONG
+- BE 4273833d, app 752cc4f5. SP C0–E1 usp_nv_app_chat_* bọc 22 SP chat web (t_chat.py: brg + msr app = web, gửi tin rollback phát 3 dòng
+  rt_outbox). C# NvAppChatTepController: tệp 1 bước (attach_create ⇒ StorageSignService.UploadAsync) + link ký 300 s.
+- LỆCH ĐÃ SỬA THEO WEB (user chốt): thông báo — chuông web từ 15-11 chỉ hiện hộp thư theo kịch bản (tb_nb_hop_thu), app đọc bảng
+  notifications cũ ⇒ nay E2/E3 + realtime tb:u:<nv> tb_moi; bấm tin mở màn app có (804 / 824 / 832 / 9002; booking = id phiếu giữ chỗ,
+  phiếu thu = màn mẫu ⇒ không mở). Tài liệu / ảnh — app đọc thẳng bảng cloud_doc_* (phẳng) ⇒ nay cây fn_doc_tree / fn_doc_file_list
+  (E4/E5, chỉ 488 / 323), đi xuống thư mục con; dự án theo uuid.
+- Xoá tài khoản (user chốt "bỏ qua chặn cho chính mình"): web chặn tự xoá / tự khoá ở SP + trigger dm_employees ⇒ nút cũ của app (DELETE REST)
+  luôn lỗi. E6 usp_nv_app_xoa_tai_khoan chỉ chạy quyền nội bộ; C# lấy nhân viên / công ty từ JWT. t_l4.py (rollback): NV tạm ⇒ xoa,
+  NV có bds_product_changes ⇒ khoa (lock=1), quản trị ⇒ chặn, gọi bằng JWT ⇒ chặn. Không xoá cloud_users (như web).
+- Quên MK: fn_nv_app_quen_mat_khau = StaffResetPasswordService web (thử 1 request tài khoản không tồn tại ⇒ ghi 1 dòng OTP như web).
+- Đổi MK khi đăng nhập: app vẫn không có (MK tạm ⇒ máy chủ chặn app, đổi trên web) — giữ luồng.
+- Máy ảo: thông báo (6 chưa đọc, đúng chuông web), chat (inbox / hội thoại / đã đọc), tài liệu + thư viện ảnh Capital Square 2.
+  Ảnh / tệp chat KHÔNG thử được ở API local (thiếu cấu hình kho — edge chat-files web cũng lỗi y vậy) ⇒ thử sau deploy API.
+- lib/web đồng bộ web main a33e9790 (kho quà hạn mức nhóm). 328 test đạt.
+- Còn lại (L5): xoá axiosApiSupabase.ts / cloudTenant còn dùng, màn Lịch hẹn ẩn, receipt/[id] mẫu.
