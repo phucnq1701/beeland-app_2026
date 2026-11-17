@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
-import { AppHeader, ErrorState, Screen, SkeletonDetail } from "@/components/ui";
+import { Lock } from "lucide-react-native";
+
+import { AppHeader, EmptyState, ErrorState, Screen, SkeletonDetail } from "@/components/ui";
 import { CustomerForm } from "@/components/customer/CustomerForm";
 import { CustomerFormValues } from "@/lib/customerRules";
-import { CustomerRulesService } from "@/sevicesSupabase/CustomerRulesService";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
+import { CUSTOMER_TX_LOCK_MESSAGE, CustomerRulesService } from "@/services/CustomerRulesService";
+import { CustomerService } from "@/services/CustomerService";
 
-/** Chi tiết khách (bản ghi cloud_customers đã chuẩn hoá) → giá trị form. */
+/** Chi tiết khách (fn_customer_get, đã chuẩn hoá) → giá trị form. */
 function toFormValues(d: any): Partial<CustomerFormValues> {
   const isPersonal = d.is_personal !== false;
   return {
@@ -26,16 +28,19 @@ function toFormValues(d: any): Partial<CustomerFormValues> {
     nddDienThoai: d.ndd_dien_thoai || "",
     nddEmail: d.ndd_email || "",
     nddSoCccd: d.ndd_so_cccd || "",
+    notes: d.ghi_chu || "",
   };
 }
 
 export default function CustomerEditScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [state, setState] = useState<{ loading: boolean; detail: any; locked: boolean }>({
+  const [state, setState] = useState<{ loading: boolean; detail: any; locked: boolean; txLocked: boolean; error: string | null }>({
     loading: true,
     detail: null,
     locked: false,
+    txLocked: false,
+    error: null,
   });
   const [reload, setReload] = useState(0);
 
@@ -43,9 +48,24 @@ export default function CustomerEditScreen() {
     let alive = true;
     setState((s) => ({ ...s, loading: true }));
     (async () => {
-      const detail = id ? await CustomerService.getCustomerDetailCloud(String(id)) : null;
-      const locked = detail?.id ? await CustomerRulesService.hasIdentityLock(String(detail.id)) : false;
-      if (alive) setState({ loading: false, detail, locked });
+      try {
+        const found = id ? await CustomerService.getCustomerDetailCloud(String(id)) : null;
+        // Bản giới hạn (khách công ty khác chỉ thấy qua chứng từ): máy chủ không cho sửa ⇒ không mở form
+        const detail = found && found.limited !== true ? found : null;
+        // Khoá định danh (lịch ký cá nhân) + khoá theo giao dịch đã duyệt (web hasCustomerTxLock ⇒ form chỉ xem)
+        const [locked, txLocked] = detail?.id
+          ? await Promise.all([
+              CustomerRulesService.hasIdentityLock(String(detail.id)),
+              CustomerRulesService.hasTxLock(String(detail.id)),
+            ])
+          : [false, false];
+        const error = found?.limited === true ? "Khách thuộc công ty khác – không có quyền sửa." : null;
+        if (alive) setState({ loading: false, detail, locked, txLocked, error });
+      } catch (err) {
+        // Lỗi máy chủ (không quyền xem, phiên hết hạn…) hiện nguyên thông báo
+        const error = err instanceof Error && err.message ? err.message : "Không tải được khách hàng.";
+        if (alive) setState({ loading: false, detail: null, locked: false, txLocked: false, error });
+      }
     })();
     return () => {
       alive = false;
@@ -62,8 +82,25 @@ export default function CustomerEditScreen() {
           {state.loading ? (
             <SkeletonDetail />
           ) : (
-            <ErrorState description="Không tìm thấy khách hàng." onRetry={() => setReload((n) => n + 1)} />
+            <ErrorState description={state.error || "Không tìm thấy khách hàng."} onRetry={() => setReload((n) => n + 1)} />
           )}
+        </Screen>
+      </>
+    );
+  }
+
+  if (state.txLocked) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <Screen header={header}>
+          <EmptyState
+            icon={Lock}
+            title="Không sửa được khách hàng"
+            description={CUSTOMER_TX_LOCK_MESSAGE}
+            actionLabel="Quay lại"
+            onAction={() => router.back()}
+          />
         </Screen>
       </>
     );

@@ -33,10 +33,10 @@ function webFn(file, startMarker, endMarker, name, requires = {}) {
 
 test("allocatePaidToSchedule: principal first, then maintenance fee – same as web", { skip: !hasWeb && "no web repo" }, () => {
   const web = webFn(
-    // Web dời src/pages/Contracts → src/pages/contracts (commit 77ad33db7)
-    "pages/contracts/components/chi-tiet-hop-dong/index.tsx",
-    "const allocatePaidToSchedule = (rows: any[], totalPaid: number) => {",
-    "\n    return result;\n  };",
+    // Web dời sang src/pages/contracts/chi-tiet/scheduleLegacy.ts (2026-11)
+    "pages/contracts/chi-tiet/scheduleLegacy.ts",
+    "export const allocatePaidToSchedule = (rows: any[], totalPaid: number) => {",
+    "\n};",
     "allocatePaidToSchedule"
   );
   const rows = [
@@ -52,8 +52,8 @@ test("allocatePaidToSchedule: principal first, then maintenance fee – same as 
 });
 
 test("aging buckets – same as web agingOf", { skip: !hasWeb && "no web repo" }, () => {
-  const dayjs = require(path.join(WEB, "node_modules", "dayjs"));
-  const web = webFn("pages/Reports/DebtProgressReport.tsx", "const agingOf = (r: Row) => {", "\n};", "agingOf", { dayjs });
+  const dayjs = require("dayjs");
+  const web = webFn("pages/reports/hop-dong-cong-no/cong-no-tien-do/index.tsx", "const agingOf = (r: Row) => {", "\n};", "agingOf", { dayjs });
   const today = new Date();
   const ymd = (offset) => {
     const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset, 10);

@@ -2,21 +2,17 @@
   "expo": {
     "name": "BeeLand App",
     "slug": "beeland-app",
-    "version": "10.4",
+    "version": "10.7",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.beesky.beelandcrm",
       "infoPlist": {
+        "UIStatusBarStyle": "UIStatusBarStyleLightContent",
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
@@ -55,6 +51,15 @@
     },
     "plugins": [
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-navy.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#16233B"
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Cho phép BEELAND truy cập vị trí của bạn."
@@ -92,7 +97,26 @@
           "iCloudContainerEnvironment": "Production"
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "color": "#E86F25",
+          "defaultChannel": "chat"
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Cho phép $(PRODUCT_NAME) dùng Face ID để đăng nhập nhanh."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Cho phép $(PRODUCT_NAME) dùng Face ID để đăng nhập nhanh."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

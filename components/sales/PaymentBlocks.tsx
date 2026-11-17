@@ -6,7 +6,7 @@ import { Badge, MoneyText, Text } from "@/components/ui";
 import { formatDate, formatVND } from "@/lib/format";
 import { ScheduleRow } from "@/lib/paymentMath";
 import { colors, elevation, radius, space } from "@/theme";
-import { Receipt } from "@/sevicesSupabase/PaymentProgressService";
+import { Receipt } from "@/services/PaymentProgressService";
 
 
 /**

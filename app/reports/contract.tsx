@@ -5,7 +5,7 @@ import { ReportList } from "@/components/reports/ReportList";
 import { DocTrailing } from "@/components/sales/SalesDocList";
 import { ListItem, MoneyText, Text } from "@/components/ui";
 import { formatDate } from "@/lib/format";
-import { ReportService } from "@/sevicesSupabase/ReportService";
+import { ReportService } from "@/services/ReportService";
 
 /** Báo cáo hợp đồng: hợp đồng mua bán ký trong kỳ (fn_contract_list – như danh sách HĐ web). */
 export default function ContractReportScreen() {

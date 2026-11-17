@@ -86,10 +86,10 @@ test("resolveHomeFeatureIds: normal accounts keep a deliberate empty selection b
   assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: "garbage" })), ["1", "2", "4", "5", "6", "8"]);
 });
 
-test("Lịch hẹn (id 3) is hidden everywhere for now but keeps its route for later", () => {
+test("Lịch hẹn (id 3) đã bỏ hẳn 2026-11-17: không có màn, không hiện, lựa chọn cũ bị bỏ qua", () => {
   const ids = ["1", "2", "3", "5", "6"];
+  assert.equal(f.routeForFeature("3"), null);
   assert.equal(f.visibleFeatureIds(ids, { isAgency: false, menuOnly: false, menuEligible: ids }).includes("3"), false);
-  assert.equal(f.FEATURE_ROUTES["3"], "/appointments");
   assert.deepEqual(
     [...f.resolveHomeFeatureIds({ stored: { selectedIds: ["3", "1"] }, isAgency: false, allIds: ids, menuEligible: ids, max: 6 })],
     ["1"]
@@ -110,4 +110,31 @@ test("Đặt lịch ký (14) chỉ dành cho đại lý: tài khoản nội bộ
   assert.equal(f.isFeatureAllowed("14", true), true);
   assert.equal(f.isFeatureAllowed("6", false), true);
   assert.equal(f.isFeatureAllowed("6", true), false);
+});
+
+test("Yêu cầu khách hàng (15): có màn /requests, chỉ tài khoản nội bộ (như Khách hàng)", () => {
+  assert.equal(f.routeForFeature("15"), "/requests");
+  const all = ["1", "6", "14", "15"];
+  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: false, menuEligible: all })), ["1", "6", "15"]);
+  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: true, menuOnly: false, menuEligible: all })), ["1", "14"]);
+  assert.equal(f.isFeatureAllowed("15", false), true);
+  assert.equal(f.isFeatureAllowed("15", true), false);
+});
+
+test("Tin nhắn (16): có màn /chat, nội bộ và đại lý đều dùng", () => {
+  assert.equal(f.routeForFeature("16"), "/chat");
+  assert.equal(f.isFeatureAllowed("16", false), true);
+  assert.equal(f.isFeatureAllowed("16", true), true);
+  const all = ["1", "16"];
+  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: true, menuOnly: false, menuEligible: ["1"] })), ["1", "16"]);
+  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: true, menuEligible: ["1"] })), ["1"]);
+});
+
+test("phiếu tính giá (17): có route, chỉ tài khoản nội bộ", () => {
+  assert.equal(f.routeForFeature("17"), "/price-sheets");
+  assert.equal(f.isFeatureAllowed("17", false), true);
+  assert.equal(f.isFeatureAllowed("17", true), false);
+  const ids = ["1", "2", "5", "13", "17"];
+  assert.deepEqual(plain(f.visibleFeatureIds(ids, { isAgency: true, menuOnly: false, menuEligible: ids })), ["1", "2", "5", "13"]);
+  assert.deepEqual(plain(f.visibleFeatureIds(ids, { isAgency: false, menuOnly: false, menuEligible: ids })), ids);
 });

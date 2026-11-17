@@ -15,13 +15,15 @@ export type ProtectionLevel = 'none' | 'low' | 'medium' | 'high';
 
 export type ProtectionRule = { enabled: boolean; mode: DuplicateMode; days?: number };
 
+/** Như web CustomerDuplicateConfigService (2026-11): tiêu chí chưa cài = không kiểm tra; không còn defaultMode / ignoreInactive */
 export type CustomerDuplicateConfig = {
-  defaultMode: DuplicateMode;
+  /** Cấu hình theo từng tiêu chí (chỉ request / block); thiếu key = không kiểm tra */
   rules: Partial<Record<DuplicateField, DuplicateMode>>;
-  ignoreInactive: boolean;
-  ownDuplicateMode: DuplicateMode;
+  /** Trùng khách do CHÍNH nhân viên đang nhập: block = không cho trùng; allow = cảnh báo vẫn cho nhập */
+  ownDuplicateMode: 'allow' | 'block';
   protectionEnabled: boolean;
   protection: Record<ProtectionRuleKey, ProtectionRule>;
+  updatedAt?: string | null;
 };
 
 export const DUPLICATE_FIELDS: { key: DuplicateField; label: string }[] = [
@@ -63,9 +65,7 @@ export const DEFAULT_PROTECTION_RULES: Record<ProtectionRuleKey, ProtectionRule>
 };
 
 export const DEFAULT_CUSTOMER_DUPLICATE: CustomerDuplicateConfig = {
-  defaultMode: 'block',
   rules: {},
-  ignoreInactive: false,
   ownDuplicateMode: 'block',
   protectionEnabled: true,
   protection: DEFAULT_PROTECTION_RULES,
@@ -74,13 +74,14 @@ export const DEFAULT_CUSTOMER_DUPLICATE: CustomerDuplicateConfig = {
 const asMode = (v: unknown): DuplicateMode | undefined =>
   v === 'allow' || v === 'request' || v === 'block' ? v : undefined;
 
+/** Như web normalizeDuplicateConfig: nhận RPC fn_customer_dup_config_get (snake_case) lẫn dạng camelCase; bỏ defaultMode / ignoreInactive */
 export function normalizeDuplicateConfig(raw: unknown): CustomerDuplicateConfig {
   const src: any = raw && typeof raw === 'object' ? raw : {};
   const rules: Partial<Record<DuplicateField, DuplicateMode>> = {};
   const srcRules = src.rules && typeof src.rules === 'object' ? src.rules : {};
   DUPLICATE_FIELDS.forEach(({ key }) => {
-    const m = asMode(srcRules[key]);
-    if (m) rules[key] = m;
+    const v = srcRules[key];
+    if (v === 'request' || v === 'block') rules[key] = v;
   });
 
   const srcProt = src.protection && typeof src.protection === 'object' ? src.protection : {};
@@ -96,19 +97,19 @@ export function normalizeDuplicateConfig(raw: unknown): CustomerDuplicateConfig 
     };
   });
 
+  const own = src.own_duplicate_mode ?? src.ownDuplicateMode;
+  const prot = src.protection_enabled ?? src.protectionEnabled;
   return {
-    defaultMode: asMode(src.defaultMode) ?? 'block',
     rules,
-    ignoreInactive: !!src.ignoreInactive,
-    ownDuplicateMode: asMode(src.ownDuplicateMode) ?? 'block',
-    protectionEnabled: typeof src.protectionEnabled === 'boolean' ? src.protectionEnabled : true,
+    ownDuplicateMode: own === 'allow' ? 'allow' : 'block',
+    protectionEnabled: typeof prot === 'boolean' ? prot : true,
     protection,
+    updatedAt: src.updated_at ?? src.updatedAt ?? null,
   };
 }
 
-/** Cách xử lý cho 1 tiêu chí (chưa cài đặt → mặc định). */
-export const modeOf = (cfg: CustomerDuplicateConfig, field: DuplicateField): DuplicateMode =>
-  cfg.rules[field] ?? cfg.defaultMode;
+/** Cách xử lý 1 tiêu chí — chưa cài = không kiểm tra = allow (web modeOf) */
+export const modeOf = (cfg: CustomerDuplicateConfig, field: DuplicateField): DuplicateMode => cfg.rules[field] ?? 'allow';
 
 const STRICTNESS: Record<DuplicateMode, number> = { allow: 0, request: 1, block: 2 };
 export const strictest = (a: DuplicateMode, b: DuplicateMode): DuplicateMode => (STRICTNESS[a] >= STRICTNESS[b] ? a : b);
@@ -160,6 +161,63 @@ export function evaluateProtection(
     else if (g === 'DATCOC') hasDeposit = true;
     else hasBooking = true;
   }
+  return protectionCore(
+    {
+      hasContract,
+      hasDeposit,
+      hasBooking,
+      txnTotal: input.stages.length,
+      careCount: input.careCount,
+      lastCareAt: input.lastCareAt,
+      createdAt: input.createdAt,
+      now: input.now,
+    },
+    cfg
+  );
+}
+
+/** Số liệu bảo vệ của 1 khách trùng do máy chủ trả trong `fn_customer_duplicate_check` (web DuplicateStats). */
+export type DuplicateStats = {
+  txn_total?: number;
+  has_contract?: boolean;
+  has_deposit?: boolean;
+  has_booking?: boolean;
+  care_count?: number;
+  last_care_at?: string | null;
+  created_at?: string | null;
+};
+
+/** Mức bảo vệ từ số liệu máy chủ – web CustomerDuplicateService.protectionFromStats. */
+export function protectionFromStats(stats: DuplicateStats, cfg: CustomerDuplicateConfig, now: number): DuplicateProtection {
+  return protectionCore(
+    {
+      hasContract: !!stats?.has_contract,
+      hasDeposit: !!stats?.has_deposit,
+      hasBooking: !!stats?.has_booking,
+      txnTotal: Number(stats?.txn_total || 0),
+      careCount: Number(stats?.care_count || 0),
+      lastCareAt: stats?.last_care_at ?? null,
+      createdAt: stats?.created_at ?? null,
+      now,
+    },
+    cfg
+  );
+}
+
+function protectionCore(
+  input: {
+    hasContract: boolean;
+    hasDeposit: boolean;
+    hasBooking: boolean;
+    txnTotal: number;
+    careCount: number;
+    lastCareAt: string | null;
+    createdAt: string | null;
+    now: number;
+  },
+  cfg: CustomerDuplicateConfig
+): DuplicateProtection {
+  const { hasContract, hasDeposit, hasBooking } = input;
   const daysFrom = (v: string | null): number | null => {
     if (!v) return null;
     const t = new Date(v).getTime();
@@ -174,8 +232,8 @@ export function evaluateProtection(
     activityCount: input.careCount,
     lastCareAt: input.lastCareAt,
     daysSinceCare: careDays,
-    hasTransaction: input.stages.length > 0,
-    transactionCount: input.stages.length,
+    hasTransaction: input.txnTotal > 0,
+    transactionCount: input.txnTotal,
     reasons: [],
     ruleKey: null,
     ruleLabel: null,
@@ -293,6 +351,7 @@ const t = (v: unknown) => String(v ?? '').trim();
 /**
  * Giá trị từng tiêu chí trùng lấy từ form (web duplicateValuesFromPayload đọc DiDong/Email/SoCMND/MaSoThueCT/TenKH|TenCongTy).
  * Tab Doanh nghiệp của web nhập SĐT/email vào DienThoaiCT/EmailCT → web không kiểm SĐT/email/CCCD của doanh nghiệp.
+ * Khác web: KHÔNG kiểm trùng họ tên / tên công ty – nhiều người trùng tên, chỉ tính SĐT/CCCD/email/MST.
  */
 export function duplicateValues(f: CustomerFormValues): Record<DuplicateField, string> {
   return {
@@ -300,7 +359,7 @@ export function duplicateValues(f: CustomerFormValues): Record<DuplicateField, s
     phone: f.isPersonal ? t(f.phone) : '',
     email: f.isPersonal ? t(f.email) : '',
     tax_code: f.isPersonal ? '' : t(f.taxCode),
-    full_name: t(f.name),
+    full_name: '',
   };
 }
 
@@ -323,6 +382,7 @@ export function customerSavePayload(v: CustomerFormValues, mode: 'create' | 'edi
     taxCode: mode === 'create' && v.isPersonal ? null : n(v.taxCode),
     maTtId: n(v.statusId),
     maNguonId: n(v.sourceId),
+    ghiChu: n(v.notes),
     ...(v.isPersonal
       ? {}
       : {
@@ -505,6 +565,8 @@ export type CustomerTransaction = {
   giaiDoan: string;
   stageLabel: string;
   tenDA: string;
+  /** uuid dự án (da_projects.id). */
+  projectId: string | null;
   kyHieu: string;
   giaTri: number | null;
   tienCoc: number | null;
@@ -535,6 +597,7 @@ export function mapCustomerTransaction(
     giaiDoan,
     stageLabel: stageLabel(giaiDoan),
     tenDA: t(da.ten_da),
+    projectId: t(row?.project_id) || null,
     kyHieu: t(sp.ky_hieu) || t(sp.ma_sp),
     giaTri: num(row?.gia_tri_hd_sau_ck) ?? num(row?.gia_tri_hd),
     tienCoc: num(row?.tien_coc),

@@ -21,7 +21,7 @@ import {
 import { callPhone, openZalo } from "@/components/customer/CustomerListItem";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { colors, elevation, hitSlop, radius, space } from "@/theme";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
+import { CustomerService } from "@/services/CustomerService";
 
 /** Nút liên hệ nhanh: vòng tròn nền nhạt + nhãn bên dưới (kiểu danh bạ). */
 function QuickAction({
@@ -72,6 +72,9 @@ type Detail = {
   diaChi: string;
   nguoiDaiDienPl: string;
   chucVu: string;
+  notes: string;
+  /** Khách công ty khác chỉ thấy qua chứng từ (fn_customer_get bản giới hạn): chỉ xem, không sửa / xoá */
+  limited: boolean;
 };
 
 function toDetail(d: any): Detail {
@@ -86,7 +89,8 @@ function toDetail(d: any): Detail {
     company: !isPersonal
       ? d.ten_cong_ty || d.cty?.ten_ct_vt || d.cty?.ten_ct || ""
       : d.tenSan || d.cty?.ten_ct_vt || d.cty?.ten_ct || "",
-    cccd: d.cccd || d.so_cmnd || "",
+    // Bản giới hạn: CCCD đã che (4 số cuối) nằm ở cccd_masked
+    cccd: d.cccd || d.so_cmnd || d.cccd_masked || "",
     taxCode: d.ma_so_thue_ct || d.ma_so_ttncn || "",
     isPersonal,
     // Chưa chọn trạng thái → không hiện badge (như danh sách)
@@ -96,6 +100,8 @@ function toDetail(d: any): Detail {
     diaChi: d.diaChi || d.dia_chi || d.thuong_tru || d.dia_chi_ct || "",
     nguoiDaiDienPl: d.nguoi_dai_dien_pl || "",
     chucVu: d.chuc_vu || "",
+    notes: String(d.ghi_chu ?? "").trim(),
+    limited: d.limited === true,
   };
 }
 
@@ -105,6 +111,7 @@ export default function CustomerDetailScreen() {
   const { id } = useLocalSearchParams();
   const [customer, setCustomer] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const deletingRef = useRef(false);
 
@@ -114,9 +121,12 @@ export default function CustomerDetailScreen() {
     try {
       const d = await CustomerService.getCustomerDetailCloud(String(id));
       setCustomer(d ? toDetail(d) : null);
+      setLoadError(null);
     } catch (err) {
+      // Lỗi máy chủ (không quyền xem, phiên hết hạn…) hiện nguyên thông báo, không báo "không tìm thấy"
       console.log("Error get customer detail:", err);
       setCustomer(null);
+      setLoadError(err instanceof Error && err.message ? err.message : "Không tải được khách hàng.");
     } finally {
       setLoading(false);
     }
@@ -161,7 +171,7 @@ export default function CustomerDetailScreen() {
       variant="soft"
       title="Khách hàng"
       actions={
-        customer ? (
+        customer && !customer.limited ? (
           <View style={styles.headerActions}>
             <IconButton
               icon={Pencil}
@@ -188,7 +198,7 @@ export default function CustomerDetailScreen() {
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <Screen header={header}>
-          {loading ? <SkeletonDetail /> : <ErrorState description="Không tìm thấy khách hàng." onRetry={() => void load()} />}
+          {loading ? <SkeletonDetail /> : <ErrorState description={loadError || "Không tìm thấy khách hàng."} onRetry={() => void load()} />}
         </Screen>
       </>
     );
@@ -229,6 +239,11 @@ export default function CustomerDetailScreen() {
               {c.maSoKh ? <Badge label={`Mã ${c.maSoKh}`} /> : null}
               {c.status ? <StatusBadge label={c.status} color={c.statusColor} /> : null}
             </View>
+            {c.limited ? (
+              <Text variant="caption" color="textSecondary" style={styles.center}>
+                Khách thuộc công ty khác – chỉ xem thông tin giới hạn.
+              </Text>
+            ) : null}
 
             {c.phone || c.email ? (
               <View style={styles.quick}>
@@ -276,6 +291,19 @@ export default function CustomerDetailScreen() {
               </Text>
             )}
           </Card>
+
+          {c.notes ? (
+            <Card padding={0} style={styles.card}>
+              <View style={styles.notes}>
+                <Text variant="label" color="textSecondary">
+                  Ghi chú
+                </Text>
+                <Text variant="body" selectable>
+                  {c.notes}
+                </Text>
+              </View>
+            </Card>
+          ) : null}
 
           <Pressable
             accessibilityRole="button"
@@ -334,6 +362,7 @@ const styles = StyleSheet.create({
   card: { borderWidth: 0, borderRadius: radius.xxl, ...elevation.soft },
   rows: { paddingHorizontal: space.lg + 2 },
   empty: { padding: space.lg },
+  notes: { gap: space.xs, paddingHorizontal: space.lg + 2, paddingVertical: space.md + 2 },
   link: {
     flexDirection: "row",
     alignItems: "center",

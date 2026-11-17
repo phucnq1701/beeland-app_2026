@@ -4,7 +4,7 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import { Chip, DateField, SelectField } from "@/components/ui";
 import { PERIODS, PERIOD_LABEL, PeriodType, periodRange, toYmd } from "@/lib/reportPeriod";
 import { space } from "@/theme";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { ProjectService } from "@/services/ProjectService";
 
 export type ReportFilterValue = {
   period: PeriodType;

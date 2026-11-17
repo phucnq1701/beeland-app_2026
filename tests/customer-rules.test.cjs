@@ -17,7 +17,7 @@ const form = (over = {}) => ({
 // Nguồn web: services/CustomerDuplicateConfigService.ts
 test("duplicate config defaults to the web defaults", () => {
   const cfg = plain(r.normalizeDuplicateConfig(null));
-  assert.equal(cfg.defaultMode, "block");
+  assert.equal("defaultMode" in cfg, false, "web bỏ defaultMode: tiêu chí chưa cài = không kiểm");
   assert.equal(cfg.ownDuplicateMode, "block");
   assert.equal(cfg.protectionEnabled, true);
   assert.deepEqual(cfg.rules, {});
@@ -33,16 +33,28 @@ test("duplicate config defaults to the web defaults", () => {
 
 test("duplicate config keeps valid values and falls back field by field", () => {
   const cfg = r.normalizeDuplicateConfig({
-    defaultMode: "allow", rules: { phone: "request", email: "weird" },
+    defaultMode: "block", rules: { phone: "request", email: "weird", cccd: "allow" },
     protection: { booking: { enabled: false, mode: "block" }, care_recent: { days: -3 } },
     protectionEnabled: "yes",
   });
-  assert.equal(cfg.defaultMode, "allow");
   assert.equal(r.modeOf(cfg, "phone"), "request");
-  assert.equal(r.modeOf(cfg, "email"), "allow", "invalid rule → default mode");
+  assert.equal(r.modeOf(cfg, "email"), "allow", "invalid rule → not checked");
+  assert.equal(r.modeOf(cfg, "tax_code"), "allow", "unset rule → not checked (web), even if old defaultMode = block");
+  assert.equal("cccd" in cfg.rules, false, "allow is not stored as a rule");
   assert.deepEqual(plain(cfg.protection.booking), { enabled: false, mode: "block" });
   assert.equal(cfg.protection.care_recent.days, 30);
   assert.equal(cfg.protectionEnabled, true);
+});
+
+test("duplicate config: RPC fn_customer_dup_config_get shape (snake_case) like the web", () => {
+  const cfg = r.normalizeDuplicateConfig({
+    rules: { cccd: "block", phone: null, email: null, tax_code: null, full_name: null },
+    own_duplicate_mode: "allow", protection_enabled: false, updated_at: "2026-11-01",
+  });
+  assert.deepEqual(plain(cfg.rules), { cccd: "block" });
+  assert.equal(cfg.ownDuplicateMode, "allow");
+  assert.equal(cfg.protectionEnabled, false);
+  assert.equal(cfg.updatedAt, "2026-11-01");
 });
 
 // Nguồn web: services/CustomerDuplicateService.ts (evaluateProtection)
@@ -85,11 +97,12 @@ test("final mode per match: own duplicates use ownDuplicateMode, others are rais
 
 test("duplicate values come from the form like the web payload", () => {
   assert.deepEqual(plain(r.duplicateValues(form({ name: " Nguyễn A ", phone: "0901", cccd: "0123", taxCode: "999" }))), {
-    cccd: "0123", phone: "0901", email: "", tax_code: "", full_name: "Nguyễn A",
+    cccd: "0123", phone: "0901", email: "", tax_code: "", full_name: "",
   });
+  // Trùng tên không tính là trùng khách (nhiều người trùng họ tên)
   // Web: tab Doanh nghiệp nhập SĐT/email vào DienThoaiCT/EmailCT nên không kiểm DiDong/Email/SoCMND
   const org = plain(r.duplicateValues(form({ isPersonal: false, name: "Cty B", taxCode: "0312", cccd: "x", phone: "0902", email: "b@c.d" })));
-  assert.deepEqual(org, { cccd: "", phone: "", email: "", tax_code: "0312", full_name: "Cty B" });
+  assert.deepEqual(org, { cccd: "", phone: "", email: "", tax_code: "0312", full_name: "" });
 });
 
 test("save payload only sends the fields of the current customer type", () => {
@@ -103,6 +116,11 @@ test("save payload only sends the fields of the current customer type", () => {
   assert.equal(org.taxCode, "0312");
   assert.equal(org.nguoiDaiDienPl, "B");
   assert.equal("nguoiDaiDienPl" in personal, false);
+});
+
+test("save payload carries the customer note (cloud_customers.ghi_chu), blank → null", () => {
+  assert.equal(r.customerSavePayload(form({ name: "A", notes: "  Quan tâm căn 2PN  " }), "create").ghiChu, "Quan tâm căn 2PN");
+  assert.equal(r.customerSavePayload(form({ name: "A", notes: "  " }), "edit").ghiChu, null);
 });
 
 // Nguồn web: services/RequiredFieldService.ts + config/requiredFieldCatalog.ts (agencyFormKey)
@@ -151,13 +169,14 @@ test("stage labels and transaction mapping", () => {
     { products: { s1: { ky_hieu: "B2-608", ma_sp: "SP1" } }, projects: { d1: { ten_da: "Dự án A" } }, statuses: { t1: { item_name: "Đã cọc", color_code: "#123456" } } }
   );
   assert.deepEqual(plain(t), {
-    id: "p1", soPhieu: "BK-1", giaiDoan: "DATCOC", stageLabel: "Đặt cọc", tenDA: "Dự án A", kyHieu: "B2-608",
+    id: "p1", soPhieu: "BK-1", giaiDoan: "DATCOC", stageLabel: "Đặt cọc", tenDA: "Dự án A", projectId: "d1", kyHieu: "B2-608",
     giaTri: 800, tienCoc: 50, daThu: 20, status: "Đã cọc", statusColor: "#123456", createdAt: "2026-09-01T00:00:00Z",
   });
   const bare = r.mapCustomerTransaction({ id: "p2", gia_tri_hd: 700 }, { products: {}, projects: {}, statuses: {} });
   assert.equal(bare.giaTri, 700);
   assert.equal(bare.stageLabel, "Giữ chỗ / booking");
   assert.equal(bare.soPhieu, "");
+  assert.equal(bare.projectId, null);
 });
 
 test("transactionTarget: giai đoạn → màn chi tiết (cọc / hợp đồng / còn lại là booking)", () => {

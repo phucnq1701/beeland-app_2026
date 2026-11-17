@@ -25,10 +25,11 @@ import {
   CustomerRulesService,
   DuplicateMatch,
   DuplicateResult,
+  FIELD_CONFIG_LOAD_FAILED,
   FormRules,
   IDENTITY_LOCK_HINT,
-} from "@/sevicesSupabase/CustomerRulesService";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
+} from "@/services/CustomerRulesService";
+import { CustomerService } from "@/services/CustomerService";
 
 import { DuplicateSheet } from "./DuplicateSheet";
 
@@ -119,9 +120,12 @@ export function CustomerForm({
   useEffect(() => {
     let alive = true;
     setRules(null);
-    CustomerRulesService.getFormRules(values.isPersonal).then((r) => {
-      if (alive) setRules(r);
-    });
+    // Hiển thị (ẩn / chỉ xem / dấu *): tải lỗi ⇒ không ràng buộc (web FALLBACK); lúc lưu tải lại, lỗi thì chặn
+    CustomerRulesService.getFormRules(values.isPersonal)
+      .then((r) => {
+        if (alive) setRules(r);
+      })
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
@@ -173,16 +177,6 @@ export function CustomerForm({
     };
     const res: any = await CustomerService.saveCustomerCloud(payload);
     if (res?.status === 2000 && res.data) {
-      if (mode === "create" && values.notes.trim() && res.data.id) {
-        try {
-          await CustomerService.addCustomerActivity({
-            customerId: res.data.id,
-            content: values.notes.trim(),
-            title: "Ghi chú ban đầu khi tạo khách",
-            loai: "note",
-          });
-        } catch {}
-      }
       hapticSuccess();
       toast.show({ type: "success", message: mode === "create" ? "Đã thêm khách hàng" : "Đã cập nhật khách hàng" });
       onSaved(res.data);
@@ -200,13 +194,16 @@ export function CustomerForm({
   const handleSubmit = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
-    // Như web (RequiredFieldService.preload trước khi kiểm): cấu hình chưa tải xong thì chờ tải
-    const r: FormRules =
-      rules ??
-      (await CustomerRulesService.getFormRules(values.isPersonal).catch(
-        // Không đọc được cấu hình → không ràng buộc thêm (như web)
-        (): FormRules => ({ formKey: "", required: [], hidden: new Set(), readonly: new Set() })
-      ));
+    // Như web useFieldConfig.validate: luôn lấy cấu hình hiệu lực trước khi kiểm (đệm 60 giây); tải lỗi ⇒ chặn lưu
+    let r: FormRules;
+    try {
+      r = await CustomerRulesService.getFormRules(values.isPersonal);
+    } catch {
+      savingRef.current = false;
+      hapticError();
+      toast.show({ type: "error", message: FIELD_CONFIG_LOAD_FAILED });
+      return;
+    }
     const e = baseErrors(values);
     const req = checkRequired(r.required, r.hidden, values, {});
     const all: Errors = { ...req.fieldErrors, ...e };
@@ -221,7 +218,8 @@ export function CustomerForm({
     setSaving(true);
     let saved = false;
     try {
-      const result = await CustomerRulesService.checkDuplicate(values, mode === "edit" ? customerId : null);
+      // scoped = true khớp fn_customer_save(p_scoped = true) như web màn Khách hàng
+      const result = await CustomerRulesService.checkDuplicate(values, mode === "edit" ? customerId : null, { scoped: true });
       if (result.matches.length && result.mode !== "allow") {
         hapticError();
         setDup(result);
@@ -232,7 +230,8 @@ export function CustomerForm({
     } catch (err) {
       console.log("Customer save error:", err);
       hapticError();
-      toast.show({ type: "error", message: "Đã xảy ra sự cố khi lưu dữ liệu" });
+      // Lỗi máy chủ (kiểm trùng / lưu) hiện nguyên thông báo
+      toast.show({ type: "error", message: err instanceof Error && err.message ? err.message : "Đã xảy ra sự cố khi lưu dữ liệu" });
     } finally {
       // Đã lưu xong thì giữ khoá (màn đang chuyển đi) – bấm thêm lần nữa không tạo khách thứ hai
       if (!saved) savingRef.current = false;
@@ -331,6 +330,7 @@ export function CustomerForm({
             ? field("cccd", "Số CCCD / CMND", { keyboardType: "number-pad" })
             : field("taxCode", "Mã số thuế", { required: true, keyboardType: "number-pad" })}
           {field("diaChi", p ? "Địa chỉ liên hệ" : "Địa chỉ trụ sở", { placeholder: "Số nhà, đường, phường, quận…" })}
+          {field("notes", "Ghi chú", { multiline: true, placeholder: "Nhu cầu, ngân sách, lưu ý về khách…" })}
         </View>
 
         {shown("statusId") || shown("sourceId") ? (
@@ -356,17 +356,6 @@ export function CustomerForm({
           </>
         ) : null}
 
-        {mode === "create" && shown("notes") ? (
-          <>
-            <HomeSectionHeader title="Ghi chú" />
-            <View style={styles.card}>
-              {field("notes", "Nhu cầu / ghi chú ban đầu", {
-                multiline: true,
-                placeholder: "Khách quan tâm căn 2PN, ngân sách 3 tỷ…",
-              })}
-            </View>
-          </>
-        ) : null}
       </View>
 
       <DuplicateSheet

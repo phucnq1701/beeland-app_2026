@@ -1,56 +1,44 @@
 import React, { useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { CheckCircle2, Circle, Eye, EyeOff } from "lucide-react-native";
+import { CheckCircle2, Eye, EyeOff, ShieldCheck, XCircle } from "lucide-react-native";
 
 import { AppHeader, Button, Screen, Text, TextField, useToast } from "@/components/ui";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
+import { PASSWORD_RULES, isStrongPassword, resetErrorMessage } from "@/lib/staffResetPassword";
 import { colors, space } from "@/theme";
-import { AuthService } from "@/sevices/AuthService";
+import { StaffResetPasswordService } from "@/services/StaffResetPasswordService";
 
 /**
- * Quên mật khẩu – bước 3: đặt mật khẩu mới (payload giữ nguyên).
- * Sửa: trước đây báo "thành công" cả khi máy chủ trả status lỗi → nay báo lỗi khi status có và khác 200.
+ * Quên mật khẩu – bước 3: đặt mật khẩu mới bằng token một lần (`staff-reset-password` {action:"reset"}, hạn 15 phút).
+ * Máy chủ thu hồi mọi phiên đăng nhập của tài khoản → về màn đăng nhập.
  */
 export default function ResetPasswordScreen() {
   const router = useRouter();
   const toast = useToast();
-  const { companyCode, otp } = useLocalSearchParams<{ companyCode: string; email: string; otp: string }>();
+  const { resetToken } = useLocalSearchParams<{ resetToken: string }>();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const submitting = useRef(false);
 
-  const hasMinLength = password.length >= 6;
   const hasMatch = password.length > 0 && password === confirmPassword;
-  const isValid = hasMinLength && hasMatch;
+  const isValid = isStrongPassword(password) && hasMatch;
 
   const handleReset = async () => {
     if (!isValid || submitting.current) return;
     submitting.current = true;
     try {
       setLoading(true);
-      const res = await AuthService.resetPassword({
-        TenCTDK: companyCode,
-        Password: password,
-        PasswordRe: confirmPassword,
-        MaNV: Number(otp),
-      });
-      // API cũ không rõ dạng trả về khi thành công (màn cũ không kiểm) → chỉ coi là lỗi khi có status khác 200
-      if (res?.status == null || Number(res.status) === 200) {
-        hapticSuccess();
-        toast.show({ type: "success", message: "Đã đặt lại mật khẩu. Vui lòng đăng nhập lại." });
-        router.dismissAll();
-        router.replace("/login");
-      } else {
-        hapticError();
-        toast.show({ type: "error", message: res?.message || "Không thể đặt lại mật khẩu" });
-      }
-    } catch (error: any) {
-      console.log(error);
+      await StaffResetPasswordService.reset(resetToken ?? "", password);
+      hapticSuccess();
+      toast.show({ type: "success", message: "Đã đặt lại mật khẩu. Vui lòng đăng nhập lại." });
+      router.dismissAll();
+      router.replace("/login");
+    } catch (error) {
       hapticError();
-      toast.show({ type: "error", message: error?.response?.data?.message || "Không thể đặt lại mật khẩu" });
+      toast.show({ type: "error", message: resetErrorMessage(error, "Không thể đặt lại mật khẩu") });
     } finally {
       submitting.current = false;
       setLoading(false);
@@ -78,8 +66,15 @@ export default function ResetPasswordScreen() {
           error={confirmPassword && !hasMatch ? "Mật khẩu nhập lại không khớp" : null}
           required
         />
-        <View style={styles.rules}>
-          <Rule ok={hasMinLength} text="Ít nhất 6 ký tự" />
+        {/* Yêu cầu mật khẩu (mẫu sếp 2026-11-10): đạt ⇒ xanh, chưa đạt ⇒ đỏ */}
+        <View style={styles.box}>
+          <View style={styles.rule}>
+            <ShieldCheck size={18} color={colors.primary} />
+            <Text variant="subhead">Yêu cầu mật khẩu</Text>
+          </View>
+          {PASSWORD_RULES.map((r) => (
+            <Rule key={r.key} ok={r.ok(password)} text={r.label} hint={r.hint} />
+          ))}
           <Rule ok={hasMatch} text="Hai mật khẩu trùng nhau" />
         </View>
         <Button title="Đặt lại mật khẩu" size="lg" loading={loading} disabled={!isValid} onPress={() => void handleReset()} />
@@ -88,19 +83,23 @@ export default function ResetPasswordScreen() {
   );
 }
 
-function Rule({ ok, text }: { ok: boolean; text: string }) {
-  const Icon = ok ? CheckCircle2 : Circle;
+function Rule({ ok, text, hint }: { ok: boolean; text: string; hint?: string }) {
+  const Icon = ok ? CheckCircle2 : XCircle;
   return (
     <View style={styles.rule}>
-      <Icon size={18} color={ok ? colors.success : colors.textTertiary} />
-      <Text variant="caption" color={ok ? "success" : "textSecondary"}>
-        {text}
-      </Text>
+      <Icon size={18} color={ok ? colors.success : colors.danger} />
+      <View style={styles.ruleText}>
+        <Text variant="caption" color={ok ? "success" : "danger"}>
+          {text}
+        </Text>
+        {hint ? <Text variant="caption" color="textTertiary">{hint}</Text> : null}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  rules: { gap: space.xs },
-  rule: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  box: { gap: space.xs, padding: space.md, borderRadius: 16, backgroundColor: colors.surfaceMuted },
+  rule: { flexDirection: "row", alignItems: "flex-start", gap: space.sm },
+  ruleText: { flex: 1 },
 });

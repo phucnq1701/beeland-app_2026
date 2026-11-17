@@ -1,5 +1,5 @@
 /**
- * Trạng thái căn theo MÃ danh mục bds_trang_thai + áp sự kiện realtime (SignalR "ChangeTable").
+ * Trạng thái căn theo MÃ danh mục bds_trang_thai + áp sự kiện realtime (thay đổi bảng bds_products qua hub `/api/realtime`).
  * Bảng mã → nhóm lấy theo đặc tả nghiệp vụ web (src/services/ProductTransactionStatus.ts).
  * Chỉ import hàm thuần để test nạp được.
  */
@@ -30,6 +30,22 @@ export function unitStatusOf(item: { MaTT?: unknown; TenTT?: unknown }, catalog:
 }
 
 /**
+ * Dòng `bds_products` mới (sự kiện UPDATE realtime của API .NET – cùng bảng web nghe trong useProductStatusRealtime)
+ * → dạng sự kiện mà `applyRealtimeChange` nhận (giống lưới PriceServices.getBlock: MaKhu=ma_khu, MaTang=ma_tang,
+ * MaVT=vi_tri). Thiếu ma_sp → null (bỏ qua).
+ */
+export function rowToRealtimeChange(row: any): { maSP: string; maTT: any; mauNen: any; data: { MaKhu: any; MaTang: any; MaVT: any } } | null {
+  const maSP = row?.ma_sp == null ? '' : String(row.ma_sp).trim();
+  if (!maSP) return null;
+  return {
+    maSP,
+    maTT: row.ma_tt ?? null,
+    mauNen: row.mau_nen || null,
+    data: { MaKhu: row.ma_khu ?? null, MaTang: row.ma_tang ?? null, MaVT: row.vi_tri ?? null },
+  };
+}
+
+/**
  * Áp sự kiện realtime vào dữ liệu lưới: cập nhật mã, TÊN và MÀU của đúng 1 căn
  * (trước đây chỉ đổi MaTT/MauNen nên Tổng quan – tính theo tên – và ô lưới – ưu tiên ColorTT – không đổi).
  * Giữ nguyên tham chiếu các khu/tầng/căn không đổi để memo có tác dụng.
@@ -42,14 +58,17 @@ export function applyRealtimeChange(
   const target = response?.data ?? {};
   const entry = resolveCatalogStatus(response?.maTT, catalog);
   let changedMaSP: string | null = null;
+  const bySP = response?.maSP == null ? '' : String(response.maSP).trim();
 
   const grid = dataGrid.map((block) => {
-    if (block?.rawBlock?.maKhu !== target.MaKhu) return block;
+    if (String(block?.rawBlock?.maKhu) !== String(target.MaKhu)) return block;
     let changed = false;
     const floors = (block.rawBlock.floor || []).map((floor: any) => {
       if (String(floor.maTang) !== String(target.MaTang)) return floor;
       const details = (floor.detailFloor || []).map((item: any) => {
-        if (String(item.MaVT) !== String(target.MaVT)) return item;
+        // Có mã căn (sự kiện bds_products) → khớp theo MaSP; sự kiện cũ chỉ có vị trí → khớp MaVT
+        const hit = bySP ? String(item.MaSP ?? '') === bySP : String(item.MaVT) === String(target.MaVT);
+        if (!hit) return item;
         changed = true;
         changedMaSP = item.MaSP ?? null;
         const color = entry?.ColorWeb || null;

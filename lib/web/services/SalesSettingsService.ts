@@ -1,0 +1,5 @@
+// ⚠️ TỰ SINH — bản chép nguyên văn web src/services/SalesSettingsService.ts (scripts/sync-web-pricing.cjs). KHÔNG SỬA TAY: sửa ở web rồi chạy lại script.
+// Web biên dịch với strict: false ⇒ bỏ kiểm kiểu strict của app cho tệp chép (hành vi kiểm bằng test so web).
+// @ts-nocheck
+/** @deprecated Đã dời sang `@/services/sales/sales-settings` — code mới import đường mới. */
+export * from "./sales/sales-settings";

@@ -23,8 +23,8 @@ import {
 } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { colors, elevation, radius, space } from "@/theme";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
-import { BookingService } from "@/sevicesSupabase/BookingService";
+import { ProjectService } from "@/services/ProjectService";
+import { BookingService } from "@/services/BookingService";
 
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
 const TAB_BAR_SPACE = 100;

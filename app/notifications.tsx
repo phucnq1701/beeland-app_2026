@@ -1,614 +1,193 @@
-import React, { useState, useRef, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-  Animated,
-  Pressable,
-} from "react-native";
-import { Stack, useLocalSearchParams } from "expo-router";
-import {
-  Bell,
-  Package,
-  FolderOpen,
-  Settings as SettingsIcon,
-  MessageCircle,
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import { Stack, useRouter } from "expo-router";
+import { Bell, BellOff } from "lucide-react-native";
 
-} from "lucide-react-native";
-import { colors } from "@/theme";
-import {
-  notifications as initialNotifications,
-  Notification,
-} from "@/mocks/notifications";
-import { NotificationService } from "@/sevices/NotificationService";
+import { AppHeader, Button, EmptyState, ErrorState, Screen, Skeleton, Text, useToast } from "@/components/ui";
+import { notificationRoute, relativeTime, type AppNotification } from "@/lib/notifications";
+import { colors, radius, space } from "@/theme";
+import { NotificationService } from "@/services/NotificationService";
 
-type FilterType = "all" | Notification["type"];
-
-interface FilterOption {
-  key: FilterType;
-  label: string;
-  icon: React.ReactNode;
-  color: string;
-  bg: string;
-}
-
-const FILTER_OPTIONS: FilterOption[] = [
-  {
-    key: "all",
-    label: "Tất cả",
-    icon: <Bell color={colors.textSecondary} size={18} />,
-    color: colors.textSecondary,
-    bg: "#F3F4F6",
-  },
-  {
-    key: "project",
-    label: "Dự án",
-    icon: <FolderOpen color={colors.primary} size={18} />,
-    color: colors.primary,
-    bg: "#FFF4ED",
-  },
-  {
-    key: "product",
-    label: "Sản phẩm",
-    icon: <Package color="#10B981" size={18} />,
-    color: "#10B981",
-    bg: "#ECFDF5",
-  },
-  {
-    key: "message",
-    label: "Tin nhắn",
-    icon: <MessageCircle color="#3B82F6" size={18} />,
-    color: "#3B82F6",
-    bg: "#EFF6FF",
-  },
-  {
-    key: "system",
-    label: "Hệ thống",
-    icon: <SettingsIcon color="#6366F1" size={18} />,
-    color: "#6366F1",
-    bg: "#EEF2FF",
-  },
-];
-
+/**
+ * Thông báo — hộp thư thông báo theo kịch bản của chính người đăng nhập, CÙNG nguồn chuông web (từ 2026-11-15 web chỉ hiện nguồn
+ * này). Có tin mới → tự tải lại (realtime tb:u:<nhân viên>). Bấm tin: đánh dấu đã đọc, mở màn app tương ứng nếu app có màn đó
+ * (như web mở theo form_code + id bản ghi); không có thì chỉ đánh dấu đã đọc.
+ */
 export default function NotificationsScreen() {
-  const { showUnreadOnly } = useLocalSearchParams<{
-    showUnreadOnly?: string;
-  }>();
-  const [notifications, setNotifications] =
-    useState<Notification[]>(initialNotifications);
-  const [activeFilter, setActiveFilter] = useState<FilterType>("all");
-  const [showDropdown, setShowDropdown] = useState<boolean>(false);
-  const dropdownAnim = useRef(new Animated.Value(0)).current;
-  const _unreadCount = notifications.filter((n) => !n.isRead).length;
+  const toast = useToast();
+  const router = useRouter();
+  const [items, setItems] = useState<AppNotification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [markingAll, setMarkingAll] = useState(false);
+  const markingRef = useRef(false);
 
-  const [data, setData] = useState<any[]>([]);
-
-  const loadData = async () => {
-    let res = await NotificationService.getNotifications({
-      TypeNoti: "giucho",
-    });
-    setData(res?.data ?? []);
-  };
-
-  console.log(data);
+  const load = useCallback(async () => {
+    try {
+      setLoadError(false);
+      setItems((await NotificationService.list()).items);
+    } catch (error) {
+      console.log("[Notifications] load error:", error);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    void loadData();
-  }, []);
-  const filteredByType =
-    activeFilter === "all"
-      ? notifications
-      : notifications.filter((n) => n.type === activeFilter);
+    void load();
+    return NotificationService.subscribe(() => void load());
+  }, [load]);
 
-  const displayedNotifications =
-    showUnreadOnly === "true"
-      ? filteredByType.filter((n) => !n.isRead)
-      : filteredByType;
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
 
-  const _activeOption =
-    FILTER_OPTIONS.find((o) => o.key === activeFilter) ?? FILTER_OPTIONS[0];
-  const _filteredCount = displayedNotifications.length;
+  const unread = items.filter((n) => !n.isRead);
 
-  const toggleDropdown = () => {
-    if (showDropdown) {
-      Animated.timing(dropdownAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(() => setShowDropdown(false));
-    } else {
-      setShowDropdown(true);
-      Animated.spring(dropdownAnim, {
-        toValue: 1,
-        tension: 100,
-        friction: 8,
-        useNativeDriver: true,
-      }).start();
+  const markOne = useCallback(
+    (item: AppNotification) => {
+      // Như web: đánh dấu đã đọc xong mới cập nhật danh sách; mở màn tương ứng ngay (không chờ)
+      if (!item.isRead) {
+        NotificationService.markRead(item.id)
+          .then(() => setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))))
+          .catch(() => toast.show({ type: "error", message: "Không cập nhật được trạng thái đã đọc" }));
+      }
+      const route = notificationRoute(item);
+      if (route) router.push(route as any);
+    },
+    [router, toast]
+  );
+
+  const markAll = async () => {
+    if (markingRef.current || unread.length === 0) return;
+    markingRef.current = true;
+    setMarkingAll(true);
+    try {
+      await NotificationService.markRead();
+      setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      toast.show({ type: "success", message: "Đã đánh dấu tất cả là đã đọc" });
+    } catch {
+      toast.show({ type: "error", message: "Không cập nhật được trạng thái đã đọc" });
+    } finally {
+      markingRef.current = false;
+      setMarkingAll(false);
     }
   };
 
-  const _selectFilter = (key: FilterType) => {
-    setActiveFilter(key);
-    Animated.timing(dropdownAnim, {
-      toValue: 0,
-      duration: 180,
-      useNativeDriver: true,
-    }).start(() => setShowDropdown(false));
-  };
-
-  const handleNotificationPress = (notification: Notification) => {
-    console.log("[Notifications] Notification pressed", {
-      id: notification.id,
-    });
-
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === notification.id ? { ...n, isRead: true } : n))
-    );
-  };
-
-  const handleMarkAllAsRead = () => {
-    console.log("[Notifications] Mark all as read");
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-  };
-
-  const _getIconByType = (type: Notification["type"]) => {
-    switch (type) {
-      case "project":
-        return <FolderOpen color={colors.primary} size={20} />;
-      case "product":
-        return <Package color="#10B981" size={20} />;
-      case "message":
-        return <MessageCircle color="#3B82F6" size={20} />;
-      case "system":
-        return <SettingsIcon color="#6366F1" size={20} />;
-      default:
-        return <Bell color={colors.textSecondary} size={20} />;
-    }
-  };
-
-  const _getIconBgByType = (type: Notification["type"]) => {
-    switch (type) {
-      case "project":
-        return "#FFF4ED";
-      case "product":
-        return "#ECFDF5";
-      case "message":
-        return "#EFF6FF";
-      case "system":
-        return "#EEF2FF";
-      default:
-        return colors.surface;
-    }
-  };
-
-  const formatTimeFacebook = (dateString: string) => {
-    const now = new Date();
-    const date = new Date(dateString);
-
-    const diff = now.getTime() - date.getTime();
-
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (seconds < 60) {
-      return "Vừa xong";
-    }
-
-    if (minutes < 60) {
-      return `${minutes} phút trước`;
-    }
-
-    if (hours < 24) {
-      return `${hours} giờ trước`;
-    }
-
-    if (days === 1) {
-      return "Hôm qua";
-    }
-
-    if (days < 7) {
-      return `${days} ngày trước`;
-    }
-
-    return date.toLocaleDateString("vi-VN");
-  };
-
-  return (
-    <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: "Thông báo",
-          headerStyle: {
-            backgroundColor: colors.surface,
-          },
-          headerTintColor: colors.text,
-          headerTitleStyle: {
-            fontWeight: "700",
-            fontSize: 18,
-          },
-          headerShadowVisible: false,
-        }}
-      />
-
-      <View style={styles.header}>
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>
-            {data?.length > 0
-              ? `${data?.length} thông báo chưa đọc`
-              : "Không có thông báo mới"}
+  const renderItem = useCallback(
+    ({ item }: { item: AppNotification }) => (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${item.isRead ? "" : "Chưa đọc. "}${item.title}`}
+        onPress={() => markOne(item)}
+        style={({ pressed }) => [styles.card, !item.isRead && styles.cardUnread, pressed && styles.pressed]}
+      >
+        <View style={[styles.icon, !item.isRead && styles.iconUnread]}>
+          <Bell size={18} color={item.isRead ? colors.textTertiary : colors.primary} strokeWidth={2} />
+        </View>
+        <View style={styles.body}>
+          <View style={styles.titleRow}>
+            <Text variant="subhead" numberOfLines={2} style={styles.title}>
+              {item.title}
+            </Text>
+            {!item.isRead ? <View style={styles.dot} /> : null}
+          </View>
+          {item.message ? (
+            <Text variant="caption" color="textSecondary" numberOfLines={3}>
+              {item.message}
+            </Text>
+          ) : null}
+          <Text variant="caption" color="textTertiary">
+            {relativeTime(item.createdAt)}
           </Text>
         </View>
-        {data?.length > 0 && (
-          <TouchableOpacity
-            style={styles.markAllButton}
-            onPress={handleMarkAllAsRead}
-          >
-            <Text style={styles.markAllText}>Đánh dấu tất cả</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      </Pressable>
+    ),
+    [markOne]
+  );
 
-      {/* <View style={styles.filterBar}>
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            activeFilter !== "all" && {
-              borderColor: activeOption.color,
-              backgroundColor: activeOption.bg,
-            },
-          ]}
-          activeOpacity={0.7}
-          onPress={toggleDropdown}
-        >
-          {activeOption.icon}
-          <Text
-            style={[
-              styles.filterButtonText,
-              activeFilter !== "all" && {
-                color: activeOption.color,
-                fontWeight: "600" as const,
-              },
-            ]}
-          >
-            {activeOption.label}
-          </Text>
-          <ChevronDown
-            color={
-              activeFilter !== "all" ? activeOption.color : colors.textSecondary
-            }
-            size={16}
-          />
-        </TouchableOpacity>
-        <Text style={styles.filterCount}>{filteredCount} thông báo</Text>
-      </View> */}
-
-      {showDropdown && (
-        <>
-          <Pressable style={styles.dropdownOverlay} onPress={toggleDropdown} />
-          <Animated.View
-            style={[
-              styles.dropdownContainer,
-              {
-                opacity: dropdownAnim,
-                transform: [
-                  {
-                    translateY: dropdownAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-8, 0],
-                    }),
-                  },
-                  {
-                    scale: dropdownAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.95, 1],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            {/* {FILTER_OPTIONS.map((option, index) => {
-              const isActive = activeFilter === option.key;
-              const count =
-                option.key === "all"
-                  ? notifications.length
-                  : notifications.filter((n) => n.type === option.key).length;
-              return (
-                <TouchableOpacity
-                  key={option.key}
-                  style={[
-                    styles.dropdownItem,
-                    isActive && { backgroundColor: option.bg },
-                    index < FILTER_OPTIONS.length - 1 &&
-                      styles.dropdownItemBorder,
-                  ]}
-                  activeOpacity={0.6}
-                  onPress={() => selectFilter(option.key)}
-                >
-                  <View
-                    style={[
-                      styles.dropdownItemIcon,
-                      { backgroundColor: option.bg },
-                    ]}
-                  >
-                    {option.icon}
-                  </View>
-                  <View style={styles.dropdownItemContent}>
-                    <Text
-                      style={[
-                        styles.dropdownItemLabel,
-                        isActive && {
-                          color: option.color,
-                          fontWeight: "700" as const,
-                        },
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                    <Text style={styles.dropdownItemCount}>{count}</Text>
-                  </View>
-                  {isActive && <Check color={option.color} size={18} />}
-                </TouchableOpacity>
-              );
-            })} */}
-          </Animated.View>
-        </>
-      )}
-
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {data.map((notification) => (
-          <TouchableOpacity
-            key={notification.ID}
-            style={[
-              styles.notificationCard,
-              // !notification.isRead && styles.notificationCardUnread,
-            ]}
-            activeOpacity={0.7}
-            onPress={() => handleNotificationPress(notification)}
-          >
-            {/* <View
-              style={[
-                styles.iconContainer,
-                { backgroundColor: getIconBgByType(notification.type) },
-              ]}
-            >
-              {getIconByType(notification.type)}
-            </View> */}
-
-            <View style={styles.notificationContent}>
-              <View style={styles.notificationHeader}>
-                <Text
-                  style={[
-                    styles.notificationTitle,
-                    // !notification.isRead && styles.notificationTitleUnread,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {notification.Title}
-                </Text>
-                {/* {!notification.isRead && <View style={styles.unreadBadge} />} */}
-              </View>
-              <Text style={styles.notificationDescription} numberOfLines={2}>
-                {notification.Content}
-              </Text>
-
-              <Text style={styles.notificationTime}>
-                {formatTimeFacebook(notification.NgayNhap)}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+  const empty = loading ? (
+    <View style={styles.gapList}>
+      <Skeleton height={88} radius={radius.xl} />
+      <Skeleton height={88} radius={radius.xl} />
+      <Skeleton height={88} radius={radius.xl} />
     </View>
+  ) : loadError ? (
+    <ErrorState onRetry={() => void load()} />
+  ) : (
+    <EmptyState icon={BellOff} title="Chưa có thông báo nào" />
+  );
+
+  return (
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <Screen scroll={false} padded={false} header={<AppHeader title="Thông báo" variant="soft" />}>
+        <FlatList
+          data={loading ? [] : items}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          ListHeaderComponent={
+            !loading && items.length > 0 ? (
+              <View style={styles.header}>
+                <Text variant="caption" color="textSecondary">
+                  {unread.length > 0 ? `${unread.length} thông báo chưa đọc` : "Đã đọc hết"}
+                </Text>
+                {unread.length > 0 ? (
+                  <Button title="Đánh dấu tất cả" variant="ghost" onPress={() => void markAll()} loading={markingAll} />
+                ) : null}
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={empty}
+          ItemSeparatorComponent={() => <View style={styles.gap} />}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+          }
+        />
+      </Screen>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.surface,
-  },
+  list: { paddingHorizontal: space.xl, paddingTop: space.sm, paddingBottom: space.xxl },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 14,
-    fontWeight: "600" as const,
-    color: colors.textSecondary,
-  },
-  markAllButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  markAllText: {
-    fontSize: 14,
-    fontWeight: "600" as const,
-    color: colors.primary,
-  },
-  filterBar: {
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    gap: space.md,
+    paddingBottom: space.md,
+    minHeight: 44,
   },
-  filterButton: {
+  gap: { height: space.md },
+  gapList: { gap: space.md },
+  card: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: "#F9FAFB",
   },
-  filterButtonText: {
-    fontSize: 13,
-    fontWeight: "500" as const,
-    color: colors.textSecondary,
-  },
-  filterCount: {
-    fontSize: 12,
-    color: colors.textTertiary,
-    fontWeight: "500" as const,
-  },
-  dropdownOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 99,
-  },
-  dropdownContainer: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 152 : 148,
-    left: 16,
-    right: 16,
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    zIndex: 100,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.12,
-        shadowRadius: 24,
-      },
-      android: {
-        elevation: 12,
-      },
-      web: {
-        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.12)",
-      },
-    }),
-  },
-  dropdownItem: {
-    flexDirection: "row",
+  cardUnread: { backgroundColor: colors.primarySubtle, borderColor: colors.primarySubtle },
+  pressed: { opacity: 0.9 },
+  icon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.full,
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  dropdownItemBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  dropdownItemIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
     justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: colors.surfaceMuted,
   },
-  dropdownItemContent: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  dropdownItemLabel: {
-    fontSize: 15,
-    fontWeight: "500" as const,
-    color: colors.text,
-  },
-  dropdownItemCount: {
-    fontSize: 13,
-    color: colors.textTertiary,
-    fontWeight: "500" as const,
-  },
-  content: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingVertical: 12,
-  },
-  notificationCard: {
-    flexDirection: "row",
-    backgroundColor: colors.surface,
-    marginHorizontal: 16,
-    marginVertical: 6,
-    padding: 16,
-    borderRadius: 16,
-    gap: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 2,
-      },
-      web: {
-        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)",
-      },
-    }),
-  },
-  notificationCardUnread: {
-    backgroundColor: "#FFFBEB",
-    borderWidth: 1,
-    borderColor: "#FEF3C7",
-  },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  notificationContent: {
-    flex: 1,
-    gap: 6,
-  },
-  notificationHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  notificationTitle: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "600" as const,
-    color: colors.text,
-  },
-  notificationTitleUnread: {
-    fontWeight: "700" as const,
-  },
-  unreadBadge: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-  },
-  notificationDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
+  iconUnread: { backgroundColor: colors.surface },
+  body: { flex: 1, gap: space.xs },
+  titleRow: { flexDirection: "row", alignItems: "flex-start", gap: space.sm },
+  title: { flex: 1 },
+  dot: { width: 8, height: 8, borderRadius: radius.full, backgroundColor: colors.primary, marginTop: space.sm },
 });

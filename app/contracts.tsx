@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { DocTrailing, SalesDocList } from "@/components/sales/SalesDocList";
 import { Avatar, ListItem } from "@/components/ui";
 import { formatDate } from "@/lib/format";
-import { HopDongService } from "@/sevicesSupabase/HopDongService";
+import { HopDongService } from "@/services/HopDongService";
 
 /** Danh sách hợp đồng mua bán – dữ liệu fn_contract_list như web (ContractListService). */
 export default function ContractsScreen({ embedded }: { embedded?: boolean } = {}) {

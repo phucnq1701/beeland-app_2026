@@ -13,8 +13,9 @@ function compileSource(source) {
 
 /**
  * @param {string} file đường dẫn tính từ gốc repo
- * @param {{ source?: string, modules?: Record<string, unknown> }} [opts]
- *   source: nội dung thay cho file trên đĩa; modules: ánh xạ tên require → exports
+ * @param {{ source?: string, modules?: Record<string, unknown>, globals?: Record<string, unknown> }} [opts]
+ *   source: nội dung thay cho file trên đĩa; modules: ánh xạ tên require → exports;
+ *   globals: biến toàn cục thêm vào sandbox (vd setTimeout)
  */
 function loadTs(file, opts = {}) {
   const source = opts.source ?? fs.readFileSync(path.join(__dirname, "..", "..", file), "utf8");
@@ -27,6 +28,7 @@ function loadTs(file, opts = {}) {
       throw new Error(`loadTs: không có module "${name}" cho ${file}`);
     },
     Date, Math, Number, String, Object, Array, JSON, RegExp, Error,
+    ...opts.globals,
   });
   return module.exports;
 }

@@ -8,9 +8,12 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import UpdateManager from "@/components/UpdateManager";
+import { ChatNotifier } from "@/components/chat/ChatNotifier";
+import { SessionGuard } from "@/components/SessionGuard";
 import { FontStatusProvider } from "@/components/ui/FontStatus";
 import { ToastProvider } from "@/components/ui/Toast";
 import { applyWebFont } from "@/constants/webFont";
+import { purgeLegacyRememberedLogin } from "@/lib/biometric";
 import { fonts } from "@/theme";
 SplashScreen.preventAutoHideAsync();
 applyWebFont();
@@ -32,7 +35,6 @@ function RootLayoutNav() {
       <Stack.Screen name="register" options={{ headerShown: false }} />
       <Stack.Screen name="project/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="product/[id]" options={{ title: 'Chi tiết sản phẩm' }} />
-      <Stack.Screen name="price-calculator/[id]" options={{ title: 'Tính giá sản phẩm' }} />
       <Stack.Screen name="customer/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="contract/[id]" options={{ headerShown: true, title: 'Chi tiết hợp đồng' }} />
       <Stack.Screen name="deposits" options={{ headerShown: true, title: 'Đặt cọc' }} />
@@ -80,6 +82,8 @@ export default function RootLayout() {
       } catch (error) {
         console.log('[RootLayout] AsyncStorage check error:', error instanceof Error ? error.message : String(error));
       }
+      // Bản cũ lưu mật khẩu dạng chữ ("Nhớ mật khẩu") → xoá, chỉ giữ tài khoản để điền sẵn.
+      await purgeLegacyRememberedLogin();
       setStorageChecked(true);
     };
     initApp();
@@ -92,10 +96,13 @@ export default function RootLayout() {
           <ToastProvider>
             <StatusBar style="dark" />
             <RootLayoutNav />
+            <ChatNotifier />
+            <SessionGuard />
           </ToastProvider>
+          {/* Trong FontStatusProvider để màn "đang cập nhật dữ liệu mới" dùng font của app. */}
+          <UpdateManager />
         </FontStatusProvider>
       </GestureHandlerRootView>
-      <UpdateManager />
     </QueryClientProvider>
   );
 }

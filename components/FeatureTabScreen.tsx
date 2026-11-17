@@ -12,7 +12,6 @@ import { loadMenuTabIds } from '@/components/utils/menuTabs';
 
 import ProjectsScreen from '@/app/projects';
 import ProductsScreen from '@/app/products';
-import AppointmentsScreen from '@/app/appointments';
 import LockedUnitsScreen from '@/app/locked-units';
 import BookingsScreen from '@/app/bookings';
 import CustomersScreen from '@/app/customers';
@@ -20,12 +19,14 @@ import ContractsScreen from '@/app/contracts';
 import ReportsScreen from '@/app/reports/index';
 import DepositsScreen from '@/app/deposits';
 import SigningsScreen from '@/app/signings';
+import RequestsScreen from '@/app/requests';
+import ChatInboxScreen from '@/app/chat/index';
+import PriceSheetsScreen from '@/app/price-sheets';
 
 /** Map feature id → màn hình tương ứng hiển thị trong tab menu */
 const SCREEN_MAP: Record<string, ComponentType<{ embedded?: boolean }>> = {
   '1': ProjectsScreen,
   '2': ProductsScreen,
-  '3': AppointmentsScreen,
   '4': LockedUnitsScreen,
   '5': BookingsScreen,
   '6': CustomersScreen,
@@ -33,6 +34,9 @@ const SCREEN_MAP: Record<string, ComponentType<{ embedded?: boolean }>> = {
   '9': ReportsScreen,
   '13': DepositsScreen,
   '14': SigningsScreen,
+  '15': RequestsScreen,
+  '16': ChatInboxScreen,
+  '17': PriceSheetsScreen,
 };
 
 interface FeatureTabScreenProps {

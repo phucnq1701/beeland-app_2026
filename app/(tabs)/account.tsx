@@ -1,10 +1,14 @@
 import React, { useCallback, useRef, useState } from "react";
+import { getSessionInfo } from "@/services/session";
 import { useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ChevronRight, LayoutGrid, LogOut, Trash2, User } from "lucide-react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Application from "expo-application";
+import * as Updates from "expo-updates";
 
+import { BiometricLoginSetting } from "@/components/account/BiometricLoginSetting";
+import { chatAuthChanged, unregisterChatPush } from "@/components/chat/chatPush";
 import { FeatureGrid } from "@/components/home/FeatureGrid";
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import {
@@ -18,15 +22,18 @@ import {
   useToast,
 } from "@/components/ui";
 import { MENU_TAB_FEATURE_IDS } from "@/components/utils/menuTabs";
+import { disableBiometricLogin } from "@/lib/biometric";
 import { routeForFeature, visibleFeatureIds } from "@/lib/featureConfig";
+import { shortBundleId } from "@/lib/otaUpdate";
 import { features } from "@/mocks/features";
 import { colors, elevation, radius, space } from "@/theme";
-import { CloudProfileService, CloudProfile } from "@/sevicesSupabase/CloudProfileService";
+import { CloudProfileService, CloudProfile } from "@/services/CloudProfileService";
+import { logoutCurrentSession } from "@/services/LogoutService";
 import {
   deleteCurrentEmployee,
   clearDeletedEmployeeSession,
   DeletedEmployeeSession,
-} from "@/sevicesSupabase/AccountDeletionService";
+} from "@/services/AccountDeletionService";
 
 /** Chừa chỗ cho tab bar nổi. */
 const TAB_BAR_SPACE = 100;
@@ -42,6 +49,7 @@ export default function AccountScreen() {
   const [retry, setRetry] = useState(0);
   const queryClient = useQueryClient();
   const [deleting, setDeleting] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [employeeDeleted, setEmployeeDeleted] = useState(false);
   const deleteBusy = useRef(false);
   const confirmationOpen = useRef(false);
@@ -49,14 +57,29 @@ export default function AccountScreen() {
   // Chặn bấm "Đăng xuất" 2 lần làm mở 2 màn đăng nhập chồng nhau
   const loggingOut = useRef(false);
 
-  const handleLogout = () => {
+  /**
+   * Đăng xuất thật (docs/auth.md): gỡ push (cần JWT cũ) → huỷ phiên cloud-auth + xoá phiên trên máy
+   * (`logoutCurrentSession`) → xoá cache dữ liệu → thay hẳn bằng màn Đăng nhập (vuốt lùi không quay lại app).
+   * Trước 2026-11-02 chỉ `router.push("/login")` nên tắt app mở lại vẫn vào thẳng Trang chủ.
+   */
+  const handleLogout = async () => {
     if (deleteBusy.current || loggingOut.current) return;
     if (deletedSession.current) {
       void performDeleteAccount();
       return;
     }
     loggingOut.current = true;
-    router.push("/login");
+    setSigningOut(true);
+    try {
+      await unregisterChatPush().catch(() => undefined);
+      chatAuthChanged(false);
+      await logoutCurrentSession();
+      queryClient.clear();
+      if (router.canDismiss()) router.dismissAll();
+      router.replace("/login");
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   useFocusEffect(useCallback(() => {
@@ -65,8 +88,8 @@ export default function AccountScreen() {
     setData(null);
     setLoadingProfile(true);
     setProfileError(null);
-    void AsyncStorage.getItem('@type_account').then((type: string | null) => {
-      if (active) setIsAgency(type === 'AGENCY');
+    void getSessionInfo().then((s) => {
+      if (active) setIsAgency(s.isAgency);
     });
     void CloudProfileService.userInfo().then((res) => {
       if (active && !deleteBusy.current && !deletedSession.current) setData(res.data);
@@ -91,7 +114,14 @@ export default function AccountScreen() {
         setEmployeeDeleted(true);
         setData(null);
       }
+      await unregisterChatPush();
+      chatAuthChanged(false);
+      await disableBiometricLogin();
       await clearDeletedEmployeeSession(deletedSession.current);
+      toast.show({
+        type: "success",
+        message: deletedSession.current.result === "khoa" ? "Tài khoản đã bị khóa (còn chứng từ trên hệ thống)." : "Đã xóa tài khoản.",
+      });
       queryClient.clear();
       if (router.canDismiss()) router.dismissAll();
       router.replace("/login");
@@ -115,7 +145,7 @@ export default function AccountScreen() {
     const confirmed = await confirm({
       title: "Xóa tài khoản",
       message:
-        "Bạn có chắc chắn muốn xóa hồ sơ nhân viên của mình như trên web và đăng xuất khỏi app? Không thể hoàn tác việc xóa hồ sơ. Tài khoản đăng nhập trên hệ thống không bị vô hiệu hóa.",
+        "Bạn có chắc chắn muốn xóa tài khoản và đăng xuất khỏi app? Hồ sơ nhân viên sẽ bị xóa; nếu đã có chứng từ trên hệ thống thì tài khoản bị khóa (không đăng nhập được nữa) để giữ chứng từ. Không thể hoàn tác.",
       confirmText: "Xóa",
       cancelText: "Hủy",
       destructive: true,
@@ -234,6 +264,7 @@ export default function AccountScreen() {
                 onPress={() => router.push("/all-management")}
               />
             </View>
+            {settingsDisabled ? null : <BiometricLoginSetting style={styles.divider} />}
             <View pointerEvents={deleting ? "none" : "auto"} style={styles.divider}>
               <ListItem
                 leading={<RowIcon icon={Trash2} danger />}
@@ -249,11 +280,15 @@ export default function AccountScreen() {
           variant="secondary"
           icon={LogOut}
           title="Đăng xuất"
-          loading={deleting}
-          onPress={handleLogout}
+          loading={deleting || signingOut}
+          onPress={() => void handleLogout()}
           fullWidth
           style={styles.pill}
         />
+        {/* Mã bản OTA đang chạy ("gốc" = bản trong build) — để kiểm tra máy đã nhận bản cập nhật nào (docs/ota-update.md). */}
+        <Text variant="caption" color="textSecondary" align="center" numeric>
+          {appVersionLabel()}
+        </Text>
       </View>
 
       <Modal visible={deleting} transparent animationType="fade" onRequestClose={() => {}}>
@@ -268,6 +303,12 @@ export default function AccountScreen() {
       </Modal>
     </Screen>
   );
+}
+
+function appVersionLabel(): string {
+  const base = `BeeLand ${Application.nativeApplicationVersion ?? "—"}`;
+  if (!Updates.isEnabled) return base;
+  return `${base} · ${shortBundleId(Updates.updateId, Updates.isEmbeddedLaunch)}`;
 }
 
 function RowIcon({ icon: Icon, danger }: { icon: typeof User; danger?: boolean }) {

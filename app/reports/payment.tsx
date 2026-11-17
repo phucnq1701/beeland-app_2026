@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { ReportList } from "@/components/reports/ReportList";
 import { ListItem, MoneyText, Text } from "@/components/ui";
 import { formatDate, formatVND } from "@/lib/format";
-import { ReceiptRow, ReportService } from "@/sevicesSupabase/ReportService";
+import { ReceiptRow, ReportService } from "@/services/ReportService";
 
 /** Báo cáo thu tiền: phiếu thu trong kỳ (fn_cash_voucher_list loại THU – như màn Phiếu thu web). */
 export default function PaymentReportScreen() {

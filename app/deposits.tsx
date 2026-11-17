@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { DocTrailing, SalesDocList, StatusOption } from "@/components/sales/SalesDocList";
 import { Avatar, ListItem } from "@/components/ui";
 import { foldVietnamese, formatDate } from "@/lib/format";
-import { DatCocService } from "@/sevicesSupabase/DatCocService";
+import { DatCocService } from "@/services/DatCocService";
 
 /**
  * Bộ lọc màn Đặt cọc chỉ hiện "Đặt cọc chờ duyệt" và "Đặt cọc đã duyệt" (giữ như màn cũ);

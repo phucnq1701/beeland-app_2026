@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSessionInfo } from "@/services/session";
 import { sanitizeMenuTabIds, visibleFeatureIds } from '@/lib/featureConfig';
 import { features } from '@/mocks/features';
 import { getScopedKey } from './accountScope';
@@ -26,6 +27,9 @@ export const MENU_TAB_FEATURE_IDS: string[] = [
   '9', // Báo cáo
   '13', // Đặt cọc
   '14', // Đặt lịch ký
+  '15', // Yêu cầu khách hàng
+  '16', // Tin nhắn
+  '17', // Phiếu tính giá (chỉ nội bộ)
 ];
 
 export const DEFAULT_MENU_TAB_IDS: string[] = features
@@ -44,7 +48,7 @@ export async function loadMenuTabIds(): Promise<string[]> {
     { isAgency: true, menuOnly: true, menuEligible: MENU_TAB_FEATURE_IDS }
   );
   try {
-    const isAgency = (await AsyncStorage.getItem('@type_account')) === 'AGENCY';
+    const { isAgency } = await getSessionInfo();
     allowed = visibleFeatureIds(
       features.map((f) => f.id),
       { isAgency, menuOnly: true, menuEligible: MENU_TAB_FEATURE_IDS }

@@ -17,7 +17,8 @@ import {
 import { CustomerListItem } from "@/components/customer/CustomerListItem";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, space } from "@/theme";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
+import { CustomerService } from "@/services/CustomerService";
+import { errorMessage } from "@/services/nvApi";
 
 type CustomerTab = "all" | "personal" | "business";
 type StatusOption = { id: string; label: string; value: string; color?: string };
@@ -47,6 +48,7 @@ export default function CustomersScreen({ embedded }: { embedded?: boolean } = {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [loadErrorMsg, setLoadErrorMsg] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
 
   // Chỉ nhận kết quả của lần gọi mới nhất (gõ nhanh / đổi bộ lọc liên tục)
@@ -95,6 +97,8 @@ export default function CustomersScreen({ embedded }: { embedded?: boolean } = {
         setDataKH([]);
         setTotal(0);
         setLoadError(true);
+        // Thông báo máy chủ (vd không có quyền xem màn Khách hàng) hiện nguyên
+        setLoadErrorMsg(errorMessage(error, "Không tải được danh sách khách hàng."));
       }
       setHasMore(false);
     } finally {
@@ -180,7 +184,7 @@ export default function CustomersScreen({ embedded }: { embedded?: boolean } = {
       );
     }
     if (loadError) {
-      return <ErrorState description="Không tải được danh sách khách hàng." onRetry={() => void fetchCustomers("load")} />;
+      return <ErrorState description={loadErrorMsg || "Không tải được danh sách khách hàng."} onRetry={() => void fetchCustomers("load")} />;
     }
     if (searchQuery || statusId !== "all" || activeTab !== "all") {
       return (

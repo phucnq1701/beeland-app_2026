@@ -32,16 +32,18 @@ import {
   SegmentedControl,
   SkeletonList,
   Text,
+  useToast,
 } from "@/components/ui";
 import { SummaryKey } from "@/lib/productOverview";
-import { applyRealtimeChange, resolveCatalogStatus, unitStatusOf } from "@/lib/productRealtime";
+import { applyRealtimeChange, resolveCatalogStatus, rowToRealtimeChange, unitStatusOf } from "@/lib/productRealtime";
 import { colors, space } from "@/theme";
-import { ProductService } from "@/sevicesSupabase/ProductService";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
-import { FilterService } from "@/sevicesSupabase/FilterService";
-import { PriceServices } from "@/sevicesSupabase/PriceServices";
+import { ProductService } from "@/services/ProductService";
+import { ProjectService } from "@/services/ProjectService";
+import { FilterService } from "@/services/FilterService";
+import { PriceServices } from "@/services/PriceServices";
 
-import * as signalR from "@microsoft/signalr";
+import { subscribeTableChanges } from "@/services/realtimeHub";
+import { getSessionInfo } from "@/services/session";
 
 type ViewMode = "list" | "grid" | "overview";
 
@@ -65,6 +67,17 @@ export default function ProductsScreen({
   const [legendOpen, setLegendOpen] = useState<boolean>(false);
   const [selectedOverviewStatus, setSelectedOverviewStatus] = useState<SummaryKey>("all");
   const router = useRouter();
+  const toast = useToast();
+  // Lỗi tải (mất phiên, máy chủ lỗi…) ⇒ báo, không để danh sách trống im lặng; cùng thông điệp chỉ báo 1 lần / 4 giây
+  const lastErrorRef = useRef<{ msg: string; at: number } | null>(null);
+  const notifyError = (res: any) => {
+    const msg = res?.error;
+    if (!msg) return;
+    const now = Date.now();
+    if (lastErrorRef.current && lastErrorRef.current.msg === msg && now - lastErrorRef.current.at < 4000) return;
+    lastErrorRef.current = { msg, at: now };
+    toast.show({ type: "error", message: msg });
+  };
   const { MaDA } = useLocalSearchParams();
 
 
@@ -75,9 +88,6 @@ export default function ProductsScreen({
   const trangThaiRef = useRef<any[]>([]);
   trangThaiRef.current = TrangThai;
   const [dataGrid, setDataGrid] = useState<any[]>([]);
-  // Bản mới nhất cho handler realtime (đăng ký một lần, tránh closure cũ)
-  const dataGridRef = useRef<any[]>([]);
-  dataGridRef.current = dataGrid;
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -104,81 +114,50 @@ export default function ProductsScreen({
     KyHieu: "",
   });
 
-  // real time
-
-  const [hubConnection, setHubConnection] = useState<any>(null);
+  // Realtime trạng thái căn: nghe UPDATE bảng bds_products của công ty qua hub `/api/realtime` – cùng nguồn với web
+  // (beeland-dotnet/src/hooks/useProductStatusRealtime.ts). Server tự lọc RLS (căn đã xoá, giỏ hàng đại lý).
   const [localChange, setLocalChange] = useState<any>(null);
 
-  const initSignalR = async () => {
-    try {
-      // Logger no-op: chặn hoàn toàn log nội bộ của SignalR (tránh stack trace rác
-      // khi server đóng kết nối realtime — không phải lỗi API)
-      const silentLogger: signalR.ILogger = {
-        log: () => {},
-      };
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+    let clearTimer: ReturnType<typeof setTimeout> | null = null;
+    void (async () => {
+      const { companyId } = await getSessionInfo();
+      if (cancelled || !companyId) return;
+      unsubscribe = subscribeTableChanges(
+        `product-status-${companyId}`,
+        [{ event: "UPDATE", table: "bds_products", filter: `ma_ctdk=eq.${companyId}` }],
+        (payload) => {
+          const response = rowToRealtimeChange(payload?.new);
+          if (!response) return;
+          // Tra trạng thái mới theo uuid trong danh mục → cập nhật cả tên và màu (lib/productRealtime).
+          // Danh mục + lưới đọc qua ref vì handler chỉ đăng ký một lần.
+          const catalog = trangThaiRef.current;
+          const entry = resolveCatalogStatus(response.maTT, catalog);
+          setDataGrid((prev) => applyRealtimeChange(prev, response, catalog).grid);
 
-      const connection = new signalR.HubConnectionBuilder()
-        .withUrl("https://api-beeland.beesky.vn/signalr-beeland")
-        .withAutomaticReconnect()
-        .configureLogging(silentLogger)
-        .build();
-
-      // Xử lý khi server đóng kết nối (không phải lỗi API, chỉ realtime)
-      connection.onclose((err) => {
-        if (err) {
-          console.log("[SignalR] Connection closed:", err?.message || err);
+          // Danh sách: đổi trạng thái đúng dòng của căn vừa đổi
+          if (entry) {
+            setProducts2((list) =>
+              list.map((p) =>
+                p?.MaSP === response.maSP ? { ...p, MaTT: entry.MaTT, TenTT: entry.TenTT, ColorTT: entry.ColorWeb ?? p?.ColorTT } : p
+              )
+            );
+          }
+          setLocalChange({ MaTang: response.data.MaTang, MaVT: response.data.MaVT });
+          if (clearTimer) clearTimeout(clearTimer);
+          clearTimer = setTimeout(() => setLocalChange(null), 1000);
         }
-      });
-
-      await connection.start();
-      // console.log("✅ Connected SignalR");
-
-      setHubConnection(connection);
-    } catch {
-      // SignalR connection error
-    }
-  };
-
-  useEffect(() => {
-    if (!hubConnection) return;
-
-    try {
-      hubConnection.on("ChangeTable", (response: any) => {
-        // Tra trạng thái mới theo mã/uuid trong danh mục → cập nhật cả tên và màu (lib/productRealtime).
-        // Danh mục + lưới đọc qua ref vì handler chỉ đăng ký một lần.
-        const catalog = trangThaiRef.current;
-        const entry = resolveCatalogStatus(response?.maTT, catalog);
-        const { changedMaSP } = applyRealtimeChange(dataGridRef.current, response, catalog);
-
-        setDataGrid((prev) => applyRealtimeChange(prev, response, catalog).grid);
-
-        // Danh sách: đổi trạng thái đúng dòng của căn vừa đổi
-        if (changedMaSP && entry) {
-          setProducts2((list) =>
-            list.map((p) => (p?.MaSP === changedMaSP ? { ...p, MaTT: entry.MaTT } : p))
-          );
-        }
-        setLocalChange({
-          MaTang: response.data?.MaTang,
-          MaVT: response.data?.MaVT,
-        });
-
-        setTimeout(() => setLocalChange(null), 1000);
-      });
-    } catch {
-      // SignalR listen error
-    }
-  }, [hubConnection]);
-
-  useEffect(() => {
-    void initSignalR();
-  }, []);
-
-  useEffect(() => {
+      );
+      if (cancelled) unsubscribe();
+    })();
     return () => {
-      hubConnection?.stop();
+      cancelled = true;
+      if (clearTimer) clearTimeout(clearTimer);
+      unsubscribe?.();
     };
-  }, [hubConnection]);
+  }, []);
 
   const applyChangeFilter = (p: string, v: any) => {
     // Tạo bản sao để tránh mutate state trực tiếp (gây không re-render)
@@ -210,6 +189,7 @@ export default function ProductsScreen({
 
   const loadDataByDA = async (MaDA: any) => {
     const resListKhu = await ProductService.getKhuVuc({ maDA: MaDA });
+    notifyError(resListKhu);
     setKhuVuc(resListKhu?.data || []);
 
     void handleFormGrid(MaDA);
@@ -222,6 +202,7 @@ export default function ProductsScreen({
       maDA: MaDA ?? filterCondition?.MaDA,
     });
 
+    notifyError(result);
     const raw = result?.data || [];
 
     const mappedBlocks = raw
@@ -265,6 +246,7 @@ export default function ProductsScreen({
       setHasMore(true);
 
       const resDA = await ProjectService.getProjects({});
+      notifyError(resDA);
       setDuAn(resDA?.data || []);
       const ma = Number(MaDA);
       const finalMa = isNaN(ma) ? resDA?.data?.[0]?.MaDA : ma;
@@ -297,6 +279,7 @@ export default function ProductsScreen({
       };
       setFilterCondition(filter);
       const res = await ProductService.getProducts(filter);
+      notifyError(res);
       const data = res?.data || [];
       setProducts2(data);
 
@@ -335,6 +318,7 @@ export default function ProductsScreen({
       void loadDataByDA(_filter.MaDA);
 
       const res = await ProductService.getProducts(filter);
+      notifyError(res);
       const data = res?.data || [];
       setProducts2(data);
 
@@ -373,6 +357,7 @@ export default function ProductsScreen({
       };
 
       const res = await ProductService.getProducts(filter);
+      notifyError(res);
       const data = res?.data || [];
       setProducts2(data);
 
@@ -438,6 +423,7 @@ export default function ProductsScreen({
       };
 
       const res = await ProductService.getProducts(filter);
+      notifyError(res);
       const data = res?.data || [];
 
       setProducts2((prev) => {

@@ -5,7 +5,7 @@ import { WebView } from "react-native-webview";
 
 import { AppHeader, ErrorState, Screen, SkeletonDetail } from "@/components/ui";
 import { colors } from "@/theme";
-import { getValidSupabaseJwt } from "@/sevicesSupabase/cloudTenant";
+import { getFreshJwt } from "@/services/session";
 
 // Trang sơ đồ phân lô — đọc dữ liệu bằng cloud_jwt (xem API doc mục "Sơ đồ phân lô")
 const BASE_URL = "https://real.beesky.vn/products/sodophanlo-app";
@@ -22,7 +22,7 @@ export default function DiagramViewer() {
     try {
       // Trang web đọc dữ liệu bằng cloud_jwt (7 ngày) — KHÔNG dùng legacy @token.
       // Token legacy không được nhận → trang hiện form đăng nhập.
-      const cloudJwt = await getValidSupabaseJwt();
+      const cloudJwt = await getFreshJwt();
 
       if (!cloudJwt) {
         setError("Phiên đăng nhập cloud đã hết hạn. Vui lòng đăng xuất và đăng nhập lại.");

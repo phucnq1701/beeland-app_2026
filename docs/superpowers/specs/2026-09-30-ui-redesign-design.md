@@ -98,6 +98,43 @@ App giữ đúng như web ở các điểm dưới đây cho tới khi đội we
    `phuong_an_tt_ky` có mã chữ (`genCatalogCode`) → lưu thành `null`. (b) Cấu hình bắt buộc `MaHinhThucTT` / `MaBaoLanh`
    kiểm tra key không có trong form (form dùng `LaChuyenKhoan` / `CoBaoLanh`) → luôn báo thiếu, không lưu được.
    **App làm giống web** ở cả hai; đề xuất web lưu mã chữ / đổi key kiểm tra.
+8. **Trùng khách theo họ tên / tên công ty – app KHÁC web (người dùng quyết 2026-10-02).** Web
+   `CustomerDuplicateService` coi trùng `ten_kh`/`ten_cong_ty` là trùng khách (mặc định block) → người trùng tên bị chặn /
+   bắt gửi yêu cầu. Thực tế nhiều người trùng tên nên **app không kiểm tiêu chí `full_name`** (`duplicateValues` trong
+   `lib/customerRules.ts`), chỉ SĐT/CCCD/email (cá nhân) và MST (doanh nghiệp). Web vẫn kiểm → cùng khách có thể lưu được
+   trên app nhưng bị chặn trên web; đề xuất web bỏ tiêu chí này hoặc công ty đặt "Họ tên / Tên công ty" = Cho phép.
+9. **Yêu cầu khách hàng: hạn xử lý gửi không kèm múi giờ (chưa kiểm chứng trên DB).** Web `RequestFormDrawer` gửi
+   `ThoiHan` dạng `YYYY-MM-DDTHH:mm:ss` (không múi) → `fn_customer_request_save` ép `::timestamptz` theo múi giờ phiên DB
+   (mặc định Supabase là UTC) → có thể lệch 7 giờ khi đọc lại. **App gửi kèm `+07:00`** (`lib/customerRequest.ts` `toApiPayload`)
+   để lưu đúng giờ VN; nếu DB chạy UTC thì hạn web nhập sẽ hiện sớm hơn 7 giờ trên app (và ngược lại trên web hiện đúng).
+   Đề xuất web gửi kèm múi giờ. Ngoài ra app khác web ở: tiếp nhận mới **mặc định** trạng thái `new` "Mới tiếp nhận",
+   ưu tiên `normal`, người tiếp nhận = người đăng nhập (web để trống; máy chủ vẫn tự gán người tiếp nhận) – xem `docs/requests.md`.
+10. **Yêu cầu khách tự gửi: app KHOÁ nội dung khách gửi, web vẫn cho sửa (người dùng quyết 2026-10-07).** Với yêu cầu
+    `created_by = 'PORTAL'` app không cho sửa thông tin khách, hợp đồng, tiêu đề, nội dung, nguồn, tệp khách gửi (dự án / loại
+    chỉ khi khách đã có) – chỉ sửa phần xử lý. Web `RequestFormDrawer` và máy chủ `fn_customer_request_save` vẫn cho sửa mọi trường
+    → nội dung khách gửi vẫn có thể bị đổi từ web. Đề xuất web khoá tương tự và máy chủ giữ nguyên các cột này khi
+    `created_by = 'PORTAL'`.
+11–14. **Phiếu tính giá – ĐÃ SỬA Ở WEB VÀ ĐỒNG BỘ APP (2026-10-13, web `docs-claude/09-decisions.md` PT5–PT10).**
+    Trước đây: thứ tự cấu hình / bảng giá phụ thuộc mạng; thấp tầng nhân thẳng % VAT XD; sửa phiếu web nạp lại giá căn;
+    tên đợt luôn "Đợt n"; form phiếu tính giá dùng công thức dự phòng còn form Đặt cọc / Hợp đồng thì không.
+    Nay web dùng chung `ContractForm/calculations.ts`, `helpers.scheduleRowsFromTemplate`, `PriceSheet/productFromSavedSheet.ts`,
+    `usePriceConfigThenPriceList`; app chép đúng các tệp này (`lib/priceSheetCalc.ts`, `lib/priceSheetSchedule.ts`,
+    `lib/priceSheetPayload.productFromSavedSheet`) và test so trực tiếp với code web.
+
+11. **Sơ đồ tổng quan của đại lý: app KHÁC web (người dùng quyết 2026-10-16).** Web `so-do-tong-quan` đọc REST
+    `bds_products`; RLS của đại lý (`app_agency_product_ids(true)`) cho xem cả căn **sàn từng giao dịch** (booking, giữ chỗ,
+    lịch ký) ⇒ sơ đồ web rộng hơn danh sách Cao tầng / Thấp tầng (chỉ căn trong giỏ). **App lọc Lưới / Tổng quan của đại lý
+    theo giỏ hàng** (`app_agency_product_ids(false)`) cho khớp Danh sách – xem `docs/products-lock.md`. Đề xuất web lọc sơ đồ
+    như danh sách.
+12. **Giỏ hàng: "Quản lý nhân viên" có dòng chứa id đại lý thay cho id nhân viên (dữ liệu cũ, 2026-10-16).** Giỏ
+    "Giỏ hàng đợt 1" và "Giỏ hàng bốc thăm ngày 10/06" (công ty brg) có `cloud_cart_employees.employee_id` = id SÀN BEELAND
+    (`dm_companies`) ⇒ không khớp nhân viên nào, vô tác dụng. `fn_cart_employee_add` hiện đã chặn kiểu ghi này. Cần xoá
+    các dòng đó trên web và thêm đúng nhân viên đại lý.
+
+13. **Tạo booking: máy chủ không ép sàn cho đại lý (2026-10-16).** `fn_booking_create` ghi `san_id` theo payload client;
+    `fn_signing_appointment_upsert` thì tự ép về sàn của nhân viên đại lý. Web và app đều ép ở client (web
+    `enforceAgencySan`, app `lib/agencySan.bookingSan`), nhưng gọi thẳng RPC vẫn ghi được sàn khác ⇒ đề xuất đội web
+    ép trong `fn_booking_create` như lịch ký.
 
 ## 1. Mục tiêu và bối cảnh
 

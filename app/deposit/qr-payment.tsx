@@ -37,7 +37,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { QrPaid } from "@/components/booking/QrResult";
-import { canCreateDepositQr, depositQrAmount } from "@/lib/depositQr";
+import { canOfferDepositQr, depositQrAmount } from "@/lib/depositQr";
 import { formatVND } from "@/lib/format";
 import { hapticSuccess } from "@/lib/haptics";
 import { getQrScreenState, showsQrImage } from "@/lib/qrPaymentState";
@@ -47,7 +47,7 @@ import {
   vietQrUrl,
   type ContractVA,
   type GatewayAccount,
-} from "@/sevicesSupabase/PaymentGatewayService";
+} from "@/services/PaymentGatewayService";
 
 const errMsg = (e: any, fallback: string) =>
   e instanceof Error && e.message ? e.message : fallback;
@@ -90,7 +90,7 @@ export default function DepositQRPaymentScreen() {
   const customerName = String(row?.KhachHang ?? row?.TenKH ?? "");
   const productCode = String(row?.MaSanPham ?? row?.KyHieu ?? row?.MaSP ?? "");
   const amount = depositQrAmount(row);
-  const allowed = canCreateDepositQr(row);
+  const allowed = canOfferDepositQr(row);
 
   const acc = useMemo(() => accounts.find((a) => a.MaTK === maTk), [accounts, maTk]);
 

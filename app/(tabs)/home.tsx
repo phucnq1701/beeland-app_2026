@@ -1,3 +1,4 @@
+import { getFreshJwt, getSessionInfo, getSessionToken } from "@/services/session";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Landmark } from "lucide-react-native";
@@ -5,20 +6,22 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { FeatureGrid } from "@/components/home/FeatureGrid";
+import { useChatUnreadCount } from "@/components/chat/useChat";
 import { HomeHeader } from "@/components/home/HomeHeader";
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import { ProjectCarousel } from "@/components/home/ProjectCarousel";
 import { RecentSection } from "@/components/home/RecentSection";
-import { Avatar, ListItem, MoneyText, Screen, StatusBadge } from "@/components/ui";
+import { Avatar, Badge, ListItem, MoneyText, Screen, StatusBadge } from "@/components/ui";
+import { bookingStateBadge } from "@/lib/bookingState";
 import { getScopedKey } from "@/components/utils/accountScope";
 import { MENU_TAB_FEATURE_IDS } from "@/components/utils/menuTabs";
 import { formatDate, maskPhone } from "@/lib/format";
 import { resolveHomeFeatureIds, routeForFeature } from "@/lib/featureConfig";
 import { features, Feature } from "@/mocks/features";
-import { BookingService } from "@/sevicesSupabase/BookingService";
-import { CustomerService as CustomerSupabaseService } from "@/sevicesSupabase/CustomerService";
-import { DatCocService } from "@/sevicesSupabase/DatCocService";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { BookingService } from "@/services/BookingService";
+import { CustomerService as CustomerSupabaseService } from "@/services/CustomerService";
+import { DatCocService } from "@/services/DatCocService";
+import { ProjectService } from "@/services/ProjectService";
 import { colors, radius, space } from "@/theme";
 
 const STORAGE_KEY = "@home_features_config";
@@ -43,6 +46,7 @@ const errText = (error: unknown) => (error instanceof Error ? error.message : St
 
 export default function HomeScreen() {
   const router = useRouter();
+  const chatUnread = useChatUnreadCount();
   const [displayedFeatures, setDisplayedFeatures] = useState<Feature[]>([]);
   const [isAgency, setIsAgency] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -59,36 +63,22 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const checkAgency = async () => {
-      const typeAccount = await AsyncStorage.getItem("@type_account");
-      setIsAgency(typeAccount === "AGENCY");
+      setIsAgency((await getSessionInfo()).isAgency);
     };
     checkAgency();
 
     const checkToken = async () => {
-      const token = await AsyncStorage.getItem("@token");
+      const token = await getSessionToken();
       if (!token) {
         router.replace("/login");
         return;
       }
-      try {
-        const supabaseJwt = await AsyncStorage.getItem("@supabase_jwt");
-        if (!supabaseJwt) {
-          console.log("[Home] chưa có cloud_jwt -> về login");
-          router.replace("/login");
-          return;
-        }
-        // Giữ require lười như bản cũ (tránh vòng import lúc khởi động)
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const cloudTenant = require("@/sevicesSupabase/cloudTenant");
-        if (cloudTenant.isJwtExpired(supabaseJwt)) {
-          const p = cloudTenant.decodeJwtPayload(supabaseJwt);
-          console.log(
-            `[Home] cloud_jwt expired (exp=${p?.exp}, now=${Math.floor(Date.now() / 1000)}) -> về login lấy JWT mới`,
-          );
-          router.replace("/login");
-          return;
-        }
-      } catch {}
+      // JWT sắp / đã hết hạn ⇒ tự làm mới bằng token phiên (services/session.ts); chỉ về Đăng nhập khi phiên hết hẳn.
+      const jwt = await getFreshJwt();
+      if (!jwt) {
+        console.log("[Home] không còn phiên hợp lệ -> về login");
+        router.replace("/login");
+      }
     };
 
     void checkToken();
@@ -126,8 +116,7 @@ export default function HomeScreen() {
   const loadDeposits = async () => {
     setDepositsState({ loading: true, error: false });
     try {
-      const typeAccount = await AsyncStorage.getItem("@type_account");
-      if (typeAccount === "AGENCY") {
+      if ((await getSessionInfo()).isAgency) {
         const resDC = await DatCocService.get({ Offset: 1, Limit: 5 });
         setDeposits((resDC?.data || []).slice(0, 5));
       } else {
@@ -161,7 +150,7 @@ export default function HomeScreen() {
     // Không đọc được loại tài khoản → null (resolveHomeFeatureIds coi như đại lý cho an toàn)
     let agency: boolean | null = null;
     try {
-      agency = (await AsyncStorage.getItem("@type_account")) === "AGENCY";
+      agency = (await getSessionInfo()).isAgency;
     } catch (error) {
       console.log("[Home] Read account type error:", errText(error));
     }
@@ -238,7 +227,12 @@ export default function HomeScreen() {
       refreshing={refreshing}
       onRefresh={onRefresh}
       header={
-        <HomeHeader onSearchPress={() => router.push("/products")} onBellPress={() => router.push("/notifications")} />
+        <HomeHeader
+          onSearchPress={() => router.push("/products")}
+          onBellPress={() => router.push("/notifications")}
+          onChatPress={() => router.push("/chat")}
+          chatUnread={chatUnread}
+        />
       }
     >
       <View style={styles.sections}>
@@ -287,7 +281,7 @@ export default function HomeScreen() {
               trailing={
                 <>
                   <MoneyText value={b.tongGiaGomVAT ?? b.tong_gia} short />
-                  {b.tenTT ? <StatusBadge label={b.tenTT} color={b.colorCode} /> : null}
+                  <Badge {...bookingStateBadge(b.state)} />
                 </>
               }
               onPress={() =>

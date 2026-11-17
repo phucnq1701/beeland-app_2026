@@ -24,12 +24,12 @@ import {
 import { formatDate, formatDateTime } from "@/lib/format";
 import { dateKey, labelOf, statusMeta, timeOf, weekdayIndex } from "@/lib/signing";
 import { colors, elevation, radius, space } from "@/theme";
-import { SigningService, type SigningDetail } from "@/sevicesSupabase/SigningService";
+import { SigningService, type SigningDetail } from "@/services/SigningService";
 
 const WEEKDAY_FULL = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"];
 
 /**
- * Chi tiết lịch ký (fn_signing_appointment_get) – cập nhật trạng thái, sửa, xoá như các thao tác ở lưới web.
+ * Chi tiết lịch ký (fn_nv_app_lich_ky_chi_tiet = fn_signing_appointment_get) – sửa, xoá như lưới web; xác nhận / từ chối chỉ trên web.
  * Kiểu bo tròn như chi tiết booking: header `soft`, khối ngày ký navy bo `radius.x3`, card bo `radius.xxl`.
  */
 export default function SigningDetailScreen() {

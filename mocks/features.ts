@@ -1,4 +1,4 @@
-import { LucideIcon, Building2, DoorOpen, Calendar, CalendarCheck, Lock, BookOpen, Users, DollarSign, FileText, BarChart3, Landmark } from 'lucide-react-native';
+import { LucideIcon, Building2, DoorOpen, CalendarCheck, Lock, BookOpen, Users, DollarSign, FileText, BarChart3, Landmark, MessageSquareText, MessagesSquare, Calculator } from 'lucide-react-native';
 
 export interface Feature {
   id: string;
@@ -22,13 +22,6 @@ export const features: Feature[] = [
     icon: DoorOpen,
     backgroundColor: 'rgba(59, 130, 246, 0.2)',
     iconColor: '#3B82F6',
-  },
-  {
-    id: '3',
-    title: 'Lịch hẹn',
-    icon: Calendar,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    iconColor: '#10B981',
   },
   {
     id: '4',
@@ -86,5 +79,28 @@ export const features: Feature[] = [
     icon: CalendarCheck,
     backgroundColor: 'rgba(99, 102, 241, 0.2)',
     iconColor: '#6366F1',
+  },
+  {
+    id: '15',
+    title: 'Yêu cầu KH',
+    icon: MessageSquareText,
+    backgroundColor: 'rgba(20, 184, 166, 0.2)',
+    iconColor: '#14B8A6',
+  },
+  {
+    // Tin nhắn: BeeChat khách hàng + chat nội bộ / đại lý (app/chat/index.tsx, nhúng được vào tab menu – prop `embedded`).
+    id: '16',
+    title: 'Tin nhắn',
+    icon: MessagesSquare,
+    backgroundColor: 'rgba(14, 165, 233, 0.2)',
+    iconColor: '#0EA5E9',
+  },
+  {
+    // Phiếu tính giá (app/price-sheets.tsx) – chỉ tài khoản nội bộ (không có trong AGENCY_FEATURE_IDS).
+    id: '17',
+    title: 'Phiếu tính giá',
+    icon: Calculator,
+    backgroundColor: 'rgba(201, 80, 26, 0.15)',
+    iconColor: '#C9501A',
   },
 ];

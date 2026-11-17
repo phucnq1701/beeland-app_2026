@@ -6,7 +6,7 @@ import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import { AppHeader, Card, KeyValueRow, Screen, SkeletonDetail, StatusBadge, Text } from "@/components/ui";
 import { ScheduleRow } from "@/lib/paymentMath";
 import { colors, elevation, radius, space } from "@/theme";
-import { Receipt } from "@/sevicesSupabase/PaymentProgressService";
+import { Receipt } from "@/services/PaymentProgressService";
 
 import { MoneySummary, PaymentSchedule, ReceiptList } from "./PaymentBlocks";
 

@@ -7,7 +7,7 @@ import { CustomerFormValues, PROTECTION_LABEL, ProtectionLevel, duplicateFieldLa
 import { maskPhone } from "@/lib/format";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { colors, space } from "@/theme";
-import { CustomerRulesService, DuplicateMatch, DuplicateResult } from "@/sevicesSupabase/CustomerRulesService";
+import { CustomerRulesService, DuplicateMatch, DuplicateResult } from "@/services/CustomerRulesService";
 
 const PROTECTION_TONE: Record<ProtectionLevel, BadgeTone> = {
   none: "neutral",
@@ -101,21 +101,30 @@ export function DuplicateSheet({
             <Text variant="caption" color="textSecondary">
               Trùng: {m.fields.map(duplicateFieldLabel).join(", ")}
             </Text>
-            <Text variant="caption" color="textSecondary">
-              Phụ trách: {m.isOwn ? "Bạn" : m.ownerName || "—"}
-            </Text>
+            {m.outOfScope ? (
+              <Text variant="caption" color="textSecondary">
+                Thuộc {m.companyName || "công ty khác"} – ngoài phạm vi của bạn
+              </Text>
+            ) : (
+              <Text variant="caption" color="textSecondary">
+                Phụ trách: {m.isOwn ? "Bạn" : m.ownerName || "—"}
+              </Text>
+            )}
             {m.protection.reasons.length ? (
               <Text variant="caption" color="textTertiary">
                 {m.protection.reasons.join(" · ")}
               </Text>
             ) : null}
-            <Button
-              title={useExistingLabel}
-              variant="secondary"
-              icon={UserCheck}
-              onPress={() => onUseExisting(m)}
-              style={styles.useBtn}
-            />
+            {/* Khách ngoài phạm vi: máy chủ từ chối dùng / xem hồ sơ ⇒ ẩn nút */}
+            {m.outOfScope ? null : (
+              <Button
+                title={useExistingLabel}
+                variant="secondary"
+                icon={UserCheck}
+                onPress={() => onUseExisting(m)}
+                style={styles.useBtn}
+              />
+            )}
           </Card>
         ))}
 

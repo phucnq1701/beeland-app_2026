@@ -1,61 +1,82 @@
 # Truy cập dữ liệu
 
-## Hai nguồn
+## Một nguồn: bộ API riêng của app nhân viên
 
-| Nguồn | Client | Base URL | Dùng cho |
-|---|---|---|---|
-| Supabase self-host | `sevicesSupabase/axiosApiSupabase.ts` | `https://api-beelandv2.beesky.vn` (`rest/v1/…`, `rest/v1/rpc/…`, `functions/v1/…`) | Gần như toàn app |
-| API .NET cũ | `sevices/axiosApi.ts` (và `sevicesSupabase/axiosApi.ts`) | `https://api-beeland.beesky.vn/` | Quên/đặt lại mật khẩu, thông báo, video dự án, lịch hẹn (đang ẩn), kiểm tra phiên bản, SignalR |
+| Thành phần | File | Ghi chú |
+|---|---|---|
+| Địa chỉ | `services/config.ts` | `API_URL` = `https://api-beeland26.beesky.vn` (thử API chạy máy: `EXPO_PUBLIC_API_URL`, vd `http://localhost:5117`); `NV_API_BASE` = `${API_URL}/api/app-nhan-vien` |
+| Gọi API | `services/nvApi.ts` | `callNv(fn, args, opt)` = `POST {NV_API_BASE}/<fn>` body JSON `{ p_x: … }`, Bearer JWT; `postFormNv(fn, makeForm)` = multipart (tải tệp) |
+| Phiên | `services/session.ts` | JWT + token phiên, tự làm mới, `getSessionInfo()` – xem `docs/auth.md` |
+| Realtime | `services/realtimeHub.ts` | SignalR `/api/realtime` (mục dưới) |
+| Tải tệp | `services/TepApi.ts` | `uploadFile` → `fn_nv_app_tai_tep` (mục dưới) |
 
-- Web đã chạy **Cloud-only**: `cloud_global_settings.legacy_api_mode = {"mode":"off"}` (đọc ngày 01/10/2026, cập nhật
-  22/08/2026). Các màn app còn gọi API cũ (bảng trên) **chưa kiểm chứng** còn hoạt động.
+- Mỗi lệnh `fn_nv_app_<tên>` ↔ SP `dbo.usp_nv_app_<tên>` + action C# (repo BE `_wt/be-app-nv`, `database/sp/63_app_nhan_vien/`,
+  module `AppNhanVien`). **Lõi chung:** SP app gọi lại SP / hàm lõi của web (phạm vi, quyền, che trường, trạng thái); đọc thì chọn
+  cột app cần, ghi thì gọi đúng SP ghi của web. Danh sách SP + nhật ký: `docs/app-api-rieng.md`, bảng kê: `docs/app-api-inventory/`.
+- **Máy chủ lấy công ty / nhân viên / nhóm quyền / phạm vi từ JWT** – app không gửi mã công ty, id nhân viên, người thao tác.
+  Tham số endpoint đặt tên tiếng Việt (`p_du_an_id`, `p_tu_khoa`, `p_trang`, `p_so_dong`…); dự án luôn gửi **uuid**.
+- Ngoài BEELAND chỉ còn: phiên bản app trên store `services/UserService.checkVersion` → `https://api-bms.beesky.vn/api/app/get-version`.
 - Không có môi trường test riêng: mọi thao tác ghi đi vào dữ liệu thật.
 
-## Phiên và header (axiosApiSupabase)
+## Quy tắc
 
-- Request: `apikey` = anon key; `Authorization: Bearer <cloud JWT>` (`@supabase_jwt`) nếu còn hạn, hết hạn → anon key
-  (RLS trả rỗng). Không tự refresh JWT – hết hạn thì về màn đăng nhập (`app/(tabs)/home.tsx` kiểm tra lúc mở).
-- Response lỗi luôn `Promise.reject` → lỗi `RAISE EXCEPTION` của hàm SQL nằm ở `error.response.data.message`.
-- Edge function `payment-gateway` xác thực bằng token phiên `@token` (header `x-cloud-token`), không phải JWT.
+1. **Không gọi bảng trực tiếp, không cú pháp Supabase** (`rest/v1`, `rpc`, `functions/v1`, `storage/v1`, `apikey`/anon key) và
+   không gọi API cũ `api-beeland.beesky.vn`. `tests/locked-tables.test.cjs` chặn các service đã chuyển dùng lại.
+2. **Cần dữ liệu mới ⇒ thêm 1 endpoint** `fn_nv_app_*` (SP mới bọc lõi web + action C#) ở repo BE, không sửa đối tượng web
+   (CLAUDE.md quy tắc 2). Thêm tham số cho SP đã có ⇒ API phải restart mới nhận.
+3. Logic form chép từ web (`lib/web`) gọi tên hàm web; shim `lib/web/_shims/integrations/supabase/client.ts` đổi sang endpoint
+   app qua `RPC_MAP` (`.from(bảng)` chỉ vài bảng đọc khai trong `TABLES`). Hàm chưa có trong `RPC_MAP` ⇒ trả `{ error }`
+   "app không hỗ trợ" + log – thêm endpoint rồi thêm vào map.
 
-## Tenant – khoá công ty (bẫy hay gặp)
+## Lỗi
 
-`sevicesSupabase/cloudTenant.ts`:
+- Mọi lỗi ⇒ `NvApiError` (`status` HTTP, `code`, `message` = lời máy chủ). Mất mạng / quá giờ ⇒ `status 0`, `code "NETWORK"`.
+  Hiển thị bằng `errorMessage(e, fallback)`. Không nuốt lỗi thành danh sách rỗng: service danh sách trả `{ data: [], error }`
+  hoặc ném, màn báo lỗi (toast / EmptyState).
+- 401 ⇒ làm mới phiên 1 lần rồi gửi lại; làm mới bị từ chối ⇒ xoá phiên, `SessionGuard` về màn Đăng nhập.
+- `opt.anonymous` chỉ cho đăng nhập / đăng xuất (token phiên trong body); quên mật khẩu gọi axios riêng (chưa đăng nhập).
 
-| Hàm | Trả | Lấy từ |
+## Realtime (`services/realtimeHub.ts`)
+
+Hub SignalR `{API_URL}/api/realtime`, chỉ WebSocket, giao thức như web `realtimeShim.ts` (`Join` / `Leave` / `Broadcast`, nhận
+`broadcast`). Xác thực bằng JWT phiên qua `access_token` (không anon key); đổi JWT ⇒ `syncRealtimeAuth()` nối lại. Mỗi topic Join
+một lần (đếm tham chiếu), tự nối lại + Join lại khi rớt.
+
+| Hàm | Dùng | Kênh |
 |---|---|---|
-| `getCompanyId()` = `getTenantId()` | **uuid** công ty đăng ký | claim JWT (`company_id`…), rồi `@tenant_id`/`@company_id`/`maCTDK_UUID`; không có uuid → `""` |
-| `getCompanyCode()` | **mã chữ** công ty (vd `BeeSky1`) | claim `company_code`…, rồi `@company_code`/`tenCTDKVT`/`maCTDK` |
-| `getEmployeeId()`, `getBranchId()`, `getTypeAccount()`, `getMaNv()` | uuid NV, uuid chi nhánh, `SYSTEM`/`AGENCY`, mã NV | JWT rồi AsyncStorage |
+| `joinChannel(name, { private })` | Chat (`docs/chat.md`), Thông báo (`docs/home-navigation.md`) | private `chat:u:<employee_id>`, `chat:c:<id>`, `tb:u:<employee_id>`; công khai `chatv:<channel_key>` |
+| `subscribeTableChanges(name, changes, cb)` | Trạng thái căn (`app/products.tsx`) | UPDATE `bds_products` lọc `ma_ctdk=eq.<uuid công ty>`; nhận `{ eventType, new, old (chỉ khoá chính) }` |
 
-Mỗi bảng lọc tenant **khác nhau** – làm theo web (`../beeland/src/services/CloudMirror.ts` `tenant()` = mã chữ thường;
-`lib/catalogTenantRewrite.ts` đổi `cloud_catalogs.ma_ctdk` → `ma_ctdk_uid`):
+Máy chủ chỉ cho tài khoản đăng nhập, tự lọc công ty + quyền.
 
-| Bảng / hàm | Cột | Giá trị |
+## Tải tệp
+
+| Việc | Endpoint | Ghi chú |
 |---|---|---|
-| `cloud_customers`, `cloud_bookings`, `cloud_doc_folders/files` | `ma_ctdk` / `ma_ctdk_id` | uuid |
-| `cloud_pgc_phieu_giucho`, `cloud_pre_bookings`, `cloud_signing_appointments` | `ma_ctdk_uid` | uuid |
-| `cloud_catalogs` (cấu hình theo công ty) | `ma_ctdk_uid` | uuid · danh mục dùng chung: `ma_ctdk=eq.global` |
-| `cloud_catalogs` lịch `lich_tt_hd` | `ma_ctdk` | **mã chữ thường** (như web ContractCloudService) |
-| `cloud_customer_activities`, `cloud_customer_dup_requests(_logs)`, `cloud_required_field_configs`, `cloud_field_visibility_configs`, `cloud_debts` | `ma_ctdk` | **mã chữ thường** |
-| `cloud_cash_voucher_details` | `ma_ctdk` | uuid |
-| RPC `fn_*` | `p_ma_ctdk_uid` / `p_ma_ctdk` | uuid (xem từng hàm) |
+| Tệp chung (ảnh chứng từ booking `"booking"`, hồ sơ lịch ký `"signing"`, tệp yêu cầu KH `"yeu-cau"`) | `fn_nv_app_tai_tep` (multipart `file`, `folder`) qua `TepApi.uploadFile` / `BookingService.uploadTenantFile` | lõi `UploadFileService` web: kho theo cấu hình công ty, ≤ 50 MB; trả link nội bộ (`provider DOTNET` ⇒ `link`) hoặc URL R2/S3 |
+| Tệp chat | `fn_nv_app_chat_tep_tai` (1 bước) / link xem `fn_nv_app_chat_tep_link` | `docs/chat.md` |
+| Tệp khách gửi (`drive-files:<path>`) | `fn_nv_app_yeu_cau_tep_ky` | `docs/requests.md` |
+
+Đường dẫn tương đối của dữ liệu cũ ⇒ ghép `https://upload.beesky.vn/` (`lib/nvSanPham.absUrl`, `DocumentService.resolveUploadUrl`).
+
+## Phạm vi dữ liệu – máy chủ quyết định
+
+SP app dùng chung hàm phạm vi của web: trần công ty + "chỉ dữ liệu của tôi" của chứng từ (`_ds_txn_scope`), dự án
+(`_da_project_scope`: đại lý ⇒ dự án gán cho đại lý; nội bộ ⇒ dự án được gán; toàn quyền ⇒ tất cả), sản phẩm đại lý theo giỏ
+(`app_agency_product_ids`, `docs/products-lock.md`), khách (`_customer_scope_ids`), che trường theo nhóm (`_fm_*`).
+⇒ App **không tự lọc phạm vi** phía client, chỉ gọi đúng endpoint.
 
 ## Quy ước service
 
-- Service trả shape PascalCase cũ cho màn (`MaSP`, `TenTT`…); dữ liệu Supabase snake_case được map trong service.
-- Không embed FK (`table!fk(...)`) ở chỗ mới: schema cache self-host từng thiếu FK → lỗi 400. Tra bảng phụ bằng
-  `id=in.(…)`, **chia nhóm ~100 id** (URL dài lỗi im lặng). Một số chỗ cũ còn embed (`BOOKING_SELECT_FULL` có fallback).
-- Hàm máy chủ mới trả `{ rows, total_count }`, bản cũ trả mảng dòng kèm `total_count` → dùng `rpcRows()` (`DatCocService.ts`).
-- Ngày lọc gửi theo giờ VN: `vnDayBound()` (`DatCocService.ts`) = `YYYY-MM-DDT00:00:00.000+07:00` / `…T23:59:59.999+07:00`;
-  không lọc → `null` (không gửi khoảng 2000–2100).
-- Mã sản phẩm: `normalizeProduct` (`ProductService.ts`) trả uuid ở **`ID`** (không phải `id`/`Id`); `MaSP` = `ma_sp`.
-- Mã dự án ở màn = `MaDA` = `ma_da_code` (mã cũ), thiếu thì uuid (`ProjectService.ts`). Service tự đổi sang uuid khi cần.
-
-## Hàm máy chủ app đang gọi (chỉ có trên server, không có trong repo web)
-
-`fn_booking_list`, `fn_booking_create`, `fn_product_transaction`, `fn_customer_list`, `fn_deposit_list`, `fn_contract_list`,
-`fn_contract_payment_schedule`, `fn_cash_vouchers_by_pgc`, `fn_cash_voucher_list`, `fn_get_current_price_lists`,
-`fn_get_sales_policies`, `fn_get_price_list_item_by_product`, `get_active_price_for_product`. Tham số lấy theo code web gọi;
-kết quả trả về **chưa kiểm chứng trực tiếp** cho các hàm không có migration trong `../beeland/supabase/migrations`.
-Edge function: `cloud-auth`, `payment-gateway`, `upload-file`.
+- Service trả shape PascalCase cũ cho màn (`MaSP`, `TenTT`…); map từ dòng máy chủ trong service / `lib/nvSanPham.ts`.
+- Danh sách: kết quả `{ rows, total }` đọc bằng `lib/listRpc.ts` (`listResult`, `pageArgs`); máy chủ nhận 1 dự án / lần ⇒ chọn
+  nhiều dự án thì gọi từng dự án rồi `mergeProjectPages`. Bản trả `{ rows, total_count }` / mảng dòng: `rpcRows()` (`DatCocService.ts`).
+- Ngày lọc theo giờ VN: `vnDayBound()` (`DatCocService.ts`) = `YYYY-MM-DDT00:00:00.000+07:00` / `…T23:59:59.999+07:00`;
+  không lọc → `null`.
+- Sản phẩm: uuid ở **`ID`** (không phải `id`/`Id`); `MaSP` = `ma_sp`.
+- Dự án: `MaDA` = `ma_da_code` (mã cũ), thiếu thì uuid (`lib/nvSanPham.mapProject`); đổi sang uuid bằng `DuAnApi.resolveId`
+  (`services/SanPhamApi.ts`) trước khi gọi.
+- Khách trên chứng từ: `services/customerLookup.ts` – `getCustomersByIds` / `customerMapByIds` (`fn_nv_app_khach_hang_theo_id`,
+  ≤ 500 id; khách công ty khác chỉ thấy qua chứng từ ⇒ bản giới hạn `limited: true`, CCCD che), `getCustomersByRefs` (mã KH /
+  SĐT → dòng), `pickCustomers` (`fn_nv_app_khach_hang_chon`, ô chọn khách ở màn khác). Lỗi ở `customerMapByIds` ⇒ thiếu tên
+  khách, không chặn màn.

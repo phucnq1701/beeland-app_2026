@@ -5,14 +5,14 @@ import { CalendarCheck, QrCode } from "lucide-react-native";
 
 import { SalesDocDetail } from "@/components/sales/SalesDocDetail";
 import { BottomActionBar, Button } from "@/components/ui";
-import { canCreateDepositQr } from "@/lib/depositQr";
+import { canOfferDepositQr } from "@/lib/depositQr";
 import { isFeatureAllowed } from "@/lib/featureConfig";
 import { radius } from "@/theme";
 import { formatArea, formatDate, formatVND } from "@/lib/format";
 import { ScheduleRow } from "@/lib/paymentMath";
-import { getTypeAccount } from "@/sevicesSupabase/cloudTenant";
-import { DatCocService } from "@/sevicesSupabase/DatCocService";
-import { Receipt } from "@/sevicesSupabase/PaymentProgressService";
+import { getSessionInfo } from "@/services/session";
+import { DatCocService } from "@/services/DatCocService";
+import { Receipt } from "@/services/PaymentProgressService";
 
 /**
  * Chi tiết đặt cọc – như web (ContractDetail type DATCOC): đầu phiếu từ dòng danh sách fn_deposit_list,
@@ -40,8 +40,8 @@ export default function DepositDetailScreen() {
   // Đặt lịch ký chỉ dành cho đại lý (tính năng 14)
   const [canSign, setCanSign] = useState(false);
   useEffect(() => {
-    getTypeAccount()
-      .then((t) => setCanSign(isFeatureAllowed("14", t === "AGENCY")))
+    getSessionInfo()
+      .then((s) => setCanSign(isFeatureAllowed("14", s.isAgency)))
       .catch(() => setCanSign(false));
   }, []);
 
@@ -77,8 +77,8 @@ export default function DepositDetailScreen() {
   );
 
   const h = header || {};
-  // Như web: chỉ phiếu đặt cọc chờ duyệt (còn tiền cọc phải thu) mới có QR thanh toán
-  const canCollect = !loading && canCreateDepositQr(h);
+  // Như web: quyền PAYMENT_QR + phiếu chờ duyệt còn tiền cọc phải thu, không đang chờ duyệt đổi căn / hoàn cọc
+  const canCollect = !loading && canOfferDepositQr(h);
   // Lịch ký khoá theo uuid PHIẾU GIỮ CHỖ (pgc_id), không phải id phiếu cọc (web openSigningForDeposit)
   const pgcId = String(h.PhieuGiuChoId ?? "");
   const goToSigning = () =>

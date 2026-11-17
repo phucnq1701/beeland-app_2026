@@ -22,11 +22,13 @@ import {
 import { formatCountdown } from "@/lib/countdown";
 import { formatVNDShort } from "@/lib/format";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
+import { isFeatureAllowed, PRICE_SHEET_CREATE_LOCKED } from "@/lib/featureConfig";
 import { isOpenForSale, OPEN_FOR_SALE_MESSAGE } from "@/lib/productStatus";
 import { colors, elevation, radius, space } from "@/theme";
-import { BookingService } from "@/sevicesSupabase/BookingService";
-import { ProductService } from "@/sevicesSupabase/ProductService";
-import { PriceServices, ActivePriceListItem } from "@/sevicesSupabase/PriceServices";
+import { BookingService } from "@/services/BookingService";
+import { getSessionInfo } from "@/services/session";
+import { ProductService } from "@/services/ProductService";
+import { PriceServices, ActivePriceListItem } from "@/services/PriceServices";
 
 /** Ảnh dùng khi sản phẩm chưa có ảnh (ảnh mặc định của dự án). */
 const DEFAULT_IMAGE =
@@ -49,6 +51,18 @@ export default function ProductDetailScreen() {
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [data, setData] = useState<any>(null);
+  // Lập phiếu tính giá (tính năng 17): chỉ tài khoản nội bộ có quyền ADD
+  // Quyền ADD của /products/price-sheet do API chi tiết căn trả (perms.priceSheet) — không gọi riêng nữa.
+  const [canPriceSheet, setCanPriceSheet] = useState(false);
+  // Quyền nút giao dịch theo nhóm quyền như web (useProductTxPerm: LOCK / BOOKING của /products/high-rise | low-rise).
+  // Chưa tải / lỗi ⇒ ẩn nút (fail-closed như web).
+  const [txPerm, setTxPerm] = useState<{ lock: boolean; booking: boolean } | null>(null);
+  const [isAgencyAccount, setIsAgencyAccount] = useState<boolean | null>(null);
+  useEffect(() => {
+    getSessionInfo()
+      .then((s) => setIsAgencyAccount(s.isAgency))
+      .catch(() => setIsAgencyAccount(null));
+  }, []);
   const [bannerProduct, setBannerProduct] = useState<{ HinhAnh?: string }[]>([]);
   // Bảng giá đang hiệu lực (price_list_items qua RPC get_active_price_for_product)
   const [activePrice, setActivePrice] = useState<ActivePriceListItem | null>(null);
@@ -76,7 +90,10 @@ export default function ProductDetailScreen() {
 
   const getProducts = async () => {
     setLoading(true);
-    const result = await ProductService.getDetailProducts({ maSP: id });
+    const result = await ProductService.getDetailProducts({ maSP: id, fresh: true });
+    if ((result as any)?.error) toast.show({ type: "error", message: (result as any).error });
+    setCanPriceSheet(!!result?.perms?.priceSheet);
+    if (result?.perms) setTxPerm({ lock: !!result.perms.lock, booking: !!result.perms.booking });
     if (result?.data) {
       const seconds = result.data.ThoiGianConLai || 0;
 
@@ -190,16 +207,12 @@ export default function ProductDetailScreen() {
   const canTransact = /^\d+$/.test(legacyCode) ? isOpenForSale(legacyCode) : isOpenForSale(statusName);
 
   const handleLock = async () => {
-    if (isLocked || !canTransact || lockInFlight.current) return;
+    if (isLocked || !canTransact || !txPerm?.lock || lockInFlight.current) return;
     lockInFlight.current = true;
     setLocking(true);
     try {
-      // Tạo lock cloud: RPC đổi SP (2→18) + insert phiếu LOCK
-      const res = await BookingService.createLock({
-        maSP: id,
-        kyHieu: data?.KyHieu,
-        maDA: data?.MaDA,
-      });
+      // 1 lời gọi máy chủ (fn_nv_app_lock_tao): phút lock, số phiếu, 2 ⇒ 18 + phiếu LOCK cùng giao dịch
+      const res = await BookingService.createLock({ sanPhamId: data?.ID, maSP: id });
 
       if (res?.status === 2000) {
         const seconds = res?.data || 0;
@@ -224,8 +237,15 @@ export default function ProductDetailScreen() {
     }
   };
 
+  // Lập phiếu tính giá (tính năng 17): chỉ tài khoản được dùng tính năng + có quyền ADD
+  // Tạm khoá lập phiếu trên app (2026-11-16) tới khi form khớp web ⇒ ẩn lối vào; bật lại: bỏ `PRICE_SHEET_CREATE_LOCKED`
+  const showPriceSheet = !PRICE_SHEET_CREATE_LOCKED && canPriceSheet && isAgencyAccount !== null && isFeatureAllowed("17", isAgencyAccount);
   const images = bannerProduct.map((b) => b?.HinhAnh).filter((u): u is string => !!u);
-  const price = Number(data?.TongGiaTriHDMB) > 0 ? formatVNDShort(data.TongGiaTriHDMB) : "Liên hệ";
+  // Giá đầu màn: giá trị HĐMB của căn; căn chưa có giá riêng ⇒ tổng theo bảng giá đang áp dụng (cùng số ở "Chi tiết giá")
+  const listPrice = Number(activePrice?.contract_total_value) > 0 ? Number(activePrice?.contract_total_value)
+    : Number(activePrice?.total_payment) > 0 ? Number(activePrice?.total_payment) : 0;
+  const heroPrice = Number(data?.TongGiaTriHDMB) > 0 ? Number(data.TongGiaTriHDMB) : listPrice;
+  const price = heroPrice > 0 ? formatVNDShort(heroPrice) : "Liên hệ";
 
   return (
     <>
@@ -237,7 +257,7 @@ export default function ProductDetailScreen() {
             <ImageCarousel
               images={images}
               fallback={DEFAULT_IMAGE}
-              height={340 + insets.top}
+              height={HERO_HEIGHT + insets.top}
               bottomInset={SHEET_OVERLAP}
             />
           </View>
@@ -277,7 +297,11 @@ export default function ProductDetailScreen() {
                 </Text>
               ) : null}
 
-              <HomeSectionHeader title="Chi tiết giá" />
+              <HomeSectionHeader
+                title="Chi tiết giá"
+                actionLabel={showPriceSheet && data?.ID ? "Lập phiếu tính giá" : undefined}
+                onAction={() => router.push({ pathname: "/price-sheet/new", params: { productId: String(data?.ID) } })}
+              />
               <Card style={styles.card}>
                 <PriceBreakdown activePrice={activePrice} data={data} loading={priceLoading} />
               </Card>
@@ -286,6 +310,7 @@ export default function ProductDetailScreen() {
         </ScrollView>
         {back}
 
+        {isLocked || txPerm?.lock || (txPerm?.booking && data?.isHienThiBook) ? (
         <BottomActionBar>
           {isLocked ? (
             <View style={styles.lockTimer} accessible accessibilityLabel={`Đang lock, còn ${formatCountdown(remainingSeconds)}`}>
@@ -294,7 +319,7 @@ export default function ProductDetailScreen() {
                 {formatCountdown(remainingSeconds)}
               </Text>
             </View>
-          ) : (
+          ) : txPerm?.lock ? (
             <Button
               variant="secondary"
               icon={Lock}
@@ -304,8 +329,8 @@ export default function ProductDetailScreen() {
               style={styles.pill}
               onPress={() => void handleLock()}
             />
-          )}
-          {data?.isHienThiBook ? (
+          ) : null}
+          {txPerm?.booking && data?.isHienThiBook ? (
             <Button
               testID="action-book"
               size="lg"
@@ -326,12 +351,15 @@ export default function ProductDetailScreen() {
             />
           ) : null}
         </BottomActionBar>
+        ) : null}
       </View>
     </>
   );
 }
 
 /** Khối nội dung bo góc trên, trồi đè lên đáy ảnh. */
+// Ảnh đầu trang (chưa tính status bar) — 2/3 bản cũ 340 (2026-10-16)
+const HERO_HEIGHT = 227;
 const SHEET_OVERLAP = radius.x3;
 
 const styles = StyleSheet.create({

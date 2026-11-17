@@ -1,4 +1,4 @@
-import { Check, ChevronDown } from 'lucide-react-native';
+import { Check, ChevronDown, Lock } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -27,6 +27,8 @@ export type SelectFieldProps<T extends string | number> = {
    * `raised`: nền trắng, viên thuốc, bóng nhẹ – đặt thẳng trên nền màn (bộ lọc).
    */
   variant?: 'default' | 'soft' | 'raised';
+  /** Khoá ô (chỉ xem giá trị, không mở danh sách) – vd sàn của tài khoản đại lý. */
+  disabled?: boolean;
 };
 
 const SEARCH_THRESHOLD = 8;
@@ -42,6 +44,7 @@ export function SelectField<T extends string | number>({
   loading,
   sheetTitle,
   variant = 'default',
+  disabled = false,
 }: SelectFieldProps<T>) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -67,7 +70,8 @@ export function SelectField<T extends string | number>({
         accessibilityRole="button"
         accessibilityLabel={`${label}: ${selected?.label ?? placeholder}`}
         accessibilityHint={error ?? undefined}
-        disabled={loading}
+        accessibilityState={{ disabled }}
+        disabled={loading || disabled}
         onPress={() => setOpen(true)}
         style={({ pressed }) => [
           styles.box,
@@ -79,7 +83,13 @@ export function SelectField<T extends string | number>({
         <Text variant="body" color={selected ? 'text' : 'textTertiary'} numberOfLines={1} style={styles.value}>
           {selected?.label ?? placeholder}
         </Text>
-        {loading ? <ActivityIndicator size="small" color={colors.textTertiary} /> : <ChevronDown size={18} color={colors.textTertiary} />}
+        {loading ? (
+          <ActivityIndicator size="small" color={colors.textTertiary} />
+        ) : disabled ? (
+          <Lock size={16} color={colors.textTertiary} />
+        ) : (
+          <ChevronDown size={18} color={colors.textTertiary} />
+        )}
       </Pressable>
       {error ? (
         <Text variant="caption" color="danger">

@@ -16,6 +16,8 @@ const UI_STRICT_FILES = [
   'app/(tabs)/_layout.tsx',
   'app/(tabs)/home.tsx',
   'app/(tabs)/account.tsx',
+  'components/account/**/*.{ts,tsx}',
+  'app/login.tsx',
   'app/all-management.tsx',
   'app/profile.tsx',
   'components/home/**/*.{ts,tsx}',
@@ -33,6 +35,10 @@ const UI_STRICT_FILES = [
   'app/customer/**/*.{ts,tsx}',
   'app/contacts.tsx',
   'components/customer/**/*.{ts,tsx}',
+  // Chat (BeeChat khách + nội bộ / đại lý)
+  'app/chat/**/*.{ts,tsx}',
+  'app/(tabs)/ai-chat.tsx',
+  'components/chat/**/*.{ts,tsx}',
   // Giai đoạn 5 – cọc, hợp đồng, báo cáo
   'app/deposits.tsx',
   'app/deposit/**/*.{ts,tsx}',
@@ -45,6 +51,14 @@ const UI_STRICT_FILES = [
   'app/signings.tsx',
   'app/signing/**/*.{ts,tsx}',
   'components/signing/**/*.{ts,tsx}',
+  // Yêu cầu khách hàng
+  'app/requests.tsx',
+  'app/request/**/*.{ts,tsx}',
+  'components/request/**/*.{ts,tsx}',
+  // Phiếu tính giá
+  'app/price-sheets.tsx',
+  'app/price-sheet/**/*.{ts,tsx}',
+  'components/priceSheet/**/*.{ts,tsx}',
   // Giai đoạn 6 – đăng nhập, media
   'app/login.tsx',
   'app/register.tsx',
@@ -54,15 +68,15 @@ const UI_STRICT_FILES = [
   'app/folders/**/*.{ts,tsx}',
   'app/documents/[[]folderId].tsx',
   'app/photo-gallery.tsx',
-  'app/video/**/*.{ts,tsx}',
-  'app/videos/[[]folderId].tsx',
+  'app/notifications.tsx',
   'components/media/**/*.{ts,tsx}',
 ];
 
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ["dist/*"],
+    // lib/web: bản chép nguyên văn từ web (scripts/sync-web-pricing.cjs) — không sửa / không lint theo luật app
+    ignores: ["dist/*", "lib/web/**"],
   },
   {
     files: UI_STRICT_FILES,

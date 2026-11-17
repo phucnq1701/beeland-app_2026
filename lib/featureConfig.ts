@@ -7,7 +7,6 @@
 export const FEATURE_ROUTES: Record<string, string> = {
   '1': '/projects',
   '2': '/products',
-  '3': '/appointments',
   '4': '/locked-units',
   '5': '/bookings',
   '6': '/customers',
@@ -15,20 +14,23 @@ export const FEATURE_ROUTES: Record<string, string> = {
   '9': '/reports',
   '13': '/deposits',
   '14': '/signings',
+  '15': '/requests',
+  '16': '/chat',
+  '17': '/price-sheets',
 };
 
 /**
  * Tính năng tạm ẨN (đã có màn nhưng chưa dùng đợt này) – không hiện ở Trang chủ, Tất cả quản lý, tab menu.
- * Bật lại: bỏ id khỏi danh sách. '3' = Lịch hẹn (ẩn trong đợt redesign; màn và dữ liệu giữ nguyên).
+ * Bật lại: bỏ id khỏi danh sách. (Lịch hẹn '3' đã bỏ hẳn 2026-11-17: màn gọi API .NET cũ đã ngừng — làm lại thì theo web + API riêng.)
  */
-export const HIDDEN_FEATURE_IDS: readonly string[] = ['3'];
+export const HIDDEN_FEATURE_IDS: readonly string[] = [];
 
 export function routeForFeature(id: string): string | null {
   return FEATURE_ROUTES[id] ?? null;
 }
 
-/** Tài khoản đại lý chỉ dùng: Dự án, Sản phẩm, Booking, Đặt cọc, Đặt lịch ký. */
-export const AGENCY_FEATURE_IDS = ['1', '2', '5', '13', '14'] as const;
+/** Tài khoản đại lý chỉ dùng: Dự án, Sản phẩm, Booking, Đặt cọc, Đặt lịch ký, Tin nhắn (khu chat Đại lý). */
+export const AGENCY_FEATURE_IDS = ['1', '2', '5', '13', '14', '16'] as const;
 
 /** Tính năng CHỈ dành cho đại lý – tài khoản nội bộ không thấy. '14' = Đặt lịch ký (yêu cầu người dùng 2026-10-02). */
 export const AGENCY_ONLY_FEATURE_IDS: readonly string[] = ['14'];
@@ -143,3 +145,9 @@ export function resolveHomeFeatureIds(opts: {
   const valid = normalizeSelection({ selectedIds: saved }, visible, []);
   return valid.length ? valid.slice(0, opts.max) : defaults;
 }
+
+/**
+ * Khoá lập / sửa phiếu tính giá trên app (true ⇒ chỉ xem / chia sẻ / xoá, lập trên web). 2026-11-16 khoá khi form app chưa khớp web;
+ * cùng ngày MỞ LẠI: form chạy đúng logic form web chép nguyên văn (lib/web, scripts/sync-web-pricing.cjs). Bật lại true nếu cần khoá nhanh.
+ */
+export const PRICE_SHEET_CREATE_LOCKED = false;

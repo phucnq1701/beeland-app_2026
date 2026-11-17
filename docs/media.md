@@ -4,22 +4,27 @@
 
 | Màn | File | Nguồn |
 |---|---|---|
-| Thư mục tài liệu dự án | `app/folders/[projectId].tsx` | `sevicesSupabase/DocumentService.get` (`TypeDocument: DOCUMENT`) |
-| Tệp trong thư mục (tìm kiếm máy chủ, chờ 500ms) | `app/documents/[folderId].tsx` | `DocumentService.getDetail` |
+| Thư mục tài liệu dự án (params `projectId` = uuid dự án, `parentId` = thư mục con, `title`) | `app/folders/[projectId].tsx` | `DocumentService.entries("DOCUMENT", …)` |
+| Tệp trong thư mục (tìm kiếm máy chủ, chờ 500ms; có từ khoá ⇒ tìm cả thư mục con như web) | `app/documents/[folderId].tsx` | `DocumentService.files("DOCUMENT", …)` |
 | Xem tài liệu (PDF/Office/ảnh/TXT, WebView) | `app/documents/viewer.tsx` | `components/utils/documentLinks.ts` |
-| Thư viện ảnh (album) / ảnh trong album | `app/photo-gallery.tsx`, `app/photos/[folderId].tsx` | `DocumentService.get` (`GALLERY`) |
-| Thư mục video / video trong thư mục | `app/video/[projectId].tsx`, `app/videos/[folderId].tsx`, `app/videos/viewer.tsx` | **API cũ** `sevices/DocumentService.getFolderVideo` / `getDetailVideo` |
+| Thư viện ảnh (album, params như trên) / ảnh trong album | `app/photo-gallery.tsx`, `app/photos/[folderId].tsx` | `DocumentService.entries / files("GALLERY", …)` |
 | Khung chung (kiểu bo tròn: header/ô tìm/chip `soft`, mỗi thư mục / tệp là card bo `radius.xxl`, icon tệp trong vòng tròn nền nhạt theo loại, nút chia sẻ / › tròn) | `components/media/FolderListScreen.tsx`, `FileListScreen.tsx`, `lib/shareText.ts` | |
 
-Lối vào: chi tiết dự án (`app/project/[id].tsx`) → `/folders/${MaDA}`, `/photo-gallery?projectId=${MaDA}`, `/video/${MaDA}`.
+Lối vào: chi tiết dự án (`app/project/[id].tsx`) → `/folders/[projectId]`, `/photo-gallery?projectId=` với **uuid dự án**.
+Không có thư viện video riêng (như web) – video là tệp trong thư mục.
 
-## Bảng `cloud_doc_folders` / `cloud_doc_files` (đã kiểm chứng trong `sevicesSupabase/DocumentService.ts`)
+## Dữ liệu – cây thư mục như web (`services/DocumentService.ts`)
 
-- Lọc: `ma_ctdk` = **uuid công ty**, `form_id` (**488** tài liệu, **323** thư viện ảnh), `doc_type` (`DOCUMENT`/`GALLERY`).
-- Lọc dự án: `ma_da` = **uuid dự án** – `resolveProjectUuid(MaDA)` (uuid giữ nguyên; mã cũ → `da_projects.ma_da_code`;
-  số → thử `da_projects.id`). Không đổi được → trả `[]` (fail-closed).
-- Đếm tệp: 1 lượt lấy thư mục + 1 lượt thống kê `cloud_doc_files` theo `folder_seq` (tránh N+1). Khoá 2 bảng là `seq`.
-- Link tệp: không phải http → thêm `https://upload.beesky.vn/`.
+| Việc | Endpoint |
+|---|---|
+| Cây thư mục của màn (mọi dự án trong phạm vi) | `fn_nv_app_tai_lieu_cay { p_form_id }` (= `fn_doc_tree` web `services/projects/doc-tree`: quyền Xem của màn, phạm vi dự án, thư mục giới hạn người xem – máy chủ lọc) |
+| Tệp nằm thẳng trong 1 thư mục / tìm cả cây con | `fn_nv_app_tai_lieu_tep { p_form_id, p_folder_id, p_search, p_recursive }` (= `fn_doc_file_list`) |
+
+- `form_id`: **488** Tài liệu, **323** Thư viện ảnh (`DOC_FORM`).
+- Mỗi dự án có 1 thư mục gốc / màn, thư mục con nhiều cấp. `entriesAt(folders, projectId, parentId)`: không `parentId` ⇒ con
+  của thư mục gốc dự án; có ⇒ con của thư mục đó; thư mục đang xem có tệp nằm thẳng bên trong ⇒ thêm ô đầu "Tài liệu chung
+  của dự án" / "Tài liệu trong thư mục này" (`filesOf`). Sắp theo tên. Thư mục còn con ⇒ đi xuống cấp dưới; hết con ⇒ mở tệp.
+- Link tệp / ảnh bìa không phải http → thêm `https://upload.beesky.vn/` (`resolveUploadUrl`).
 
 ## Mở / chia sẻ
 
@@ -35,13 +40,6 @@ Hai trình xem: `components/ImageViewerModal.tsx` (ảnh căn / dự án qua `Im
 chạm lần nữa → hiện lại; mở lại trình xem thì luôn hiện. Ẩn bằng opacity nên ảnh không nhảy bố cục.
 Trình xem thêm mới phải dùng hook này cho đồng bộ.
 
-## Bẫy
-
-- Màn truyền `MaDA: Number(projectId)`; `MaDA` của dự án là `ma_da_code`, thiếu thì uuid → dự án **không có mã cũ** sẽ ra
-  `NaN` → danh sách rỗng. **Chưa kiểm chứng** có dự án như vậy.
-- `DocumentService.add/edit/delete` gọi `api/duan/documents` trên client Supabase (đường dẫn không tồn tại) – không màn nào dùng.
-
 ## Tồn đọng
 
-- Video dùng API cũ (`api-beeland.beesky.vn`) – còn dữ liệu khi web Cloud-only hay không: **chưa kiểm chứng**.
 - Biểu mẫu (`form_id` 801 `FORMS` trên web) chưa có trên app.

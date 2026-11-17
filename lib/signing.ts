@@ -1,10 +1,7 @@
 /**
- * Đặt lịch ký – logic thuần, như web:
- *  - beeland/src/pages/sales/giao-dich/dat-lich-ky/types.ts (trạng thái, phân loại, hình thức TT, bảo lãnh)
- *  - beeland/src/services/SigningAppointmentCloudService.ts (giờ VN, map dòng, toRow/upcert)
- *  - beeland/src/services/SigningShiftConfigService.ts (availabilityByDate)
- *  - beeland/src/pages/sales/giao-dich/dat-lich-ky/ShiftPickerFields.tsx (ca còn lượt, ca sắp hết)
- *  - beeland/src/config/requiredFieldCatalog.ts (signing / agency_signing)
+ * Đặt lịch ký – logic thuần cho màn Danh sách / Chi tiết / ô chọn phiếu cọc (như web dat-lich-ky/types.ts + mapper của
+ * SigningAppointmentCloudService: trạng thái, giờ VN, map dòng fn_signing_appointment_list / fn_signing_deposit_search, lịch).
+ * Form Thêm / Sửa dùng thẳng logic web chép (lib/web — useWebSigningForm / useWebShiftPicker), không dùng tệp này.
  * Không import gì để test nạp trực tiếp được.
  */
 
@@ -95,10 +92,6 @@ export function addDays(key: string, n: number): string {
 export const quickDays = (from: string, count: number): string[] =>
   Array.from({ length: count }, (_, i) => addDays(from, i));
 
-/** Ghép ngày + "HH:mm" thành giờ naive. */
-export const withTime = (key: string, hhmm: string | null | undefined): string =>
-  `${key}T${/^\d{2}:\d{2}/.test(String(hhmm ?? '')) ? String(hhmm).slice(0, 5) : '00:00'}:00`;
-
 /** 0 = Thứ 2 … 6 = Chủ nhật */
 export function weekdayIndex(key: string): number {
   const [y, m, d] = key.split('-').map(Number);
@@ -119,9 +112,6 @@ export function addMonths(anyDay: string, n: number): string {
   const t = new Date(Date.UTC(y, m - 1 + n, 1));
   return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-01`;
 }
-
-/** "DD/MM" */
-export const ddmm = (key: string): string => (key ? `${key.slice(8, 10)}/${key.slice(5, 7)}` : '');
 
 /* ---------------- Dòng dữ liệu ---------------- */
 
@@ -238,66 +228,6 @@ export function mapDeposit(d: any) {
 }
 export type Deposit = ReturnType<typeof mapDeposit>;
 
-export const depositLabel = (d: Partial<Deposit>): string =>
-  `${d.SoPhieu || '—'} | ${d.KhachHang || ''}${d.MaCan ? ` | ${d.MaCan}` : ''}`;
-
-/** Có người đồng đứng tên → 2, khách doanh nghiệp → 3, còn lại 1 (web phanLoaiFromDeposit). */
-export const phanLoaiFromDeposit = (d: { IsPersonal?: boolean } | null | undefined, coOwners: number): number =>
-  coOwners > 0 ? 2 : d?.IsPersonal === false ? 3 : 1;
-
-/* ---------------- Ca làm việc ---------------- */
-
-export type ShiftSlot = {
-  id: string;
-  name: string;
-  from: string;
-  to: string;
-  capacity: number;
-  used: number;
-  remaining: number;
-};
-
-/** Chỉ hiện ca còn lượt; luôn giữ ca đang chọn (máy chủ có thể loại ca mà chính phiếu này đã đặt). */
-export function shiftOptions(slots: ShiftSlot[], selectedId: string | null | undefined, selectedName: string | null | undefined) {
-  const out = slots
-    .filter((s) => s.remaining > 0 || s.id === selectedId)
-    .map((s) => ({ id: s.id, label: `${s.name} (${s.from}-${s.to})`, slot: s as ShiftSlot | null }));
-  if (selectedId && !out.some((o) => o.id === selectedId)) {
-    out.unshift({ id: selectedId, label: selectedName || 'Ca đã chọn', slot: null });
-  }
-  return out;
-}
-
-/** Ca sắp hết: còn ≤ 20% sức chứa (tối thiểu 1). */
-export const isLowSlot = (s: { capacity: number; remaining: number }): boolean =>
-  s.remaining <= Math.max(1, Math.round(s.capacity * 0.2));
-
-/**
- * Số lượt còn trống theo ngày (web availabilityByDate): tổng sức chứa ca đang dùng có khai báo loại thủ tục,
- * trừ lịch ký (không tính Từ chối) rơi vào các ca đó trong ngày (giờ VN).
- */
-export function availabilityFrom(shifts: any[], appointments: any[], procedureId: string | null, days: string[]) {
-  const out: Record<string, number> = {};
-  if (!procedureId) return out;
-  const valid = shifts.filter(
-    (s) => s?.is_active !== false && Array.isArray(s?.procedure_ids) && s.procedure_ids.map(String).includes(String(procedureId))
-  );
-  const allow = new Set(valid.map((s) => String(s.id)));
-  const capacity = valid.reduce((sum, s) => sum + (Number(s.so_khach) || 0), 0);
-  const used: Record<string, number> = {};
-  for (const a of appointments) {
-    if (String(a?.state || '').toUpperCase() === 'REJECTED') continue;
-    if (!a?.ca_lam_viec_id || !allow.has(String(a.ca_lam_viec_id))) continue;
-    const k = dateKey(fromVNStore(a.ngay_book_ky));
-    used[k] = (used[k] || 0) + 1;
-  }
-  for (const k of days) out[k] = Math.max(0, capacity - (used[k] || 0));
-  return out;
-}
-
-export const canQuerySlots = (f: { NgayBookKy?: unknown; MaPGC?: unknown; LoaiThuTuc?: unknown }): boolean =>
-  !!f?.NgayBookKy && !!f?.MaPGC && !!f?.LoaiThuTuc;
-
 /* ---------------- Lịch ---------------- */
 
 export function groupByDay<T extends { NgayBookKy?: string | null }>(rows: T[]) {
@@ -313,132 +243,4 @@ export function groupByDay<T extends { NgayBookKy?: string | null }>(rows: T[]) 
   }
   for (const k of Object.keys(byDay)) byDay[k].sort((a, b) => String(a.NgayBookKy).localeCompare(String(b.NgayBookKy)));
   return { byDay, noDate };
-}
-
-/* ---------------- Lưu ---------------- */
-
-export type SaveContext = {
-  tenantId: string;
-  employeeId: string;
-  /** Sàn của tài khoản đại lý (null = tài khoản hệ thống) */
-  agencySanId: string | null;
-  actorId: string;
-  actorName: string;
-};
-
-/** Khách đồng đứng tên: chỉ lưu uuid khi khách cá nhân + phân loại đồng sở hữu (2). */
-export const coOwnerIdsToSave = (isPersonal: boolean, phanLoai: unknown, list: { MaKH?: unknown }[]): string[] =>
-  isPersonal && Number(phanLoai) === 2 ? list.map((c) => c?.MaKH).filter(Boolean).map(String) : [];
-
-/** p_payload cho fn_signing_appointment_upsert – như web toRow + upcert. */
-export function buildUpsertPayload(f: any, ctx: SaveContext) {
-  return {
-    ma_ctdk_uid: uid(ctx.tenantId),
-    project_id: uid(f?.MaDA),
-    phieu_giu_cho_id: uid(f?.MaPGC),
-    san_pham_id: uid(f?.MaSP),
-    khach_hang_id: uid(f?.MaKH),
-    nguoi_nhap_id: uid(ctx.employeeId),
-    san_id: uid(ctx.agencySanId ?? f?.MaSan),
-    is_personal: f?.IsPersonal !== false,
-    ngay_book_ky: toVNStore(f?.NgayBookKy),
-    ma_phan_loai_kh: num(f?.MaPhanLoaiKH),
-    ma_phuong_an_tt: num(f?.MaPhuongAnTT),
-    la_chuyen_khoan: bool(f?.LaChuyenKhoan),
-    co_bao_lanh: bool(f?.CoBaoLanh),
-    ca_lam_viec_id: uid(f?.MaCa),
-    loai_thu_tuc_id: uid(f?.LoaiThuTuc),
-    dong_so_huu_ids: (Array.isArray(f?.DongSoHuuIds) ? f.DongSoHuuIds : []).map(uid).filter(Boolean),
-    ghi_chu: f?.GhiChu ?? null,
-    tai_lieu: Array.isArray(f?.TaiLieu) ? f.TaiLieu : [],
-    seq: f?.ID ? Number(f.ID) : null,
-    state: String(f?.State || 'PENDING').toUpperCase(),
-    actor_id: ctx.actorId,
-    actor_name: ctx.actorName,
-  };
-}
-
-/* ---------------- Bắt buộc nhập ---------------- */
-
-const SIGNING_FIELDS: Record<string, string> = {
-  MaPGC: 'Phiếu đặt cọc',
-  MaDA: 'Dự án',
-  MaSan: 'Đại lý phụ trách',
-  MaCan: 'Mã căn',
-  NgayBookKy: 'Ngày giờ book ký',
-  MaCa: 'Ca book ký',
-  LoaiThuTuc: 'Loại thủ tục',
-  MaPhanLoaiKH: 'Phân loại khách hàng',
-  TenKH: 'Họ và tên / Tên công ty',
-  GioiTinh: 'Giới tính',
-  NgaySinh: 'Ngày sinh',
-  SoCMND: 'Số CCCD / Hộ chiếu',
-  NgayCap: 'Ngày cấp',
-  NoiCap: 'Nơi cấp',
-  MST: 'Mã số thuế',
-  DienThoai: 'Điện thoại',
-  Email: 'Email',
-  DiaChiTT: 'Địa chỉ thường trú',
-  DiaChiLH: 'Địa chỉ liên hệ',
-  SoDKKD: 'Số ĐKKD',
-  DkkdNgayCap: 'Ngày cấp ĐKKD',
-  DkkdNoiCap: 'Nơi cấp ĐKKD',
-  TruSo: 'Trụ sở',
-  NguoiDaiDien: 'Người đại diện',
-  ChucVu: 'Chức vụ',
-  DongSoHuu: 'Đồng sở hữu',
-  MaPhuongAnTT: 'Phương án thanh toán',
-  MaHinhThucTT: 'Hình thức thanh toán',
-  MaBaoLanh: 'Bảo lãnh',
-  GhiChu: 'Ghi chú',
-};
-/** Form đại lý không có các trường này trong danh mục web. */
-const AGENCY_EXCLUDED = new Set(['MaDA', 'LoaiThuTuc', 'DongSoHuu', 'GhiChu']);
-
-export const signingFormKey = (isAgency: boolean): string => (isAgency ? 'agency_signing' : 'signing');
-
-const isEmpty = (v: unknown) =>
-  v === null || v === undefined || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0);
-
-/**
- * Trường bắt buộc còn trống (web validateRequiredFields): bỏ trường bị ẩn và trường không có trong danh mục form.
- * Giá trị lấy từ `requiredValues` (form + hồ sơ khách).
- */
-export function missingRequired(required: string[], hidden: Set<string>, values: Record<string, unknown>, formKey = 'signing') {
-  const agency = formKey === 'agency_signing';
-  return required
-    .filter((k) => !hidden.has(k))
-    .filter((k) => k in SIGNING_FIELDS && !(agency && AGENCY_EXCLUDED.has(k)))
-    .filter((k) => isEmpty(values?.[k]))
-    .map((k) => ({ key: k, label: SIGNING_FIELDS[k] }));
-}
-
-/**
- * Giá trị để kiểm tra bắt buộc nhập: trường của form lịch ký + thông tin khách lấy từ hồ sơ (web điền form
- * khách từ danh mục khách hàng – CustomerSection toFormPatch). Như web: form lưu `LaChuyenKhoan` / `CoBaoLanh` nên
- * cấu hình bắt buộc `MaHinhThucTT` / `MaBaoLanh` luôn báo thiếu (spec 0.2 mục 7).
- */
-export function requiredValues(f: any, c: any): Record<string, unknown> {
-  const t = (v: unknown) => (v == null ? '' : String(v));
-  return {
-    ...f,
-    TenKH: t(c?.tenKH ?? c?.ten_kh ?? c?.ten_cong_ty),
-    GioiTinh: t(c?.gioi_tinh),
-    NgaySinh: t(c?.ngay_sinh),
-    SoCMND: t(c?.cccd ?? c?.so_cmnd),
-    NgayCap: t(c?.ngay_cap),
-    NoiCap: t(c?.noi_cap),
-    MST: t(c?.ma_so_thue_ct || c?.ma_so_ttncn || c?.ma_so_thue),
-    DienThoai: t(c?.dien_thoai ?? c?.di_dong),
-    Email: t(c?.email),
-    DiaChiTT: t(c?.thuong_tru),
-    DiaChiLH: t(c?.dia_chi),
-    SoDKKD: t(c?.so_dkkd),
-    DkkdNgayCap: t(c?.ngay_cap_dkkd),
-    DkkdNoiCap: t(c?.noi_cap_dkkd),
-    TruSo: t(c?.dia_chi_ct),
-    NguoiDaiDien: t(c?.nguoi_dai_dien_pl),
-    ChucVu: t(c?.chuc_vu),
-    DongSoHuu: Array.isArray(f?.CoOwners) ? f.CoOwners : [],
-  };
 }

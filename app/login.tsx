@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Keyboard,
@@ -12,31 +13,44 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Eye, EyeOff, Square, SquareCheck } from "lucide-react-native";
+import { Eye, EyeOff, Fingerprint, ScanFace } from "lucide-react-native";
 
 import { buildAccountScope, setAccountScope } from "@/components/utils/accountScope";
-import { Button, Screen, SegmentedControl, Text, TextField, useToast } from "@/components/ui";
+import { Button, confirm, Screen, SegmentedControl, Text, TextField, useToast } from "@/components/ui";
+import {
+  BiometricError,
+  disableBiometricLogin,
+  enableBiometricLogin,
+  getBiometricAccount,
+  getBiometricSupport,
+  loadLastLogin,
+  markBiometricDeclined,
+  readBiometricCredential,
+  saveLastLogin,
+  wasBiometricDeclined,
+  type BiometricSupport,
+} from "@/lib/biometric";
+import { maskUsername, sameAccount, type LoginAccount } from "@/lib/biometricLogin";
 import { hapticError } from "@/lib/haptics";
 import { colors, elevation, radius, space } from "@/theme";
-import {
-  cacheCloudProfile,
-  PROFILE_KEY,
-} from "@/sevicesSupabase/CloudProfileService";
-import { AuthSupabaseService } from "@/sevicesSupabase/AuthService";
-import {
-  persistTenantFromJwt,
-  decodeJwtPayload,
-  isJwtExpired,
-  findJwtInObject,
-  looksLikeJwt,
-  getSessionStatus,
-} from "@/sevicesSupabase/cloudTenant";
+import { chatAuthChanged } from "@/components/chat/chatPush";
+import { resetChatSession } from "@/components/chat/useChat";
+import { AuthApi } from "@/services/AuthApi";
+
+type SignInResult = { status: "ok" } | { status: "rejected"; message: string } | { status: "network" } | { status: "blocked" };
+
+const NETWORK_ERROR = "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** "Nội bộ · brg · adm***" – tài khoản sẽ đăng nhập bằng Face ID (nhãn trợ năng của nút tròn). */
+const biometricCaption = (a: LoginAccount) =>
+  `${a.loginType === "AGENCY" ? "Đại lý" : "Nội bộ"} · ${a.companyCode} · ${maskUsername(a.username)}`;
+/** = `Button size="lg"` (minHeight 52) để nút Face ID tròn cao bằng nút Đăng nhập. */
+const LG_BUTTON_HEIGHT = 52;
 
 /**
- * Đăng nhập (nội bộ / đại lý). Luồng đăng nhập (lưu phiên, tenant, nhớ mật khẩu) giữ nguyên;
- * chỉ đổi giao diện và cách báo lỗi (lỗi nhập → dưới form; lỗi đăng nhập/mạng → toast;
- * lỗi cấu hình tài khoản nghiêm trọng → Alert như cũ).
+ * Đăng nhập (nội bộ / đại lý) bằng mật khẩu hoặc Face ID / vân tay (`lib/biometric.ts`, docs/auth.md).
+ * Không lưu mật khẩu: chỉ điền sẵn tài khoản gần nhất; mật khẩu cho Face ID nằm trong Keychain / Keystore.
+ * Lỗi nhập → dưới form; lỗi đăng nhập/mạng → toast; lỗi cấu hình tài khoản nghiêm trọng → Alert.
  */
 export default function LoginScreen() {
   const router = useRouter();
@@ -47,25 +61,91 @@ export default function LoginScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [biometric, setBiometric] = useState<BiometricSupport | null>(null);
+  const [biometricAccount, setBiometricAccount] = useState<LoginAccount | null>(null);
   const submitting = useRef(false);
 
   useEffect(() => {
-    const loadCredentials = async () => {
-      const saved = await AsyncStorage.getItem("@remember_login");
-      if (saved) {
-        const { companyCode, username, password, loginType, rememberMe } = JSON.parse(saved);
-        setCompanyCode(companyCode || "");
-        setUsername(username || "");
-        setPassword(password || "");
-        setLoginType(loginType || "INTERNAL");
-        setRememberMe(rememberMe || false);
+    let active = true;
+    void (async () => {
+      const [last, support, account] = await Promise.all([loadLastLogin(), getBiometricSupport(), getBiometricAccount()]);
+      if (!active) return;
+      if (last) {
+        setLoginType(last.loginType);
+        setCompanyCode(last.companyCode);
+        setUsername(last.username);
       }
+      setBiometric(support);
+      setBiometricAccount(support ? account : null);
+    })();
+    return () => {
+      active = false;
     };
-    loadCredentials();
   }, []);
+
+  /** Đăng nhập (API riêng app nhân viên) và lưu phiên; chưa chuyển màn. "blocked" = đã báo Alert (tài khoản thiếu cấu hình). */
+  const signIn = async (account: LoginAccount, pwd: string): Promise<SignInResult> => {
+    const res = await AuthApi.login(account, pwd);
+    if (res.status === "network") return { status: "network" };
+    if (res.status === "rejected") return { status: "rejected", message: res.message || "Đăng nhập thất bại" };
+    const user = res.session.nguoi_dung;
+    const typeAccount = account.loginType === "AGENCY" ? "AGENCY" : "SYSTEM";
+    await setAccountScope(buildAccountScope(typeAccount, account.companyCode, account.username));
+    await saveLastLogin(account);
+    if (!user?.company_id) {
+      Alert.alert(
+        "Thông báo",
+        "Đăng nhập thành công nhưng thiếu thông tin công ty (tenant). Vui lòng liên hệ quản trị để kiểm tra tài khoản."
+      );
+      return { status: "blocked" };
+    }
+    return { status: "ok" };
+  };
+
+  /** Phiên mới → bỏ hồ sơ chat cũ, nối lại kênh tin nhắn + đăng ký push cho tài khoản này. */
+  const enterApp = () => {
+    resetChatSession();
+    chatAuthChanged(true);
+    router.replace("/(tabs)/home");
+  };
+
+  /**
+   * Sau khi đăng nhập bằng mật khẩu: Face ID đang bật cho tài khoản khác → xoá (chỉ nhớ tài khoản gần nhất);
+   * chưa bật cho tài khoản này và chưa từng chọn "Không" → hỏi bật.
+   */
+  const offerBiometric = async (account: LoginAccount, pwd: string) => {
+    const current = await getBiometricAccount();
+    if (current && sameAccount(current, account)) return;
+    if (current) {
+      await disableBiometricLogin();
+      setBiometricAccount(null);
+    }
+    const support = biometric ?? (await getBiometricSupport());
+    if (!support || (await wasBiometricDeclined(account))) return;
+    const accepted = await confirm({
+      title: `Đăng nhập bằng ${support.label}?`,
+      message: `Lần sau chỉ cần quét ${support.label} để đăng nhập tài khoản ${maskUsername(account.username)}. Có thể tắt trong Tài khoản.`,
+      confirmText: "Bật",
+      cancelText: "Không",
+    });
+    if (!accepted) {
+      await markBiometricDeclined(account);
+      return;
+    }
+    try {
+      await enableBiometricLogin({ ...account, password: pwd }, support);
+      // Đăng nhập bị chặn sau đó (thiếu tenant…) thì vẫn ở màn này → hiện nút Face ID ngay.
+      setBiometric(support);
+      setBiometricAccount(account);
+      toast.show({ type: "success", message: `Đã bật đăng nhập bằng ${support.label}` });
+    } catch (error) {
+      if (error instanceof BiometricError && error.kind === "cancel") return;
+      toast.show({ type: "error", message: `Chưa bật được ${support.label}. Có thể bật lại trong Tài khoản.` });
+    }
+  };
 
   const handleLogin = async () => {
     if (!companyCode || !username || !password) {
@@ -77,153 +157,91 @@ export default function LoginScreen() {
     if (submitting.current) return;
     submitting.current = true;
     setFormError(null);
+    setLoading(true);
+    const account: LoginAccount = { loginType, companyCode: companyCode.trim(), username: username.trim() };
     try {
-      setLoading(true);
-
-      const payload = {
-        action: "login",
-        maCTDK: companyCode.trim(),
-        email: username.trim(),
-        password: password,
-        typeAccount: loginType === "AGENCY" ? "AGENCY" : "SYSTEM",
-      };
-
-      const res = await AuthSupabaseService.login(payload);
-      console.log("[Login] cloud-auth response keys:", Object.keys(res || {}));
-      if (res?.status === 200) {
-        const dataObj =
-          (res as any)?.data && typeof (res as any).data === "object"
-            ? (res as any).data
-            : {};
-        const token =
-          (res as any)?.acessToken ??
-          (res as any)?.accessToken ??
-          (res as any)?.token ??
-          dataObj?.acessToken ??
-          dataObj?.accessToken ??
-          dataObj?.token ??
-          "";
-        let supabaseJwt =
-          (res as any)?.jwt ??
-          (res as any)?.cloud_jwt ??
-          (res as any)?.supabase_jwt ??
-          (res as any)?.cloudJwt ??
-          dataObj?.jwt ??
-          dataObj?.cloud_jwt ??
-          dataObj?.supabase_jwt ??
-          dataObj?.cloudJwt ??
-          dataObj?.access_token ??
-          "";
-        try {
-          if (!supabaseJwt || !looksLikeJwt(supabaseJwt)) {
-            const scanned = findJwtInObject(res);
-            if (scanned) {
-              console.log("[Login] tìm thấy JWT bằng quét đệ quy response");
-              supabaseJwt = scanned;
-            }
-          }
-          const p = decodeJwtPayload(supabaseJwt || "");
-          console.log(
-            `[Login] jwt exp=${p?.exp} now=${Math.floor(
-              Date.now() / 1000
-            )} expired=${isJwtExpired(supabaseJwt || "")} company_id=${
-              p?.company_id || p?.ma_ctdk
-            } company_code=${p?.company_code} role=${p?.role}`
-          );
-        } catch {}
-
-        if (token || supabaseJwt) {
-          await AsyncStorage.multiRemove([
-            PROFILE_KEY,
-            "@token",
-            "@supabase_jwt",
-            "@company_id",
-            "@tenant_id",
-            "@cloud_company_id",
-            "@employee_id",
-            "@user_company_id",
-            "@branch_id",
-            "@ma_nv",
-            "@type_account",
-            "maCTDK_UUID",
-            "@home_features_config",
-          ]);
-          if (token) {
-            await AsyncStorage.setItem("@token", token);
-          }
-          if (supabaseJwt) {
-            await AsyncStorage.setItem("@supabase_jwt", supabaseJwt);
-          } else {
-            await AsyncStorage.removeItem("@supabase_jwt");
-          }
-          await AsyncStorage.setItem(
-            "maCTDK",
-            String(dataObj?.maCTDK ?? (res as any)?.maCTDK ?? "")
-          );
-          await AsyncStorage.setItem("tenCTDKVT", companyCode.trim());
-          await AsyncStorage.setItem(
-            "@type_account",
-            loginType === "AGENCY" ? "AGENCY" : "SYSTEM"
-          );
-          await setAccountScope(
-            buildAccountScope(
-              loginType === "AGENCY" ? "AGENCY" : "SYSTEM",
-              companyCode,
-              username
-            )
-          );
-          
-          if (rememberMe) {
-            await AsyncStorage.setItem("@remember_login", JSON.stringify({
-              companyCode, username, password, loginType, rememberMe
-            }));
-          } else {
-            await AsyncStorage.removeItem("@remember_login");
-          }
-
-          await persistTenantFromJwt(
-            supabaseJwt || "",
-            companyCode.trim(),
-            res
-          );
-          await cacheCloudProfile(res, supabaseJwt || "");
-          try {
-            const st = await getSessionStatus();
-            console.log(
-              `[Login] session sau khi lưu: ok=${st.ok} reason=${st.reason} tenant=${st.tenantId} hasJwt=${st.hasJwt} expired=${st.jwtExpired}`
-            );
-            if (!st.ok) {
-              Alert.alert(
-                "Thông báo",
-                "Đăng nhập thành công nhưng thiếu thông tin công ty (tenant). Vui lòng liên hệ quản trị để kiểm tra tài khoản."
-              );
-              return;
-            }
-          } catch {}
-          router.replace("/(tabs)/home");
-        } else {
-          console.log("[Login] WARN response 200 nhưng không có token/jwt nào");
-          Alert.alert(
-            "Thông báo",
-            "Máy chủ không trả phiên đăng nhập (thiếu token). Vui lòng thử lại hoặc liên hệ quản trị."
-          );
-        }
-      } else {
+      const result = await signIn(account, password);
+      if (result.status === "ok") {
+        await offerBiometric(account, password);
+        enterApp();
+      } else if (result.status === "rejected") {
         hapticError();
-        toast.show({ type: "error", message: res?.message || "Đăng nhập thất bại" });
+        toast.show({ type: "error", message: result.message });
+      } else if (result.status === "network") {
+        hapticError();
+        toast.show({ type: "error", message: NETWORK_ERROR });
       }
-    } catch (error) {
-      console.log("Login error:", error);
-      hapticError();
-      toast.show({ type: "error", message: "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại." });
     } finally {
       submitting.current = false;
       setLoading(false);
     }
   };
 
+  /** Quét sinh trắc học → đọc mật khẩu trong Keychain / Keystore → đăng nhập như bằng mật khẩu. */
+  const handleBiometricLogin = async () => {
+    if (!biometric || submitting.current) return;
+    const label = biometric.label;
+    submitting.current = true;
+    setBiometricLoading(true);
+    const turnOff = async () => {
+      await disableBiometricLogin();
+      setBiometricAccount(null);
+    };
+    try {
+      let credential;
+      try {
+        credential = await readBiometricCredential();
+      } catch (error) {
+        const kind = error instanceof BiometricError ? error.kind : "other";
+        if (kind === "cancel") return;
+        hapticError();
+        toast.show({
+          type: "error",
+          message:
+            kind === "lockout"
+              ? `${capitalize(label)} đang tạm khoá do quét sai nhiều lần. Vui lòng đăng nhập bằng mật khẩu.`
+              : `Không xác thực được ${label}. Vui lòng thử lại hoặc nhập mật khẩu.`,
+        });
+        return;
+      }
+      if (!credential) {
+        // Vân tay / khuôn mặt trên máy đã thay đổi → hệ điều hành huỷ khoá.
+        await turnOff();
+        hapticError();
+        toast.show({
+          type: "error",
+          message: `${capitalize(label)} trên máy đã thay đổi. Vui lòng đăng nhập bằng mật khẩu rồi bật lại.`,
+        });
+        return;
+      }
+      setLoginType(credential.loginType);
+      setCompanyCode(credential.companyCode);
+      setUsername(credential.username);
+      setPassword("");
+      setFormError(null);
+      const result = await signIn(credential, credential.password);
+      if (result.status === "ok") {
+        enterApp();
+      } else if (result.status === "rejected") {
+        // Thường do đã đổi mật khẩu trên web → mật khẩu đã lưu không còn đúng.
+        await turnOff();
+        hapticError();
+        toast.show({
+          type: "error",
+          message: `${result.message}. Đã tắt đăng nhập bằng ${label}, vui lòng nhập mật khẩu.`,
+        });
+      } else if (result.status === "network") {
+        hapticError();
+        toast.show({ type: "error", message: NETWORK_ERROR });
+      }
+    } finally {
+      submitting.current = false;
+      setBiometricLoading(false);
+    }
+  };
+
   const isAgency = loginType === "AGENCY";
-  const Check = rememberMe ? SquareCheck : Square;
+  const BiometricIcon = biometric?.kind === "face" ? ScanFace : Fingerprint;
 
   // ── Không để bàn phím che ô đang nhập ────────────────────────────────────
   // KeyboardAvoidingView (iOS) / adjustResize (Android) thu vùng cuộn lại phía trên bàn phím;
@@ -382,21 +400,40 @@ export default function LoginScreen() {
             />
           </View>
 
-          <View style={styles.row}>
-            <Pressable
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: rememberMe }}
-              onPress={() => setRememberMe(!rememberMe)}
-              style={styles.remember}
-              hitSlop={8}
-            >
-              <Check size={20} color={rememberMe ? colors.primary : colors.textSecondary} />
-              <Text variant="body">Nhớ mật khẩu</Text>
-            </Pressable>
-            <Button title="Quên mật khẩu?" variant="ghost" onPress={() => router.push("/forgot-password")} />
+          {/* Bố cục người dùng chốt 2026-11-02: [Đăng nhập][◯ Face ID] rồi "Quên mật khẩu?" căn trái bên dưới. */}
+          <View style={styles.loginRow}>
+            <Button
+              title="Đăng nhập"
+              size="lg"
+              loading={loading}
+              onPress={() => void handleLogin()}
+              style={[styles.pill, styles.flex]}
+            />
+            {biometric && biometricAccount ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Đăng nhập bằng ${biometric.label}, ${biometricCaption(biometricAccount)}`}
+                accessibilityState={{ busy: biometricLoading }}
+                disabled={biometricLoading}
+                onPress={() => void handleBiometricLogin()}
+                style={({ pressed }) => [styles.biometricButton, pressed ? styles.biometricButtonPressed : null]}
+              >
+                {biometricLoading ? (
+                  <ActivityIndicator size="small" color={colors.inverse} />
+                ) : (
+                  <BiometricIcon size={24} color={colors.inverse} strokeWidth={2} />
+                )}
+              </Pressable>
+            ) : null}
           </View>
-
-          <Button title="Đăng nhập" size="lg" loading={loading} onPress={() => void handleLogin()} style={styles.pill} />
+          <View style={styles.row}>
+            <Button
+              title="Quên mật khẩu?"
+              variant="ghost"
+              onPress={() => router.push({ pathname: "/forgot-password", params: { companyCode: companyCode.trim(), account: username.trim() } })}
+              style={styles.forgot}
+            />
+          </View>
         </View>
       </ScrollView>
     </Screen>
@@ -418,6 +455,20 @@ const styles = StyleSheet.create({
     ...elevation.soft,
   },
   pill: { borderRadius: radius.full },
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: -space.xs },
-  remember: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 44 },
+  row: { flexDirection: "row", alignItems: "center", justifyContent: "flex-start", marginTop: -space.sm },
+  // Chữ thẳng mép trái với nút Đăng nhập (ghost có padding ngang).
+  forgot: { paddingHorizontal: 0 },
+  loginRow: { flexDirection: "row", alignItems: "center", gap: space.md },
+  // Cùng màu Button `secondary` (nền trắng, viền borderStrong, icon inverse), tròn, cao bằng nút lg.
+  biometricButton: {
+    width: LG_BUTTON_HEIGHT,
+    height: LG_BUTTON_HEIGHT,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  biometricButtonPressed: { backgroundColor: colors.surfaceMuted },
 });

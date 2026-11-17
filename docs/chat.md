@@ -1,0 +1,105 @@
+# Tin nhắn (BeeChat khách hàng + chat nội bộ / đại lý)
+
+Cùng dữ liệu và luật với web (`../beeland`: `src/services/chat/*`, `src/pages/customers/quan-ly/beechat/`,
+`src/components/Chat/*`; spec `docs/superpowers/specs/2026-10-08-chat-realtime-design.md`,
+`2026-10-12-chat-app-khach-design.md`). App gọi `fn_nv_app_chat_*` – SP app gọi thẳng đúng SP chat của web (người gọi / công
+ty từ phiên). Tên hàm web dưới đây (`fn_chat_*`) đổi sang endpoint app qua `CHAT_FN` (`services/ChatService.ts`).
+
+## Màn
+
+| Màn | File | Ghi chú |
+|---|---|---|
+| Hộp thư | `app/chat/index.tsx` | Tab theo `khu` của `fn_chat_inbox`: **Khách hàng** (`beechat`) · **Nội bộ** (`noi_bo`) · **Đại lý** (`dai_ly`, chỉ NV nội bộ có cờ `is_chat_dai_ly`). NV đại lý chỉ có tab Đại lý (hội thoại có NV đại lý luôn mang `san_id`; BeeChat khách chỉ cho nội bộ). Tìm (debounce 300ms, server `q`), kéo làm mới, tải thêm theo `next_cursor`. Nút header: Tạo nhóm · Nhắn tin mới |
+| Cuộc trò chuyện | `app/chat/[id].tsx` | Danh sách đảo ngược (mới nhất ở đáy, kéo lên tải tin cũ `before`), ô soạn dính đáy. Hội thoại khách mình chưa là thành viên: chỉ xem + **"Tham gia để trả lời"** khi `canJoinCustomer` (admin nội bộ, hoặc kênh **app** – mọi NV nội bộ vào được BeeChat; server kiểm `app_has_perm('/customers/beechat')`). Thành viên hội thoại khách: nút Đóng / Mở lại trên header (đóng có `confirm`) |
+| Thành viên / thông tin | `app/chat/manage-members/[groupId].tsx` | Khách: tên, kênh (App có icon điện thoại xanh), hồ sơ KH đã gắn (mở `customer/[id]`), SĐT, email + NV xử lý. Nhóm: thành viên + vai trò. Thêm (`ContactPicker` chọn nhiều) / xoá / rời theo `_chat_can` (xem dưới) |
+| Nhắn tin mới | `app/contacts.tsx` | Danh bạ `fn_chat_danh_ba` → `fn_chat_direct_open` → mở chat (thay màn) |
+| Tạo nhóm | `app/chat/create-group.tsx` | Tên (≤ 100) + ≥ 2 người → `fn_chat_group_create` (server áp luật một sàn / cờ chat đại lý, lỗi tiếng Việt → toast) |
+
+Lối vào: nút tròn **Tin nhắn** ở header Trang chủ (`HomeHeader`, chấm cam khi có hội thoại chưa đọc – `useChatUnreadCount`,
+đếm `fn_chat_inbox {khu:tat_ca, chua_doc}` bỏ hội thoại tắt tiếng, làm mới mỗi lần về Trang chủ). Tab ẩn cũ
+`app/(tabs)/ai-chat.tsx` chuyển hướng sang `/chat`.
+
+## Quyền (server quyết định, app chỉ ẩn / hiện nút)
+
+- Nhóm: thêm / xoá người khi mình là `owner`/`admin`; không xoá `owner`. Hội thoại khách: thành viên thêm được NV xử lý,
+  chỉ xoá người thêm tay (`nguon_them = thu_cong`). Ai cũng rời được (owner rời → server chuyển owner).
+- Tài khoản không có hồ sơ NV (`employee_id` null trong JWT) → `_chat_me` báo "Phiên đăng nhập không hợp lệ" → app hiện
+  "Tài khoản chưa có hồ sơ nhân viên nên chưa dùng được chat".
+
+## Dữ liệu
+
+- Service `services/ChatService.ts`: `callNv` tới endpoint trong `CHAT_FN`, máy chủ trả `{data}`|`{error}` → `Error(message)`.
+  Logic thuần + kiểu: `lib/chat.ts` (test `tests/chat.test.cjs`).
+- **Tệp:** 1 bước `fn_nv_app_chat_tep_tai` (multipart `conversation_id` + `file`, `postFormNv`; máy chủ ghi tệp vào kho
+  `chat-files` đúng đường dẫn SP cấp) → `attachment_id` → gửi tin kèm `attachment_ids`. Xem: `fn_nv_app_chat_tep_link
+  { p_attachment_id }` → link ký 300 s (cache 240 s), mở bằng `expo-web-browser`. Ảnh / PDF / Office / txt / csv / zip,
+  ≤ 20 MB (`CHAT_FILE_MAX_MB`); 413 ⇒ "Tệp quá lớn". iOS chọn ảnh: `preferredAssetRepresentationMode: Compatible` (HEIC → JPEG).
+- **Gửi lạc quan:** tin tạm `local-<client_msg_id>` hiện ngay; lỗi → "Chưa gửi được · Thử lại · Xoá" (gửi lại cùng
+  `client_msg_id` → server không tạo trùng, tệp đã tải không tải lại).
+- **Realtime:** hub SignalR `wss://api-beeland26.beesky.vn/api/realtime` (`services/realtimeHub.ts`, giao thức như
+  web `realtimeShim.ts`: `Join` / `Leave` / `Broadcast`, nhận `broadcast`), kênh private `chat:u:<employee_id>` (JWT qua
+  `access_token`; `syncRealtimeAuth()` nối lại khi JWT đổi — thay `setAuth`), 5 sự kiện như web. Mỗi topic Join một lần
+  (đếm tham chiếu trong hub), tự nối lại + Join lại khi rớt mạng / JWT hết hạn. Một kênh dùng chung (đếm tham chiếu `useChatSession`). Dự phòng: realtime chưa nối,
+  hoặc xem hội thoại chưa tham gia → làm mới 15 s khi màn đang mở; tab Khách hàng làm mới 30 s (hội thoại chưa tham gia
+  không phát `chat:u`). Mở lại app → tải bù.
+- **Đã đọc:** đang mở + là thành viên + có tin mới → `fn_chat_mark_read`. "Đã xem" dưới tin cuối của mình = có người khác
+  (hoặc khách – `contact_last_read_at`) đọc tới.
+
+## Giao diện
+
+Kiểu bo tròn mềm (header `soft`, card trắng bo `xxl` bóng nhẹ). Tin của mình: phải, nền `primary` chữ trắng; người khác:
+trái, card trắng, avatar ở tin cuối cụm, tên ở tin đầu cụm (nhóm / khách – khách ghi "· Khách hàng"). Cụm = cùng người gửi,
+≤ 5 phút, cùng ngày. Vạch ngày "Hôm nay / Hôm qua / Thứ…, dd/MM/yyyy"; tin hệ thống chữ nhỏ căn giữa (`systemText`).
+Hội thoại khách kênh app: chip **App** xanh lá + huy hiệu điện thoại ở avatar (giống web BeeChat).
+
+## Thao tác trên tin (giống menu web MessageItem)
+
+Nhấn giữ bong bóng (chỉ khi là thành viên) → sheet: **Trả lời** (thanh "Đang trả lời …" trên ô soạn, gửi `reply_to_id`;
+bong bóng hiện khung trích dẫn `reply_to`) · **Sao chép** (`expo-clipboard`) · **Sửa** (ô soạn điền sẵn, nút gửi = lưu,
+`fn_chat_edit`) · **Thu hồi** (`confirm`, `fn_chat_recall`). Sửa / thu hồi: tin của mình, đã lên máy chủ, chưa thu hồi,
+≤ 24 giờ (`canModifyMessage`, server kiểm lại). Tin đã sửa ghi "(đã sửa)", đã thu hồi "Tin nhắn đã được thu hồi".
+
+**@nhắc tên** (nhóm / hội thoại khách có NV khác): gõ `@` → gợi ý thành viên phía trên ô soạn (lọc không dấu), chọn → chèn
+"@Tên "; khi gửi, `mentions` = người đã chọn mà "@Tên" còn trong nội dung (như web Composer).
+
+**Đang gõ:** hội thoại khách – kênh công khai `chatv:<channel_key>` (nghe `from: 'visitor'`, mình gõ phát `from: 'agent'` →
+app khách / widget hiện "đang soạn tin"); nội bộ / nhóm – kênh private `chat:c:<id>` (`{employee_id}`), ≤ 1 lần / 3 s,
+ẩn sau 4 s. Dòng "<Tên> đang gõ…" ngay trên ô soạn ("Khách đang gõ…" với hội thoại khách).
+
+## Màn thông tin (`manage-members/[groupId]`, mở từ nút người ở header – mọi loại hội thoại)
+
+- **Ghim / Tắt thông báo** (công tắc, `fn_chat_pref`) – thành viên.
+- Hội thoại khách: **Gắn hồ sơ khách hàng** (`CustomerLinkSheet`: gợi ý `goi_y_khach_hang` khớp SĐT/email + tìm qua
+  `CustomerService.pickCustomers`, ≥ 2 ký tự → `fn_chat_customer_link`), **Bỏ gắn** (confirm). **Kênh app không đổi / bỏ gắn được**
+  (hồ sơ là khoá nhận diện khách đăng nhập – server chặn, migration web `20261013130000_chat_app_khong_doi_kh`).
+  **Nhãn** (thêm / bỏ, ≤ 20 × 50 ký tự, `fn_chat_customer_tags`). **Xin thông tin liên hệ** khi khách chưa có SĐT / email
+  (`fn_chat_request_info`).
+- Nhóm / khách: thành viên, thêm / xoá / rời như trên. Hội thoại 1-1: chỉ ghim / tắt thông báo.
+
+Hội thoại khách: mọi tin NV nằm bên phải (như web BeeChat – thấy NV nào trả lời khách), tin đồng nghiệp ghi tên.
+
+Chấm chưa đọc ở Trang chủ: tải khi về Trang chủ + tải lại ngầm khi có sự kiện realtime `chat:u` (debounce 600 ms).
+
+## Tồn đọng
+
+- Chưa có (web có): tìm trong tin nhắn (`fn_chat_search`), đổi tên / ảnh nhóm, đổi vai trò thành viên, tạo hồ sơ khách mới
+  từ hội thoại, trạng thái online (presence).
+- Tải / xem tệp chat qua endpoint mới chưa thử được trên API chạy máy (thiếu cấu hình kho) – thử lại sau khi deploy API.
+
+## Thông báo (banner + push) – 2026-10-13
+
+Máy chủ: beeland migration `20261013150000_chat_push` + edge `chat-push` (spec `beeland/docs/superpowers/specs/2026-10-13-chat-push-design.md`).
+
+- **Đăng ký push** (`components/chat/chatPush.ts`): mở app / đăng nhập / quay lại app → xin quyền (lần đầu) → Expo push token
+  (`projectId` EAS) → `fn_chat_push_dang_ky` (→ `fn_nv_app_chat_push_dang_ky`; máy chủ chụp quyền BeeChat / admin lúc này).
+  Đăng xuất / xoá tài khoản → `fn_chat_push_huy` **trước** khi rời phiên (`account.tsx`). Đăng nhập xong → `resetChatSession()` + `chatAuthChanged(true)`.
+  Android: kênh `chat` ("Tin nhắn", HIGH). `expo-notifications` nạp có điều kiện (bản build cũ / web → chỉ banner realtime).
+- **Ai nhận push** (máy chủ quyết định): thành viên hội thoại trừ người gửi; tắt tiếng thì chỉ nhận khi được @nhắc; hội thoại
+  khách chưa ai tham gia → NV có quyền BeeChat (kênh app) / admin (kênh khác).
+- **Banner trong app** (`components/chat/ChatNotifier.tsx`, gắn ở `app/_layout.tsx`): realtime `chat:u` `message_new`
+  (kênh dùng chung `useChatSession`, sống suốt phiên) + push nhận lúc đang mở (ẩn thông báo hệ thống). Khử trùng theo id tin,
+  không hiện cho hội thoại đang mở (`useActiveChat` trong `app/chat/[id].tsx`), tự ẩn 4,5 s. Logic thuần: `lib/chatNotify.ts`
+  (test `tests/chatNotify.test.cjs`).
+- **Bấm banner / push** (kể cả mở app từ push khi app đã tắt) → `/chat/<conversation_id>`.
+- Bản build **10.6** (thêm native module + plugin `expo-notifications` trong `app.json`). Android cần `google-services.json`
+  (Firebase) + khoá FCM V1 trên EAS mới lấy được token.

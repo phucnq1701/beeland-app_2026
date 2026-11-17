@@ -26,3 +26,28 @@ export function statusTextColorOf(bg: string): string {
   const toHex = (v: number) => Math.round(v * 0.4).toString(16).padStart(2, "0");
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
+
+/**
+ * Màu preset của Tag antd – web lưu color_code dạng tên (blue, green…) ở Danh mục khách hàng.
+ * Giữ tông màu web nhưng vẽ theo kiểu soft của app (không viền, cùng độ đậm với nền *Subtle):
+ * bg = màu-6 (@ant-design/colors) phủ 14% trên trắng, fg = màu-8 (gold/yellow/lime: màu-9 cho đủ tương phản ≥ 4.5).
+ */
+const ANTD_TAG_PRESETS: Record<string, { bg: string; fg: string }> = {
+  red: { bg: "#FEE0E2", fg: "#A8071A" },
+  volcano: { bg: "#FEE7DF", fg: "#AD2102" },
+  orange: { bg: "#FEEFDE", fg: "#AD4E00" },
+  gold: { bg: "#FEF4DE", fg: "#874D00" },
+  yellow: { bg: "#FEFADE", fg: "#876800" },
+  lime: { bg: "#F2FADE", fg: "#3F6600" },
+  green: { bg: "#E7F7DF", fg: "#237804" },
+  cyan: { bg: "#DEF6F6", fg: "#006D75" },
+  blue: { bg: "#DEECFF", fg: "#003EB3" },
+  geekblue: { bg: "#E2E7FC", fg: "#10239E" },
+  purple: { bg: "#EBE2F9", fg: "#391085" },
+  magenta: { bg: "#FCE2F0", fg: "#9E1068" },
+};
+
+/** Tên màu preset antd → màu badge; không phải preset (hex, "default", rỗng) → null. */
+export function antdPresetTagColor(color: unknown): { bg: string; fg: string } | null {
+  return ANTD_TAG_PRESETS[String(color ?? "").trim().toLowerCase()] ?? null;
+}

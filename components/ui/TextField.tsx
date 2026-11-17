@@ -27,6 +27,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
   const [focused, setFocused] = useState(false);
   const fontsLoaded = useFontsLoaded();
   const soft = variant === 'soft';
+  const multiline = !!inputProps.multiline;
   const borderStyle = soft
     ? error
       ? styles.softError
@@ -45,7 +46,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
         {label}
         {required ? <Text variant="caption" weight="semibold" color="danger">{' *'}</Text> : null}
       </Text>
-      <View style={[styles.box, soft ? styles.soft : null, borderStyle]}>
+      <View style={[styles.box, soft ? styles.soft : null, multiline ? styles.boxMultiline : null, borderStyle]}>
         {prefix}
         <TextInput
           ref={ref}
@@ -62,7 +63,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
             setFocused(false);
             onBlur?.(e);
           }}
-          style={[styles.input, fontStyleFor('regular', fontsLoaded), style]}
+          style={[styles.input, multiline ? styles.inputMultiline : null, fontStyleFor('regular', fontsLoaded), style]}
         />
         {suffix}
       </View>
@@ -112,4 +113,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     paddingVertical: 0,
   },
+  // Nhiều dòng: ô cao ~4 dòng, chữ bắt đầu từ trên (Android mặc định căn giữa, iOS tự thêm paddingTop)
+  boxMultiline: { alignItems: 'flex-start', paddingVertical: space.md },
+  inputMultiline: { minHeight: 88, lineHeight: 22, paddingTop: 0, textAlignVertical: 'top' },
 });

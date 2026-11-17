@@ -41,13 +41,13 @@ import { formatVND } from "@/lib/format";
 import { hapticSuccess } from "@/lib/haptics";
 import { getQrScreenState, showsQrImage } from "@/lib/qrPaymentState";
 import { colors, radius, space } from "@/theme";
-import { BookingService } from "@/sevicesSupabase/BookingService";
+import { BookingService } from "@/services/BookingService";
 import {
   PaymentGatewayService,
   vietQrUrl,
   type ContractVA,
   type GatewayAccount,
-} from "@/sevicesSupabase/PaymentGatewayService";
+} from "@/services/PaymentGatewayService";
 
 const errMsg = (e: any, fallback: string) =>
   e instanceof Error && e.message ? e.message : fallback;
@@ -260,6 +260,10 @@ export default function QRPaymentScreen() {
 
   const createQr = async () => {
     if (!acc || !booking || creating) return;
+    if (qrBlocked) {
+      toast.show({ type: "error", message: qrBlocked });
+      return;
+    }
     // Các điều kiện dưới đã được chặn bằng trạng thái nút; giữ lại để phòng thủ.
     if (!expiresAtMs || remain <= 0) {
       toast.show({ type: "error", message: "Booking đã hết thời gian giữ chỗ" });
@@ -404,7 +408,15 @@ export default function QRPaymentScreen() {
     />
   );
 
-  const canCreate = !!acc && !!projectId && !!expectedAmount;
+  // Như web: quyền PAYMENT_QR màn Booking + không đang chờ duyệt đổi căn (thiếu thông tin ⇒ khoá)
+  const qrBlocked = !booking
+    ? null
+    : booking.quyenQR !== true
+      ? "Bạn chưa được cấp quyền tạo QR thanh toán booking."
+      : booking.doiCanChoDuyet
+        ? "Booking đang chờ duyệt đổi căn — tạm khoá tạo QR thanh toán."
+        : null;
+  const canCreate = !!acc && !!projectId && !!expectedAmount && !qrBlocked;
 
   const footer = (() => {
     switch (screenState) {
@@ -603,6 +615,7 @@ export default function QRPaymentScreen() {
               </Card>
             )}
             {amountError ? <Banner tone="warning">{amountError}</Banner> : null}
+            {qrBlocked ? <Banner tone="warning">{qrBlocked}</Banner> : null}
             <Text variant="caption" color="textTertiary">
               Tài khoản định danh chỉ có hiệu lực tới khi booking hết thời gian giữ chỗ; quá hạn mà chưa chuyển
               tiền sẽ tự bị xoá.

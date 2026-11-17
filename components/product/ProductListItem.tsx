@@ -1,7 +1,7 @@
 import React, { memo } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { ListItem, MoneyText, StatusBadge } from "@/components/ui";
+import { ListItem, MoneyText, StatusBadge, Text } from "@/components/ui";
 import { colors, elevation, radius, space } from "@/theme";
 
 type Props = {
@@ -30,7 +30,12 @@ function ProductListItemBase({ product, statusLabel, statusColor, onPress }: Pro
                   <StatusBadge label={statusLabel} color={statusColor} />
                 </View>
               ) : null}
-              <MoneyText value={product?.TongGomPBT} short variant="subhead" />
+              {/* Căn chưa có giá (null / 0) ⇒ "Liên hệ" như màn chi tiết, không hiện "0 đ" */}
+              {Number(product?.TongGomPBT) > 0 ? (
+                <MoneyText value={product?.TongGomPBT} short variant="subhead" />
+              ) : (
+                <Text variant="subhead" color="textSecondary">Liên hệ</Text>
+              )}
             </>
           }
           onPress={() => onPress(product?.MaSP)}
