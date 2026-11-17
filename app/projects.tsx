@@ -37,6 +37,8 @@ const ProjectCard = memo(function ProjectCard({
 }) {
   const isActive = item?.is_active;
   const uri = item?.icon && String(item.icon).trim() !== "" ? item.icon : DEFAULT_PROJECT_IMAGE;
+  const district = String(item?.district ?? "").trim();
+  const place = district && district.toLowerCase() !== String(item?.TenDA ?? "").trim().toLowerCase() ? district : "";
   return (
     <Pressable
       testID={`project-card-${index}`}
@@ -63,12 +65,15 @@ const ProjectCard = memo(function ProjectCard({
         <Text variant="heading" color={colors.showcase.text} numberOfLines={1} style={styles.name}>
           {item?.TenDA || "Dự án"}
         </Text>
-        <View style={styles.place}>
-          <MapPin size={14} color={colors.showcase.textMuted} strokeWidth={2} />
-          <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
-            {item?.district || "Chưa cập nhật"}
-          </Text>
-        </View>
+        {/* Khu vực trống / trùng tên dự án ⇒ bỏ dòng (không hiện "Chưa cập nhật") */}
+        {place ? (
+          <View style={styles.place}>
+            <MapPin size={14} color={colors.showcase.textMuted} strokeWidth={2} />
+            <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
+              {place}
+            </Text>
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );

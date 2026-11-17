@@ -281,6 +281,7 @@ export function CustomerForm({
     <Screen
       header={header}
       keyboardAware
+      hideFooterWithKeyboard
       padded={false}
       footer={
         <BottomActionBar>

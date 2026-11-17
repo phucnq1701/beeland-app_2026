@@ -6,6 +6,12 @@ import { Avatar, StatusBadge, Text } from "@/components/ui";
 import { maskPhone } from "@/lib/format";
 import { colors, elevation, hitSlop, radius, space } from "@/theme";
 
+/** Số gọi được: không bị máy chủ che ("***") và đủ ≥ 9 chữ số. */
+export const isCallablePhone = (phone: unknown): boolean => {
+  const p = String(phone ?? "");
+  return !!p && !p.includes("*") && p.replace(/[^0-9]/g, "").length >= 9;
+};
+
 /** Gọi điện / mở Zalo theo số điện thoại (bỏ ký tự không phải số). */
 export const callPhone = (phone: string) => Linking.openURL(`tel:${phone.replace(/[^0-9+]/g, "")}`);
 export const openZalo = (phone: string) => Linking.openURL(`https://zalo.me/${phone.replace(/[^0-9]/g, "")}`);
@@ -46,6 +52,8 @@ function CustomerListItemBase({ item, onPress }: { item: any; onPress: (id: stri
   const isPersonal = item.isPersonal !== false;
   const name = item.tenKH || (isPersonal ? "Chưa có tên" : "Doanh nghiệp");
   const idLine = [item.ma_so_kh, isPersonal ? "Cá nhân" : "Doanh nghiệp"].filter(Boolean).join(" · ");
+  // Máy chủ che số theo nhóm quyền ("0988***008") ⇒ không gọi / Zalo được ⇒ ẩn nút (không quay nhầm số)
+  const callable = isCallablePhone(phone);
   const detail = phone ? maskPhone(phone) : item.cccd ? `CCCD ${item.cccd}` : item.taxCode ? `MST ${item.taxCode}` : "";
 
   return (
@@ -81,7 +89,7 @@ function CustomerListItemBase({ item, onPress }: { item: any; onPress: (id: stri
                 <StatusBadge label={item.status} color={item.statusColor} size="sm" />
               </View>
             ) : null}
-            {phone ? (
+            {callable ? (
               <View style={styles.actions}>
                 <RoundAction
                   icon={Phone}

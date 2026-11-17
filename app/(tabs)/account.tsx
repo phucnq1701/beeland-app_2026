@@ -221,16 +221,17 @@ export default function AccountScreen() {
           </View>
         </Card>
 
+        {/* Thu gọn = 1 hàng 4 mục (trước đây thu gọn chỉ còn tiêu đề trống) */}
         <HomeSectionHeader
           title="Quản lý nhanh"
-          actionLabel={showAllManagement ? "Thu gọn" : "Tất cả"}
-          onAction={() => setShowAllManagement(!showAllManagement)}
+          actionLabel={managementFeatures.length > 4 ? (showAllManagement ? "Thu gọn" : "Tất cả") : undefined}
+          onAction={managementFeatures.length > 4 ? () => setShowAllManagement(!showAllManagement) : undefined}
         />
-        {showAllManagement ? (
+        {managementFeatures.length ? (
           <FeatureGrid
             columns={4}
             compact
-            items={managementFeatures.map((f) => ({
+            items={(showAllManagement ? managementFeatures : managementFeatures.slice(0, 4)).map((f) => ({
               key: f.id,
               feature: f,
               onPress: () => {

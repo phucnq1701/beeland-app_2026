@@ -162,6 +162,7 @@ export default function CreateBookingScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <Screen
         keyboardAware
+        hideFooterWithKeyboard
         padded={false}
         header={header}
         footer={
@@ -343,7 +344,7 @@ export default function CreateBookingScreen() {
                       {it.label}
                     </Text>
                     <Text variant="label" numeric numberOfLines={1}>
-                      {it.value}
+                      {prettyPriceValue(it.label, it.value)}
                     </Text>
                   </View>
                 ))}
@@ -354,6 +355,19 @@ export default function CreateBookingScreen() {
       </Screen>
     </>
   );
+}
+
+/**
+ * Số trong khối giá (chuỗi đã định dạng kiểu web "97.419.750,893") ⇒ dễ đọc: tiền làm tròn đồng + "₫", diện tích + "m²".
+ * Chuỗi không phải số (vd "—") giữ nguyên.
+ */
+function prettyPriceValue(label: string, value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!/^-?[\d.]+(,\d+)?$/.test(raw)) return raw || "—";
+  const n = Number(raw.replace(/\./g, "").replace(",", "."));
+  if (!Number.isFinite(n)) return raw;
+  if (/diện tích/i.test(label)) return `${n.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} m²`;
+  return `${Math.round(n).toLocaleString("vi-VN")} ₫`;
 }
 
 function Meta({ label, value }: { label: string; value: string }) {

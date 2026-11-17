@@ -182,9 +182,9 @@ function SigningForm() {
     void boot();
   }, [boot]);
 
-  // Mở từ phiếu cọc (không chỉ loại khách): theo khách của phiếu như web openSigningForDeposit
+  // Thêm mới: loại khách theo khách của phiếu cọc / hợp đồng đã chọn (như web openSigningForDeposit) — không bắt người dùng chọn
   useEffect(() => {
-    if (editingKey || !params.pgcId || params.kind) return;
+    if (editingKey || params.kind) return;
     const want = Number(form?.MaPhanLoaiKH) === 3 ? "enterprise" : "individual";
     if (form?.MaKH && w.kind !== want) w.setKind(want);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -382,6 +382,7 @@ function SigningForm() {
         header={header}
         padded={false}
         keyboardAware
+        hideFooterWithKeyboard
         footer={
           <BottomActionBar>
             <Button variant="secondary" title="Huỷ" onPress={() => router.back()} style={styles.pill} />
@@ -396,21 +397,6 @@ function SigningForm() {
         }
       >
         <View style={styles.body}>
-          {!w.editingId && !params.pgcId ? (
-            <SegmentedControl
-              variant="soft"
-              value={isPersonal ? "individual" : "enterprise"}
-              options={[
-                { value: "individual", label: "Cá nhân" },
-                { value: "enterprise", label: "Doanh nghiệp" },
-              ]}
-              onChange={(v) => {
-                w.setKind(v);
-                patch({ MaPhanLoaiKH: v === "enterprise" ? 3 : 1, CoOwners: v === "enterprise" ? [] : form?.CoOwners });
-              }}
-            />
-          ) : null}
-
           {/* ── Nguồn + chứng từ ── */}
           <Card style={styles.card}>
             <Text variant="subhead" style={styles.cardTitle}>
@@ -442,27 +428,6 @@ function SigningForm() {
                 onPress={() => setDepositOpen(true)}
               />
             )}
-            {show("MaPhanLoaiKH") ? (
-              <SelectField
-                variant="soft"
-                label="Phân loại khách hàng"
-                value={form?.MaPhanLoaiKH ?? null}
-                options={typeOptions}
-                disabled={ro("MaPhanLoaiKH") || !isPersonal}
-                onChange={(v) => patch({ MaPhanLoaiKH: v })}
-              />
-            ) : null}
-            {show("MaSan") ? (
-              <SelectField
-                variant="soft"
-                label="Đại lý phụ trách"
-                placeholder="Chọn đại lý"
-                value={form?.MaSan ? String(form.MaSan) : null}
-                options={agencyOptions}
-                disabled={!!w.agencySan || ro("MaSan")}
-                onChange={(v) => patch({ MaSan: v })}
-              />
-            ) : null}
           </Card>
 
           {/* ── Quỹ → Điểm ký → Thủ tục → Ngày → Ca ── */}
@@ -516,6 +481,7 @@ function SigningForm() {
                     <Pressable
                       key={d.configId}
                       accessibilityRole="radio"
+                      accessibilityLabel={`Điểm ký ${d.ten || ""}${d.diaChi ? `, ${d.diaChi}` : ""}`}
                       accessibilityState={{ checked: active }}
                       onPress={() => sp.pickDiem(d)}
                       style={[styles.option, active ? styles.optionActive : null]}
@@ -530,10 +496,11 @@ function SigningForm() {
                             {d.diaChi}
                           </Text>
                         ) : null}
-                        <Text variant="caption" color="textTertiary" numberOfLines={2}>
-                          {(d.thuTuc || []).map((t: any) => t.name).join(" · ") || "Chưa có loại thủ tục"}
-                          {full && full.remaining != null ? ` · còn ${full.remaining}` : ""}
-                        </Text>
+                        {full && full.remaining != null ? (
+                          <Text variant="caption" color="success">
+                            Còn {full.remaining} lượt
+                          </Text>
+                        ) : null}
                       </View>
                       {active ? <Check size={18} color={colors.primary} /> : null}
                     </Pressable>
@@ -634,7 +601,7 @@ function SigningForm() {
             ) : !(sp.shiftOptions || []).length ? (
               <Hint text="Ngày này không còn ca trống ở điểm ký đã chọn." />
             ) : (
-              <View style={styles.list}>
+              <View style={styles.grid2}>
                 {(sp.shiftOptions || []).map((o: any) => {
                   const active = form?.MaCa === o.value;
                   const s = o.raw;
@@ -643,16 +610,20 @@ function SigningForm() {
                     <Pressable
                       key={o.value}
                       accessibilityRole="radio"
+                      accessibilityLabel={s ? `${s.name}, ${s.from} đến ${s.to}, còn ${s.remaining} lượt` : `${o.label}, ca hiện tại của lịch`}
                       accessibilityState={{ checked: active }}
                       onPress={() => sp.pickShift(o.value)}
                       style={[styles.shift, active ? styles.optionActive : low ? styles.shiftLow : null]}
                     >
-                      <Text variant="body" weight="semibold" color={active ? "primary" : "text"}>
+                      <Text variant="body" weight="semibold" color={active ? "primary" : "text"} numberOfLines={1}>
                         {s ? s.name : o.label}
                       </Text>
+                      <Text variant="caption" color={active ? "primary" : "textSecondary"} numberOfLines={1}>
+                        {s ? `${s.from}–${s.to}` : "Ca hiện tại"}
+                      </Text>
                       {s ? (
-                        <Text variant="caption" color={active ? "primary" : "textSecondary"}>
-                          {s.from}–{s.to} · còn {s.remaining}/{s.capacity}
+                        <Text variant="caption" weight="semibold" color={low ? "warning" : "success"}>
+                          Còn {s.remaining}/{s.capacity}
                         </Text>
                       ) : null}
                     </Pressable>
@@ -684,6 +655,27 @@ function SigningForm() {
             <Text variant="subhead" style={styles.cardTitle}>
               {isPersonal ? "Thông tin khách hàng" : "Thông tin doanh nghiệp"}
             </Text>
+            {show("MaPhanLoaiKH") ? (
+              <SelectField
+                variant="soft"
+                label="Phân loại khách hàng"
+                value={form?.MaPhanLoaiKH ?? null}
+                options={typeOptions}
+                disabled={ro("MaPhanLoaiKH") || !isPersonal}
+                onChange={(v) => patch({ MaPhanLoaiKH: v })}
+              />
+            ) : null}
+            {show("MaSan") ? (
+              <SelectField
+                variant="soft"
+                label="Đại lý phụ trách"
+                placeholder="Chọn đại lý"
+                value={form?.MaSan ? String(form.MaSan) : null}
+                options={agencyOptions}
+                disabled={!!w.agencySan || ro("MaSan")}
+                onChange={(v) => patch({ MaSan: v })}
+              />
+            ) : null}
             {form?.MaKH ? (
               <>
                 <View>
@@ -940,7 +932,7 @@ function DocRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={`${label}: ${value || placeholder}${locked ? " (đã khoá)" : ""}`}
       disabled={locked}
       onPress={onPress}
       style={({ pressed }) => [styles.picker, pressed ? styles.pressed : null]}
@@ -1045,19 +1037,29 @@ function ContractPickerSheet({
         ) : !rows.length ? (
           <EmptyState title="Không có hợp đồng phù hợp" description="Thử từ khoá khác." />
         ) : (
-          rows.map((c) => (
-            <Pressable key={c.id} accessibilityRole="button" onPress={() => onPick(c)} style={({ pressed }) => [styles.option, pressed ? styles.pressed : null]}>
-              <View style={styles.flex}>
-                <Text variant="body" weight="semibold">
-                  {c.loai_hd === "HDGV" ? "HĐ góp vốn" : "HĐMB"} {c.so_hd || "—"}
-                </Text>
-                <Text variant="caption" color="textSecondary" numberOfLines={1}>
-                  {[c.khach_hang, c.ma_can].filter(Boolean).join(" · ")}
-                </Text>
-              </View>
-              <ChevronRight size={18} color={colors.textTertiary} />
-            </Pressable>
-          ))
+          <ScrollView style={styles.sheetList} keyboardShouldPersistTaps="handled">
+            <View style={styles.list}>
+              {rows.map((c) => (
+                <Pressable
+                  key={c.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Hợp đồng ${c.so_hd || ""}, ${c.khach_hang || ""}, căn ${c.ma_can || ""}`}
+                  onPress={() => onPick(c)}
+                  style={({ pressed }) => [styles.option, pressed ? styles.pressed : null]}
+                >
+                  <View style={styles.flex}>
+                    <Text variant="body" weight="semibold" numberOfLines={1}>
+                      {c.so_hd || "—"}
+                    </Text>
+                    <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                      {[c.ma_can, c.khach_hang, c.loai_hd === "HDGV" ? "HĐ góp vốn" : "HĐMB"].filter(Boolean).join(" · ")}
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.textTertiary} />
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
         )}
       </View>
     </BottomSheet>
@@ -1128,7 +1130,16 @@ const styles = StyleSheet.create({
   dayActive: { backgroundColor: colors.primary },
   dayFull: { backgroundColor: colors.dangerSubtle },
   hint: { padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceMuted },
-  shift: { padding: space.md, borderRadius: radius.lg, borderWidth: 1.5, borderColor: "transparent", backgroundColor: colors.surfaceMuted, gap: 2 },
+  grid2: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  shift: {
+    width: "48.5%",
+    padding: space.md,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    backgroundColor: colors.surfaceMuted,
+    gap: 2,
+  },
   shiftLow: { backgroundColor: colors.warningSubtle },
   summary: { gap: space.xs, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.primarySubtle },
   owner: { flexDirection: "row", alignItems: "center", gap: space.xs, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceMuted },
@@ -1140,4 +1151,5 @@ const styles = StyleSheet.create({
   cell: { width: `${100 / 7}%` },
   cellBox: { paddingVertical: space.xs, borderRadius: radius.md },
   sheet: { gap: space.sm, paddingBottom: space.lg },
+  sheetList: { maxHeight: 440 },
 });

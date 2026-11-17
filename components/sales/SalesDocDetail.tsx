@@ -11,8 +11,8 @@ import { Receipt } from "@/services/PaymentProgressService";
 import { MoneySummary, PaymentSchedule, ReceiptList } from "./PaymentBlocks";
 
 /**
- * Khung chi tiết đặt cọc / hợp đồng: đầu phiếu (số, trạng thái, khách), tổng quan tiền, thông tin,
- * lịch thanh toán, phiếu thu. Màn hình chỉ truyền dữ liệu đã lấy từ dịch vụ (không tự tính tiền).
+ * Khung chi tiết đặt cọc / hợp đồng: đầu phiếu (số, trạng thái, khách), tổng quan tiền, thông tin, lịch thanh toán (chỉ khi
+ * màn truyền `schedule` — hợp đồng), phiếu thu. Màn hình chỉ truyền dữ liệu đã lấy từ dịch vụ (không tự tính tiền).
  */
 export function SalesDocDetail({
   title,
@@ -25,6 +25,7 @@ export function SalesDocDetail({
   value,
   paid,
   deposit,
+  moneyFocus,
   schedule,
   scheduleError,
   receipts,
@@ -45,7 +46,10 @@ export function SalesDocDetail({
   value: number | null | undefined;
   paid: number | null | undefined;
   deposit?: number | null;
-  schedule: ScheduleRow[];
+  /** Phần tiền ở đầu: theo hợp đồng (mặc định) / theo tiền cọc */
+  moneyFocus?: "contract" | "deposit";
+  /** Không truyền ⇒ không hiện Lịch thanh toán */
+  schedule?: ScheduleRow[];
   scheduleError?: boolean;
   receipts: Receipt[];
   receiptsTotal: number;
@@ -69,19 +73,22 @@ export function SalesDocDetail({
       >
         <View style={styles.body}>
           {/* Card navy: khách + trạng thái ở đầu, tiền bên dưới */}
-          <MoneySummary value={value} paid={paid} deposit={deposit}>
+          <MoneySummary value={value} paid={paid} deposit={deposit} focus={moneyFocus}>
+            {/* Trạng thái 1 dòng riêng ⇒ tên khách + căn dùng cả bề ngang (không bị huy hiệu ép xuống dòng) */}
             <View style={styles.hero}>
-              <View style={styles.flex}>
-                <Text variant="heading" color={colors.showcase.text} numberOfLines={2} accessibilityRole="header">
-                  {customer || "—"}
+              {status ? (
+                <View style={styles.badgeRow}>
+                  <StatusBadge label={status} color={statusColor} />
+                </View>
+              ) : null}
+              <Text variant="heading" color={colors.showcase.text} numberOfLines={2} accessibilityRole="header">
+                {customer || "—"}
+              </Text>
+              {subtitle ? (
+                <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
+                  {subtitle}
                 </Text>
-                {subtitle ? (
-                  <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={2}>
-                    {subtitle}
-                  </Text>
-                ) : null}
-              </View>
-              {status ? <StatusBadge label={status} color={statusColor} /> : null}
+              ) : null}
             </View>
           </MoneySummary>
 
@@ -102,7 +109,7 @@ export function SalesDocDetail({
             <SkeletonDetail />
           ) : (
             <>
-              <PaymentSchedule rows={schedule} error={scheduleError} />
+              {schedule ? <PaymentSchedule rows={schedule} error={scheduleError} /> : null}
               <ReceiptList rows={receipts} total={receiptsTotal} error={receiptsError} />
             </>
           )}
@@ -114,10 +121,9 @@ export function SalesDocDetail({
 
 const styles = StyleSheet.create({
   body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  badgeRow: { flexDirection: "row", marginBottom: space.xs },
   hero: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.md,
+    gap: 2,
     marginBottom: space.md,
     paddingBottom: space.md,
     borderBottomWidth: StyleSheet.hairlineWidth,

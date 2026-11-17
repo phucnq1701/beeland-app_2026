@@ -39,6 +39,7 @@ export function SalesDocList({
   fetchPage,
   fetchStatuses,
   statusFilter,
+  statusLabel,
   renderRow,
   keyOf,
 }: {
@@ -57,6 +58,8 @@ export function SalesDocList({
   fetchStatuses: () => Promise<{ data: StatusOption[] }>;
   /** Trạng thái được hiện trên bộ lọc (mặc định: tất cả) */
   statusFilter?: (s: StatusOption) => boolean;
+  /** Nhãn chip trạng thái (vd bỏ tiền tố tên module) — mặc định tên trạng thái */
+  statusLabel?: (name: string) => string;
   renderRow: (item: any) => React.ReactElement;
   keyOf: (item: any, index: number) => string;
 }) {
@@ -183,7 +186,7 @@ export function SalesDocList({
             <Chip
               variant="soft"
               key={String(s.MaTT)}
-              label={s.TenTT}
+              label={statusLabel ? statusLabel(s.TenTT) : s.TenTT}
               selected={status === s.MaTT}
               onPress={() => setStatus(s.MaTT)}
             />

@@ -102,11 +102,11 @@ test("Đặt lịch ký (14): có màn /signings, đại lý được dùng (web
   assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: true, menuOnly: false, menuEligible: all })), ["1", "2", "5", "13", "14"]);
 });
 
-test("Đặt lịch ký (14) chỉ dành cho đại lý: tài khoản nội bộ không thấy", () => {
+test("Đặt lịch ký (14): từ 2026-11-17 nội bộ và đại lý đều dùng (sếp: có module Đặt lịch ký + đặt từ Đặt cọc)", () => {
   const all = ["1", "5", "13", "14"];
-  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: false, menuEligible: all })), ["1", "5", "13"]);
+  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: false, menuEligible: all })), ["1", "5", "13", "14"]);
   assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: true, menuOnly: true, menuEligible: all })), ["1", "5", "13", "14"]);
-  assert.equal(f.isFeatureAllowed("14", false), false);
+  assert.equal(f.isFeatureAllowed("14", false), true);
   assert.equal(f.isFeatureAllowed("14", true), true);
   assert.equal(f.isFeatureAllowed("6", false), true);
   assert.equal(f.isFeatureAllowed("6", true), false);
@@ -115,7 +115,7 @@ test("Đặt lịch ký (14) chỉ dành cho đại lý: tài khoản nội bộ
 test("Yêu cầu khách hàng (15): có màn /requests, chỉ tài khoản nội bộ (như Khách hàng)", () => {
   assert.equal(f.routeForFeature("15"), "/requests");
   const all = ["1", "6", "14", "15"];
-  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: false, menuEligible: all })), ["1", "6", "15"]);
+  assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: false, menuOnly: false, menuEligible: all })), ["1", "6", "14", "15"]);
   assert.deepEqual(plain(f.visibleFeatureIds(all, { isAgency: true, menuOnly: false, menuEligible: all })), ["1", "14"]);
   assert.equal(f.isFeatureAllowed("15", false), true);
   assert.equal(f.isFeatureAllowed("15", true), false);

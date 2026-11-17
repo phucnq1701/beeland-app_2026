@@ -229,23 +229,32 @@ export default function RequestDetailScreen() {
               ) : null}
             </View>
             <KeyValueRow label="Họ tên" value={data.customerName || "—"} />
-            <KeyValueRow label="Điện thoại" value={phone || "—"} copyValue={phone || undefined} />
-            <KeyValueRow label="Email" value={data.customerEmail || "—"} copyValue={data.customerEmail || undefined} />
-            <KeyValueRow label="Dự án" value={data.projectName || data.projectCode || "—"} />
-            <KeyValueRow label="Hợp đồng / phiếu" value={contract || "—"} last />
+            {phone ? <KeyValueRow label="Điện thoại" value={phone} copyValue={phone} /> : null}
+            {data.customerEmail ? <KeyValueRow label="Email" value={data.customerEmail} copyValue={data.customerEmail} /> : null}
+            <KeyValueRow label="Dự án" value={data.projectName || data.projectCode || "—"} last={!contract} />
+            {contract ? <KeyValueRow label="Hợp đồng / phiếu" value={contract} last /> : null}
           </Card>
 
           <Card style={styles.card}>
             <Text variant="subhead" style={styles.cardTitle}>
               Phân loại & phân công
             </Text>
-            <KeyValueRow label="Loại / chủ đề" value={category.name || "—"} />
-            <KeyValueRow label="Nguồn tiếp nhận" value={source.name || "—"} />
-            <KeyValueRow label="Mức ưu tiên" value={priority.name || "—"} />
-            <KeyValueRow label="Người tiếp nhận" value={data.receiverName || "—"} />
-            <KeyValueRow label="Người xử lý" value={data.assigneeName || "—"} />
-            <KeyValueRow label="Hạn xử lý" value={data.dueDate ? formatDateTime(data.dueDate) : "—"} />
-            <KeyValueRow label="Cập nhật" value={data.updatedAt ? formatDateTime(data.updatedAt) : "—"} last />
+            {/* Chỉ dòng có dữ liệu (không dãy "—") */}
+            {(
+              [
+                ["Loại / chủ đề", category.name],
+                ["Nguồn tiếp nhận", source.name],
+                ["Mức ưu tiên", priority.name],
+                ["Người tiếp nhận", data.receiverName],
+                ["Người xử lý", data.assigneeName],
+                ["Hạn xử lý", data.dueDate ? formatDateTime(data.dueDate) : null],
+                ["Cập nhật", data.updatedAt ? formatDateTime(data.updatedAt) : null],
+              ] as [string, string | null | undefined][]
+            )
+              .filter(([, v]) => !!v)
+              .map(([l, v], i, arr) => (
+                <KeyValueRow key={l} label={l} value={v as string} last={i === arr.length - 1} />
+              ))}
           </Card>
 
           <Card style={styles.card}>

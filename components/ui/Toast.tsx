@@ -131,7 +131,7 @@ function ToastView({ toast, onDismiss }: { toast: ToastOptions; onDismiss: () =>
       <View style={[styles.icon, { backgroundColor: iconBg }]}>
         <Icon size={14} color={iconFg} strokeWidth={3} />
       </View>
-      <Text variant="body" color={light ? 'text' : 'onInverse'} style={styles.message} numberOfLines={3}>
+      <Text variant="body" color={light ? 'text' : 'onInverse'} style={styles.message} numberOfLines={6}>
         {toast.message}
       </Text>
       {toast.action ? (

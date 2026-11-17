@@ -75,7 +75,8 @@ const styles = StyleSheet.create({
   },
   divider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   pressed: { backgroundColor: colors.surfaceMuted },
-  label: { flexShrink: 0 },
+  // Nhãn dài xuống dòng thay vì ép giá trị (số tiền) gãy nhiều dòng
+  label: { flexShrink: 1, maxWidth: '58%' },
   valueWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: space.sm },
   value: { flexShrink: 1 },
 });

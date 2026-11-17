@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -80,7 +80,8 @@ export function BottomSheet({
       onDismiss={Platform.OS === 'ios' ? notifyClosed : undefined}
       statusBarTranslucent
     >
-      <View style={styles.root}>
+      {/* Ô nhập trong sheet (tìm hợp đồng / phiếu / khách…): sheet nổi lên trên bàn phím, không bị che */}
+      <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: progress }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Đóng" accessibilityRole="button" />
         </Animated.View>
@@ -104,7 +105,7 @@ export function BottomSheet({
           ) : null}
           {children}
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

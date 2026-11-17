@@ -5,11 +5,16 @@
 | Màn | File |
 |---|---|
 | Danh sách đặt cọc / hợp đồng (khung chung: tìm, lọc dự án, chip trạng thái, phân trang). Kiểu bo tròn: header/ô tìm/chip `soft`, khung tự bọc mỗi dòng thành card bo `radius.xxl`; cột phải dùng `DocTrailing` (trạng thái trên, tiền rút gọn dưới), avatar tròn | `app/deposits.tsx`, `app/contracts.tsx` + `components/sales/SalesDocList.tsx` |
-| Chi tiết đặt cọc / hợp đồng (tổng tiền, thông tin, lịch, phiếu thu). Kiểu bo tròn: header `soft`, card navy bo `radius.x3` gộp khách + trạng thái + tổng tiền (`MoneySummary children`); thông tin / lịch / phiếu thu là card bo `radius.xxl`, mỗi đợt có badge Còn nợ/Đã đủ và khung số liệu nền xám | `app/deposit/[id].tsx`, `app/contract/[id].tsx` + `components/sales/SalesDocDetail.tsx`, `PaymentBlocks.tsx` |
+| Chi tiết đặt cọc / hợp đồng (tổng tiền, thông tin, lịch — chỉ hợp đồng, phiếu thu). Kiểu bo tròn: header `soft`, card navy bo `radius.x3` gộp khách + trạng thái + tổng tiền (`MoneySummary children`); thông tin / lịch / phiếu thu là card bo `radius.xxl`, mỗi đợt có badge Còn nợ/Đã đủ và khung số liệu nền xám | `app/deposit/[id].tsx`, `app/contract/[id].tsx` + `components/sales/SalesDocDetail.tsx`, `PaymentBlocks.tsx` |
 
 Mở chi tiết với params `{ id, data: JSON dòng danh sách }` (trang chủ cũng mở chi tiết cọc kiểu này).
 
-Chi tiết đặt cọc có nút **"Đặt lịch ký"** (chỉ tài khoản đại lý – `isFeatureAllowed("14")`) → `signing/form` với `pgcId` = `PhieuGiuChoId`
+**Chi tiết đặt cọc chỉ hiện việc của khâu cọc** (sếp 2026-11-17: module nào chỉ hiện thứ của module đó; app làm nhanh luồng chính):
+đầu phiếu = Tiền cọc / Đã nộp / Còn phải nộp (`SalesDocDetail moneyFocus="deposit"`, giá căn gồm VAT chỉ để tham khảo), thông tin
+(ngày cọc, điện thoại, CCCD, chính sách, NVKD, sàn), phiếu thu. **Không** hiện lịch thanh toán (xem ở Hợp đồng — `getDepositDetail`
+không tải lịch) và thông số căn (đơn giá, phí bảo trì, loại căn, hướng — xem ở Sản phẩm).
+
+Nút **"Đặt lịch ký"** cho mọi tài khoản (từ 2026-11-17; trước chỉ đại lý) → `signing/form` với `pgcId` = `PhieuGiuChoId`
 (khoá ô chọn phiếu). Còn nút "Thu tiền cọc QR" thì nút lịch ký thu gọn bên trái. Xem `docs/signing.md`.
 
 ## Thu tiền cọc QR (như web `dat-coc/index.tsx` + `BookingVAQRDialog` `module="DATCOC"`)

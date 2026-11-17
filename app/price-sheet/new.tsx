@@ -295,7 +295,7 @@ function PriceSheetEditorScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <Screen header={header} padded={false} keyboardAware footer={footer}>
+      <Screen header={header} padded={false} keyboardAware hideFooterWithKeyboard footer={footer}>
         <View style={styles.body}>
           <ProgressSteps steps={STEPS} current={step} />
           {busyText ? (
@@ -456,24 +456,27 @@ function PriceSheetEditorScreen() {
                 </View>
               ) : null}
 
-              <InfoCard
-                title="Sau chiết khấu"
-                rows={
-                  isLow
-                    ? [
-                        ["Tổng giá đất", money(c.tongTienDatVAT)],
-                        ["Tiền xây dựng gồm VAT", money(c.tongGiaXDVAT)],
-                        ["Tổng giá trị HĐMB", money(c.tongGiaTriHDMB)],
-                      ]
-                    : [
-                        ["Tổng giá chưa VAT", money(c.giaTriSauCK)],
-                        ["VAT", money(c.tienVAT)],
-                        ["Tổng giá gồm VAT", money(c.tongGomVAT)],
-                        ["Kinh phí bảo trì", money(c.phiBaoTri)],
-                        ["Tổng giá trị HĐMB", money(c.tongGiaTriHD)],
-                      ]
-                }
-              />
+              {/* Không có chiết khấu ⇒ trùng thẻ Giá niêm yết, ẩn cho gọn */}
+              {Number(c.tienChietKhau) ? (
+                <InfoCard
+                  title="Sau chiết khấu"
+                  rows={
+                    isLow
+                      ? [
+                          ["Tổng giá đất", money(c.tongTienDatVAT)],
+                          ["Tiền xây dựng gồm VAT", money(c.tongGiaXDVAT)],
+                          ["Tổng giá trị HĐMB", money(c.tongGiaTriHDMB)],
+                        ]
+                      : [
+                          ["Tổng giá chưa VAT", money(c.giaTriSauCK)],
+                          ["VAT", money(c.tienVAT)],
+                          ["Tổng giá gồm VAT", money(c.tongGomVAT)],
+                          ["Kinh phí bảo trì", money(c.phiBaoTri)],
+                          ["Tổng giá trị HĐMB", money(c.tongGiaTriHD)],
+                        ]
+                  }
+                />
+              ) : null}
             </>
           ) : null}
 
@@ -499,6 +502,7 @@ function PriceSheetEditorScreen() {
             <>
               <HomeSectionHeader title="Khách hàng (không bắt buộc)" />
               <SegmentedControl
+                variant="soft"
                 options={[
                   { value: "individual", label: "Cá nhân" },
                   { value: "business", label: "Doanh nghiệp" },

@@ -5,18 +5,16 @@ import { CalendarCheck, QrCode } from "lucide-react-native";
 
 import { SalesDocDetail } from "@/components/sales/SalesDocDetail";
 import { BottomActionBar, Button } from "@/components/ui";
-import { canOfferDepositQr } from "@/lib/depositQr";
-import { isFeatureAllowed } from "@/lib/featureConfig";
+import { canBookSigning, canOfferDepositQr } from "@/lib/depositQr";
 import { radius } from "@/theme";
-import { formatArea, formatDate, formatVND } from "@/lib/format";
-import { ScheduleRow } from "@/lib/paymentMath";
-import { getSessionInfo } from "@/services/session";
+import { formatDate } from "@/lib/format";
 import { DatCocService } from "@/services/DatCocService";
 import { Receipt } from "@/services/PaymentProgressService";
 
 /**
- * Chi tiết đặt cọc – như web (ContractDetail type DATCOC): đầu phiếu từ dòng danh sách fn_deposit_list,
- * lịch thanh toán + phiếu thu theo phiếu giữ chỗ (DatCocService.getDepositDetail → PaymentProgressService).
+ * Chi tiết đặt cọc — chỉ việc của khâu cọc (sếp 2026-11-17: module nào chỉ hiện thứ của module đó, app làm nhanh luồng chính):
+ * tiền cọc / đã nộp / còn phải nộp (giá căn để tham khảo), thông tin cọc, phiếu thu; thao tác Thu tiền cọc QR + Đặt lịch ký.
+ * Không hiện lịch thanh toán / thông số căn (xem ở Hợp đồng / Sản phẩm). Dữ liệu: DatCocService.getDepositDetail.
  */
 export default function DepositDetailScreen() {
   const router = useRouter();
@@ -31,19 +29,11 @@ export default function DepositDetailScreen() {
   }, [dataParam]);
 
   const [header, setHeader] = useState<any>(row);
-  const [schedule, setSchedule] = useState<ScheduleRow[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [receiptsTotal, setReceiptsTotal] = useState(0);
   const [receiptsError, setReceiptsError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // Đặt lịch ký chỉ dành cho đại lý (tính năng 14)
-  const [canSign, setCanSign] = useState(false);
-  useEffect(() => {
-    getSessionInfo()
-      .then((s) => setCanSign(isFeatureAllowed("14", s.isAgency)))
-      .catch(() => setCanSign(false));
-  }, []);
 
   const load = useCallback(
     async (refresh = false) => {
@@ -51,7 +41,6 @@ export default function DepositDetailScreen() {
       try {
         const res: any = await DatCocService.getDepositDetail({ row });
         setHeader({ ...row, ...(res?.data || {}) });
-        setSchedule(res?.lichTT || []);
         setReceipts(res?.phieuThu || []);
         setReceiptsTotal(Number(res?.tongDaThu) || 0);
         setReceiptsError(!!res?.receiptsError);
@@ -81,6 +70,8 @@ export default function DepositDetailScreen() {
   const canCollect = !loading && canOfferDepositQr(h);
   // Lịch ký khoá theo uuid PHIẾU GIỮ CHỖ (pgc_id), không phải id phiếu cọc (web openSigningForDeposit)
   const pgcId = String(h.PhieuGiuChoId ?? "");
+  // Chỉ hiện khi máy chủ cho đặt: phiếu đã duyệt cọc, chưa sang hợp đồng (mã 13 / 24 / 25)
+  const canSign = !loading && !!pgcId && canBookSigning(h);
   const goToSigning = () =>
     router.push({
       pathname: "/signing/form",
@@ -102,23 +93,15 @@ export default function DepositDetailScreen() {
       value={h.TongGiaTriHDMB ?? h.TongGiaGomVAT}
       paid={h.DaThu}
       deposit={h.TienCoc ?? null}
+      moneyFocus="deposit"
       info={[
         ["Ngày đặt cọc", h.NgayDatCoc ? formatDate(h.NgayDatCoc) : null],
-        ["Số phiếu giữ chỗ", h.SoPhieuGC],
         ["Điện thoại", h.DiDong],
-        ["Email", h.Email],
         ["CCCD", h.SoCMND],
-        ["Địa chỉ", h.DiaChi],
-        ["Loại căn", h.LoaiCanHo],
-        ["Hướng", h.Huong],
-        ["Diện tích", h.DienTich != null ? formatArea(h.DienTich) : null],
-        ["Đơn giá", h.DonGiaTT != null ? formatVND(h.DonGiaTT) : null],
-        ["Phí bảo trì", h.PhiBaoTri != null ? formatVND(h.PhiBaoTri) : null],
-        ["Sàn giao dịch", h.SanGD],
-        ["Nhân viên kinh doanh", h.TenNVKD],
         ["Chính sách", h.TenChinhSach],
+        ["Nhân viên kinh doanh", h.TenNVKD],
+        ["Sàn giao dịch", h.SanGD],
       ]}
-      schedule={schedule}
       receipts={receipts}
       receiptsTotal={receiptsTotal}
       receiptsError={receiptsError}
@@ -126,10 +109,10 @@ export default function DepositDetailScreen() {
       refreshing={refreshing}
       onRefresh={() => void load(true)}
       footer={
-        loading || (!canCollect && !(pgcId && canSign)) ? undefined : (
+        !canCollect && !canSign ? undefined : (
           <BottomActionBar>
-            {/* Như web (menu dòng đặt cọc "Đặt lịch ký"): luôn cho đặt lịch ký, mở form đã điền sẵn phiếu */}
-            {pgcId && canSign ? (
+            {/* Mọi tài khoản (sếp 2026-11-17), mở form đã điền sẵn phiếu */}
+            {canSign ? (
               <Button
                 variant={canCollect ? "secondary" : "primary"}
                 title="Đặt lịch ký"

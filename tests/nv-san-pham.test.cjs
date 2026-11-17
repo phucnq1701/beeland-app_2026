@@ -66,8 +66,8 @@ test("sơ đồ: khu theo thứ tự, tầng theo danh mục, tầng lạ xếp 
     vi_tri: [{ id: uid(30), ma: "01", ten: "" }],
     can: [
       { id: uid(1), ma_sp: "A", ky_hieu: "A-201", ma_khu: K, ten_khu: "Khu A", ma_tang: T2, ten_tang: "Tầng 2", vi_tri: uid(30), tt_mau: "#f00", tt_ten: "Lock" },
-      { id: uid(2), ma_sp: "B", ky_hieu: "A-X", ma_khu: K, ten_khu: "Khu A", ma_tang: TX, ten_tang: "Áp mái", mau_nen: "#123" },
-      { id: uid(3), ma_sp: "C", ky_hieu: "A-101", ma_khu: K, ten_khu: "Khu A", ma_tang: T1, ten_tang: "Tầng 1" },
+      { id: uid(2), ma_sp: "B", ky_hieu: "A-X", ma_khu: K, ten_khu: "Khu A", ma_tang: TX, ten_tang: "Áp mái", mau_nen: "#123", vi_tri: uid(30) },
+      { id: uid(3), ma_sp: "C", ky_hieu: "A-101", ma_khu: K, ten_khu: "Khu A", ma_tang: T1, ten_tang: "Tầng 1", vi_tri: uid(30) },
       { id: uid(4), ma_sp: "D", ma_khu: null },
     ],
   });
@@ -80,6 +80,45 @@ test("sơ đồ: khu theo thứ tự, tầng theo danh mục, tầng lạ xếp 
   assert.equal(u.MauNen, "#f00");
   assert.equal(u.ColorTT, "#f00");
   assert.equal(g[0].floor[2].detailFloor[0].MauNen, "#123");
+});
+
+test("buildGrid: mỗi tòa chỉ có cột vị trí mà căn của tòa dùng (giữ thứ tự danh mục); khớp uuid không phân biệt hoa thường", () => {
+  const KA = uid(40), KB = uid(41), T = uid(42);
+  const g = lib.buildGrid({
+    tang: [{ id: T, ma: "01", ten: "Tầng 1" }],
+    vi_tri: [
+      { id: uid(50), ma: "vt1", ten: "01" },
+      { id: uid(51), ma: "vt2", ten: "02" },
+      { id: uid(52), ma: "vt3", ten: "01" },
+      { id: uid(53), ma: "vt4", ten: "02" },
+    ],
+    can: [
+      { id: uid(5), ma_sp: "B2", ma_khu: KB, ten_khu: "B", ma_tang: T, vi_tri: uid(53).toUpperCase() },
+      { id: uid(6), ma_sp: "A1", ma_khu: KA, ten_khu: "A", ma_tang: T, vi_tri: uid(50) },
+      { id: uid(7), ma_sp: "B1", ma_khu: KB, ten_khu: "B", ma_tang: T, vi_tri: uid(52) },
+    ],
+  });
+  const byKhu = Object.fromEntries(g.map((b) => [b.tenKhu, b.location.map((l) => l.maVT)]));
+  deq(byKhu, { A: [uid(50)], B: [uid(52), uid(53)] });
+  // ô căn mang đúng id cột (để BlockGrid so chuỗi)
+  const b = g.find((x) => x.tenKhu === "B");
+  deq(b.floor[0].detailFloor.map((d) => d.MaVT).sort(), [uid(52), uid(53)].sort());
+});
+
+test("buildGrid: căn thiếu tầng / vị trí (hoặc vị trí không có trong danh mục) ⇒ nhóm Chưa xếp, không tạo hàng tầng trống", () => {
+  const K = uid(60), T = uid(61);
+  const g = lib.buildGrid({
+    tang: [{ id: T, ma: "01", ten: "Tầng 1" }],
+    vi_tri: [{ id: uid(62), ma: "vt1", ten: "01" }],
+    can: [
+      { id: uid(8), ma_sp: "OK", ky_hieu: "K-101", ma_khu: K, ten_khu: "K", ma_tang: T, vi_tri: uid(62) },
+      { id: uid(9), ma_sp: "NT", ky_hieu: "K-0501", ma_khu: K, ten_khu: "K", ma_tang: null, vi_tri: null },
+      { id: uid(10), ma_sp: "NV", ky_hieu: "K-102", ma_khu: K, ten_khu: "K", ma_tang: T, vi_tri: uid(99) },
+    ],
+  });
+  assert.equal(g.length, 1);
+  deq(g[0].floor.map((f) => f.detailFloor.map((d) => d.MaSP)), [["OK"]]);
+  deq(g[0].unplaced.map((d) => d.KyHieu), ["K-0501", "K-102"]);
 });
 
 /* ---------- service: gọi đúng endpoint + tham số (không còn rest/v1) ---------- */

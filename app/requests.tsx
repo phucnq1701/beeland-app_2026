@@ -268,7 +268,7 @@ export default function RequestsScreen({ embedded }: { embedded?: boolean }) {
         header={
           <AppHeader
             variant="soft"
-            title="Yêu cầu khách hàng"
+            title="Yêu cầu KH"
             subtitle={subtitle}
             hideBack={embedded}
             actions={

@@ -389,14 +389,28 @@ export default function BookingDetailScreen() {
             <ProgressSteps steps={BOOKING_STEPS} current={progress.current} cancelled={progress.cancelled} />
           </Card>
 
+          {/* Chỉ dòng có dữ liệu; "Đã thu" chỉ khi khác số ở thẻ đầu (thu dở / thu khác mức chuẩn) — không lặp lại */}
           <Card style={styles.card}>
-            <KeyValueRow label="Khách hàng" value={data?.customer?.tenKH || "—"} />
-            <KeyValueRow label="Mã khách hàng" value={data?.customer?.maSoKH || "—"} />
-            <KeyValueRow label="Điện thoại" value={maskPhone(data?.customer?.dienThoai) || "—"} />
-            <KeyValueRow label="Sàn giao dịch" value={data?.san?.tenCongTy || "—"} />
-            <KeyValueRow label="Nhân viên" value={data?.nhanVien || "—"} />
-            <KeyValueRow label="Đã thu" value={formatVND(data?.daThu)} />
-            <KeyValueRow label="Ngày booking" value={formatDateTime(data?.ngayGiuCho ?? data?.ngayNhap)} last />
+            {(
+              [
+                ["Khách hàng", data?.customer?.tenKH],
+                ["Mã khách hàng", data?.customer?.maSoKH],
+                ["Điện thoại", maskPhone(data?.customer?.dienThoai)],
+                ["Sàn giao dịch", data?.san?.tenCongTy],
+                ["Nhân viên", data?.nhanVien],
+                [
+                  "Đã thu",
+                  Number(data?.daThu) > 0 && Number(data?.daThu) !== Number(standardAmount)
+                    ? formatVND(Number(data?.daThu))
+                    : null,
+                ],
+                ["Ngày booking", formatDateTime(data?.ngayGiuCho ?? data?.ngayNhap)],
+              ] as [string, string | null | undefined][]
+            )
+              .filter(([, v]) => !!v && v !== "—")
+              .map(([l, v], i, arr) => (
+                <KeyValueRow key={l} label={l} value={v as string} last={i === arr.length - 1} />
+              ))}
           </Card>
 
           <CollapsibleSection title="Chính sách & thời gian" open={openSection.policy} onToggle={() => toggleSection("policy")}>

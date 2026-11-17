@@ -14,12 +14,11 @@ import {
   IconButton,
   Screen,
   SearchBar,
-  SegmentedControl,
   SkeletonList,
   Text,
 } from "@/components/ui";
 import { formatDate } from "@/lib/format";
-import { groupByDay, STATUS_OPTIONS, todayVN, type SigningRow, type SigningState } from "@/lib/signing";
+import { agendaSections, groupByDay, sortForAgenda, STATUS_OPTIONS, todayVN, type SigningRow, type SigningState } from "@/lib/signing";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, elevation, radius, space } from "@/theme";
 import { ProjectService } from "@/services/ProjectService";
@@ -28,7 +27,6 @@ import { SigningService } from "@/services/SigningService";
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
 const TAB_BAR_SPACE = 100;
 
-type Kind = "individual" | "enterprise";
 
 /**
  * Đặt lịch ký – như web (beeland/src/pages/sales/giao-dich/dat-lich-ky/index.tsx): tab Cá nhân / Doanh nghiệp,
@@ -37,7 +35,6 @@ type Kind = "individual" | "enterprise";
  */
 export default function SigningsScreen({ embedded }: { embedded?: boolean }) {
   const router = useRouter();
-  const [kind, setKind] = useState<Kind>("individual");
   const [view, setView] = useState<"list" | "calendar">("list");
   const [query, setQuery] = useState("");
   const debounced = useDebouncedValue(query, 300);
@@ -70,7 +67,7 @@ export default function SigningsScreen({ embedded }: { embedded?: boolean }) {
       else setRefreshing(true);
       try {
         const data = await SigningService.list({
-          isPersonal: kind === "individual",
+          isPersonal: null,
           state,
           search: debounced,
           projectId,
@@ -87,7 +84,7 @@ export default function SigningsScreen({ embedded }: { embedded?: boolean }) {
         }
       }
     },
-    [kind, state, debounced, projectId],
+    [state, debounced, projectId],
   );
 
   useEffect(() => {
@@ -106,6 +103,9 @@ export default function SigningsScreen({ embedded }: { embedded?: boolean }) {
   );
 
   const grouped = useMemo(() => groupByDay(rows), [rows]);
+  // Danh sách: lịch sắp tới (gần nhất trước) rồi lịch đã qua — mở module chủ yếu để xem lịch hôm nay / sắp tới
+  const agenda = useMemo(() => sortForAgenda(rows, today), [rows, today]);
+  const sections = useMemo(() => agendaSections(agenda, today), [agenda, today]);
   const counts = useMemo(
     () => Object.fromEntries(Object.entries(grouped.byDay).map(([k, v]) => [k, v.length])),
     [grouped],
@@ -125,7 +125,8 @@ export default function SigningsScreen({ embedded }: { embedded?: boolean }) {
     (r: SigningRow) => router.push({ pathname: "/signing/[id]", params: { id: String(r.UID ?? r.ID) } }),
     [router],
   );
-  const add = () => router.push({ pathname: "/signing/form", params: { kind, projectId: projectId ?? "" } });
+  // Loại khách (cá nhân / doanh nghiệp) form tự lấy theo khách của phiếu cọc / hợp đồng được chọn
+  const add = () => router.push({ pathname: "/signing/form", params: { projectId: projectId ?? "" } });
 
   const projectOptions = projects.map((p: any) => ({
     key: String(p.id),
@@ -136,15 +137,6 @@ export default function SigningsScreen({ embedded }: { embedded?: boolean }) {
 
   const toolbar = (
     <View style={styles.sticky}>
-      <SegmentedControl
-        variant="soft"
-        value={kind}
-        options={[
-          { value: "individual", label: "Cá nhân" },
-          { value: "enterprise", label: "Doanh nghiệp" },
-        ]}
-        onChange={setKind}
-      />
       <SearchBar
         value={query}
         onChangeText={setQuery}
@@ -252,9 +244,18 @@ export default function SigningsScreen({ embedded }: { embedded?: boolean }) {
       >
         {view === "list" ? (
           <FlatList
-            data={loading ? [] : rows}
+            data={loading ? [] : agenda}
             keyExtractor={(r) => String(r.UID ?? r.ID)}
-            renderItem={({ item }) => <SigningRowItem row={item} onPress={() => open(item)} />}
+            renderItem={({ item, index }) => (
+              <>
+                {sections[index] ? (
+                  <Text variant="label" color="textSecondary" style={styles.section}>
+                    {sections[index]}
+                  </Text>
+                ) : null}
+                <SigningRowItem row={item} today={today} onPress={() => open(item)} />
+              </>
+            )}
             ItemSeparatorComponent={Separator}
             ListHeaderComponent={toolbar}
             stickyHeaderIndices={[0]}
@@ -325,6 +326,7 @@ function Separator() {
 }
 
 const styles = StyleSheet.create({
+  section: { marginHorizontal: space.xl + space.xs, marginBottom: space.sm, marginTop: space.xs },
   headerActions: { flexDirection: "row", alignItems: "center", gap: space.sm },
   sticky: {
     backgroundColor: colors.bg,
