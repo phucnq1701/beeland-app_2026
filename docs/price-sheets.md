@@ -11,7 +11,7 @@ Tính năng **17** – chỉ tài khoản nội bộ (không có trong `AGENCY_F
 | Danh sách | `app/price-sheets.tsx` | `fn_nv_app_ptg_list`: tìm (mã phiếu / mã căn / sản phẩm), lọc dự án (uuid, 1 dự án), loại (Cao tầng / Thấp tầng), chip trạng thái kèm số đếm (`stats` máy chủ), cuộn tải thêm 20. Nút + chỉ hiện khi có quyền ADD. Nhúng được làm tab menu (`embedded`). |
 | Chi tiết | `app/price-sheet/[id].tsx` | `fn_nv_app_ptg_chi_tiet`; hiện **số đã lưu** (snapshot / payload – không tính lại). Chia sẻ PDF; menu: Sửa (quyền EDIT; máy chủ chặn phiếu đang / đã duyệt), Xoá mềm (DELETE, `fn_nv_app_ptg_xoa`). |
 | Lịch sử | `app/price-sheet/history/[id].tsx` | `fn_nv_app_ptg_phien_ban` – chỉ xem (khôi phục phiên bản làm trên web). |
-| Lập / sửa | `app/price-sheet/new.tsx` | 3 bước: Căn & chính sách → Lịch thanh toán → Khách hàng. Params `productId` (căn có sẵn) / `sheetId` (sửa). Không param ⇒ chọn căn ở bước 1 (`ProductPicker`: dự án + loại + tìm). Lối vào khác: chi tiết căn (`app/product/[id].tsx`) nút "Lập phiếu tính giá" – chỉ nội bộ có quyền ADD (`fn_nv_app_san_pham_chi_tiet` trả). |
+| Lập / sửa | `app/price-sheet/new.tsx` | 3 bước **như web** (từ 2026-11-17): **Khách hàng (bắt buộc, đầu tiên)** → Căn & chính sách → Lịch thanh toán (+ Tóm tắt, nút Lưu). Chưa chọn khách ⇒ "Tiếp tục" khoá ("Chọn khách hàng trước", `stepLocked` web; phiếu cũ mở sửa không khoá); lưu khi chưa có khách ⇒ web chặn + app quay về bước Khách hàng. Params `productId` (căn có sẵn) / `sheetId` (sửa). Không param ⇒ chọn căn ở bước 1 (`ProductPicker`: dự án + loại + tìm). Lối vào khác: chi tiết căn (`app/product/[id].tsx`) nút "Lập phiếu tính giá" – chỉ nội bộ có quyền ADD (`fn_nv_app_san_pham_chi_tiet` trả). |
 
 Khối dùng chung: `components/priceSheet/` (`useWebPriceSheet`, `WebRoundCard`, `PriceSheetBlocks`, `ProductPicker`,
 `sharePriceSheetPdf`). Service: `services/PriceSheetService.ts`. Cờ `PRICE_SHEET_CREATE_LOCKED` (`lib/featureConfig.ts`) = `false`
@@ -31,7 +31,8 @@ Khối dùng chung: `components/priceSheet/` (`useWebPriceSheet`, `WebRoundCard`
   điều kiện / phân bổ / tồn kho quà, tiến độ thanh toán, ngày tính / ngày hết hạn (≤ hạn chính sách), tính giá.
 - Endpoint đọc dùng qua `RPC_MAP`: `fn_nv_app_bang_gia_hien_hanh`, `_chinh_sach_list`, `_chinh_sach_chi_tiet`, `_lich_tt_list`,
   `_lich_tt_chi_tiet`, `_khuyen_mai_list`, `_quy_can_list`, `_cong_ty_ban_hang_cua_toi`, `_cong_ty_dai_ly`, `_tuy_chon_da_dung`,
-  `_ton_kho_qua`, `_ngoai_le_hieu_luc`, `_khach_hang_chon` / `_theo_id` (bảng đầy đủ: `lib/web/_shims/integrations/supabase/client.ts`).
+  `_ton_kho_qua`, `_ngoai_le_hieu_luc`, `_dieu_kien_khach` (tỉnh + số HĐMB của khách cho điều kiện mức «Tỉnh» / «Mua nhiều», bọc
+  `fn_sales_customer_conditions` web), `_khach_hang_chon` / `_theo_id` (bảng đầy đủ: `lib/web/_shims/integrations/supabase/client.ts`).
 - **Khác web có chủ đích:** số phiếu không xem trước (máy chủ cấp khi lưu); không có bước 360 khách hàng / người đồng sở hữu
   (giữ nguyên dữ liệu phiếu cũ khi sửa); không có "Lưu & gửi duyệt" (duyệt trên web).
 
@@ -60,3 +61,22 @@ Khối dùng chung: `components/priceSheet/` (`useWebPriceSheet`, `WebRoundCard`
 
 - Đã thử trên máy ảo lập (C6-2301) + sửa (S4-1401, đúng số đã lưu) và lưu trong ROLLBACK; **chưa bấm Lưu thật** (ghi prod).
 - Thấp tầng chưa có phiếu thật để đối chiếu.
+
+## Nhật ký đồng bộ web
+
+### 2026-11-17 — web main 10fe7251 (nhánh app `app-nv-dong-bo-web`, BE `app-nv-dieu-kien-khach`)
+- Web đổi (đồng nghiệp, không phải app): điều kiện mức chiết khấu **«Tỉnh»** + **«Mua nhiều»** (spec csbh-dieu-kien-toa-tinh B,
+  csbh-mua-nhieu); kho quà **không giới hạn** + **hạn mức theo nhóm** (`chonKho`); phiếu tính giá **bắt buộc chọn khách, bước Khách
+  hàng lên đầu** (web fb2f8c5d, chủ dự án chốt 16-11); đóng form không mang khách sang phiếu mới.
+- App: chạy lại `scripts/sync-web-pricing.cjs` (10 tệp lib/web, 3 tệp mới: `stepGate`, `useCustomerConditions`,
+  `services/sales/customer-conditions`); shim `priceSheetConstants` sửa tay theo thứ tự bước mới (+ `tests/web-steps.test.cjs` so
+  id + thứ tự với web); `RPC_MAP` thêm `fn_sales_customer_conditions` ⇒ `fn_nv_app_dieu_kien_khach`; `new.tsx` đổi thứ tự bước + khoá.
+- BE: SP E8 `usp_nv_app_dieu_kien_khach` bọc đúng `usp_sales_customer_conditions` (ĐÃ nạp BEELAND26; so app = web trên 2 khách,
+  ROLLBACK) + controller `NvAppDieuKienKhach` (**cần deploy API**).
+- **Thứ tự phát hành bắt buộc: deploy API trước, rồi mới phát hành app.** App mới trên API cũ: lời gọi điều kiện khách 404 ⇒ form web coi
+  là đang chờ (`custProv.failed` ⇒ `optionCtx.pending`) ⇒ không chọn / đối soát được mức chiết khấu.
+- Kiểm: 316 test (lib/web khớp web); harness form trên API local: chưa có khách ⇒ không lưu; chọn khách ⇒ tỉnh ["1"], 1 HĐMB; có khách ⇒
+  lưu đi tiếp đúng tổng 5.781.400.024; máy ảo: bước Khách hàng đầu + khoá "Tiếp tục".
+- Quay lại: app `git revert` 2 commit đợt này (lib/web về bản cũ + new.tsx); BE gỡ `NvAppDieuKienKhach*` + `DROP PROCEDURE
+  dbo.usp_nv_app_dieu_kien_khach` (chỉ app dùng). Lưu ý: quay lại app thì lệch web (phiếu lập trên app không bắt khách, không xét «Tỉnh» /
+  «Mua nhiều»).

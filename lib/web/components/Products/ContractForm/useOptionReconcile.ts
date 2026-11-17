@@ -25,7 +25,10 @@ export function useOptionReconcile<T extends { name?: string }>(
     : null;
   // R-2d: mức phải phân bổ (chính sách bật Áp dụng phân bổ CTBH ⇒ đối chiếu lại, bỏ tick mức chưa phân bổ)
   const reqKey = ctx.allocationRequiredIds?.length ? [...ctx.allocationRequiredIds].sort().join(",") : null;
-  const key = JSON.stringify([ctx.loaiCan ?? null, ctx.toaId ?? null, ctx.giaGomVAT ?? null, ctx.lichTTId ?? null, !!ctx.pending, ctx.ngay ?? null, usageKey, ctx.congTyBanHangId ?? null, byCoKey, reqKey]);
+  // CSBH đợt 2: tỉnh của khách (điều kiện Tỉnh) — đổi khách / đồng đứng tên ⇒ đối chiếu lại (review M2)
+  const tinhKey = ctx.tinhIds ? [...ctx.tinhIds].sort().join(",") : null;
+  // Mua nhiều: số HĐMB đổi (đổi khách / đồng đứng tên) ⇒ đối chiếu lại
+  const key = JSON.stringify([ctx.loaiCan ?? null, ctx.toaId ?? null, ctx.giaGomVAT ?? null, ctx.lichTTId ?? null, !!ctx.pending, ctx.ngay ?? null, usageKey, ctx.congTyBanHangId ?? null, byCoKey, reqKey, tinhKey, ctx.soHdmb ?? null]);
   const done = useRef<string | null>(null);
   const roundsRef = useRef(rounds);
   roundsRef.current = rounds;

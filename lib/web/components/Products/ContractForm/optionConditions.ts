@@ -48,6 +48,11 @@ export type OptionCtx = {
   priorPickIds?: string[];
   priorCongTyId?: string | null;
   priorHoldsSlot?: boolean;
+  /**
+   * ID các mức đang tick trên chứng từ (hạn mức nhóm, spec 2026-11-16-kho-han-muc-nhom): mức CHƯA tick thuộc nhóm có hạn mức bị trừ thêm số mức khác
+   * đang tick cùng nhóm (`group_line_id`). Mức đã tick không trừ — tránh bỏ tick dây chuyền; máy chủ (_sp_option_quota_guard) cộng dồn và chặn khi lưu.
+   */
+  chonKho?: string[];
   isPriceSheet?: boolean;
   /** Chỉ đối soát mức có phân bổ, không tự tick (đối soát bật chỉ vì người dùng đổi Công ty bán hàng trên chứng từ đã lưu) */
   onlyAllocated?: boolean;
@@ -70,6 +75,15 @@ export type OptionCtx = {
    * "CDT" (hoặc thiếu) = nhân viên chủ đầu tư ⇒ thấy hết (mức ngoài phân bổ hiện mờ kèm lý do).
    */
   viewer?: OptionViewer;
+  /**
+   * CSBH đợt 2 (spec csbh-dieu-kien-toa-tinh B): tỉnh (id tb_dm_tinh) của người đứng tên + đồng đứng tên + chủ / đồng chủ HĐ liên quan
+   * (fn_sales_customer_provinces). Thiếu = chưa xác định (chưa chọn khách / đang tải) ⇒ mức có điều kiện Tỉnh chưa chọn được.
+   */
+  tinhIds?: string[];
+  /**
+   * CSBH Mua nhiều (spec csbh-mua-nhieu): số HĐMB khách đang sở hữu (fn_sales_customer_conditions, trừ chứng từ đang lập). Thiếu = chưa xác định.
+   */
+  soHdmb?: number;
 };
 
 export type OptionViewer = "CDT" | "CTBH";
@@ -198,6 +212,8 @@ export const CONDITION_FIELD_LABELS: Record<ConditionField, string> = {
   TANG: "Tầng",
   TRANG_THAI: "Trạng thái giao dịch",
   TY_LE_TT_HD: "Tỷ lệ TT / Tổng giá trị HĐMB",
+  TINH: "Tỉnh",
+  MUA_NHIEU: "Mua nhiều",
 };
 
 export const OPS_BY_FIELD: Record<ConditionField, ConditionOp[]> = {
@@ -211,6 +227,8 @@ export const OPS_BY_FIELD: Record<ConditionField, ConditionOp[]> = {
   TANG: ["IN", "NOT_IN"],
   TRANG_THAI: ["IN", "NOT_IN"],
   TY_LE_TT_HD: ["GTE", "LTE", "GT", "LT", "EQ", "BETWEEN"],
+  TINH: ["IN"],
+  MUA_NHIEU: ["GTE"],
 };
 
 export const OP_LABELS: Record<ConditionOp, string> = {
@@ -233,6 +251,7 @@ const listText = (row: ConditionRow): string =>
 
 const rowText = (row: ConditionRow): string => {
   const label = CONDITION_FIELD_LABELS[row.Truong];
+  if (row.Truong === "MUA_NHIEU") return `${label} ≥ ${row.GiaTri} HĐMB`;
   if (row.Truong === "TY_LE_TT_HD") {
     return row.ToanTu === "BETWEEN"
       ? `${label} Trong khoảng ${row.GiaTri}% – ${row.GiaTriDen}%`
@@ -265,12 +284,23 @@ const ctxValue = (field: ConditionField, ctx: OptionCtx): string | number | unde
   if (field === "VI_TRI") return lc(ctx.viTriId) || undefined;
   if (field === "TANG") return lc(ctx.tangId) || undefined;
   // Tiêu chí tiến độ của Chính sách hoa hồng: chỉ máy chủ so (_agency_fee_unit_eval), form chứng từ không có bối cảnh
-  if (field === "TRANG_THAI" || field === "TY_LE_TT_HD") return undefined;
+  if (field === "TRANG_THAI" || field === "TY_LE_TT_HD" || field === "TINH" || field === "MUA_NHIEU") return undefined;
   return Number(ctx.giaGomVAT) > 0 ? Number(ctx.giaGomVAT) : undefined;
 };
 
 /** Một dòng: true / false, hoặc null khi bối cảnh thiếu dữ liệu của tiêu chí */
 const evalRow = (row: ConditionRow, ctx: OptionCtx): boolean | null => {
+  // Mua nhiều: số HĐMB đang sở hữu ≥ N
+  if (row.Truong === "MUA_NHIEU") {
+    if (ctx.soHdmb == null) return null;
+    return ctx.soHdmb >= Number(row.GiaTri);
+  }
+  // Tỉnh: nhiều giá trị ở bối cảnh — đạt khi bất kỳ tỉnh nào thuộc danh sách (toán tử chỉ Thuộc)
+  if (row.Truong === "TINH") {
+    if (!ctx.tinhIds) return null;
+    const ids = (Array.isArray(row.GiaTri) ? row.GiaTri : []).map((x) => String((x as CatalogRef)?.ID ?? "").trim());
+    return ctx.tinhIds.some((t) => ids.includes(String(t)));
+  }
   const v = ctxValue(row.Truong, ctx);
   if (v === undefined) return null;
   if (row.Truong === "GIA_GOM_VAT") {
@@ -320,8 +350,21 @@ export function matchOption(option: PolicyDiscountOption, ctx: OptionCtx): { ok:
     const inScope = !prj || ks.pham_vi.length === 0
       || ks.pham_vi.some((s) => lc(s.da_project_id) === prj && (!s.toa_id || !ctx.toaId || lc(s.toa_id) === lc(ctx.toaId)));
     if (!inScope) return { ok: false, reason: ctbh ? "Không áp dụng cho căn này" : `Kho «${ks.kho_ten}» không áp dụng cho căn này` };
-    if (ks.con_lai <= 0) return { ok: false, reason: ctbh ? "Đã hết số lượng" : `Hết hàng trong kho «${ks.kho_ten}»` };
-    if (!ctbh) kinfo = { info: `Kho «${ks.kho_ten}»: còn ${ks.con_lai}`, ...(ks.con_lai <= ks.nguong ? { warn: true } : {}) };
+    if (ks.khong_gioi_han || ks.con_lai == null) {
+      // Quà không giới hạn (spec 2026-11-17-kho-khong-gioi-han): kho không chặn, không cảnh báo
+      if (!ctbh) kinfo = { info: `Kho «${ks.kho_ten}»: không giới hạn` };
+    } else {
+      if (ks.con_lai <= 0) return { ok: false, reason: ctbh ? "Đã hết số lượng" : `Hết hàng trong kho «${ks.kho_ten}»` };
+      // Hạn mức nhóm: mức chưa tick ⇒ trừ các mức khác đang tick cùng nhóm
+      let conLai = ks.con_lai;
+      const id = String(option?.ID ?? "");
+      if (ks.group_line_id && ks.con_lai_nhom != null && ctx.chonKho?.length && !ctx.chonKho.includes(id)) {
+        const khac = ctx.chonKho.filter((x) => x !== id && ctx.khoStock?.[x]?.group_line_id === ks.group_line_id).length;
+        conLai = Math.min(conLai, ks.con_lai_nhom - khac);
+        if (conLai <= 0) return { ok: false, reason: ctbh ? "Đã hết số lượng" : `Hết số lượng nhóm trong kho «${ks.kho_ten}»` };
+      }
+      if (!ctbh) kinfo = { info: `Kho «${ks.kho_ten}»: còn ${conLai}`, ...(conLai <= (ks.nguong ?? 0) ? { warn: true } : {}) };
+    }
   }
   // R-2d: chính sách bật "Áp dụng phân bổ CTBH", dòng không miễn ⇒ mức không có PhanBo chỉ giữ được khi chứng từ đã giữ nó từ trước (sau tổng, trước phân bổ)
   if (lacksRequiredAllocation(option, ctx) && !(prior && ctx.priorHoldsSlot)) return { ok: false, reason: UNALLOCATED_REASON };
@@ -346,6 +389,8 @@ export function matchOption(option: PolicyDiscountOption, ctx: OptionCtx): { ok:
   // Lý do: thiếu dữ liệu của tiêu chí đầu tiên chưa xác định; còn lại là tóm tắt điều kiện
   const missing = rows.find((_, i) => results[i] === null);
   if (missing?.Truong === "LICH_TT") return { ok: false, reason: "Chưa chọn Lịch thanh toán" };
+  if (missing?.Truong === "TINH") return { ok: false, reason: "Chưa xác định tỉnh của khách hàng" };
+  if (missing?.Truong === "MUA_NHIEU") return { ok: false, reason: "Chưa xác định số HĐMB của khách hàng" };
   if (missing) return { ok: false, reason: `Chưa xác định ${CONDITION_FIELD_LABELS[missing.Truong]} của sản phẩm` };
   return { ok: false, reason: `Chỉ áp dụng: ${conditionText(dk)}` };
 }

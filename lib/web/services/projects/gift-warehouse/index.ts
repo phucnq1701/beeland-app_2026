@@ -12,6 +12,7 @@ import type {
   GiftWarehouseInput,
   GiftWarehouseRow,
   GiftWhGroupPatch,
+  GiftWhLinePatch,
   GiftWhLedgerPage,
   GiftWhLine,
   GiftWhLineInput,
@@ -45,6 +46,8 @@ const idOrNull = (v: unknown) => (v == null || v === "" ? null : lowerId(v));
 const str = (v: unknown) => (v == null ? "" : String(v));
 const strOrNull = (v: unknown) => (v == null || v === "" ? null : String(v));
 const num = (v: unknown, d = 0) => (v == null || v === "" || !Number.isFinite(Number(v)) ? d : Number(v));
+/** null / rỗng ⇒ null (quà không giới hạn: còn lại / sức chứa / ngưỡng null — không ép thành 0) */
+const numOrNull = (v: unknown) => (v == null || v === "" ? null : num(v));
 const trimOrNull = (v: string | null | undefined) => v?.trim() || null;
 const loai = (v: unknown): GiftLoai => (v === "percentage" ? "percentage" : "fixed_amount");
 const STATUSES: GiftWhStatus[] = ["NGUNG", "SAP_HIEU_LUC", "HET_HAN", "DANG_HIEU_LUC"];
@@ -71,13 +74,14 @@ const toLine = (r: Row): GiftWhLine => ({
   sl_chung_tu: num(r.sl_chung_tu),
   sl_xuat: num(r.sl_xuat),
   con_lai: r.con_lai == null ? null : num(r.con_lai),
-  con_lai_hieu_luc: num(r.con_lai_hieu_luc ?? r.con_lai),
+  con_lai_hieu_luc: (r.con_lai_hieu_luc ?? r.con_lai) == null ? null : num(r.con_lai_hieu_luc ?? r.con_lai),
   nguong_canh_bao: num(r.nguong_canh_bao),
   thu_tu: num(r.thu_tu, 1),
   is_active: r.is_active === true,
   co_xuat: r.co_xuat === true,
   dung_chung: r.dung_chung === true,
   la_dong_nhom: r.la_dong_nhom === true,
+  khong_gioi_han: r.khong_gioi_han === true,
 });
 
 const toWarehouse = (r: Row): GiftWarehouse => ({
@@ -175,14 +179,15 @@ export const toPolicyKhoStock = (r: Row): PolicyKhoStock => ({
   line_id: lowerId(r.line_id),
   kho_id: lowerId(r.kho_id),
   kho_ten: str(r.kho_ten),
-  con_lai: num(r.con_lai),
-  suc_chua: num(r.suc_chua),
-  nguong: num(r.nguong),
+  con_lai: numOrNull(r.con_lai),
+  suc_chua: numOrNull(r.suc_chua),
+  nguong: numOrNull(r.nguong),
   tu_ngay: str(r.tu_ngay),
   den_ngay: strOrNull(r.den_ngay),
   kho_active: r.kho_active === true,
   pham_vi: arr(r.pham_vi).map((s) => ({ da_project_id: lowerId(s.da_project_id), toa_id: idOrNull(s.toa_id) })),
   dung_chung: r.dung_chung === true,
+  khong_gioi_han: r.khong_gioi_han === true,
   group_line_id: idOrNull(r.group_line_id),
   con_lai_nhom: r.con_lai_nhom == null ? null : num(r.con_lai_nhom),
   suc_chua_nhom: r.suc_chua_nhom == null ? null : num(r.suc_chua_nhom),
@@ -267,7 +272,7 @@ export const giftWarehouseService = {
     );
   },
 
-  async updateLine(lineId: string, patch: { nguong_canh_bao?: number; is_active?: boolean; bo?: boolean }): Promise<GiftWarehouse> {
+  async updateLine(lineId: string, patch: GiftWhLinePatch): Promise<GiftWarehouse> {
     return toWarehouse(
       obj(await rpcRaw<unknown>("fn_gift_warehouse_line_update", { p_line_id: lineId, p_data: patch }, { fallback: "Không cập nhật được dòng quà" }))
     );
@@ -290,7 +295,7 @@ export const giftWarehouseService = {
     const r = obj(
       await rpcRaw<unknown>("fn_gift_warehouse_move", { p_line_id: lineId, p_data: movePayload(input) }, { fallback: "Không ghi được phát sinh kho" })
     );
-    return { move_id: lowerId(r.move_id), con_lai: num(r.con_lai), nguong_canh_bao: num(r.nguong_canh_bao), canh_bao: r.canh_bao === true };
+    return { move_id: lowerId(r.move_id), con_lai: numOrNull(r.con_lai), nguong_canh_bao: num(r.nguong_canh_bao), canh_bao: r.canh_bao === true };
   },
 
   async ledger(warehouseId: string, f: GiftWhLedgerFilter): Promise<GiftWhLedgerPage> {

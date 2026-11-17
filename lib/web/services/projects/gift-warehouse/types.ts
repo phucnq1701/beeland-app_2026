@@ -40,8 +40,8 @@ export interface GiftWhLine {
   sl_xuat: number;
   /** Còn lại của chính dòng: riêng (quà có số) / còn lại nhóm (dòng nhóm); null = quà dùng chung hạn mức nhóm */
   con_lai: number | null;
-  /** Còn lại dùng cho chứng từ: riêng / nhóm / min (spec 2026-11-16-kho-han-muc-nhom) */
-  con_lai_hieu_luc: number;
+  /** Còn lại dùng cho chứng từ: riêng / nhóm / min (spec 2026-11-16-kho-han-muc-nhom); null = quà không giới hạn */
+  con_lai_hieu_luc: number | null;
   nguong_canh_bao: number;
   thu_tu: number;
   is_active: boolean;
@@ -51,6 +51,19 @@ export interface GiftWhLine {
   dung_chung: boolean;
   /** Dòng nhóm (item_id null, nhóm có quà con trong kho): giữ hạn mức nhóm */
   la_dong_nhom: boolean;
+  /** Quà không giới hạn (spec 2026-11-17-kho-khong-gioi-han): con_lai / con_lai_hieu_luc null, không chặn, không cảnh báo */
+  khong_gioi_han: boolean;
+}
+
+/** Sửa một dòng quà (fn_gift_warehouse_line_update, không nhom). dat_so_luong / khong_gioi_han đi một mình (spec 2026-11-17-kho-khong-gioi-han) */
+export interface GiftWhLinePatch {
+  nguong_canh_bao?: number;
+  is_active?: boolean;
+  bo?: boolean;
+  /** Quà không giới hạn ⇒ có số (≥ số đã dùng) */
+  dat_so_luong?: number;
+  /** Quà có số riêng (nhóm không có hạn mức) ⇒ không giới hạn */
+  khong_gioi_han?: true;
 }
 
 /** Thao tác cả nhóm quà trong kho (fn_gift_warehouse_line_update với nhom = true): áp cho mọi quà con của nhóm, nguyên tử */
@@ -142,7 +155,8 @@ export interface GiftWhMoveInput {
 
 export interface GiftWhMoveResult {
   move_id: string;
-  con_lai: number;
+  /** null = quà không giới hạn */
+  con_lai: number | null;
   nguong_canh_bao: number;
   canh_bao: boolean;
 }

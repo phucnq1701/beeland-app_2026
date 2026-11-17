@@ -67,7 +67,11 @@ export type PolicyOptionAllocation = { CongTyId: string; TenCongTy?: string; SoL
 export type ConditionField =
   | "LOAI_CAN" | "TOA" | "LICH_TT" | "GIA_GOM_VAT" | "QUY_CAN" | "PHONG_NGU" | "VI_TRI" | "TANG"
   /** Chỉ Chính sách hoa hồng (2026-11-14): trạng thái phiếu (ID = mã pgc_trang_thai) + tỷ lệ thanh toán / tổng giá trị HĐMB (%) */
-  | "TRANG_THAI" | "TY_LE_TT_HD";
+  | "TRANG_THAI" | "TY_LE_TT_HD"
+  /** CSBH đợt 2 (2026-11-17): Tỉnh của khách (ID = id tb_dm_tinh), chỉ Thuộc; so với người đứng tên / đồng đứng tên / chủ – đồng chủ HĐ liên quan */
+  | "TINH"
+  /** CSBH Mua nhiều (2026-11-17): số HĐMB khách đang sở hữu ≥ N (GTE, số nguyên 1..99) */
+  | "MUA_NHIEU";
 export type ConditionOp = "IN" | "NOT_IN" | "GTE" | "LTE" | "GT" | "LT" | "EQ" | "BETWEEN";
 /** Giá trị danh mục: so theo ID, Ten chụp lại để hiển thị */
 export type CatalogRef = { ID: string; Ten: string };
