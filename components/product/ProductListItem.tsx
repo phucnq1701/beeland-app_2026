@@ -1,7 +1,8 @@
 import React, { memo } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { ListItem, MoneyText, StatusBadge, Text } from "@/components/ui";
+import { ListItem, MoneyText, StatusBadge } from "@/components/ui";
+import { formatArea } from "@/lib/format";
 import { colors, elevation, radius, space } from "@/theme";
 
 type Props = {
@@ -11,7 +12,7 @@ type Props = {
   onPress: (id: string) => void;
 };
 
-/** Card sản phẩm bo tròn: ký hiệu căn, tổng giá gồm PBT, trạng thái (màu từ danh mục). */
+/** Card sản phẩm bo tròn: ký hiệu căn, khu · diện tích · dự án, trạng thái (màu từ danh mục), giá nếu căn có giá riêng. */
 function ProductListItemBase({ product, statusLabel, statusColor, onPress }: Props) {
   const code = product?.KyHieu || product?.MaSP || "—";
   return (
@@ -20,7 +21,11 @@ function ProductListItemBase({ product, statusLabel, statusColor, onPress }: Pro
       <View style={styles.clip}>
         <ListItem
           title={String(code)}
-          subtitle={[product?.TenKhu, product?.TenDA].filter(Boolean).join(" · ") || undefined}
+          subtitle={
+            [product?.TenKhu, Number(product?.DienTichThongThuy) > 0 ? formatArea(product.DienTichThongThuy) : null, product?.TenDA]
+              .filter(Boolean)
+              .join(" · ") || undefined
+          }
           accessibilityLabel={`Căn ${code}${statusLabel ? ", " + statusLabel : ""}`}
           trailing={
             <>
@@ -30,12 +35,8 @@ function ProductListItemBase({ product, statusLabel, statusColor, onPress }: Pro
                   <StatusBadge label={statusLabel} color={statusColor} />
                 </View>
               ) : null}
-              {/* Căn chưa có giá (null / 0) ⇒ "Liên hệ" như màn chi tiết, không hiện "0 đ" */}
-              {Number(product?.TongGomPBT) > 0 ? (
-                <MoneyText value={product?.TongGomPBT} short variant="subhead" />
-              ) : (
-                <Text variant="subhead" color="textSecondary">Liên hệ</Text>
-              )}
+              {/* Giá căn phần lớn nằm ở bảng giá (xem ở chi tiết) ⇒ chỉ hiện khi căn có giá riêng; không "Liên hệ" / "0 đ" */}
+              {Number(product?.TongGomPBT) > 0 ? <MoneyText value={product?.TongGomPBT} short variant="subhead" /> : null}
             </>
           }
           onPress={() => onPress(product?.MaSP)}
