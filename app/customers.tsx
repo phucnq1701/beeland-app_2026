@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { LogIn, Plus, SearchX, Users } from "lucide-react-native";
 
@@ -8,15 +8,15 @@ import {
   Chip,
   EmptyState,
   ErrorState,
-  IconButton,
   Screen,
   SearchBar,
-  SegmentedControl,
   SkeletonList,
+  Text,
 } from "@/components/ui";
 import { CustomerListItem } from "@/components/customer/CustomerListItem";
+import { FilterPanel, FilterSection, FilterToggleButton } from "@/components/FilterPanel";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { colors, space } from "@/theme";
+import { colors, elevation, radius, space } from "@/theme";
 import { CustomerService } from "@/services/CustomerService";
 import { FORM } from "@/lib/permissions";
 import { usePerm } from "@/services/PermissionService";
@@ -28,6 +28,8 @@ type StatusOption = { id: string; label: string; value: string; color?: string }
 const PAGE_SIZE = 20;
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
 const TAB_BAR_SPACE = 100;
+/** Chiều cao nút nổi "Thêm khách hàng" + khoảng hở — để thẻ cuối không bị che. */
+const FAB_SPACE = 72;
 
 const TABS: { value: CustomerTab; label: string }[] = [
   { value: "all", label: "Tất cả" },
@@ -42,6 +44,9 @@ export default function CustomersScreen({ embedded }: { embedded?: boolean } = {
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedQuery = useDebouncedValue(searchQuery, 300);
   const [statusId, setStatusId] = useState("all");
+  // Loại khách (Cá nhân / Doanh nghiệp) nằm trong Bộ lọc — trước là thanh chuyển riêng, cùng hàng chip trạng thái
+  // thành 2 hàng lọc đều bắt đầu bằng "Tất cả" (2026-11-17, docs/app-api-rieng.md)
+  const [showFilters, setShowFilters] = useState(false);
   const [statusCatalogs, setStatusCatalogs] = useState<StatusOption[]>([]);
 
   const [dataKH, setDataKH] = useState<any[]>([]);
@@ -149,7 +154,19 @@ export default function CustomersScreen({ embedded }: { embedded?: boolean } = {
         placeholder="Tìm tên, SĐT, CCCD, email, mã KH…"
         variant="soft"
       />
-      <SegmentedControl variant="soft" value={activeTab} options={TABS} onChange={setActiveTab} />
+      {showFilters ? (
+        <FilterPanel activeCount={activeTab !== "all" ? 1 : 0} onReset={() => setActiveTab("all")}>
+          <FilterSection
+            title="Loại khách hàng"
+            options={TABS.map((t) => ({
+              key: t.value,
+              label: t.label,
+              selected: activeTab === t.value,
+              onPress: () => setActiveTab(t.value),
+            }))}
+          />
+        </FilterPanel>
+      ) : null}
       {statusCatalogs.length > 0 ? (
         // Tràn ra mép màn để bóng chip không bị cắt ở hai đầu
         <ScrollView
@@ -229,8 +246,11 @@ export default function CustomersScreen({ embedded }: { embedded?: boolean } = {
             // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
             hideBack={embedded}
             actions={
-              // Thêm theo nhóm quyền (/customers/list ADD) như web
-              perm.can("ADD") ? <IconButton icon={Plus} variant="soft" accessibilityLabel="Thêm khách hàng" onPress={addCustomer} /> : undefined
+              <FilterToggleButton
+                open={showFilters}
+                activeCount={activeTab !== "all" ? 1 : 0}
+                onPress={() => setShowFilters((v) => !v)}
+              />
             }
           />
         }
@@ -257,8 +277,28 @@ export default function CustomersScreen({ embedded }: { embedded?: boolean } = {
             />
           }
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: embedded ? TAB_BAR_SPACE : space.xxl }}
+          // Chừa chỗ cho nút nổi "Thêm khách hàng"
+          contentContainerStyle={{ paddingBottom: (embedded ? TAB_BAR_SPACE : space.xxl) + (perm.can("ADD") ? FAB_SPACE : 0) }}
         />
+        {/* Thêm theo nhóm quyền (/customers/list ADD) như web — nút nổi như "Thêm lịch ký" (đầu màn chỉ còn Bộ lọc,
+            tiêu đề không bị cắt) */}
+        {perm.can("ADD") ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Thêm khách hàng"
+            onPress={addCustomer}
+            style={({ pressed }) => [
+              styles.fab,
+              { bottom: embedded ? TAB_BAR_SPACE : space.xl },
+              pressed ? styles.fabPressed : null,
+            ]}
+          >
+            <Plus size={20} color={colors.onPrimary} />
+            <Text variant="subhead" color="onPrimary">
+              Thêm khách hàng
+            </Text>
+          </Pressable>
+        ) : null}
       </Screen>
     </>
   );
@@ -279,5 +319,18 @@ const styles = StyleSheet.create({
   chipsScroll: { marginHorizontal: -space.xl },
   chips: { gap: space.sm, paddingHorizontal: space.xl, paddingVertical: space.xs },
   separator: { height: space.sm + 2 },
+  fab: {
+    position: "absolute",
+    right: space.xl,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    minHeight: 52,
+    paddingHorizontal: space.xl,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    ...elevation.overlay,
+  },
+  fabPressed: { backgroundColor: colors.primaryPressed },
   footerSpinner: { paddingVertical: space.lg },
 });

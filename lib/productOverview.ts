@@ -51,6 +51,17 @@ export type OverviewUnit = {
 export type OverviewFloor = { id: string; name: string; floorNumber: number; units: OverviewUnit[]; totalUnits: number };
 
 /**
+ * Tên nhóm tầng: kèm tòa / khu để không lẫn tầng cùng số của tòa khác ("C6 · Tầng 23");
+ * tên tầng chỉ là số ("23") ⇒ thêm chữ "Tầng".
+ */
+export function floorLabel(tenKhu: unknown, tenTang: unknown): string {
+  const raw = String(tenTang ?? '').trim();
+  const floor = !raw ? '' : /^tầng/i.test(raw) ? raw : `Tầng ${raw}`;
+  const block = String(tenKhu ?? '').trim();
+  return [block, floor].filter(Boolean).join(' · ');
+}
+
+/**
  * Gom căn theo khu + tầng (giữ thứ tự tầng của dữ liệu – đã sắp theo danh mục tầng),
  * trong tầng sắp theo số căn tự nhiên; giá hiển thị dạng "2.500.000.000".
  * `statusOf` cho phép nhận trạng thái theo MÃ danh mục (mặc định: theo tên TenTT).
@@ -65,7 +76,7 @@ export function buildOverviewFloors(
     (raw?.floor || []).forEach((floor: any) => {
       const key = `${raw.maKhu}_${floor.maTang}`;
       if (!floorsMap[key]) {
-        floorsMap[key] = { id: key, name: floor.tenTang, floorNumber: Number(floor.maTang), units: [], totalUnits: 0 };
+        floorsMap[key] = { id: key, name: floorLabel(raw.tenKhu, floor.tenTang), floorNumber: Number(floor.maTang), units: [], totalUnits: 0 };
       }
       const units: OverviewUnit[] = (floor.detailFloor || []).map((item: any) => ({
         id: item.MaSP,

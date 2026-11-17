@@ -37,6 +37,15 @@ test("buildOverviewFloors groups by block+floor, sorts by column and formats pri
   assert.equal(floors[1].units[0].status, "hold");
 });
 
+test("floor names carry the block so same-numbered floors of different towers are distinct", () => {
+  const floors = plain(o.buildOverviewFloors([
+    { rawBlock: { maKhu: "k6", tenKhu: "C6", floor: [{ maTang: "23", tenTang: "23", detailFloor: [{ MaSP: "x", KyHieu: "C6-2301", MaVT: "1" }] }] } },
+  ]));
+  assert.equal(floors[0].name, "C6 · Tầng 23");
+  assert.equal(o.floorLabel("", "Tầng 5"), "Tầng 5");
+  assert.equal(o.floorLabel("S3", ""), "S3");
+});
+
 test("buildOverviewFloors tolerates missing blocks/floors", () => {
   assert.deepEqual(plain(o.buildOverviewFloors([{}, { rawBlock: {} }, null])), []);
 });

@@ -12,7 +12,7 @@ type Props = {
   onPress: (id: string) => void;
 };
 
-/** Card sản phẩm bo tròn: ký hiệu căn, khu · diện tích · dự án, trạng thái (màu từ danh mục), giá nếu căn có giá riêng. */
+/** Card sản phẩm bo tròn: ký hiệu căn, khu · diện tích (danh sách luôn theo 1 dự án ⇒ không lặp tên dự án), trạng thái (màu từ danh mục), giá nếu căn có giá riêng. */
 function ProductListItemBase({ product, statusLabel, statusColor, onPress }: Props) {
   const code = product?.KyHieu || product?.MaSP || "—";
   return (
@@ -22,7 +22,7 @@ function ProductListItemBase({ product, statusLabel, statusColor, onPress }: Pro
         <ListItem
           title={String(code)}
           subtitle={
-            [product?.TenKhu, Number(product?.DienTichThongThuy) > 0 ? formatArea(product.DienTichThongThuy) : null, product?.TenDA]
+            [product?.TenKhu, Number(product?.DienTichThongThuy) > 0 ? formatArea(product.DienTichThongThuy) : null]
               .filter(Boolean)
               .join(" · ") || undefined
           }

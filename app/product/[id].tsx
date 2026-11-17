@@ -168,6 +168,13 @@ export default function ProductDetailScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lockUntil, remainingSeconds]);
 
+  // Cuộn qua ảnh đầu trang ⇒ hiện thanh tiêu đề nền đặc (nút quay lại không còn nổi đè lên nội dung)
+  const [compactHeader, setCompactHeader] = useState(false);
+  const onScroll = (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+    const next = e.nativeEvent.contentOffset.y > HERO_HEIGHT - SHEET_OVERLAP;
+    if (next !== compactHeader) setCompactHeader(next);
+  };
+
   const back = (
     <View style={[styles.back, { top: insets.top + space.sm }]}>
       <IconButton icon={ChevronLeft} variant="glass" accessibilityLabel="Quay lại" onPress={() => router.back()} />
@@ -263,7 +270,7 @@ export default function ProductDetailScreen() {
       ["Hướng cửa", txt(data?.TenHuongCua)],
       ["Hướng ban công", txt(data?.TenHuongBC)],
       ["View", txt(data?.TenView)],
-      ["Diện tích thông thủy", Number(data?.DienTichThongThuy) > 0 ? formatArea(data.DienTichThongThuy) : null],
+      // Diện tích thông thủy đã có ở "Chi tiết giá" (PriceBreakdown luôn hiện) ⇒ không lặp ở đây
       ["Diện tích tim tường", Number(data?.DTTimDuong) > 0 ? formatArea(data.DTTimDuong) : null],
     ] as [string, string | null][]
   ).filter((r): r is [string, string] => !!r[1]);
@@ -271,9 +278,9 @@ export default function ProductDetailScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <FocusStatusBar style="light" />
+      <FocusStatusBar style={compactHeader ? "dark" : "light"} />
       <View style={styles.root}>
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView contentContainerStyle={styles.scroll} onScroll={onScroll} scrollEventThrottle={32}>
           <View testID="product-hero">
             <ImageCarousel
               images={images}
@@ -344,7 +351,17 @@ export default function ProductDetailScreen() {
             </View>
           </View>
         </ScrollView>
-        {back}
+        {compactHeader ? (
+          <View style={[styles.compactBar, { paddingTop: insets.top }]}>
+            <IconButton icon={ChevronLeft} variant="soft" accessibilityLabel="Quay lại" onPress={() => router.back()} />
+            <Text variant="heading" numberOfLines={1} style={styles.flex} accessibilityRole="header">
+              {data?.KyHieu ? `Căn ${data.KyHieu}` : "Sản phẩm"}
+            </Text>
+            {statusName ? <StatusBadge label={statusName} color={data?.ColorTT || data?.MauNen} /> : null}
+          </View>
+        ) : (
+          back
+        )}
 
         {isLocked || txPerm?.lock || (txPerm?.booking && data?.isHienThiBook) ? (
         <BottomActionBar>
@@ -421,6 +438,19 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { paddingBottom: space.xxl },
   back: { position: "absolute", left: space.lg },
+  compactBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.sm,
+    backgroundColor: colors.bg,
+    ...elevation.soft,
+  },
   sheet: {
     marginTop: -SHEET_OVERLAP,
     paddingTop: space.xxl,

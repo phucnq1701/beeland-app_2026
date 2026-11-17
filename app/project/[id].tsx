@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -9,7 +9,11 @@ import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import { ImageCarousel } from "@/components/product/ImageCarousel";
 import { FocusStatusBar } from "@/components/ui/FocusStatusBar";
 import { IconButton, Text } from "@/components/ui";
+import { buildOverviewFloors, overviewSummary } from "@/lib/productOverview";
+import { unitStatusOf } from "@/lib/productRealtime";
 import { colors, elevation, radius, space } from "@/theme";
+import { FilterService } from "@/services/FilterService";
+import { PriceServices } from "@/services/PriceServices";
 
 const DEFAULT_PROJECT_IMAGE =
   "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/css461kotbkumrm0wjakm";
@@ -18,6 +22,14 @@ const DEFAULT_PROJECT_IMAGE =
 const SHEET_OVERLAP = radius.x3;
 
 type Option = { id: string; title: string; subtitle: string; icon: LucideIcon; onPress: () => void };
+type Stat = { key: string; label: string; count: number };
+
+/** Ô số căn theo nhóm: chữ màu theo nhóm (Mở bán xanh, Giữ chỗ vàng, Đã bán đỏ), Tổng màu chữ thường. */
+const STAT_COLOR: Record<string, string> = {
+  available: colors.success,
+  hold: colors.warning,
+  sold: colors.danger,
+};
 
 export default function ProjectOptionsScreen() {
   const { project } = useLocalSearchParams<{ project: any }>();
@@ -30,6 +42,30 @@ export default function ProjectOptionsScreen() {
   } catch {
     projectData = null;
   }
+
+  // Số căn theo trạng thái — cùng dữ liệu + luật với Sản phẩm › Tổng quan (sơ đồ fn_nv_app_so_do + danh mục trạng thái)
+  const projectCode = projectData?.MaDA;
+  const [stats, setStats] = useState<Stat[] | null>(null);
+  const [statsFailed, setStatsFailed] = useState(false);
+  useEffect(() => {
+    if (projectCode == null) return;
+    let alive = true;
+    (async () => {
+      const [grid, catalog] = await Promise.all([PriceServices.getBlock({ maDA: projectCode }), FilterService.getStatusSP({})]);
+      if (!alive) return;
+      if (grid?.error) {
+        setStatsFailed(true);
+        return;
+      }
+      const blocks = (grid?.data || []).filter((b: any) => b?.maKhu !== -1).map((b: any) => ({ rawBlock: b }));
+      const floors = buildOverviewFloors(blocks, (item) => unitStatusOf(item, catalog?.data || []));
+      // Bỏ nhóm Khóa khi không có căn nào (đỡ chật)
+      setStats(overviewSummary(floors).filter((x) => x.key !== "blocked" || x.count > 0));
+    })().catch(() => alive && setStatsFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [projectCode]);
 
   if (!projectData) return null;
 
@@ -64,7 +100,11 @@ export default function ProjectOptionsScreen() {
     },
   ];
 
-  const place = [projectData.district, projectData.city].filter(Boolean).join(", ");
+  const placeRaw = [projectData.district, projectData.city].filter(Boolean).join(", ");
+  // Địa chỉ trùng tên dự án (dữ liệu chưa nhập địa chỉ) ⇒ không lặp dòng
+  const place =
+    placeRaw && placeRaw.trim().toLowerCase() !== String(projectData.TenDA ?? "").trim().toLowerCase() ? placeRaw : "";
+  const openProducts = () => router.push(`/products?MaDA=${projectData.MaDA}` as any);
 
   return (
     <>
@@ -101,6 +141,35 @@ export default function ProjectOptionsScreen() {
             </View>
           </ImageCarousel>
           <View style={styles.sheet}>
+            {!statsFailed ? (
+              <>
+                <HomeSectionHeader title="Tình trạng căn" actionLabel="Xem căn" onAction={openProducts} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    stats ? `Tình trạng căn: ${stats.map((x) => `${x.label} ${x.count}`).join(", ")}` : "Đang tải tình trạng căn"
+                  }
+                  onPress={openProducts}
+                  style={({ pressed }) => [styles.stats, pressed ? styles.pressed : null]}
+                >
+                  {(stats ?? [
+                    { key: "all", label: "Tổng", count: -1 },
+                    { key: "available", label: "Mở bán", count: -1 },
+                    { key: "hold", label: "Giữ chỗ", count: -1 },
+                    { key: "sold", label: "Đã bán", count: -1 },
+                  ]).map((x) => (
+                    <View key={x.key} style={styles.stat}>
+                      <Text variant="title" numeric style={{ color: STAT_COLOR[x.key] ?? colors.text }}>
+                        {x.count < 0 ? "–" : x.count}
+                      </Text>
+                      <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                        {x.label}
+                      </Text>
+                    </View>
+                  ))}
+                </Pressable>
+              </>
+            ) : null}
             <HomeSectionHeader title="Chức năng" />
             <View style={styles.options}>
               {options.map((o) => {
@@ -165,6 +234,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   options: { gap: space.sm + 2 },
+  stats: {
+    flexDirection: "row",
+    paddingVertical: space.lg,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.xxl,
+    backgroundColor: colors.surface,
+    ...elevation.soft,
+  },
+  stat: { flex: 1, alignItems: "center", gap: 2 },
   option: {
     flexDirection: "row",
     alignItems: "center",

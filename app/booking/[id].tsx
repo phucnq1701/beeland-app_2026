@@ -238,7 +238,15 @@ export default function BookingDetailScreen() {
     }
   };
 
-  const header = <AppHeader variant="soft" title={data?.soPhieu ?? "Chi tiết booking"} />;
+  // Tiêu đề theo căn (dễ nhận ra hơn mã "BK-BF228DD95B"), số phiếu ở dòng phụ — như màn Đặt cọc / Hợp đồng
+  const headerCode = data?.product?.ky_hieu ?? data?.product?.ma_sp ?? null;
+  const header = (
+    <AppHeader
+      variant="soft"
+      title={headerCode ? `Booking ${headerCode}` : "Chi tiết booking"}
+      subtitle={data?.soPhieu ?? undefined}
+    />
+  );
 
   if (loading && !data) {
     return (
@@ -332,7 +340,8 @@ export default function BookingDetailScreen() {
               <Button
                 variant="secondary"
                 icon={Upload}
-                title="Chứng từ"
+                // "Tải chứng từ" (tải lên) — phân biệt với mục "Chứng từ" (xem) trong trang
+                title="Tải chứng từ"
                 loading={isUploading}
                 onPress={() => setUploadSheet(true)}
                 style={canCollect ? styles.pill : [styles.flex, styles.pill]}

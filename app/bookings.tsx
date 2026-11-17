@@ -21,7 +21,8 @@ import {
   SearchBar,
   SkeletonList,
 } from "@/components/ui";
-import { BOOKING_TABS, BookingTabKey, bookingStateBadge, statesForTab } from "@/lib/bookingState";
+import { BOOKING_TABS, BookingTabKey, bookingStateBadge, bookingStateGroup, statesForTab } from "@/lib/bookingState";
+import { getBookingProgress } from "@/lib/bookingProgress";
 import { formatDate } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, elevation, radius, space } from "@/theme";
@@ -315,7 +316,14 @@ export default function BookingsScreen({
             leading={<Avatar name={booking.khachHang || "?"} size={44} round />}
             title={booking.khachHang || "—"}
             subtitle={[booking.maSanPham || booking.soPhieu, booking.tenDA].filter(Boolean).join(" · ")}
-            meta={[booking.soPhieu, formatDate(booking.ngayGiuCho)].filter(Boolean).join(" · ")}
+            // Ngày lên trước số phiếu (trước đây ngày bị cắt "17/11/…"); booking chờ duyệt đã hết hạn giữ chỗ ⇒ dòng đỏ "… · Hết hạn"
+            // (cùng luật băng "Đã hết hạn giữ chỗ" ở màn chi tiết — lib/bookingProgress)
+            meta={
+              holdExpired(booking)
+                ? [formatDate(booking.ngayGiuCho), "Hết hạn"].filter(Boolean).join(" · ")
+                : [formatDate(booking.ngayGiuCho), booking.soPhieu].filter(Boolean).join(" · ")
+            }
+            metaDanger={holdExpired(booking)}
             trailing={
               <>
                 {/* Bọc lại để badge căn phải (Badge tự alignSelf flex-start) */}
@@ -461,6 +469,15 @@ export default function BookingsScreen({
       </Screen>
     </>
   );
+}
+
+/** Booking chờ duyệt, đang ở giai đoạn giữ chỗ, chưa thu đủ và đã quá `het_han_luc` — như màn chi tiết booking. */
+function holdExpired(b: any) {
+  if (bookingStateGroup(b?.state) !== "PENDING") return false;
+  return getBookingProgress(
+    { giaiDoan: b?.giai_doan, daThu: b?.da_thu, tienGiuCho: b?.tien_booking, state: b?.state, hetHanLuc: b?.het_han_luc },
+    Date.now()
+  ).expired;
 }
 
 function Separator() {
