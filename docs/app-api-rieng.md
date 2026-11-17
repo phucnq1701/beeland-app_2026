@@ -203,3 +203,12 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
   thông báo, chat, tài liệu). API local: mọi lệnh 200. CHƯA thử tài khoản đại lý trên máy ảo (không có mật khẩu đại lý thử).
 - docs/*.md + CLAUDE.md viết lại theo bộ API riêng. tsc sạch, lint 0 lỗi, 304 test đạt, lib/web khớp web.
 - Còn chờ: user build + restart API thật (SP 76–E6 + endpoint C# L2–L4), thử ảnh / tệp chat trên API thật, thử bằng tài khoản đại lý.
+
+### 2026-11-17 — Phân quyền như web (menu + nút) — nhánh `app-nv-phan-quyen`
+- User chốt: ánh xạ module ↔ màn web; máy chủ chặn như web (không thêm chặn mới); đại lý giữ như cũ. Chi tiết + cách quay lại:
+  `docs/permissions.md`.
+- BE `app-nv-phan-quyen` 195881d1: SP E7 `usp_nv_app_quyen_man` (ĐÃ nạp BEELAND26) + endpoint `fn_nv_app_quyen_man`; phiên app trả
+  `menu` / `menu_cong_ty` (C# — cần deploy API). Trước khi deploy: app như cũ.
+- Đính chính rà quyền: lưu KH CÓ kiểm ADD/EDIT ở lõi `_ds5_customer_save` (p_scoped = 1, app + web đều truyền).
+- Phát hiện (chưa làm, chờ user): `lib/web` lệch web main 17-11 (~10 tệp form tính giá / booking do đồng nghiệp đổi chính sách bán
+  hàng) ⇒ test "lib/web khớp nguyên văn web" đỏ; cần 1 đợt đồng bộ riêng.
