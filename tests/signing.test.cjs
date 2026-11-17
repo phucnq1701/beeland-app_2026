@@ -130,3 +130,30 @@ test("sortForAgenda: sắp tới (gần nhất trước) rồi đã qua (mới n
   ];
   assert.deepEqual(plain(s.sortForAgenda(rows, "2026-11-17").map((r) => r.id)), ["f", "d", "b", "e", "a", "c"]);
 });
+
+test("dayLabel: Hôm nay / Ngày mai / Hôm qua, còn lại thứ + ngày (khác năm mới thêm năm); shiftShort bỏ giờ trong ngoặc", () => {
+  assert.equal(s.dayLabel("2026-11-17", "2026-11-17"), "Hôm nay");
+  assert.equal(s.dayLabel("2026-11-18", "2026-11-17"), "Ngày mai");
+  assert.equal(s.dayLabel("2026-11-16", "2026-11-17"), "Hôm qua");
+  assert.equal(s.dayLabel("2026-11-19", "2026-11-17"), "T5, 19/11");
+  assert.equal(s.dayLabel("2026-11-22", "2026-11-17"), "CN, 22/11");
+  assert.equal(s.dayLabel("2027-01-04", "2026-11-17"), "T2, 04/01/2027");
+  assert.equal(s.dayLabel("", "2026-11-17"), "");
+  assert.equal(s.shiftShort("Ca sáng 1 (08:00-10:00)"), "Ca sáng 1");
+  assert.equal(s.shiftShort("Ca chiều"), "Ca chiều");
+  assert.equal(s.shiftShort(null), "");
+});
+
+test("agendaSections: nhãn Sắp tới ở dòng đầu, Đã qua ở dòng đã qua đầu tiên", () => {
+  const rows = s.sortForAgenda(
+    [
+      { id: "a", NgayBookKy: "2026-11-10T08:00:00" },
+      { id: "b", NgayBookKy: "2026-11-19T08:00:00" },
+      { id: "c", NgayBookKy: null },
+    ],
+    "2026-11-17"
+  );
+  assert.deepEqual(plain(s.agendaSections(rows, "2026-11-17")), { 0: "Sắp tới", 1: "Đã qua" });
+  assert.deepEqual(plain(s.agendaSections([{ NgayBookKy: "2026-11-10T08:00:00" }], "2026-11-17")), { 0: "Đã qua" });
+  assert.deepEqual(plain(s.agendaSections([], "2026-11-17")), {});
+});

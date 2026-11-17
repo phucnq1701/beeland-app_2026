@@ -18,7 +18,7 @@ import {
   Text,
 } from "@/components/ui";
 import { formatDate } from "@/lib/format";
-import { groupByDay, sortForAgenda, STATUS_OPTIONS, todayVN, type SigningRow, type SigningState } from "@/lib/signing";
+import { agendaSections, groupByDay, sortForAgenda, STATUS_OPTIONS, todayVN, type SigningRow, type SigningState } from "@/lib/signing";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, elevation, radius, space } from "@/theme";
 import { ProjectService } from "@/services/ProjectService";
@@ -105,6 +105,7 @@ export default function SigningsScreen({ embedded }: { embedded?: boolean }) {
   const grouped = useMemo(() => groupByDay(rows), [rows]);
   // Danh sách: lịch sắp tới (gần nhất trước) rồi lịch đã qua — mở module chủ yếu để xem lịch hôm nay / sắp tới
   const agenda = useMemo(() => sortForAgenda(rows, today), [rows, today]);
+  const sections = useMemo(() => agendaSections(agenda, today), [agenda, today]);
   const counts = useMemo(
     () => Object.fromEntries(Object.entries(grouped.byDay).map(([k, v]) => [k, v.length])),
     [grouped],
@@ -245,7 +246,16 @@ export default function SigningsScreen({ embedded }: { embedded?: boolean }) {
           <FlatList
             data={loading ? [] : agenda}
             keyExtractor={(r) => String(r.UID ?? r.ID)}
-            renderItem={({ item }) => <SigningRowItem row={item} onPress={() => open(item)} />}
+            renderItem={({ item, index }) => (
+              <>
+                {sections[index] ? (
+                  <Text variant="label" color="textSecondary" style={styles.section}>
+                    {sections[index]}
+                  </Text>
+                ) : null}
+                <SigningRowItem row={item} today={today} onPress={() => open(item)} />
+              </>
+            )}
             ItemSeparatorComponent={Separator}
             ListHeaderComponent={toolbar}
             stickyHeaderIndices={[0]}
@@ -316,6 +326,7 @@ function Separator() {
 }
 
 const styles = StyleSheet.create({
+  section: { marginHorizontal: space.xl + space.xs, marginBottom: space.sm, marginTop: space.xs },
   headerActions: { flexDirection: "row", alignItems: "center", gap: space.sm },
   sticky: {
     backgroundColor: colors.bg,

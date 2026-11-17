@@ -255,3 +255,31 @@ export function sortForAgenda<T extends { NgayBookKy?: string | null }>(rows: T[
   const past = rows.filter((r) => key(r) && dateKey(key(r)) < today).sort((a, b) => key(b).localeCompare(key(a)));
   return [...upcoming, ...past, ...rows.filter((r) => !key(r))];
 }
+
+/** Nhãn ngày gần gũi cho danh sách lịch ký: Hôm nay / Ngày mai / Hôm qua, còn lại "T5, 19/11" (khác năm hiện tại thì thêm năm). */
+export function dayLabel(dk: string, today: string): string {
+  if (!dk) return '';
+  const d = Date.parse(`${dk}T00:00:00Z`);
+  const t = Date.parse(`${today}T00:00:00Z`);
+  if (Number.isNaN(d) || Number.isNaN(t)) return dk;
+  const diff = Math.round((d - t) / 86400000);
+  if (diff === 0) return 'Hôm nay';
+  if (diff === 1) return 'Ngày mai';
+  if (diff === -1) return 'Hôm qua';
+  const [y, m, dd] = dk.split('-');
+  const wd = WEEKDAY_SHORT[(new Date(d).getUTCDay() + 6) % 7];
+  return `${wd}, ${dd}/${m}${y !== today.slice(0, 4) ? `/${y}` : ''}`;
+}
+
+/** "Ca sáng 1 (08:00-10:00)" → "Ca sáng 1" (giờ đã hiện riêng) */
+export const shiftShort = (name: unknown): string => String(name ?? '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+
+/** Vị trí đặt nhãn mục trong danh sách đã sortForAgenda: dòng đầu "Sắp tới" (nếu có), dòng đã qua đầu tiên "Đã qua". */
+export function agendaSections<T extends { NgayBookKy?: string | null }>(rows: T[], today: string): Record<number, string> {
+  const out: Record<number, string> = {};
+  const isPast = (r: T) => !r?.NgayBookKy || dateKey(r.NgayBookKy) < today;
+  const firstPast = rows.findIndex(isPast);
+  if (rows.length && firstPast !== 0) out[0] = 'Sắp tới';
+  if (firstPast >= 0) out[firstPast] = 'Đã qua';
+  return out;
+}

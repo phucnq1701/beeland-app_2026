@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native";
 
 import { Badge, ListItem, Text } from "@/components/ui";
 import { formatDate } from "@/lib/format";
-import { statusMeta, timeOf, type SigningRow } from "@/lib/signing";
+import { dateKey, dayLabel, shiftShort, statusMeta, timeOf, type SigningRow } from "@/lib/signing";
 import { colors, elevation, radius, space } from "@/theme";
 
 /** 1 lịch ký dạng card bo tròn (danh sách + chế độ lịch). Cột phải: trạng thái trên, giờ ký dưới. */
@@ -11,14 +11,22 @@ function SigningRowItemBase({
   row,
   onPress,
   showDate = true,
+  today,
 }: {
   row: SigningRow;
   onPress: () => void;
   showDate?: boolean;
+  /** Có thì ngày hiện dạng gần gũi (Hôm nay / Ngày mai / T5, 19/11) */
+  today?: string;
 }) {
   const meta = statusMeta(row.State);
   const when = row.NgayBookKy
-    ? [showDate ? formatDate(row.NgayBookKy) : null, row.TenCa || null].filter(Boolean).join(" · ")
+    ? [
+        showDate ? (today ? dayLabel(dateKey(row.NgayBookKy), today) : formatDate(row.NgayBookKy)) : null,
+        shiftShort(row.TenCa) || null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
     : "Chưa có ngày ký";
   return (
     // Bóng ở lớp ngoài, bo + cắt ở lớp trong (iOS: overflow hidden làm mất bóng)
