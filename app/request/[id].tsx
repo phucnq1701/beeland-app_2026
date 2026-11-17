@@ -26,6 +26,8 @@ import {
 } from "@/components/ui";
 import { isCustomerSubmitted, isOverdue, mapCatalog, type CustomerRequest, type RequestLog } from "@/lib/customerRequest";
 import { formatDateTime } from "@/lib/format";
+import { FORM } from "@/lib/permissions";
+import { usePerm } from "@/services/PermissionService";
 import { colors, elevation, radius, space } from "@/theme";
 import {
   CustomerRequestService,
@@ -40,6 +42,7 @@ import {
  */
 export default function RequestDetailScreen() {
   const router = useRouter();
+  const perm = usePerm(FORM.requests);
   const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [data, setData] = useState<CustomerRequest | null>(null);
@@ -129,7 +132,7 @@ export default function RequestDetailScreen() {
       title={data?.code || "Yêu cầu"}
       subtitle={data?.customerName || undefined}
       actions={
-        data ? (
+        data && (perm.can("EDIT") || perm.can("DELETE")) ? (
           <IconButton icon={MoreVertical} variant="soft" accessibilityLabel="Tuỳ chọn" onPress={() => setMenuOpen(true)} />
         ) : null
       }
@@ -180,10 +183,13 @@ export default function RequestDetailScreen() {
         refreshing={refreshing}
         onRefresh={() => void load(true)}
         footer={
-          <BottomActionBar>
-            <Button variant="secondary" icon={Pencil} title="Sửa" onPress={edit} style={styles.pill} />
-            <Button icon={ClipboardCheck} title="Cập nhật xử lý" onPress={process} style={[styles.flex, styles.pill]} />
-          </BottomActionBar>
+          // Sửa / Cập nhật xử lý theo nhóm quyền (/customers/requests EDIT — máy chủ xử lý cũng kiểm EDIT) như web
+          perm.can("EDIT") ? (
+            <BottomActionBar>
+              <Button variant="secondary" icon={Pencil} title="Sửa" onPress={edit} style={styles.pill} />
+              <Button icon={ClipboardCheck} title="Cập nhật xử lý" onPress={process} style={[styles.flex, styles.pill]} />
+            </BottomActionBar>
+          ) : undefined
         }
       >
         <View style={styles.body}>
@@ -307,23 +313,27 @@ export default function RequestDetailScreen() {
         }}
         title="Tuỳ chọn yêu cầu"
       >
-        <SheetOption
-          icon={Pencil}
-          label="Sửa yêu cầu"
-          onPress={() => {
-            pendingMenu.current = "edit";
-            setMenuOpen(false);
-          }}
-        />
-        <SheetOption
-          icon={Trash2}
-          label="Xoá yêu cầu"
-          destructive
-          onPress={() => {
-            pendingMenu.current = "delete";
-            setMenuOpen(false);
-          }}
-        />
+        {perm.can("EDIT") ? (
+          <SheetOption
+            icon={Pencil}
+            label="Sửa yêu cầu"
+            onPress={() => {
+              pendingMenu.current = "edit";
+              setMenuOpen(false);
+            }}
+          />
+        ) : null}
+        {perm.can("DELETE") ? (
+          <SheetOption
+            icon={Trash2}
+            label="Xoá yêu cầu"
+            destructive
+            onPress={() => {
+              pendingMenu.current = "delete";
+              setMenuOpen(false);
+            }}
+          />
+        ) : null}
       </BottomSheet>
     </>
   );

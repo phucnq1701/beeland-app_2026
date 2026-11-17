@@ -18,6 +18,8 @@ import { CustomerListItem } from "@/components/customer/CustomerListItem";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, space } from "@/theme";
 import { CustomerService } from "@/services/CustomerService";
+import { FORM } from "@/lib/permissions";
+import { usePerm } from "@/services/PermissionService";
 import { errorMessage } from "@/services/nvApi";
 
 type CustomerTab = "all" | "personal" | "business";
@@ -35,6 +37,7 @@ const TABS: { value: CustomerTab; label: string }[] = [
 
 export default function CustomersScreen({ embedded }: { embedded?: boolean } = {}) {
   const router = useRouter();
+  const perm = usePerm(FORM.customers);
   const [activeTab, setActiveTab] = useState<CustomerTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedQuery = useDebouncedValue(searchQuery, 300);
@@ -225,7 +228,10 @@ export default function CustomersScreen({ embedded }: { embedded?: boolean } = {
             subtitle={`${total} khách hàng`}
             // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
             hideBack={embedded}
-            actions={<IconButton icon={Plus} variant="soft" accessibilityLabel="Thêm khách hàng" onPress={addCustomer} />}
+            actions={
+              // Thêm theo nhóm quyền (/customers/list ADD) như web
+              perm.can("ADD") ? <IconButton icon={Plus} variant="soft" accessibilityLabel="Thêm khách hàng" onPress={addCustomer} /> : undefined
+            }
           />
         }
       >
