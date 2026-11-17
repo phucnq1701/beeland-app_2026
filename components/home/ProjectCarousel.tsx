@@ -88,7 +88,9 @@ export function ProjectCarousel({ projects, loading, error, onRetry, onPress }: 
         ItemSeparatorComponent={() => <View style={{ width: GAP }} />}
         renderItem={({ item }) => {
           const status = projectStatus(item);
-          const place = item?.district || item?.DiaChi || item?.dia_chi;
+          const rawPlace = String(item?.district || item?.DiaChi || item?.dia_chi || "").trim();
+          // Khu vực trùng tên dự án ⇒ không lặp lại
+          const place = rawPlace.toLowerCase() === String(item?.TenDA ?? "").trim().toLowerCase() ? "" : rawPlace;
           return (
             <Pressable
               testID={`property-card-${item?.MaDA}`}
