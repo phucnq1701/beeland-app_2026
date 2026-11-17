@@ -499,6 +499,7 @@ function PriceSheetEditorScreen() {
             <>
               <HomeSectionHeader title="Khách hàng (không bắt buộc)" />
               <SegmentedControl
+                variant="soft"
                 options={[
                   { value: "individual", label: "Cá nhân" },
                   { value: "business", label: "Doanh nghiệp" },
