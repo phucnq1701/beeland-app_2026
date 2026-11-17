@@ -244,3 +244,14 @@ export function groupByDay<T extends { NgayBookKy?: string | null }>(rows: T[]) 
   for (const k of Object.keys(byDay)) byDay[k].sort((a, b) => String(a.NgayBookKy).localeCompare(String(b.NgayBookKy)));
   return { byDay, noDate };
 }
+
+/**
+ * Thứ tự danh sách lịch ký trên app: lịch từ hôm nay trở đi trước (gần nhất lên đầu), lịch đã qua sau (mới nhất lên đầu),
+ * lịch chưa có ngày cuối. `today` = "YYYY-MM-DD" giờ VN (todayVN).
+ */
+export function sortForAgenda<T extends { NgayBookKy?: string | null }>(rows: T[], today: string): T[] {
+  const key = (r: T) => String(r?.NgayBookKy ?? '');
+  const upcoming = rows.filter((r) => key(r) && dateKey(key(r)) >= today).sort((a, b) => key(a).localeCompare(key(b)));
+  const past = rows.filter((r) => key(r) && dateKey(key(r)) < today).sort((a, b) => key(b).localeCompare(key(a)));
+  return [...upcoming, ...past, ...rows.filter((r) => !key(r))];
+}

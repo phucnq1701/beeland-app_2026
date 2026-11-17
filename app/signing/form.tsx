@@ -182,9 +182,9 @@ function SigningForm() {
     void boot();
   }, [boot]);
 
-  // Mở từ phiếu cọc (không chỉ loại khách): theo khách của phiếu như web openSigningForDeposit
+  // Thêm mới: loại khách theo khách của phiếu cọc / hợp đồng đã chọn (như web openSigningForDeposit) — không bắt người dùng chọn
   useEffect(() => {
-    if (editingKey || !params.pgcId || params.kind) return;
+    if (editingKey || params.kind) return;
     const want = Number(form?.MaPhanLoaiKH) === 3 ? "enterprise" : "individual";
     if (form?.MaKH && w.kind !== want) w.setKind(want);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -396,21 +396,6 @@ function SigningForm() {
         }
       >
         <View style={styles.body}>
-          {!w.editingId && !params.pgcId ? (
-            <SegmentedControl
-              variant="soft"
-              value={isPersonal ? "individual" : "enterprise"}
-              options={[
-                { value: "individual", label: "Cá nhân" },
-                { value: "enterprise", label: "Doanh nghiệp" },
-              ]}
-              onChange={(v) => {
-                w.setKind(v);
-                patch({ MaPhanLoaiKH: v === "enterprise" ? 3 : 1, CoOwners: v === "enterprise" ? [] : form?.CoOwners });
-              }}
-            />
-          ) : null}
-
           {/* ── Nguồn + chứng từ ── */}
           <Card style={styles.card}>
             <Text variant="subhead" style={styles.cardTitle}>

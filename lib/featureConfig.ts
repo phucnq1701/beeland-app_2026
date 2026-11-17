@@ -32,8 +32,11 @@ export function routeForFeature(id: string): string | null {
 /** Tài khoản đại lý chỉ dùng: Dự án, Sản phẩm, Booking, Đặt cọc, Đặt lịch ký, Tin nhắn (khu chat Đại lý). */
 export const AGENCY_FEATURE_IDS = ['1', '2', '5', '13', '14', '16'] as const;
 
-/** Tính năng CHỈ dành cho đại lý – tài khoản nội bộ không thấy. '14' = Đặt lịch ký (yêu cầu người dùng 2026-10-02). */
-export const AGENCY_ONLY_FEATURE_IDS: readonly string[] = ['14'];
+/**
+ * Tính năng CHỈ dành cho đại lý – tài khoản nội bộ không thấy. Trống: từ 2026-11-17 Đặt lịch ký ('14') mở cho cả nội bộ
+ * (sếp: đặt lịch ký từ Đặt cọc + có module Đặt lịch ký; trước đó 2026-10-02 chỉ đại lý). Quyền thật do máy chủ kiểm.
+ */
+export const AGENCY_ONLY_FEATURE_IDS: readonly string[] = [];
 
 /** Tài khoản (đại lý / nội bộ) có được dùng tính năng này không. */
 export function isFeatureAllowed(id: string, isAgency: boolean): boolean {

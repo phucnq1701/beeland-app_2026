@@ -27,7 +27,8 @@ async function rpc<T = any>(fn: string, args: Record<string, unknown>, fallback:
 export const SigningService = {
   /** Danh sách lịch ký — fn_nv_app_lich_ky_list (= fn_signing_appointment_list: công ty + phạm vi dự án / đại lý ở máy chủ). */
   list: async (filter: {
-    isPersonal: boolean;
+    /** null = cả cá nhân lẫn doanh nghiệp */
+    isPersonal?: boolean | null;
     state?: SigningState | null;
     search?: string;
     projectId?: string | null;

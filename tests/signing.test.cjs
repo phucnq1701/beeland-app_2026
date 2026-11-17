@@ -118,3 +118,15 @@ test("fileUrl: giữ URL đầy đủ, link tương đối → upload.beesky.vn;
   assert.equal(s.isImageFile("a.pdf"), false);
   assert.equal(s.fileExt("Hop dong.PDF"), "pdf");
 });
+
+test("sortForAgenda: sắp tới (gần nhất trước) rồi đã qua (mới nhất trước), chưa có ngày cuối", () => {
+  const rows = [
+    { id: "a", NgayBookKy: "2026-11-10T08:00:00" },
+    { id: "b", NgayBookKy: "2026-11-19T08:00:00" },
+    { id: "c", NgayBookKy: null },
+    { id: "d", NgayBookKy: "2026-11-17T13:30:00" },
+    { id: "e", NgayBookKy: "2026-11-14T08:00:00" },
+    { id: "f", NgayBookKy: "2026-11-17T08:00:00" },
+  ];
+  assert.deepEqual(plain(s.sortForAgenda(rows, "2026-11-17").map((r) => r.id)), ["f", "d", "b", "e", "a", "c"]);
+});

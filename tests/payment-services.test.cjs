@@ -177,7 +177,7 @@ test("contract detail: thiếu uuid phiếu giữ chỗ ⇒ gửi uuid hợp đ�
   assert.deepEqual(plain(h.calls.map((c) => [c.fn, c.body.p_id])), [["fn_nv_app_lich_tt_phieu", "hd1"], ["fn_nv_app_phieu_thu_phieu", "pgc9"]]);
 });
 
-test("deposit detail: 1 lời gọi đầu phiếu + lịch + phiếu thu song song; dòng mới nhất, khách của chứng từ, loại căn / hướng, cờ QR", async () => {
+test("deposit detail: 1 lời gọi đầu phiếu + phiếu thu song song (không tải lịch thanh toán); dòng mới nhất, khách của chứng từ, loại căn / hướng, cờ QR", async () => {
   const h = harness({
     rpc: {
       fn_nv_app_dat_coc_chi_tiet: {
@@ -186,13 +186,12 @@ test("deposit detail: 1 lời gọi đầu phiếu + lịch + phiếu thu song s
         san_pham: { ma_sp: "SP1", ky_hieu: "A-1", loai_can: "2PN", huong_cua: "Đông", huong_bc: "Tây" },
         doi_can_cho_duyet: false, quyen: { payment_qr: true },
       },
-      fn_nv_app_lich_tt_phieu: [{ dot_tt: 1, phai_thu: 100 }],
       fn_nv_app_phieu_thu_phieu: [{ id: "v1", so_tien_pgc: 30 }],
     },
   });
   const r = await h.deposits().getDepositDetail({ row: { PhieuGiuChoId: "pgc1", TenTT: "cũ", MaTT: 6 } });
   assert.deepEqual(plain(h.calls.map((c) => [c.fn, c.body])),
-    [["fn_nv_app_dat_coc_chi_tiet", { p_id: "pgc1" }], ["fn_nv_app_lich_tt_phieu", { p_id: "pgc1" }], ["fn_nv_app_phieu_thu_phieu", { p_id: "pgc1" }]]);
+    [["fn_nv_app_dat_coc_chi_tiet", { p_id: "pgc1" }], ["fn_nv_app_phieu_thu_phieu", { p_id: "pgc1" }]]);
   const d = r.data;
   assert.equal(d.TenTT, "Đặt cọc chờ duyệt", "trạng thái hiện tại thắng dòng cũ");
   assert.equal(d.MaTT, 8);
@@ -205,7 +204,7 @@ test("deposit detail: 1 lời gọi đầu phiếu + lịch + phiếu thu song s
   assert.equal(d.DoiCanChoDuyet, false);
   assert.equal(depositQr.canOfferDepositQr(d), true);
   assert.equal(r.tongDaThu, 30);
-  assert.equal(r.lichTT.length, 1);
+  assert.equal(r.lichTT, undefined);
 
   const fail = harness({ failRpc: { fn_nv_app_dat_coc_chi_tiet: true } });
   const f = await fail.deposits().getDepositDetail({ row: { ID: "dc1", TenTT: "Đặt cọc chờ duyệt", TienCoc: 100, DaThu: 0 } });

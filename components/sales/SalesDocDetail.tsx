@@ -11,8 +11,8 @@ import { Receipt } from "@/services/PaymentProgressService";
 import { MoneySummary, PaymentSchedule, ReceiptList } from "./PaymentBlocks";
 
 /**
- * Khung chi tiết đặt cọc / hợp đồng: đầu phiếu (số, trạng thái, khách), tổng quan tiền, thông tin,
- * lịch thanh toán, phiếu thu. Màn hình chỉ truyền dữ liệu đã lấy từ dịch vụ (không tự tính tiền).
+ * Khung chi tiết đặt cọc / hợp đồng: đầu phiếu (số, trạng thái, khách), tổng quan tiền, thông tin, lịch thanh toán (chỉ khi
+ * màn truyền `schedule` — hợp đồng), phiếu thu. Màn hình chỉ truyền dữ liệu đã lấy từ dịch vụ (không tự tính tiền).
  */
 export function SalesDocDetail({
   title,
@@ -25,6 +25,7 @@ export function SalesDocDetail({
   value,
   paid,
   deposit,
+  moneyFocus,
   schedule,
   scheduleError,
   receipts,
@@ -45,7 +46,10 @@ export function SalesDocDetail({
   value: number | null | undefined;
   paid: number | null | undefined;
   deposit?: number | null;
-  schedule: ScheduleRow[];
+  /** Phần tiền ở đầu: theo hợp đồng (mặc định) / theo tiền cọc */
+  moneyFocus?: "contract" | "deposit";
+  /** Không truyền ⇒ không hiện Lịch thanh toán */
+  schedule?: ScheduleRow[];
   scheduleError?: boolean;
   receipts: Receipt[];
   receiptsTotal: number;
@@ -69,7 +73,7 @@ export function SalesDocDetail({
       >
         <View style={styles.body}>
           {/* Card navy: khách + trạng thái ở đầu, tiền bên dưới */}
-          <MoneySummary value={value} paid={paid} deposit={deposit}>
+          <MoneySummary value={value} paid={paid} deposit={deposit} focus={moneyFocus}>
             <View style={styles.hero}>
               <View style={styles.flex}>
                 <Text variant="heading" color={colors.showcase.text} numberOfLines={2} accessibilityRole="header">
@@ -102,7 +106,7 @@ export function SalesDocDetail({
             <SkeletonDetail />
           ) : (
             <>
-              <PaymentSchedule rows={schedule} error={scheduleError} />
+              {schedule ? <PaymentSchedule rows={schedule} error={scheduleError} /> : null}
               <ReceiptList rows={receipts} total={receiptsTotal} error={receiptsError} />
             </>
           )}

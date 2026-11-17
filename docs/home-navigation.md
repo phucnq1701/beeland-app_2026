@@ -26,13 +26,13 @@ Lịch hẹn (id 3) đã bỏ hẳn 2026-11-17 (màn gọi API .NET cũ) – kh�
 | 8 | Hợp đồng | `/contracts` | |
 | 9 | Báo cáo | `/reports` | |
 | 13 | Đặt cọc | `/deposits` | ✓ |
-| 14 | Đặt lịch ký | `/signings` (`docs/signing.md`) | ✓ **chỉ đại lý** – nội bộ ẩn (`AGENCY_ONLY_FEATURE_IDS`) |
+| 14 | Đặt lịch ký | `/signings` (`docs/signing.md`) | ✓ (từ 2026-11-17 cả nội bộ) |
 | 15 | Yêu cầu KH | `/requests` (`docs/requests.md`) | |
 | 16 | Tin nhắn | `/chat` (`docs/chat.md`) – chọn được làm tab menu (`embedded`: ẩn nút quay lại, chừa thanh tab) | ✓ (khu chat Đại lý) |
 | 17 | Phiếu tính giá | `/price-sheets` (`docs/price-sheets.md`) – chọn được làm tab menu | – (chỉ nội bộ) |
 
 - `visibleFeatureIds`: bỏ id không có route (`FEATURE_ROUTES`), id trong `HIDDEN_FEATURE_IDS` (hiện rỗng), id ngoài quyền đại lý (`AGENCY_FEATURE_IDS`),
-  và với tài khoản nội bộ bỏ id chỉ dành cho đại lý (`AGENCY_ONLY_FEATURE_IDS` = `14`). Kiểm 1 id: `isFeatureAllowed(id, isAgency)`.
+  và với tài khoản nội bộ bỏ id chỉ dành cho đại lý (`AGENCY_ONLY_FEATURE_IDS`, hiện rỗng). Kiểm 1 id: `isFeatureAllowed(id, isAgency)`.
 - Cấu hình người dùng lưu `@home_features_config` (khoá theo tài khoản qua `getScopedKey`); đọc lại bằng
   `resolveHomeFeatureIds` / `sanitizeMenuTabIds` (id cũ không hợp lệ bị bỏ, thiếu thì bù mặc định).
 - Loại tài khoản: `getSessionInfo().isAgency` (`services/session.ts`). Không đọc được → coi như đại lý (an toàn).

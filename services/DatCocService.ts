@@ -195,13 +195,14 @@ export const DatCocService = {
    * Chi tiết phiếu đặt cọc (như trang chi tiết web mở chứng từ DATCOC):
    * - Đầu phiếu: fn_nv_app_dat_coc_chi_tiet — dòng danh sách mới nhất (trạng thái hiện tại: vd vừa tự duyệt sau khi thu QR đủ cọc)
    *   + khách / giá của chứng từ (đã che trường theo nhóm) + loại căn, hướng + cờ nút QR (QuyenQR, DoiCanChoDuyet, TrangThaiHoan).
-   * - Lịch thanh toán + phiếu thu theo phiếu giữ chỗ (PaymentProgressService), chạy song song.
+   * - Phiếu thu theo phiếu giữ chỗ (PaymentProgressService), chạy song song. Không tải lịch thanh toán: màn Đặt cọc chỉ hiện
+   *   việc của khâu cọc (sếp 2026-11-17) — lịch thanh toán xem ở Hợp đồng.
    */
   getDepositDetail: async (payload: any = {}) => {
     const row = payload?.row ?? payload?.data ?? {};
     // uuid phiếu giữ chỗ (web: PhieuGiuChoId ?? MaPGC, MaPGC = pgc_id ?? id); không có thì id phiếu cọc — máy chủ tự quy về phiếu giữ chỗ
     const pgcId = row?.PhieuGiuChoId ?? payload?.PhieuGiuChoId ?? row?.MaPGC ?? payload?.MaPGC ?? row?.ID ?? null;
-    if (!pgcId) return { data: row, lichTT: [], phieuThu: [], tongDaThu: 0, receiptsError: true };
+    if (!pgcId) return { data: row, phieuThu: [], tongDaThu: 0, receiptsError: true };
 
     const headerP = (async () => {
       try {
@@ -241,18 +242,12 @@ export const DatCocService = {
       }
     })();
 
-    const [header, schedule, receipts] = await Promise.all([
-      headerP,
-      PaymentProgressService.getSchedule(String(pgcId)),
-      PaymentProgressService.getReceipts(String(pgcId)),
-    ]);
+    const [header, receipts] = await Promise.all([headerP, PaymentProgressService.getReceipts(String(pgcId))]);
     return {
       data: header,
-      lichTT: schedule.rows,
       phieuThu: receipts.rows,
       tongDaThu: receipts.total,
       receiptsError: receipts.error,
-      scheduleError: !!schedule.error,
     };
   },
 };

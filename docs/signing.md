@@ -2,18 +2,18 @@
 
 Đặt lịch ký cho giao dịch đặt cọc / hợp đồng theo **luồng web mới** (user chốt 2026-11-16): Nguồn → chứng từ → Quỹ → Điểm ký →
 Loại thủ tục → ngày → Ca, hồ sơ cần chuẩn bị. Như web `beeland/src/pages/sales/giao-dich/dat-lich-ky/*` +
-`services/sales/signing-appointment`. Tính năng id **14** (`/signings`), **chỉ dành cho tài khoản đại lý** – nội bộ không thấy ở menu và không có nút ở chi tiết đặt cọc
-(`AGENCY_ONLY_FEATURE_IDS`, yêu cầu người dùng 2026-10-02).
+`services/sales/signing-appointment`. Tính năng id **14** (`/signings`) cho **mọi tài khoản** (sếp 2026-11-17: có module Đặt lịch ký +
+đặt từ Đặt cọc; 2026-10-02 → 11-16 chỉ đại lý). Quyền thật do máy chủ kiểm.
 
 ## Màn
 
 | Màn | File |
 |---|---|
-| Danh sách: tab Cá nhân / Doanh nghiệp (`SegmentedControl soft`), ô tìm `soft` (mã căn, tên KH, SĐT, giấy tờ), chip trạng thái, lọc 1 dự án (`FilterPanel`), nút đổi **Danh sách / Lịch**; nút nổi "Thêm lịch ký" (viên cam, chừa tab bar khi nhúng). Mỗi lịch ký là card bo `radius.xxl` (`SigningRowItem`: mã căn, khách · dự án, ngày · ca · đại lý; phải: trạng thái + giờ) | `app/signings.tsx`, `components/signing/SigningRowItem.tsx` |
+| Danh sách: tất cả lịch (không tách Cá nhân / Doanh nghiệp — 2026-11-17), xếp lịch sắp tới gần nhất trước rồi lịch đã qua (`sortForAgenda`), ô tìm `soft` (mã căn, tên KH, SĐT, giấy tờ), chip trạng thái, lọc 1 dự án (`FilterPanel`), nút đổi **Danh sách / Lịch**; nút nổi "Thêm lịch ký" (viên cam, chừa tab bar khi nhúng). Mỗi lịch ký là card bo `radius.xxl` (`SigningRowItem`: mã căn, khách · dự án, ngày · ca · đại lý; phải: trạng thái + giờ) | `app/signings.tsx`, `components/signing/SigningRowItem.tsx` |
 | Chế độ Lịch: lưới tháng gọn (`SigningCalendar` mode `events`, số lịch ký mỗi ngày) + danh sách của ngày chọn | `components/signing/SigningCalendar.tsx` |
 | Chi tiết: khối navy bo `radius.x3` (giờ ký lớn, thứ ngày, ca · thủ tục, trạng thái); card Thông tin book ký / Khách hàng (+ đồng sở hữu) / Thanh toán / Hồ sơ đính kèm. Nút dưới: "Sửa lịch ký"; menu ⋯: sửa, xoá (`confirm`). **App không cập nhật trạng thái** (xác nhận / từ chối làm trên web – yêu cầu người dùng 2026-10-02), chỉ hiển thị | `app/signing/[id].tsx`, `components/signing/AttachmentList.tsx` |
 | Thêm / sửa (params `id` \| `kind`, `projectId`, `pgcId`) – logic form web chép (mục dưới), giao diện riêng app | `app/signing/form.tsx`, `components/signing/PickerSheets.tsx` |
-| Lối vào từ chi tiết đặt cọc: nút "Đặt lịch ký" (chỉ tài khoản đại lý) → form với `pgcId` = `PhieuGiuChoId`, khoá ô chọn phiếu | `app/deposit/[id].tsx` |
+| Lối vào từ chi tiết đặt cọc: nút "Đặt lịch ký" (mọi tài khoản) → form với `pgcId` = `PhieuGiuChoId`, khoá ô chọn phiếu | `app/deposit/[id].tsx` |
 
 ## Dữ liệu
 
@@ -40,7 +40,7 @@ Màn Danh sách / Chi tiết / ô tìm phiếu cọc: `services/SigningService.t
 ## Quy tắc (theo form web)
 
 - Nguồn **Đặt cọc / Hợp đồng** (`NGUON_OPTIONS`); mở từ chi tiết đặt cọc ⇒ khoá nguồn + phiếu, loại khách (cá nhân / DN) theo
-  khách của phiếu. Chọn chứng từ ⇒ form web nạp lại đầy đủ theo uuid (khách, đại lý, đồng sở hữu, lịch TT, kho hồ sơ).
+  khách của phiếu (form không có nút chọn Cá nhân / Doanh nghiệp: loại khách tự lấy theo khách của chứng từ đã chọn). Chọn chứng từ ⇒ form web nạp lại đầy đủ theo uuid (khách, đại lý, đồng sở hữu, lịch TT, kho hồ sơ).
 - Quỹ → Điểm ký → Loại thủ tục → ngày (dải 14 ngày tới + "Trống gần nhất" + lịch tháng, theo chỗ còn) → Ca còn lượt; đổi bước
   trước thì bỏ lựa chọn sau (`RESET_THEO_QUY`…). Tóm tắt lịch hẹn: `buildAppointmentText`.
 - Hồ sơ cần chuẩn bị theo phân loại khách; tệp gắn theo từng hồ sơ ("Tài liệu khác" cho tệp lẻ); tệp có sẵn trong kho hồ sơ

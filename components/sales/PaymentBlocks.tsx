@@ -17,13 +17,55 @@ export function MoneySummary({
   value,
   paid,
   deposit,
+  focus = "contract",
   children,
 }: {
   value: number | null | undefined;
   paid: number | null | undefined;
   deposit?: number | null;
+  /** "deposit" (màn Đặt cọc): số chính = tiền cọc, Đã nộp / Còn phải nộp theo tiền cọc, giá căn chỉ để tham khảo */
+  focus?: "contract" | "deposit";
   children?: React.ReactNode;
 }) {
+  if (focus === "deposit") {
+    const d = Number(deposit) || 0;
+    const p = Number(paid) || 0;
+    const r = d > 0 ? Math.min(1, p / d) : 0;
+    return (
+      <View style={styles.hero}>
+        {children}
+        <Text variant="caption" color={colors.showcase.textMuted}>
+          Tiền cọc
+        </Text>
+        <MoneyText value={d} variant="title" color={colors.showcase.text} style={styles.heroValue} />
+        <View style={styles.bar} accessibilityLabel={`Đã nộp ${Math.round(r * 100)}% tiền cọc`}>
+          <View style={[styles.fill, { width: `${r * 100}%` }]} />
+        </View>
+        <View style={styles.row2}>
+          <View style={styles.flex}>
+            <Text variant="caption" color={colors.showcase.textMuted}>
+              Đã nộp
+            </Text>
+            <MoneyText value={p} variant="subhead" color={colors.successSubtle} />
+          </View>
+          <View style={[styles.flex, styles.right]}>
+            <Text variant="caption" color={colors.showcase.textMuted}>
+              Còn phải nộp
+            </Text>
+            <MoneyText value={Math.max(d - p, 0)} variant="subhead" color={colors.showcase.text} />
+          </View>
+        </View>
+        {value != null ? (
+          <View style={styles.depositRow}>
+            <Text variant="caption" color={colors.showcase.textMuted} style={styles.flex}>
+              Giá căn (gồm VAT)
+            </Text>
+            <MoneyText value={Number(value) || 0} variant="subhead" color={colors.showcase.text} />
+          </View>
+        ) : null}
+      </View>
+    );
+  }
   const v = Number(value) || 0;
   const p = Number(paid) || 0;
   const ratio = v > 0 ? Math.min(1, p / v) : 0;
