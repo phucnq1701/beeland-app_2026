@@ -1,21 +1,19 @@
 import { PRICE_SHEET_CREATE_LOCKED } from "@/lib/featureConfig";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { Calculator, FileX2, Plus, SearchX } from "lucide-react-native";
 
+import { FilterPanel, FilterSection, FilterToggleButton } from "@/components/FilterPanel";
 import {
   AppHeader,
   Chip,
   EmptyState,
   ErrorState,
-  IconButton,
   ListItem,
   MoneyText,
   Screen,
   SearchBar,
-  SegmentedControl,
-  SelectField,
   SkeletonList,
   StatusBadge,
   Text,
@@ -31,6 +29,13 @@ import { colors, elevation, radius, space } from "@/theme";
 const PAGE_SIZE = 20;
 const TAB_BAR_SPACE = 100;
 const ALL = "all";
+/** Chiều cao nút nổi "Lập phiếu" + khoảng hở — để thẻ cuối không bị che. */
+const FAB_SPACE = 72;
+const PRODUCT_TYPES = [
+  { value: ALL, label: "Tất cả" },
+  { value: "Cao tầng", label: "Cao tầng" },
+  { value: "Thấp tầng", label: "Thấp tầng" },
+];
 
 type Stats = { draft: number; sent: number; approved: number; rejected: number };
 
@@ -48,6 +53,9 @@ export default function PriceSheetsScreen({ embedded }: { embedded?: boolean } =
   const [productType, setProductType] = useState<string>(ALL);
   const [status, setStatus] = useState<string>(ALL);
   const [canAdd, setCanAdd] = useState(false);
+  // Dự án + Loại sản phẩm nằm trong Bộ lọc (trước là ô chọn + thanh chuyển luôn hiện ⇒ đầu màn 4 tầng, gần nửa màn —
+  // 2026-11-17, như màn Khách hàng; docs/app-api-rieng.md)
+  const [showFilters, setShowFilters] = useState(false);
 
   const [rows, setRows] = useState<PriceSheetRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -140,28 +148,43 @@ export default function PriceSheetsScreen({ embedded }: { embedded?: boolean } =
     setStatus(ALL);
   };
   const statTotal = stats.draft + stats.sent + stats.approved + stats.rejected;
+  const activeFilterCount = (projectId !== ALL ? 1 : 0) + (productType !== ALL ? 1 : 0);
+  const openCreate = () =>
+    PRICE_SHEET_CREATE_LOCKED
+      ? toast.show({ type: "info", message: "Lập phiếu tính giá trên web — app tạm chỉ xem phiếu" })
+      : router.push("/price-sheet/new");
 
   const header = (
     <View style={styles.sticky}>
       <SearchBar value={query} onChangeText={setQuery} placeholder="Mã phiếu, mã căn, sản phẩm…" variant="soft" />
-      <SelectField
-        label="Dự án"
-        value={projectId}
-        options={[{ value: ALL, label: "Tất cả dự án" }, ...projects]}
-        onChange={setProjectId}
-        variant="raised"
-        sheetTitle="Chọn dự án"
-      />
-      <SegmentedControl
-        variant="soft"
-        value={productType}
-        onChange={setProductType}
-        options={[
-          { value: ALL, label: "Tất cả" },
-          { value: "Cao tầng", label: "Cao tầng" },
-          { value: "Thấp tầng", label: "Thấp tầng" },
-        ]}
-      />
+      {showFilters ? (
+        <FilterPanel
+          activeCount={activeFilterCount}
+          onReset={() => {
+            setProjectId(ALL);
+            setProductType(ALL);
+          }}
+        >
+          <FilterSection
+            title="Dự án"
+            options={[{ value: ALL, label: "Tất cả dự án" }, ...projects].map((p) => ({
+              key: p.value,
+              label: p.label,
+              selected: projectId === p.value,
+              onPress: () => setProjectId(p.value),
+            }))}
+          />
+          <FilterSection
+            title="Loại sản phẩm"
+            options={PRODUCT_TYPES.map((t) => ({
+              key: t.value,
+              label: t.label,
+              selected: productType === t.value,
+              onPress: () => setProductType(t.value),
+            }))}
+          />
+        </FilterPanel>
+      ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll} contentContainerStyle={styles.chips}>
         <Chip variant="soft" label="Tất cả" count={statTotal} selected={status === ALL} onPress={() => setStatus(ALL)} />
         {PRICE_SHEET_STATUSES.map((s) => (
@@ -193,7 +216,7 @@ export default function PriceSheetsScreen({ embedded }: { embedded?: boolean } =
       <EmptyState
         icon={FileX2}
         title="Chưa có phiếu tính giá"
-        description={canAdd ? "Bấm + để lập phiếu tính giá cho một căn." : "Phiếu tính giá được lập trên web hoặc app."}
+        description={canAdd ? "Bấm “Lập phiếu” để lập phiếu tính giá cho một căn." : "Phiếu tính giá được lập trên web hoặc app."}
       />
     );
   };
@@ -211,7 +234,8 @@ export default function PriceSheetsScreen({ embedded }: { embedded?: boolean } =
             }
             title={item.product_code || "—"}
             subtitle={[item.project_name, item.customer_name].filter(Boolean).join(" · ") || undefined}
-            meta={[item.sheet_code, formatDate(item.created_at), item.created_by].filter(Boolean).join(" · ")}
+            // Ngày lên trước mã phiếu (mã dài kiểu "PTG-Capital Square 2-0003" làm ngày bị cắt)
+            meta={[formatDate(item.created_at), item.sheet_code, item.created_by].filter(Boolean).join(" · ")}
             trailing={
               <>
                 <View style={styles.badge}>
@@ -240,18 +264,7 @@ export default function PriceSheetsScreen({ embedded }: { embedded?: boolean } =
             subtitle={loading ? undefined : `${total} phiếu`}
             hideBack={embedded}
             actions={
-              canAdd ? (
-                <IconButton
-                  icon={Plus}
-                  variant="soft"
-                  accessibilityLabel="Lập phiếu tính giá"
-                  onPress={() =>
-                    PRICE_SHEET_CREATE_LOCKED
-                      ? toast.show({ type: "info", message: "Lập phiếu tính giá trên web — app tạm chỉ xem phiếu" })
-                      : router.push("/price-sheet/new")
-                  }
-                />
-              ) : null
+              <FilterToggleButton open={showFilters} activeCount={activeFilterCount} onPress={() => setShowFilters((v) => !v)} />
             }
           />
         }
@@ -286,8 +299,22 @@ export default function PriceSheetsScreen({ embedded }: { embedded?: boolean } =
             />
           }
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: embedded ? TAB_BAR_SPACE : space.xxl }}
+          contentContainerStyle={{ paddingBottom: (embedded ? TAB_BAR_SPACE : space.xxl) + (canAdd ? FAB_SPACE : 0) }}
         />
+        {/* Lập phiếu: nút nổi như "Thêm khách hàng" / "Thêm lịch ký" (đầu màn chỉ còn Bộ lọc) */}
+        {canAdd ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Lập phiếu tính giá"
+            onPress={openCreate}
+            style={({ pressed }) => [styles.fab, { bottom: embedded ? TAB_BAR_SPACE : space.xl }, pressed ? styles.fabPressed : null]}
+          >
+            <Plus size={20} color={colors.onPrimary} />
+            <Text variant="subhead" color="onPrimary">
+              Lập phiếu
+            </Text>
+          </Pressable>
+        ) : null}
       </Screen>
     </>
   );
@@ -315,4 +342,17 @@ const styles = StyleSheet.create({
   badge: { alignSelf: "flex-end" },
   footer: { paddingVertical: space.lg },
   end: { textAlign: "center", paddingVertical: space.lg },
+  fab: {
+    position: "absolute",
+    right: space.xl,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    minHeight: 52,
+    paddingHorizontal: space.xl,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    ...elevation.overlay,
+  },
+  fabPressed: { backgroundColor: colors.primaryPressed },
 });

@@ -248,3 +248,13 @@ endpoint sẵn có. Quay lại: `git revert` commit đợt này (hoặc từng t
 Kiểm: tsc 0 lỗi, lint 0 lỗi (4 cảnh báo cũ ở tệp không đụng), 317 test. Máy ảo riêng (iOS 18.2, trỏ API prod, chỉ xem — không tạo / sửa
 dữ liệu): đã chụp lại từng mục sau sửa.
 Lưu ý nghiệp vụ (không sửa): nhóm sơ đồ web xếp căn HĐMB / đặt cọc vào "Khóa" ⇒ dự án CS2 hiện "Đã bán 0 · Khóa 28" (Tổng quan cũng vậy).
+
+### 2026-11-17 — Rà 5 màn còn lại: 2 mục user chọn sửa (nhánh `app-nv-sua-ux-dot3`, xếp trên `app-nv-sua-ux-nv-moi`)
+Chỉ giao diện app — không đổi BE, web, luồng nghiệp vụ hay dữ liệu gửi máy chủ. Quay lại: `git revert` commit đợt này.
+| # | Đổi gì | Tệp |
+|---|---|---|
+| 1 | Chi tiết lịch ký: lịch đã bị xoá / ngoài phạm vi (máy chủ ném `[P0002] Không tìm thấy lịch ký`, vd mở từ thông báo cũ) ⇒ "Lịch ký không còn tồn tại" + nút "Xem danh sách lịch ký" thay vì "Không tải được dữ liệu · Thử lại". `SigningService.get` gắn cờ `notFound` (lỗi khác giữ nguyên) | `services/SigningService.ts`, `app/signing/[id].tsx` |
+| 2 | Danh sách Phiếu tính giá: Dự án + Loại sản phẩm chuyển vào Bộ lọc (trước luôn hiện ⇒ đầu màn 4 tầng); nút + thành nút nổi "Lập phiếu" (vẫn theo quyền ADD + cờ `PRICE_SHEET_CREATE_LOCKED`); dòng 3 = ngày trước mã phiếu (mã dài làm ngày bị cắt) | `app/price-sheets.tsx` |
+Kiểm máy ảo riêng (chỉ xem): thông báo "Lịch ký mới 20/11/2026 10:00" (lịch đã xoá) ⇒ màn mới; lịch ký còn tồn tại mở bình thường; lọc dự án / đặt lại / Lập phiếu đúng.
+Chưa làm (chờ user): số căn ở thẻ danh sách Dự án (cần thêm cột `usp_nv_app_du_an_list`). Ghi nhận dữ liệu: > 50 hội thoại khách chưa đọc
+là dữ liệu thử tải "LT#…" ngày 09/10 (Trang chủ báo "50 chưa đọc" là đúng).

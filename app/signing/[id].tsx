@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Linking, Share, StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { MapPin, MoreVertical, Pencil, Phone, Send, Trash2 } from "lucide-react-native";
+import { CalendarX2, MapPin, MoreVertical, Pencil, Phone, Send, Trash2 } from "lucide-react-native";
 
 import { AttachmentList } from "@/components/signing/AttachmentList";
 import {
@@ -12,6 +12,7 @@ import {
   Button,
   Card,
   confirm,
+  EmptyState,
   ErrorState,
   IconButton,
   KeyValueRow,
@@ -46,6 +47,8 @@ export default function SigningDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Lịch ký không còn (đã xoá / ngoài phạm vi) — vd mở từ thông báo cũ: báo rõ, không mời "Thử lại"
+  const [notFound, setNotFound] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const pendingMenu = useRef<"edit" | "delete" | null>(null);
   const deleting = useRef(false);
@@ -58,6 +61,7 @@ export default function SigningDetailScreen() {
         const d = await SigningService.get(String(id ?? ""));
         setData(d);
         setError(null);
+        setNotFound(false);
         const [owners, plans] = await Promise.all([
           SigningService.customersByIds(d.DongSoHuuIds).catch(() => []),
           d.MaPhuongAnTT != null ? SigningService.plans().catch(() => []) : Promise.resolve([]),
@@ -66,6 +70,7 @@ export default function SigningDetailScreen() {
         setPlanLabel(labelOf(plans, d.MaPhuongAnTT) ?? null);
       } catch (e: any) {
         setError(e?.message || "Không tải được lịch ký");
+        setNotFound(e?.notFound === true);
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -141,7 +146,17 @@ export default function SigningDetailScreen() {
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <Screen header={header}>
-          <ErrorState description={error || "Không tìm thấy lịch ký"} onRetry={() => void load()} />
+          {notFound ? (
+            <EmptyState
+              icon={CalendarX2}
+              title="Lịch ký không còn tồn tại"
+              description="Lịch ký này đã bị xoá hoặc bạn không còn quyền xem."
+              actionLabel="Xem danh sách lịch ký"
+              onAction={() => router.replace("/signings" as any)}
+            />
+          ) : (
+            <ErrorState description={error || "Không tải được lịch ký"} onRetry={() => void load()} />
+          )}
         </Screen>
       </>
     );
