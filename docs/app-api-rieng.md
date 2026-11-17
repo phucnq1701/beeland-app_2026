@@ -212,3 +212,7 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
 - Đính chính rà quyền: lưu KH CÓ kiểm ADD/EDIT ở lõi `_ds5_customer_save` (p_scoped = 1, app + web đều truyền).
 - Phát hiện (chưa làm, chờ user): `lib/web` lệch web main 17-11 (~10 tệp form tính giá / booking do đồng nghiệp đổi chính sách bán
   hàng) ⇒ test "lib/web khớp nguyên văn web" đỏ; cần 1 đợt đồng bộ riêng.
+
+### 2026-11-17 — Đồng bộ lib/web theo web main 10fe7251 (điều kiện Tỉnh / Mua nhiều, khách hàng bước đầu)
+- Chi tiết + cách quay lại: `docs/price-sheets.md` mục "Nhật ký đồng bộ web". BE SP E8 `usp_nv_app_dieu_kien_khach` (đã nạp) + endpoint
+  (cần deploy API TRƯỚC khi phát hành app).

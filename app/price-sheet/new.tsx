@@ -38,8 +38,16 @@ import { policyExpiryDate } from "@/lib/web/lib/priceSheetExpiry";
 import { isLowRiseProduct } from "@/lib/web/utils/productType";
 import { toast as webToast } from "@/lib/web/_shims/sonner";
 import { colors, radius, space } from "@/theme";
+import { CUSTOMER_FIRST_TIP, stepLocked } from "@/lib/web/components/Products/ContractForm/stepGate";
 
-const STEPS = ["Căn & chính sách", "Lịch thanh toán", "Khách hàng"] as const;
+/**
+ * Thứ tự bước như web (PRICESHEET_STEPS, chủ dự án 2026-11-16, web fb2f8c5d): Khách hàng ĐẦU + bắt buộc (điều kiện mức «Tỉnh» /
+ * «Mua nhiều» cần khách); bước sau khoá tới khi chọn khách (stepGate web; phiếu cũ mở để sửa không khoá, lưu vẫn bắt có khách).
+ */
+const STEPS = ["Khách hàng", "Căn & chính sách", "Lịch thanh toán"] as const;
+const S = { customer: 0, product: 1, schedule: 2 } as const;
+/** id bước của web theo thứ tự STEPS (stepLocked so theo id) */
+const STEP_IDS = ["customer", "product", "schedule"] as const;
 const NONE = "__none__";
 
 /**
@@ -258,11 +266,16 @@ function PriceSheetEditorScreen() {
     if (r.isSaving) return;
     try {
       await r.handleSave(false);
+      // Web chặn lưu khi chưa chọn khách (báo "Chọn khách hàng trước") ⇒ đưa về bước Khách hàng
+      if (r.sections?.customer && !r.hasCustomer) setStep(S.customer);
     } catch (e: any) {
       hapticError();
       webToast.error(e?.message || "Không thể lưu phiếu tính giá");
     }
   };
+
+  // Khoá bước sau khi chưa chọn khách — đúng stepLocked của web (lib/web stepGate)
+  const nextLocked = stepLocked(STEP_IDS[step + 1], r.stepGate || { hasCustomer: true, customerStepId: "customer" });
 
   const footer = (
     <BottomActionBar>
@@ -276,7 +289,12 @@ function PriceSheetEditorScreen() {
         <View style={styles.footerBtns}>
           {step > 0 ? <Button title="Quay lại" variant="secondary" onPress={() => setStep(step - 1)} style={styles.flex} /> : null}
           {step < STEPS.length - 1 ? (
-            <Button title="Tiếp tục" onPress={() => setStep(step + 1)} style={styles.flex} />
+            <Button
+              title="Tiếp tục"
+              onPress={() => setStep(step + 1)}
+              disabled={nextLocked}
+              style={styles.flex}
+            />
           ) : (
             <Button
               title={isEdit ? "Lưu thay đổi" : "Lưu phiếu"}
@@ -307,7 +325,7 @@ function PriceSheetEditorScreen() {
             </View>
           ) : null}
 
-          {step === 0 ? (
+          {step === S.product ? (
             <>
               <PriceHero total={Number(total) || 0} listed={listed} discount={c.tienChietKhau} discountPercent={c.totalDiscountPercent}>
                 <View style={styles.heroHead}>
@@ -480,11 +498,11 @@ function PriceSheetEditorScreen() {
             </>
           ) : null}
 
-          {step === 1 ? (
+          {step === S.schedule ? (
             <>
               <InfoCard title="Tiền cọc" rows={[["Theo cài đặt bán hàng", money(fd.tienCoc)]]} />
               <ScheduleList
-                emptyText="Chọn lịch thanh toán ở bước 1 để dựng các đợt."
+                emptyText="Chọn lịch thanh toán ở bước Căn & chính sách để dựng các đợt."
                 items={(r.paymentSchedule || []).map((row: any, i: number) => ({
                   name: row.kieuThanhToan,
                   ratio: row.tyLeTT,
@@ -495,12 +513,23 @@ function PriceSheetEditorScreen() {
                   total: row.tongGiaTri,
                 }))}
               />
+              <InfoCard
+                title="Tóm tắt"
+                rows={[
+                  ["Khách hàng", customerName || null],
+                  ["Căn", product?.KyHieu || fd.maSanPham],
+                  ["Chính sách", policyRow?.TenChinhSach || policyRow?.ten_cs || "Không áp dụng"],
+                  ["Chiết khấu", money(c.tienChietKhau)],
+                  ["Tổng giá trị HĐMB", money(total)],
+                  ["Ngày hết hạn", fd.ngayHetHan ? String(fd.ngayHetHan).split("-").reverse().join("/") : null],
+                ]}
+              />
             </>
           ) : null}
 
-          {step === 2 ? (
+          {step === S.customer ? (
             <>
-              <HomeSectionHeader title="Khách hàng (không bắt buộc)" />
+              <HomeSectionHeader title="Khách hàng *" />
               <SegmentedControl
                 variant="soft"
                 options={[
@@ -550,17 +579,11 @@ function PriceSheetEditorScreen() {
                   ))}
                 </View>
               ) : null}
-              <InfoCard
-                title="Tóm tắt"
-                rows={[
-                  ["Căn", product?.KyHieu || fd.maSanPham],
-                  ["Chính sách", policyRow?.TenChinhSach || policyRow?.ten_cs || "Không áp dụng"],
-                  ["Chiết khấu", money(c.tienChietKhau)],
-                  ["Tổng giá trị HĐMB", money(total)],
-                  ["Tiền cọc", money(fd.tienCoc)],
-                  ["Ngày hết hạn", fd.ngayHetHan ? String(fd.ngayHetHan).split("-").reverse().join("/") : null],
-                ]}
-              />
+              {nextLocked ? (
+                <Text variant="caption" color="textSecondary">
+                  {CUSTOMER_FIRST_TIP} để sang bước tiếp theo.
+                </Text>
+              ) : null}
             </>
           ) : null}
         </View>
