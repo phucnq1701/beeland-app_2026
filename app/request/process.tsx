@@ -84,6 +84,7 @@ export default function RequestProcessScreen() {
             <Text variant="caption" color="textSecondary">
               Không chọn = giữ nguyên trạng thái hiện tại.
             </Text>
+            {/* Lưới chip 2 cột (gọn: ô Nội dung xử lý không bị đẩy khuất); mô tả chỉ hiện cho trạng thái đang chọn */}
             <View style={styles.options}>
               {statuses.map((s) => {
                 const selected = next === s.ID;
@@ -95,32 +96,28 @@ export default function RequestProcessScreen() {
                     accessibilityState={{ selected }}
                     accessibilityLabel={`${s.Name}${isCurrent ? ", trạng thái hiện tại" : ""}`}
                     onPress={() => setNext(selected ? null : s.ID)}
-                    style={({ pressed }) => [
-                      styles.option,
-                      selected ? styles.optionActive : null,
-                      pressed ? styles.pressed : null,
-                    ]}
+                    style={({ pressed }) => [styles.option, selected ? styles.optionActive : null, pressed ? styles.pressed : null]}
                   >
-                    <View style={styles.optionText}>
-                      <View style={styles.optionHead}>
-                        <StatusBadge label={s.Name} color={s.Color} size="sm" />
-                        {isCurrent ? (
-                          <Text variant="label" color="textTertiary">
-                            Hiện tại
-                          </Text>
-                        ) : null}
-                      </View>
-                      {s.GhiChu ? (
-                        <Text variant="caption" color="textSecondary" numberOfLines={1}>
-                          {s.GhiChu}
-                        </Text>
-                      ) : null}
-                    </View>
-                    {selected ? <Check size={20} color={colors.primary} /> : null}
+                    <StatusBadge label={s.Name} color={s.Color} size="sm" />
+                    {isCurrent ? (
+                      <Text variant="label" color="textTertiary">
+                        Hiện tại
+                      </Text>
+                    ) : selected ? (
+                      <Check size={16} color={colors.primary} />
+                    ) : null}
                   </Pressable>
                 );
               })}
             </View>
+            {(() => {
+              const sel = statuses.find((x) => x.ID === next);
+              return sel?.GhiChu ? (
+                <Text variant="caption" color="textSecondary">
+                  {sel.GhiChu}
+                </Text>
+              ) : null;
+            })()}
           </Card>
 
           <Card style={styles.card}>
@@ -157,20 +154,21 @@ const styles = StyleSheet.create({
     gap: space.sm,
     ...elevation.soft,
   },
-  options: { gap: space.sm, marginTop: space.xs },
+  options: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginTop: space.xs },
   option: {
+    width: "48.5%",
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    padding: space.md,
+    justifyContent: "space-between",
+    gap: space.xs,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm + 2,
     borderRadius: radius.lg,
     borderWidth: 1.5,
     borderColor: "transparent",
     backgroundColor: colors.surfaceMuted,
   },
   optionActive: { borderColor: colors.primary, backgroundColor: colors.primarySubtle },
-  optionText: { flex: 1, gap: space.xs },
-  optionHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
   pressed: { opacity: 0.85 },
   note: { minHeight: 120, textAlignVertical: "top" },
   pill: { borderRadius: radius.full },

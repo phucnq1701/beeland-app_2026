@@ -44,6 +44,7 @@ import { PriceServices } from "@/services/PriceServices";
 
 import { subscribeTableChanges } from "@/services/realtimeHub";
 import { getSessionInfo } from "@/services/session";
+import { foldVietnamese } from "@/lib/format";
 
 type ViewMode = "list" | "grid" | "overview";
 
@@ -57,6 +58,19 @@ const getHexColor = (number: any) => {
 const PAGE_SIZE = 16;
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
 const TAB_BAR_SPACE = 100;
+
+/**
+ * Thứ tự trạng thái ở bộ lọc: các trạng thái của luồng bán hàng (hay lọc nhất) lên đầu, còn lại giữ thứ tự máy chủ —
+ * trước đây "Mở bán" nằm khuất sau "+23 Xem thêm".
+ */
+const SALES_STATUS_ORDER = ["mo ban", "da lock", "giu cho", "booking cho duyet", "dc cho duyet", "da dat coc", "hdmb cho duyet", "hdmb"];
+function sortSalesStatuses<T extends { TenTT?: string }>(list: T[]): T[] {
+  const rank = (s: T) => {
+    const i = SALES_STATUS_ORDER.indexOf(foldVietnamese(String(s?.TenTT ?? "")));
+    return i < 0 ? SALES_STATUS_ORDER.length : i;
+  };
+  return (list || []).map((s, i) => ({ s, i })).sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i).map((x) => x.s);
+}
 
 export default function ProductsScreen({
   embedded,
@@ -628,7 +642,7 @@ export default function ProductsScreen({
                   selected: filterCondition?.MaTT == null,
                   onPress: () => applyChangeFilter("TrangThai", null),
                 },
-                ...TrangThai.map((status: any) => ({
+                ...sortSalesStatuses(TrangThai).map((status: any) => ({
                   key: status.MaTT,
                   label: status.TenTT,
                   selected: filterCondition?.MaTT === status.MaTT,

@@ -279,7 +279,8 @@ export default function ProductDetailScreen() {
               <Text variant="display" color="primary" numeric>
                 {price}
               </Text>
-              {data?.DiaChi ? (
+              {/* Địa chỉ trùng tên dự án (dòng ngay trên) ⇒ bỏ cho đỡ lặp */}
+              {data?.DiaChi && String(data.DiaChi).trim().toLowerCase() !== String(data?.TenDA ?? "").trim().toLowerCase() ? (
                 <View style={styles.place}>
                   <MapPin size={16} color={colors.textSecondary} strokeWidth={2} />
                   <Text variant="caption" color="textSecondary" style={styles.flex}>
