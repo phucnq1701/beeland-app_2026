@@ -1,4 +1,4 @@
-// Phần 1 — Dự án + Sản phẩm trên bộ API riêng app nhân viên (lib/nvSanPham.ts, services/SanPhamApi.ts, sevicesSupabase/*Service.ts).
+// Phần 1 — Dự án + Sản phẩm trên bộ API riêng app nhân viên (lib/nvSanPham.ts, services/SanPhamApi.ts, services/*Service.ts).
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { loadTs } = require("./helpers/loadTs.cjs");
@@ -92,16 +92,16 @@ function services(handler) {
   };
   const san = loadTs("services/SanPhamApi.ts", { modules: { "@/lib/nvSanPham": lib, "./nvApi": nvApi } });
   const projectScope = loadTs("lib/projectScope.ts");
-  const product = loadTs("sevicesSupabase/ProductService.ts", { modules: {
+  const product = loadTs("services/ProductService.ts", { modules: {
     "../lib/projectScope": projectScope, "@/services/nvApi": nvApi, "@/services/SanPhamApi": san,
     "./axiosApiSupabase": { default: { get: async () => { throw new Error("không được gọi rest/v1"); } } },
     "./cloudTenant": {},
   } });
-  const project = loadTs("sevicesSupabase/ProjectService.ts", { modules: { "@/services/nvApi": nvApi, "@/services/SanPhamApi": san } });
-  const price = loadTs("sevicesSupabase/PriceServices.ts", { modules: {
+  const project = loadTs("services/ProjectService.ts", { modules: { "@/services/nvApi": nvApi, "@/services/SanPhamApi": san } });
+  const price = loadTs("services/PriceServices.ts", { modules: {
     "@/services/nvApi": nvApi, "@/services/SanPhamApi": san, "./ProductService": product,
   } });
-  const filter = loadTs("sevicesSupabase/FilterService.ts", { modules: { "@/services/nvApi": nvApi, "@/services/SanPhamApi": san } });
+  const filter = loadTs("services/FilterService.ts", { modules: { "@/services/nvApi": nvApi, "@/services/SanPhamApi": san } });
   return { calls, san, product, project, price, filter };
 }
 

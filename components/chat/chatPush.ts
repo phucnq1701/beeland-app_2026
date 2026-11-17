@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
-import { ChatService } from "@/sevicesSupabase/ChatService";
+import { ChatService } from "@/services/ChatService";
 import { getFreshJwt } from "@/services/session";
 
 /**

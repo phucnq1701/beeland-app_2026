@@ -7,7 +7,7 @@ import { AppHeader, Button, Screen, Text, TextField, useToast } from "@/componen
 import { hapticError } from "@/lib/haptics";
 import { resetErrorMessage } from "@/lib/staffResetPassword";
 import { colors, radius, space } from "@/theme";
-import { StaffResetPasswordService } from "@/sevicesSupabase/StaffResetPasswordService";
+import { StaffResetPasswordService } from "@/services/StaffResetPasswordService";
 
 /**
  * Quên mật khẩu – bước 1: gửi mã OTP tới email đăng ký của tài khoản (nhân viên nội bộ + đại lý).

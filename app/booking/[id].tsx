@@ -30,11 +30,11 @@ import { CollapsibleSection } from "@/components/booking/CollapsibleSection";
 import { BOOKING_STEPS, getBookingProgress } from "@/lib/bookingProgress";
 import { formatDateTime, formatNumberVN, formatVND, formatVNDShort, maskPhone } from "@/lib/format";
 import { colors, elevation, radius, space } from "@/theme";
-import { BookingService } from "@/sevicesSupabase/BookingService";
+import { BookingService } from "@/services/BookingService";
 import {
   PriceServices,
   ActivePriceListItem,
-} from "@/sevicesSupabase/PriceServices";
+} from "@/services/PriceServices";
 
 type Section = "policy" | "price" | "gift" | "docs";
 

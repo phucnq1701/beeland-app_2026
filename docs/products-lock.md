@@ -11,17 +11,16 @@
 | Căn đã lock / chi tiết lock (đếm ngược, Tạo booking). Danh sách kiểu bo tròn: header/ô tìm/chip `soft`, card bo `radius.xxl` + bóng nhẹ, icon tròn nền theo trạng thái; hết hạn chỉ hiện badge (không lặp chữ "Hết hạn"), chân card: giờ lock + nút ›. Chi tiết lock cùng kiểu chi tiết sản phẩm (ảnh + khối nội dung trồi lên, ô đếm ngược/hết hạn dạng viên) | `app/locked-units.tsx`, `app/locked/[id].tsx` |
 | Sơ đồ phân lô (WebView) | `app/diagram/[mada].tsx` |
 
-## Dữ liệu
+## Dữ liệu (bộ API riêng, `services/SanPhamApi.ts` + map `lib/nvSanPham.ts`, test `tests/nv-san-pham.test.cjs`)
 
-| Việc | Service | Nguồn |
+| Việc | Service | Endpoint (lõi chung web) |
 |---|---|---|
-| Dự án (dùng chung cho mọi ô chọn dự án trong app) | `ProjectService.getProjects` | RPC `fn_da_project_list` (như web `listManagedProjects`), app giữ thêm lọc `ap_dung = true`; MaDA = `ma_da_code`, thiếu thì uuid |
-| Danh sách sản phẩm (màn Sản phẩm, chọn căn ở Đặt lịch / Phiếu tính giá) | `ProductService.getProducts` → `normalizeProduct` | RPC `fn_bds_product_list` (như web Cao tầng / Thấp tầng) lấy id + thứ tự + tổng, rồi REST `bds_products?id=in.(…)` đọc đủ cột |
-| Chi tiết, ảnh sản phẩm | `ProductService.getDetailProducts / getBannerProduct` | `bds_products` (REST) |
-| Danh mục trạng thái căn | `FilterService.getStatusSP` | `cloud_catalogs` `bds_trang_thai`, `ma_ctdk=global` (MaTT = uuid, `_raw.item_code` = mã số); lỗi → rỗng (đã bỏ fallback API cũ) |
-| Lưới khu/tầng/vị trí | `PriceServices.getBlock` | `bds_products` + `cloud_catalogs` |
-| Giá theo bảng giá (chi tiết căn) | `PriceServices.getActivePriceForProduct` | RPC `get_active_price_for_product` |
-| Realtime | `subscribeTableChanges` (`sevicesSupabase/realtimeHub.ts`): UPDATE `bds_products` lọc `ma_ctdk=eq.<uuid công ty>` – như web `useProductStatusRealtime` (`app/products.tsx`) | `lib/productRealtime.rowToRealtimeChange` → `applyRealtimeChange` (khớp căn theo `MaSP`, sự kiện cũ theo `MaVT`); danh sách đổi MaTT/TenTT/ColorTT |
+| Dự án (dùng chung cho mọi ô chọn dự án) | `ProjectService.getProjects` → `DuAnApi.list` | `fn_nv_app_du_an_list` (= `fn_da_project_list`, chỉ dự án đang áp dụng, kèm ảnh); MaDA = `ma_da_code`, thiếu thì uuid |
+| Danh sách sản phẩm (màn Sản phẩm, chọn căn ở Phiếu tính giá) | `ProductService.getProducts` → `SanPhamApi.list` | `fn_nv_app_san_pham_list` (= `fn_bds_product_list`: dự án, khu, trạng thái, loại, từ khoá, trang) |
+| Ô lọc khu + danh mục trạng thái (màu theo công ty) | `ProductService.getKhuVuc`, `FilterService.getStatusSP` | `fn_nv_app_san_pham_bo_loc` |
+| Lưới / Tổng quan khu → tầng → căn | `PriceServices.getBlock` → `SanPhamApi.grid` | `fn_nv_app_so_do` |
+| Chi tiết căn + ảnh + giá đang áp dụng + phiếu lock + quyền Lock / Booking / Lập phiếu tính giá | `SanPhamApi.detail` (`loadProductDetail`, `getDetailProducts`, `getBannerProduct`, `PriceServices.getActivePriceForProduct`) | `fn_nv_app_san_pham_chi_tiet` (1 lời gọi; giá = lõi `get_active_price_for_product`) |
+| Realtime | `subscribeTableChanges` (`services/realtimeHub.ts`): UPDATE `bds_products` lọc `ma_ctdk=eq.<uuid công ty>` – như web `useProductStatusRealtime` (`app/products.tsx`) | `lib/productRealtime.rowToRealtimeChange` → `applyRealtimeChange` (khớp căn theo `MaSP`, sự kiện cũ theo `MaVT`); danh sách đổi MaTT/TenTT/ColorTT |
 
 ## Phạm vi dự án / sản phẩm (máy chủ quyết định, app không tự lọc)
 
@@ -33,11 +32,8 @@ migration `20261014121500_da_project_scope_agency`, `20261014100000_bds_product_
   Danh sách sản phẩm = chỉ căn trong **giỏ hàng** đang hiệu lực có cả đại lý lẫn nhân viên đó — không theo dự án.
 - **Nhân viên nội bộ:** dự án được gán (`dm_employee_projects`); nhóm full access / admin ⇒ mọi dự án công ty.
   Danh sách sản phẩm = căn thuộc các dự án đó.
-- Lưới / Tổng quan (`PriceServices.getBlock`) đọc REST `bds_products`. Với **đại lý**, RLS REST còn trả cả căn sàn từng
-  giao dịch (rộng hơn danh sách) ⇒ app lọc lại bằng RPC `app_agency_product_ids(p_include_docs := false)` — đúng tập
-  `fn_bds_product_list` dùng — để cả 3 chế độ Danh sách / Lưới / Tổng quan chỉ hiện căn trong giỏ hàng (chủ dự án chốt
-  2026-10-16). RPC trả `null` cho nội bộ ⇒ không lọc; lỗi gọi + tài khoản AGENCY ⇒ không hiện căn nào.
-  (Sơ đồ tổng quan web `so-do-tong-quan` chưa lọc như vậy — đại lý trên web vẫn thấy căn sàn đã giao dịch.)
+- Cả 3 chế độ Danh sách / Lưới / Tổng quan: máy chủ áp cùng tập căn (`app_agency_product_ids`) ⇒ đại lý chỉ thấy căn trong giỏ
+  hàng (chủ dự án chốt 2026-10-16); app không tự lọc. (Sơ đồ tổng quan web `so-do-tong-quan` chưa lọc như vậy.)
 - Đại lý muốn thấy căn của giỏ: trên web **Sản phẩm › Giỏ hàng › Quản lý nhân viên** phải thêm **từng nhân viên đại lý**.
   Dialog "Sản phẩm của đại lý" (Danh sách đại lý) liệt kê mọi căn giỏ có đại lý, **không** xét nhân viên ⇒ có thể nhiều hơn
   những gì một nhân viên đại lý thấy.
@@ -50,44 +46,35 @@ migration `20261014121500_da_project_scope_agency`, `20261014100000_bds_product_
   4/5 Đã bán, còn lại Khóa). Hệ quả như web: HĐMB, Bàn giao… hiện **Khóa**; nhóm Đã bán gần như luôn 0 (spec 0.2 #2).
 - Tên dùng để xét: tên trên căn, thiếu thì tên danh mục (`lib/productRealtime.unitStatusOf`). Màu ô: `MauNen`/`ColorTT` của dữ liệu.
 - **Được Lock / Booking:** `isOpenForSale` (web `src/utils/productSaleStatus.ts`) – chỉ mã **2** hoặc tên "Mở bán".
-  Chi tiết căn tính `canTransact` theo mã số nếu có, không thì theo tên.
+  Chi tiết căn tính `canTransact` theo mã số nếu có, không thì theo tên. Nút Lock / Tạo booking còn theo quyền nhóm (LOCK /
+  BOOKING của màn sản phẩm) do `fn_nv_app_san_pham_chi_tiet` trả (`perms.lock` / `perms.booking`) – như web.
 - Booking căn **"Booking chờ duyệt" (11)**: web bật nút nhưng máy chủ từ chối → app **tắt** (spec 0.2 #1, chờ nghiệp vụ).
 - Mã trạng thái (web `ProductTransactionStatus.ts`): 2 Mở bán · 11 Booking chờ duyệt · 18 Đã Lock · bảng đầy đủ ở spec mục 0.1.
 
 ## Luồng lock căn (`BookingService`)
 
-1. `createLock({ maSP, kyHieu, maDA, minutes? })`: tra `bds_products` → thời gian lock = `minutes` > 0, không thì
-   `cloud_sales_settings.thoi_gian_lock` (dòng dự án ưu tiên dòng chung, trong khoảng ngày, `ap_dung`), mặc định 30 phút.
-2. Số phiếu `KyHieu/YYYY/MM/STT`, STT = số phiếu LOCK trong tháng **theo giờ VN** (`lockVoucherMonth`) + 1.
-3. RPC `fn_product_transaction` (`LOCK_CREATE`, cần mã 2 → 18). **Lỗi → dừng, không tạo phiếu**, trả lời báo của máy chủ.
-4. Insert `cloud_bookings` (`loai_ct=LOCK`, `state=LOCKED`, `het_han_luc`).
-- Huỷ: `releaseLock` → state RELEASED/EXPIRED + `fn_product_transaction` `LOCK_RELEASE` (18 → 2).
-- Hết hạn: `sweepExpiredLocks` (gọi khi mở màn / đếm ngược về 0) chỉ đổi phiếu sang EXPIRED.
+- `createLock({ sanPhamId | maSP })` → **1 lời gọi** `fn_nv_app_lock_tao { p_san_pham_id }`: máy chủ lấy phút lock theo cài đặt
+  bán hàng, cấp số phiếu không trùng, đổi căn 2 → 18 + ghi phiếu LOCK trong cùng giao dịch. Lỗi → lời máy chủ, không tạo gì.
+- Danh sách / chi tiết phiếu lock: `listProductLocks` (`fn_nv_app_lock_list` = `fn_product_lock_list` web: phạm vi chứng từ
+  `/sales/locks` + dự án được gán; nhiều dự án ⇒ gọi từng dự án rồi gộp), `getLockDetailCloud` (`fn_nv_app_lock_chi_tiet`). Máy
+  chủ tính `con_lai` (chỉ LOCKED còn hạn > 0).
+- Hết hạn: `sweepExpiredLocks` (`fn_nv_app_lock_het_han` = `fn_product_lock_expire_due` web; gọi khi mở màn / đếm ngược về 0):
+  phiếu LOCKED quá hạn → EXPIRED **và trả căn về trạng thái thực tế** như web; job nền 5 phút vẫn chạy.
 - Màn chi tiết căn/lock: chặn bấm lặp bằng ref; đếm ngược về 0 → sweep đúng một lần rồi tải lại.
 
 ## Bẫy đã gặp
 
-- Phạm vi dự án đại lý từng đọc `cloud_generic_records` endpoint `admin/du-an/dai-ly`. Web chuyển sang `da_project_agencies`
-  và **xoá** endpoint này 2026-10-14 ⇒ mọi tài khoản đại lý thấy 0 dự án. Đã chuyển sang `fn_da_project_list` (2026-10-16).
-- Danh sách sản phẩm từng đọc thẳng REST `bds_products`: đại lý chưa ở giỏ nào vẫn thấy các căn sàn đã giao dịch
-  (RLS REST rộng hơn danh sách web), nhân viên nội bộ chưa gán dự án thấy mọi căn công ty. Đã chuyển sang `fn_bds_product_list`.
-
-- Cột diện tích tim tường là **`dt_tim_tuong`** (app từng đọc `dt_tim_duong` không tồn tại → luôn trống). Field app: `DTTimDuong`.
-- uuid sản phẩm nằm ở **`ID`** của `normalizeProduct`, không phải `id`.
-- Số phiếu lock phải đếm tháng theo giờ VN (đếm theo UTC từng trùng số 7 giờ đầu tháng → unique lỗi sau khi căn đã sang 18).
-- `fn_product_transaction` lỗi phải dừng cả luồng (bản cũ vẫn tạo phiếu khi bị từ chối).
+- Phạm vi dự án đại lý từng đọc `cloud_generic_records` endpoint `admin/du-an/dai-ly` – web xoá endpoint 2026-10-14 ⇒ đại lý
+  thấy 0 dự án. Nay theo `fn_nv_app_du_an_list` (lõi `fn_da_project_list`).
+- Cột diện tích tim tường là **`dt_tim_tuong`** (app từng đọc `dt_tim_duong` không tồn tại). Field app: `DTTimDuong`.
+- uuid sản phẩm nằm ở **`ID`**, không phải `id`.
 
 ## Tồn đọng / chưa kiểm chứng
 
-- Web hết hạn lock còn gọi `LOCK_RELEASE` trả căn về Mở bán (`ProductLockService.closeLockRow`) + tác vụ nền
-  `expire_product_locks` (5 phút). App sweep **chỉ đổi phiếu** → căn có thể còn "Đã Lock" tới khi tác vụ nền chạy. Lệch web, chưa sửa.
-- Realtime trạng thái căn: chưa thử trên máy với dữ liệu thật (cần đổi trạng thái một căn – thao tác ghi). Tên trạng thái lấy
-  theo danh mục, chưa dùng `cloud_status_override` như web (lúc tải lưới cũng chưa dùng).
+- Realtime trạng thái căn: chưa thử trên máy với dữ liệu thật (cần đổi trạng thái một căn – thao tác ghi).
 - Booking căn mã 11 chờ quyết định nghiệp vụ (cần sửa server trước).
 - **Đại lý – phạm vi theo giỏ (2026-10-16):** nhân viên đại lý chỉ thấy căn của giỏ có tên mình trong "Quản lý nhân viên".
   Nếu nghiệp vụ muốn **mọi nhân viên của sàn** tự thấy mọi căn giỏ của sàn (như dialog "Sản phẩm của đại lý") ⇒ phải đổi
-  `app_agency_product_ids` / `fn_bds_product_list` ở **máy chủ** (ảnh hưởng web) – chưa làm, chờ quyết định.
+  `app_agency_product_ids` / `fn_bds_product_list` (đối tượng web) – chưa làm, chờ quyết định.
 - Sơ đồ tổng quan web chưa lọc đại lý theo giỏ (app đã lọc) – spec 0.2 #11. Dữ liệu giỏ có dòng nhân viên là id đại lý – spec 0.2 #12.
 - Màn chi tiết căn đã lock (`app/locked/[id].tsx`) ảnh đầu trang vẫn cao 320, chưa giảm 2/3 như chi tiết sản phẩm / dự án.
-- 4 test so sánh với code web hỏng vì web đã đổi chỗ file khi cấu trúc lại (`payment-math` → `Reports/DebtProgressReport.tsx`,
-  `price-sheet-calc` → `ContractForm/calculations.ts`, `scheduleRowsFromTemplate`, `productFromSavedSheet`) – cần trỏ lại đường dẫn.

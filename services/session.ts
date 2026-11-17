@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 
-import { jwtSecondsLeft } from "@/lib/jwt";
+import { jwtPayload, jwtSecondsLeft } from "@/lib/jwt";
 import { SESSION_KEYS } from "@/lib/sessionKeys";
 
 import { NV_API_BASE } from "./config";
@@ -13,13 +13,17 @@ import { NV_API_BASE } from "./config";
  * - Tự làm mới khi JWT còn < 1 ngày hoặc máy chủ trả 401; một lần làm mới dùng chung cho mọi lời gọi đang chờ.
  * - Làm mới bị từ chối (401/403: hết phiên, bị khoá…) ⇒ xoá phiên + báo `onSessionExpired` để giao diện về màn đăng nhập.
  *
- * Khoá lưu: giữ tên cũ (`@supabase_jwt`, `@token`, `@tenant_id`…) trong giai đoạn chuyển đổi vì các màn chưa chuyển còn đọc;
- * đổi tên ở bước dọn cuối (docs/app-api-rieng.md phần 8).
+ * Khoá lưu: GIỮ tên `@supabase_jwt` / `@token` / `@nv_user` (đổi tên ⇒ bản cập nhật đăng xuất mọi người). Các khoá cũ khác của lớp
+ * Supabase (@tenant_id, @type_account…) không còn ghi / đọc — màn dùng `getSessionInfo()`; saveSession dọn phần còn sót.
  */
 export const JWT_KEY = "@supabase_jwt";
 export const TOKEN_KEY = "@token";
 export const USER_KEY = "@nv_user";
-const PROFILE_KEY = "@cloud_profile";
+/** Khoá lưu cũ của lớp Supabase / cloudTenant (bỏ 2026-11-17) — chỉ để dọn. */
+const LEGACY_KEYS = [
+  "@cloud_profile", "@company_id", "@tenant_id", "@cloud_company_id", "@employee_id", "@user_company_id", "@branch_id",
+  "@ma_nv", "@type_account", "@company_code", "maCTDK_UUID", "maCTDK",
+];
 
 /** Làm mới sớm khi JWT còn dưới 1 ngày (JWT app 7 ngày). */
 export const REFRESH_BEFORE_SEC = 24 * 60 * 60;
@@ -84,6 +88,36 @@ export async function getUser(): Promise<NvUser | null> {
   }
 }
 
+export interface SessionInfo {
+  companyId: string;
+  employeeId: string;
+  maNv: string;
+  /** "SYSTEM" | "AGENCY" | "" */
+  typeAccount: string;
+  isAgency: boolean;
+  /** mã chữ công ty (vd brg) */
+  companyCode: string;
+}
+
+/**
+ * Thông tin phiên cho màn hình (thay các khoá lưu cũ @type_account / @company_id / @ma_nv / @employee_id … của lớp Supabase):
+ * người dùng của phiên (fn_nv_app_dang_nhap), thiếu thì đọc claim JWT phiên (cùng nguồn). Máy chủ vẫn là nơi kiểm quyền.
+ */
+export async function getSessionInfo(): Promise<SessionInfo> {
+  const u = await getUser();
+  const c = jwtPayload(await getJwt());
+  const pick = (a: unknown, b: unknown) => String(a ?? "").trim() || String(b ?? "").trim();
+  const typeAccount = pick(u?.loai_tk, c.type_account).toUpperCase();
+  return {
+    companyId: pick(u?.company_id, c.company_id),
+    employeeId: pick(u?.employee_id, c.employee_id),
+    maNv: pick(u?.ma_nv, c.ma_nv),
+    typeAccount,
+    isAgency: typeAccount === "AGENCY",
+    companyCode: pick(u?.ma_ctdk, c.company_code ?? c.ma_ctdk).toLowerCase(),
+  };
+}
+
 /** Lưu phiên vừa cấp. `companyCodeTyped` = mã công ty người dùng gõ (hiển thị). */
 export async function saveSession(s: NvSession, companyCodeTyped?: string): Promise<void> {
   const u = s.nguoi_dung || ({} as NvUser);
@@ -92,28 +126,13 @@ export async function saveSession(s: NvSession, companyCodeTyped?: string): Prom
     [TOKEN_KEY, s.token],
     [USER_KEY, JSON.stringify(u)],
   ];
-  // Khoá cũ các màn chưa chuyển còn đọc (cloudTenant.ts / CloudProfileService.ts) — cùng nghĩa như persistTenantFromJwt.
-  const put = (k: string, v: string | null | undefined) => {
-    if (v != null && String(v).trim() !== "") set.push([k, String(v)]);
-  };
-  put("@tenant_id", u.company_id);
-  put("@company_id", u.company_id);
-  put("maCTDK_UUID", u.company_id);
-  put("@cloud_company_id", u.company_id);
-  put("@employee_id", u.employee_id);
-  put("@branch_id", u.branch_id);
-  put("@user_company_id", u.branch_id);
-  put("@ma_nv", u.ma_nv);
-  put("@type_account", u.loai_tk ? String(u.loai_tk).toUpperCase() : null);
-  put("@company_code", u.ma_ctdk);
-  put("maCTDK", u.ma_ctdk);
-  put("tenCTDKVT", companyCodeTyped);
-  if (u.id && u.company_id) {
-    set.push([PROFILE_KEY, JSON.stringify({
-      id: u.id, companyId: u.company_id, HoTen: u.ho_ten || u.email || "", Email: u.email || "", DiDong: u.dien_thoai || null,
-    })]);
-  }
+  // Mã công ty người dùng gõ lúc đăng nhập (hiển thị). Các khoá cũ của lớp Supabase (@tenant_id, @type_account, @ma_nv…) không
+  // còn ghi — màn đọc getSessionInfo(); vẫn nằm trong SESSION_KEYS để đăng xuất dọn phần còn sót từ bản cũ.
+  if (companyCodeTyped && companyCodeTyped.trim()) set.push(["tenCTDKVT", companyCodeTyped.trim()]);
   await AsyncStorage.multiSet(set);
+  // Khoá cũ của lớp Supabase còn sót từ bản trước (đã không màn nào đọc) ⇒ dọn luôn
+  const keep = new Set(set.map(([k]) => k));
+  await AsyncStorage.multiRemove(LEGACY_KEYS.filter((k) => !keep.has(k))).catch(() => undefined);
 }
 
 /** Xoá phiên trên máy (giữ @last_login, Face ID, cấu hình trang chủ — xem lib/sessionKeys.ts). */

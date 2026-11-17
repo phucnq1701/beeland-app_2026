@@ -17,7 +17,7 @@ import {
 } from "@/components/ui";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, elevation, radius, space } from "@/theme";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { ProjectService } from "@/services/ProjectService";
 
 const PAGE_SIZE = 20;
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */

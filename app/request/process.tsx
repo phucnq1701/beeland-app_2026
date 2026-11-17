@@ -16,7 +16,7 @@ import {
 } from "@/components/ui";
 import { mapCatalog, type YcCat } from "@/lib/customerRequest";
 import { colors, elevation, radius, space } from "@/theme";
-import { CustomerRequestService } from "@/sevicesSupabase/CustomerRequestService";
+import { CustomerRequestService } from "@/services/CustomerRequestService";
 
 const NOTE_MAX = 2000;
 

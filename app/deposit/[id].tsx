@@ -10,9 +10,9 @@ import { isFeatureAllowed } from "@/lib/featureConfig";
 import { radius } from "@/theme";
 import { formatArea, formatDate, formatVND } from "@/lib/format";
 import { ScheduleRow } from "@/lib/paymentMath";
-import { getTypeAccount } from "@/sevicesSupabase/cloudTenant";
-import { DatCocService } from "@/sevicesSupabase/DatCocService";
-import { Receipt } from "@/sevicesSupabase/PaymentProgressService";
+import { getSessionInfo } from "@/services/session";
+import { DatCocService } from "@/services/DatCocService";
+import { Receipt } from "@/services/PaymentProgressService";
 
 /**
  * Chi tiết đặt cọc – như web (ContractDetail type DATCOC): đầu phiếu từ dòng danh sách fn_deposit_list,
@@ -40,8 +40,8 @@ export default function DepositDetailScreen() {
   // Đặt lịch ký chỉ dành cho đại lý (tính năng 14)
   const [canSign, setCanSign] = useState(false);
   useEffect(() => {
-    getTypeAccount()
-      .then((t) => setCanSign(isFeatureAllowed("14", t === "AGENCY")))
+    getSessionInfo()
+      .then((s) => setCanSign(isFeatureAllowed("14", s.isAgency)))
       .catch(() => setCanSign(false));
   }, []);
 

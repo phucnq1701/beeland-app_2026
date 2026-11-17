@@ -49,7 +49,7 @@ function load({ reply = { ket_qua: "xoa" }, error = null, clearFails = false } =
       store.token = "";
     },
   };
-  const svc = compile("sevicesSupabase/AccountDeletionService.ts", { "@/services/nvApi": nv, "@/services/session": session });
+  const svc = compile("services/AccountDeletionService.ts", { "@/services/nvApi": nv, "@/services/session": session });
   return { svc, store, calls, cleared: () => cleared };
 }
 

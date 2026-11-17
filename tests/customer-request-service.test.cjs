@@ -38,7 +38,7 @@ function harness(handlers = {}) {
   const signing = run("lib/signing.ts", {});
   const reqLib = run("lib/customerRequest.ts", { "./signing": signing });
   const uploads = [];
-  const svc = run("sevicesSupabase/CustomerRequestService.ts", {
+  const svc = run("services/CustomerRequestService.ts", {
     "@/services/nvApi": nv,
     "@/services/config": { API_URL: "https://api.test" },
     "./BookingService": { uploadTenantFile: async (f, folder) => (uploads.push({ f, folder }), "https://upload.test/yeu-cau/a.png") },

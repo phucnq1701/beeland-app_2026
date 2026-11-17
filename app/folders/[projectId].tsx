@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { FolderItem, FolderListScreen } from "@/components/media/FolderListScreen";
 import { useToast } from "@/components/ui";
 import { shareText } from "@/lib/shareText";
-import { DocumentService, type DocEntry } from "@/sevicesSupabase/DocumentService";
+import { DocumentService, type DocEntry } from "@/services/DocumentService";
 
 /**
  * Thư mục tài liệu của dự án (cây thư mục như web — fn_nv_app_tai_lieu_cay). `parentId` có ⇒ thư mục con của thư mục đó.

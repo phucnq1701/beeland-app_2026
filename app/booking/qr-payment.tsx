@@ -41,13 +41,13 @@ import { formatVND } from "@/lib/format";
 import { hapticSuccess } from "@/lib/haptics";
 import { getQrScreenState, showsQrImage } from "@/lib/qrPaymentState";
 import { colors, radius, space } from "@/theme";
-import { BookingService } from "@/sevicesSupabase/BookingService";
+import { BookingService } from "@/services/BookingService";
 import {
   PaymentGatewayService,
   vietQrUrl,
   type ContractVA,
   type GatewayAccount,
-} from "@/sevicesSupabase/PaymentGatewayService";
+} from "@/services/PaymentGatewayService";
 
 const errMsg = (e: any, fallback: string) =>
   e instanceof Error && e.message ? e.message : fallback;

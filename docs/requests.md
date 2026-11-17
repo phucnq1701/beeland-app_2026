@@ -15,23 +15,23 @@ hàng nằm chung bảng nên hiện ngay ở đây; nội dung nhân viên "C�
 | Cập nhật xử lý: chọn trạng thái mới (không chọn = giữ nguyên, đánh dấu "Hiện tại") + nội dung xử lý (bắt buộc, ≤ 2000) | `app/request/process.tsx` |
 | Tiếp nhận / sửa: card Khách hàng (chọn từ danh sách khách → khoá tên/SĐT/email, nút X để nhập tay), Dự án & hợp đồng, Nội dung yêu cầu, Phân loại & phân công (nguồn, ưu tiên, trạng thái, hạn ngày + giờ, người tiếp nhận, người xử lý, ghi chú nội bộ), Hình ảnh / tài liệu. Thêm mới xong → mở chi tiết | `app/request/form.tsx` |
 
-## Dữ liệu (`sevicesSupabase/CustomerRequestService.ts`)
+## Dữ liệu (`services/CustomerRequestService.ts`)
 
-| Việc | Hàm | Máy chủ |
+SP app bọc đúng SP web `fn_customer_request_*`; công ty / người thao tác máy chủ lấy từ phiên – app không gửi.
+
+| Việc | Hàm | Endpoint (= SP web) |
 |---|---|---|
-| Danh sách | `list` | RPC `fn_customer_request_list` (`p_keyword`, `p_ma_da`, `p_nguon`, `p_trang_thai`, `p_uu_tien`, `p_tu_ngay`/`p_den_ngay` `YYYY-MM-DD` giờ VN, `p_page`, `p_size`; `p_company_ids` / `p_form` có mặc định null – app không gửi, phạm vi máy chủ cắt) → `{rows, total}` |
-| Chi tiết / lưu / xoá | `get`, `save`, `remove` | `fn_customer_request_get`, `fn_customer_request_save(p jsonb)` (JSON kiểu cũ MaKH/TieuDe/State…, **lưu đè toàn bộ trường**), `fn_customer_request_delete` (xoá mềm) |
-| Cập nhật xử lý / lịch sử | `process`, `logs` | `fn_customer_request_process(p_id, p_trang_thai, p_noi_dung)`, `fn_customer_request_logs` |
-| Danh mục loại / nguồn / ưu tiên / trạng thái | `catalogs` | `cloud_catalogs` `dm_*_yeu_cau` theo `ma_ctdk_uid` – **chỉ đọc** (web tự ghi mục cố định thiếu); rỗng/lỗi → bộ cố định của web |
-| Người tiếp nhận / xử lý | `employees` | `dm_employees` (`ma_ctdk` = uuid công ty); giá trị = `ma_nv` (như web) |
-| Hợp đồng / phiếu của khách | `CustomerService.getCustomerTransactions` | `cloud_pgc_phieu_giucho` của khách; lưu uuid phiếu vào `MaHD` (máy chủ gán `pgc_id`) – như app khách hàng gửi |
-| Nhãn hợp đồng | `contractLabel(contractId, contractCode)` | ưu tiên `SoHD` máy chủ trả trong `_ccr_json` (`contractCode`, như web); thiếu thì uuid phiếu → `so_phieu_gc`; mã cũ giữ nguyên |
-| Xem tệp | `resolveAttachments` | `drive-files:<path>` (khách tải lên, kho riêng tư) → edge `storage-broker` `sign-download` 1 giờ (token `@token`), đổi host nội bộ về `api-beelandv2`; link khác → `fileUrl` |
-| Thêm tệp | `upload` | `uploadTenantFile(file, "yeu-cau")` (edge `upload-file`, lỗi → API .NET) → luôn lưu **URL tuyệt đối** (web hiển thị trực tiếp) |
+| Danh sách | `list` | `fn_nv_app_yeu_cau_list` (`p_keyword`, `p_ma_da`, `p_nguon`, `p_trang_thai`, `p_uu_tien`, `p_tu_ngay`/`p_den_ngay` `YYYY-MM-DD` giờ VN, `p_page`, `p_size`; phạm vi máy chủ cắt) → `{rows, total}` |
+| Chi tiết / lưu / xoá | `get`, `save`, `remove` | `fn_nv_app_yeu_cau_chi_tiet` (kèm `SoHD` = số phiếu của HĐ liên quan), `fn_nv_app_yeu_cau_luu` (JSON kiểu cũ MaKH/TieuDe/State…, **lưu đè toàn bộ trường**), `fn_nv_app_yeu_cau_xoa` (xoá mềm) |
+| Cập nhật xử lý / lịch sử | `process`, `logs` | `fn_nv_app_yeu_cau_xu_ly`, `fn_nv_app_yeu_cau_nhat_ky` |
+| Danh mục loại / nguồn / ưu tiên / trạng thái | `catalogs` | `fn_nv_app_danh_muc` (`dm_*_yeu_cau` của công ty) – **chỉ đọc**; rỗng/lỗi → bộ cố định của web |
+| Người tiếp nhận / xử lý | `employees` | `fn_nv_app_nhan_vien_list` (như web `NhanVienService.getList`); giá trị = `ma_nv` |
+| Hợp đồng / phiếu của khách | `CustomerService.getCustomerTransactions` | `fn_nv_app_khach_hang_giao_dich`; lưu uuid phiếu vào `MaHD` (máy chủ gán `pgc_id`) – như app khách hàng gửi |
+| Nhãn hợp đồng | `contractLabel(contractId, SoHD)` | `SoHD` máy chủ trả; mã cũ (không phải uuid) giữ nguyên; uuid không có số ⇒ hiện mã |
+| Xem tệp khách gửi (`drive-files:<path>`, kho riêng tư) | `resolveAttachments` | `fn_nv_app_yeu_cau_tep_ky { p_id, p_path }` → link 1 giờ (máy chủ chỉ ký khi yêu cầu xem được + tệp thuộc yêu cầu); URL ký nội bộ `…/storage/v1/…` đổi về `API_URL` (`toPublicStorageUrl`); link khác → `fileUrl` |
+| Thêm tệp | `upload` | `uploadTenantFile(file, "yeu-cau")` (`fn_nv_app_tai_tep`) → luôn lưu **URL tuyệt đối** (web hiển thị trực tiếp) |
 
-Tenant và người thao tác do máy chủ lấy từ JWT (`company_id`, `ma_nv`) – app không gửi. Anon bị từ chối (đã thử 2026-10-07: 42501).
-**Đợt 5 (2026-10-20, migration web `20261020000600_ds_dot5_requests_workflow_revoke.sql`)**: REVOKE đọc/ghi thẳng `cloud_customer_requests`
-(và các bảng workflow) ⇒ app chỉ gọi các RPC trên, không còn `rest/v1/cloud_customer_requests`.
+Tài khoản không có quyền "Yêu cầu khách hàng" (vd MSR) ⇒ lời máy chủ hiện nguyên.
 
 ## Quy tắc (logic thuần `lib/customerRequest.ts`, test `tests/customer-request.test.cjs`)
 
@@ -41,7 +41,7 @@ Tenant và người thao tác do máy chủ lấy từ JWT (`company_id`, `ma_nv
 - Dự án: ô chọn dùng uuid; mở yêu cầu cũ đổi `MaDA` (mã hoặc uuid) → uuid (`projectValueOf`, như web `projectCodeOf`); lưu gửi `ma_da_code`
   (thiếu thì uuid). Dự án cũ không còn trong danh sách → vẫn lưu giá trị cũ, ô hiện tên cũ làm gợi ý.
 - **Yêu cầu khách tự gửi – giữ nguyên nội dung khách gửi** (người dùng yêu cầu 2026-10-07): máy chủ đánh dấu `created_by = 'PORTAL'`
-  nhưng `_ccr_json` không trả cột này và từ Đợt 5 không đọc thẳng bảng được ⇒ `createdBy` = null, nhận biết theo **nguồn `app`/`website`**
+  nhưng `_ccr_json` không trả cột này (app không đọc bảng) ⇒ `createdBy` = null, nhận biết theo **nguồn `app`/`website`**
   (`isCustomerSubmitted`; yêu cầu nhân viên nhập với nguồn Website cũng bị khoá nội dung – nghiêng về an toàn).
   Form sửa hiện băng "Yêu cầu do khách gửi…" và ô khoá (`LockedValue`, viền nét đứt + biểu tượng khoá) cho: tên / SĐT / email khách,
   hợp đồng, tiêu đề, nội dung, nguồn; dự án và loại chỉ khoá khi khách đã có (trống thì nhân viên bổ sung – dự án bắt buộc).
@@ -58,8 +58,7 @@ Tenant và người thao tác do máy chủ lấy từ JWT (`company_id`, `ma_nv
 
 ## Bẫy
 
-- `fn_customer_request_save` ghi đè **mọi** cột khi sửa → form sửa phải nạp đủ và gửi lại mọi trường (kể cả mã danh mục lạ, hợp đồng mã cũ).
-- URL `storage-broker` trả host nội bộ `http://api-gw:8000/...` → phải đổi về `https://api-beelandv2.beesky.vn`.
+- Lưu (`fn_customer_request_save`) ghi đè **mọi** cột khi sửa → form sửa phải nạp đủ và gửi lại mọi trường (kể cả mã danh mục lạ, hợp đồng mã cũ).
 - `DateField` có `variant="soft"` (thêm cho form này); `CustomerPickerSheet` trả thêm `email`, `onAddNew` không bắt buộc (không truyền → ẩn nút thêm khách).
 
 ## Tồn đọng
@@ -69,4 +68,4 @@ Tenant và người thao tác do máy chủ lấy từ JWT (`company_id`, `ma_nv
 
 - Chưa có Báo cáo yêu cầu (web `bao-cao-yeu-cau`), màn Danh mục / Cấu hình tổng đài – làm trên web.
 - Chưa báo (push) cho nhân viên khi khách gửi yêu cầu mới (web cũng chưa có).
-- Chưa kiểm chứng trên máy thật với tài khoản nội bộ có dữ liệu yêu cầu (máy dev không có tài khoản đăng nhập).
+- Đã thử trên máy ảo (danh sách + chi tiết) với API chạy máy; chưa thử thêm tệp / lưu thật (ghi prod).

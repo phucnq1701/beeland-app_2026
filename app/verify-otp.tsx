@@ -6,7 +6,7 @@ import { AppHeader, Button, Screen, Text, useFontsLoaded, useToast } from "@/com
 import { hapticError } from "@/lib/haptics";
 import { OTP_LENGTH, resetErrorMessage, retryAfterOf } from "@/lib/staffResetPassword";
 import { MAX_FONT_SCALE, colors, fontStyleFor, radius, space } from "@/theme";
-import { StaffResetPasswordService } from "@/sevicesSupabase/StaffResetPasswordService";
+import { StaffResetPasswordService } from "@/services/StaffResetPasswordService";
 
 const RESEND_TIMEOUT = 60;
 

@@ -5,7 +5,7 @@ import { History } from "lucide-react-native";
 
 import { AppHeader, EmptyState, ErrorState, MoneyText, Screen, SkeletonList, Text } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
-import { PriceSheetService, type PriceSheetVersion } from "@/sevicesSupabase/PriceSheetService";
+import { PriceSheetService, type PriceSheetVersion } from "@/services/PriceSheetService";
 import { colors, elevation, radius, space } from "@/theme";
 
 /**

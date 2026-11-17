@@ -5,7 +5,7 @@ import { ProgressRowItem, progressSummary } from "@/components/reports/ProgressR
 import { ReportList } from "@/components/reports/ReportList";
 import { ProgressRow } from "@/lib/paymentMath";
 import { progressDocLink } from "@/lib/reportDetail";
-import { ReportService } from "@/sevicesSupabase/ReportService";
+import { ReportService } from "@/services/ReportService";
 
 /** Đợt quá hạn: còn nợ và đã qua hạn (agingOf như báo cáo tiến độ web) – không lọc theo kỳ. */
 export default function OverdueReportScreen() {

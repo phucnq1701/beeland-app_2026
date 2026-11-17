@@ -6,7 +6,7 @@ import {
   chatFileMime, latestServerTime, mergeMessages, newClientId, othersReadAt,
   type ChatConversationDetail, type ChatInboxItem, type ChatKhu, type ChatMe, type ChatMessage,
 } from "@/lib/chat";
-import { ChatService, subscribeChatUser, subscribeTyping, type ChatEvent } from "@/sevicesSupabase/ChatService";
+import { ChatService, subscribeChatUser, subscribeTyping, type ChatEvent } from "@/services/ChatService";
 
 /** Realtime chưa nối được → làm mới định kỳ khi màn đang mở. */
 const POLL_MS = 15_000;

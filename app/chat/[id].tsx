@@ -10,7 +10,7 @@ import { MessageRow } from "@/components/chat/MessageRow";
 import { useChatThread, useChatTyping } from "@/components/chat/useChat";
 import { AppHeader, BottomSheet, Button, ErrorState, IconButton, Screen, SheetOption, Skeleton, Text, confirm, useToast } from "@/components/ui";
 import { canJoinCustomer, canModifyMessage, chatRows, detailTitle, NGUON_LABEL, type ChatMessage, type ChatRow } from "@/lib/chat";
-import { ChatService } from "@/sevicesSupabase/ChatService";
+import { ChatService } from "@/services/ChatService";
 import { colors, radius, space } from "@/theme";
 
 /**

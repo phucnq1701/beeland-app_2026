@@ -24,8 +24,8 @@ import {
 import { formatDate } from "@/lib/format";
 import { PRICE_SHEET_STATUSES, priceSheetStatus } from "@/lib/priceSheetStatus";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { PriceSheetService, type PriceSheetRow } from "@/sevicesSupabase/PriceSheetService";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { PriceSheetService, type PriceSheetRow } from "@/services/PriceSheetService";
+import { ProjectService } from "@/services/ProjectService";
 import { colors, elevation, radius, space } from "@/theme";
 
 const PAGE_SIZE = 20;

@@ -31,7 +31,7 @@ import {
   CustomerRequestService,
   type RequestCatalogs,
   type ResolvedAttachment,
-} from "@/sevicesSupabase/CustomerRequestService";
+} from "@/services/CustomerRequestService";
 
 /**
  * Chi tiết yêu cầu – như web RequestDetailDrawer: thông tin, hình ảnh & tài liệu, lịch sử xử lý; "Cập nhật xử lý"

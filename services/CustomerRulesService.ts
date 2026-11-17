@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { getEmployeeId, getMaNv } from "./cloudTenant";
+import { getSessionInfo } from "@/services/session";
 import {
   CustomerDuplicateConfig,
   CustomerFormValues,
@@ -42,7 +42,7 @@ export async function currentUserName(): Promise<string> {
     const name = str(u?.ho_ten ?? u?.hoTen ?? u?.tenNV ?? u?.fullName ?? u?.data?.hoTen);
     if (name) return name;
   } catch {}
-  return str(await getMaNv());
+  return str((await getSessionInfo()).maNv);
 }
 
 export type DuplicateMatch = {
@@ -160,7 +160,7 @@ export const CustomerRulesService = {
       "Không kiểm tra được trùng khách hàng"
     );
 
-    const selfId = await getEmployeeId();
+    const selfId = (await getSessionInfo()).employeeId;
     const now = Date.now();
     const rows = (Array.isArray(data) ? data : []).filter(
       (r: any) =>

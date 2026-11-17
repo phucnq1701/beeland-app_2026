@@ -18,9 +18,9 @@ import { DocTrailing } from "@/components/sales/SalesDocList";
 import { CustomerTransaction, transactionTarget } from "@/lib/customerRules";
 import { foldVietnamese, formatDate } from "@/lib/format";
 import { colors, elevation, radius, space } from "@/theme";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
-import { DatCocService } from "@/sevicesSupabase/DatCocService";
-import { HopDongService } from "@/sevicesSupabase/HopDongService";
+import { CustomerService } from "@/services/CustomerService";
+import { DatCocService } from "@/services/DatCocService";
+import { HopDongService } from "@/services/HopDongService";
 
 /**
  * Màn chi tiết cọc / hợp đồng cần dòng danh sách (fn_deposit_list / fn_contract_list) → tìm dòng có

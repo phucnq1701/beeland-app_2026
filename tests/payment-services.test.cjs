@@ -82,19 +82,19 @@ function harness({ rpc = {}, tables = {}, failRpc = {}, typeAccount = "SYSTEM", 
     "@react-native-async-storage/async-storage": { default: { getItem: async () => null } },
   };
   // Khách qua RPC fn_customer_get_by_ids (helper thật, cùng axios giả)
-  map["./customerLookup"] = run("sevicesSupabase/customerLookup.ts", map);
-  const progress = run("sevicesSupabase/PaymentProgressService.ts", map);
+  map["./customerLookup"] = run("services/customerLookup.ts", map);
+  const progress = run("services/PaymentProgressService.ts", map);
   map["./PaymentProgressService"] = progress;
-  const dep = run("sevicesSupabase/DatCocService.ts", map);
+  const dep = run("services/DatCocService.ts", map);
   map["./DatCocService"] = dep;
-  const hd = run("sevicesSupabase/HopDongService.ts", map);
+  const hd = run("services/HopDongService.ts", map);
   map["./HopDongService"] = hd;
   return {
     calls,
     progress: progress.PaymentProgressService,
     deposits: () => dep.DatCocService,
     contracts: () => hd.HopDongService,
-    reports: () => run("sevicesSupabase/ReportService.ts", map).ReportService,
+    reports: () => run("services/ReportService.ts", map).ReportService,
   };
 }
 

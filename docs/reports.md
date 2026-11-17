@@ -16,35 +16,29 @@ Tổng quan mở chi tiết kèm params `period, customFrom, customTo, projectId
 
 | Báo cáo | Mở | Ghi chú |
 |---|---|---|
-| Thu tiền | `/reports/receipt/[id]` (id = uuid phiếu) | RPC `fn_cash_voucher_get_by_id` → `toVoucherDetail` – như web `VoucherDetailDrawer` (`ReceiptsPay.Receipts.getByID` → `CashVoucherService.getVoucher`). Màn cũ `app/receipt/[id].tsx` là màn mẫu (dữ liệu mock), không dùng. |
-| Hợp đồng | `/contract/[id]` với dòng `fn_sale_contract_list` | Dòng cùng dạng danh sách hợp đồng → dùng lại nguyên màn chi tiết HĐ. |
-| Sắp đến hạn / Quá hạn | `progressDocLink`: giai đoạn `DATCOC` → `/deposit/[id]`, `HDGV`/`HDMB` → `/contract/[id]`, truyền `PhieuGiuChoId` = `MaPGC` của đợt | **App thêm, web không có** (DebtProgressReport không có click). Hai màn đích tải lịch thanh toán + phiếu thu theo uuid phiếu giữ chỗ như web ContractDetail. Đầu phiếu lấy từ dòng tiến độ (`ProgressRow.giaiDoan/tongGiaTri/daThuHD/diDong`; `DaThuHD` giữ riêng vì `buildInstallments` ghi đè `DaThu` theo đợt); màn cọc tự bổ sung thêm từ `cloud_pgc_phieu_giucho`, màn HĐ chỉ có các trường từ dòng tiến độ (thiếu ngày ký, đơn giá…). |
+| Thu tiền | `/reports/receipt/[id]` (id = uuid phiếu) | `fn_nv_app_phieu_thu_chi_tiet` (= `fn_cash_voucher_get_by_id`) → `toVoucherDetail` – như web `VoucherDetailDrawer`. Đây là màn chi tiết phiếu thu duy nhất (màn mẫu `app/receipt/[id].tsx` đã xoá). |
+| Hợp đồng | `/contract/[id]` với dòng `fn_nv_app_hop_dong_list` | Dòng cùng dạng danh sách hợp đồng → dùng lại nguyên màn chi tiết HĐ. |
+| Sắp đến hạn / Quá hạn | `progressDocLink`: giai đoạn `DATCOC` → `/deposit/[id]`, `HDGV`/`HDMB` → `/contract/[id]`, truyền `PhieuGiuChoId` = `MaPGC` của đợt | **App thêm, web không có** (DebtProgressReport không có click). Hai màn đích tải lịch thanh toán + phiếu thu theo uuid phiếu giữ chỗ như web ContractDetail. Đầu phiếu lấy từ dòng tiến độ (`ProgressRow.giaiDoan/tongGiaTri/daThuHD/diDong`; `DaThuHD` giữ riêng vì `buildInstallments` ghi đè `DaThu` theo đợt); màn cọc tự bổ sung thêm từ `fn_nv_app_dat_coc_chi_tiet`, màn HĐ chỉ có các trường từ dòng tiến độ (thiếu ngày ký, đơn giá…). |
 
-## Nguồn (tất cả tính trên Cloud – `sevicesSupabase/ReportService.ts`; không còn gọi API cũ `api/bao-cao/*`)
+## Nguồn (`services/ReportService.ts`, bộ API riêng, lõi chung web)
 
 | Báo cáo | Cách tính | Web đối chiếu |
 |---|---|---|
-| Thu tiền | RPC `fn_cash_voucher_list` (`p_loai THU`, kỳ dạng `YYYY-MM-DD`, `p_contract_type GOC`, trang 5000) – tổng = cộng `so_tien` | `services/CashVoucherService.listVouchers`, `pages/Finance/revenue` |
-| Hợp đồng | `HopDongService.get` (`fn_sale_contract_list`) theo ngày ký trong kỳ – tổng giá trị = cộng `TongGiaTriHDMB`, số HĐ = `totalRows` | `services/ContractListService.ts` |
-| Tiến độ theo đợt | Dựng từ vòng đời phiếu: `cloud_pgc_phieu_giucho` (giai đoạn DATCOC/HDGV/HDMB, chưa xoá, **`ma_hd_goc is null`**), bỏ huỷ/thanh lý/từ chối và HĐ gốc đã chuyển nhượng (`da_chuyen_nhuong`); đã thu = RPC **`fn_pgc_collected(p_pgc_ids)`** (máy chủ tính PBT riêng, alias HĐ/cọc, bỏ tiền lãi; phiếu không có khoá ⇒ `da_thu` lưu trên phiếu) phân bổ luỹ tiến theo đợt (`buildInstallments`); khách = `customerMapByIds` (RPC `fn_customer_get_by_ids`) | `services/AccountingCloudService.ts` (`listDebtSummaryFromLifecycle`, `listInstallmentsFromLifecycle`, `sumReceiptsByPgc`), `pages/Reports/DebtProgressReport.tsx` (mặc định GOC) |
+| Thu tiền | `fn_nv_app_phieu_thu_list` (= `fn_cash_voucher_list` loại THU, hợp đồng gốc; kỳ `YYYY-MM-DD`, trang 1 × 5000) – tổng = cộng `so_tien` | `services/CashVoucherService.listVouchers`, `pages/Finance/revenue` |
+| Hợp đồng | `HopDongService.get` (`fn_nv_app_hop_dong_list` = `fn_sale_contract_list`) theo ngày ký trong kỳ – tổng giá trị = cộng `TongGiaTriHDMB`, số HĐ = `totalRows` | `services/ContractListService.ts` |
+| Tiến độ theo đợt | Phiếu gốc `fn_nv_app_bao_cao_tien_do { p_du_an_id }` (máy chủ lọc phạm vi, nối trạng thái / căn / dự án / số chứng từ); bỏ huỷ / thanh lý / từ chối và HĐ gốc đã chuyển nhượng (`daChuyenNhuong`); đã thu `fn_nv_app_da_thu_phieu` (= `fn_pgc_collected`: PBT riêng, bí danh HĐ/cọc, bỏ tiền lãi; phiếu không có khoá ⇒ `da_thu` trên phiếu) phân bổ luỹ tiến theo đợt (`buildInstallments`, `lib/paymentMath.ts`); khách `customerMapByIds` (`fn_nv_app_khach_hang_theo_id`) | `services/AccountingCloudService.ts`, `pages/Reports/DebtProgressReport.tsx` (mặc định GOC) |
 | Quá hạn | đợt có `agingOf` = d30/d60/d90/d90p (còn nợ > 0 và quá hạn), **không lọc kỳ** | `DebtProgressReport.agingOf` |
 | Sắp đến hạn | đợt còn nợ, `agingOf` = current, ngày TT trong kỳ (đợt chưa có ngày vẫn giữ) | |
 | Tổng quan | 4 số lấy đúng từ 4 nguồn trên (`getOverview`) | |
 
 ## Bẫy đã gặp
 
-- Không đọc bảng mirror `cloud_debts` (dữ liệu cũ chép từ API cũ) – web màn tiến độ mặc định GOC cũng không đọc.
-- `cloud_cash_voucher_details` và `cloud_customers` đã khoá đọc thẳng (đợt ds_dot3 / ds_dot5): bản cũ đọc thẳng dòng phiếu
-  thu ⇒ báo cáo tiến độ / quá hạn / sắp đến hạn lỗi. Nay: `fn_pgc_collected` + `customerMapByIds` (2026-10-20).
-- Tra bảng phụ theo id phải chia nhóm (`byIds`/`byPgc`, 100 id/lần) và **báo lỗi** khi lỗi – lỗi im lặng làm mất bộ lọc
-  huỷ/thanh lý → đếm sai quá hạn.
-- `legacy_api_mode` toàn hệ thống đang `off` (web Cloud-only) – xem `docs/data-access.md`.
+- Quá hạn từng lọc `agingOf(...).startsWith("d")` ⇒ lẫn đợt đã tất toán (`"done"`); nay so đúng tập d30/d60/d90/d90p.
+- Lỗi tải phải **báo lỗi** (`error: true`), không im lặng – lỗi im lặng làm mất bộ lọc huỷ/thanh lý → đếm sai quá hạn.
 
 ## Tồn đọng / chưa kiểm chứng
 
 - Tiền lãi quá hạn (bảng lãi suất dự án) chưa hiển thị trên app.
-- Hiệu năng: tiến độ tải toàn bộ phiếu (≤5000) và toàn bộ dòng phiếu thu (≤50000) như web – có thể chậm trên điện thoại.
-- Tổng thu cộng tối đa 5000 phiếu trong kỳ (chưa dùng `sums` máy chủ trả).
-- Số liệu chưa đối chiếu với web trên dữ liệu thật (đang chờ phiên test có đăng nhập).
-- Chi tiết phiếu thu chưa thử trên máy thật; dạng trả về của `fn_cash_voucher_get_by_id` lấy theo `scripts/selfhost/0112_fn_cash_voucher_rpc.sql` của web (bản trên máy chủ có thể khác).
-- Mở HĐ từ dòng tiến độ: đầu phiếu thiếu ngày ký / đơn giá / chính sách (dòng tiến độ không có; `fn_sale_contract_list` không lọc được theo id).
+- Hiệu năng: tiến độ tải toàn bộ phiếu gốc của phạm vi + đã thu (≤ 20.000 phiếu / lần) – có thể chậm trên điện thoại.
+- Tổng thu cộng tối đa 5000 phiếu trong kỳ (chưa dùng tổng máy chủ trả).
+- Mở HĐ từ dòng tiến độ: đầu phiếu thiếu ngày ký / đơn giá / chính sách (dòng tiến độ không có).

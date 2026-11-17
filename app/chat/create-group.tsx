@@ -8,7 +8,7 @@ import {
   AppHeader, BottomActionBar, Button, ErrorState, Screen, SkeletonList, Text, TextField, useToast,
 } from "@/components/ui";
 import type { ChatContact } from "@/lib/chat";
-import { ChatService } from "@/sevicesSupabase/ChatService";
+import { ChatService } from "@/services/ChatService";
 import { space } from "@/theme";
 
 const NAME_MAX = 100;

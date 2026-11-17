@@ -23,14 +23,14 @@ import {
 } from "@/components/ui";
 import { formatArea, formatDate, formatDateTime } from "@/lib/format";
 import { priceSheetStatus } from "@/lib/priceSheetStatus";
-import { PriceSheetService, type PriceSheetRow } from "@/sevicesSupabase/PriceSheetService";
+import { PriceSheetService, type PriceSheetRow } from "@/services/PriceSheetService";
 import { colors, space } from "@/theme";
 
 type Perms = { edit: boolean; del: boolean; approve: boolean };
 
 /**
- * Chi tiết phiếu tính giá (fn_price_sheet_get): số liệu đã lưu (snapshot/payload – không tính lại), chia sẻ PDF
- * theo mẫu in web, duyệt / từ chối (quyền APPROVE), sửa (chỉ phiếu nháp đơn giản – appEditBlockReason), xoá mềm.
+ * Chi tiết phiếu tính giá (fn_nv_app_ptg_chi_tiet = fn_price_sheet_get): số liệu đã lưu (snapshot/payload – không tính lại), chia sẻ
+ * PDF theo mẫu in web, sửa (form web chép), xoá mềm. Duyệt / từ chối chỉ trên web.
  */
 export default function PriceSheetDetailScreen() {
   const router = useRouter();

@@ -6,7 +6,7 @@ import { ContactPicker } from "@/components/chat/ContactPicker";
 import { useChatSession } from "@/components/chat/useChat";
 import { AppHeader, ErrorState, IconButton, Screen, SkeletonList, useToast } from "@/components/ui";
 import type { ChatContact } from "@/lib/chat";
-import { ChatService } from "@/sevicesSupabase/ChatService";
+import { ChatService } from "@/services/ChatService";
 
 /**
  * Nhắn tin mới: chọn một đồng nghiệp trong danh bạ chat → `fn_chat_direct_open` (lấy hoặc tạo hội thoại 1-1) → mở chat.

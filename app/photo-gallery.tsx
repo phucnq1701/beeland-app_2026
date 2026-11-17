@@ -2,7 +2,7 @@ import React, { useCallback } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { FolderItem, FolderListScreen } from "@/components/media/FolderListScreen";
-import { DocumentService, type DocEntry } from "@/sevicesSupabase/DocumentService";
+import { DocumentService, type DocEntry } from "@/services/DocumentService";
 
 /**
  * Thư viện ảnh của dự án (cây album như web — fn_nv_app_tai_lieu_cay, màn 323; ảnh bìa = ảnh đầu tiên của album).

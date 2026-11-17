@@ -9,7 +9,7 @@ import {
 import * as SplashScreen from "expo-splash-screen";
 import * as Updates from "expo-updates";
 import * as Application from "expo-application";
-import { UserService } from "../sevicesSupabase/UserService";
+import { UserService } from "../services/UserService";
 import { progressPercent, runOtaUpdate } from "@/lib/otaUpdate";
 import { OtaUpdateScreen } from "./OtaUpdateScreen";
 

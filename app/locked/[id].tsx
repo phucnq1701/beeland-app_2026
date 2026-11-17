@@ -20,8 +20,8 @@ import {
 import { formatCountdown } from "@/lib/countdown";
 import { formatDateTime } from "@/lib/format";
 import { colors, elevation, radius, space } from "@/theme";
-import { BookingService } from "@/sevicesSupabase/BookingService";
-import { ProductService } from "@/sevicesSupabase/ProductService";
+import { BookingService } from "@/services/BookingService";
+import { ProductService } from "@/services/ProductService";
 
 /** Ảnh dùng khi sản phẩm chưa có ảnh. */
 const DEFAULT_IMAGE =

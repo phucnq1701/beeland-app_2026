@@ -40,7 +40,7 @@ class FakeForm { constructor() { this.parts = []; } append(k, v) { this.parts.pu
 
 function chat(handlers, jwt = "jwt") {
   const nv = nvFake(handlers);
-  const svc = run("sevicesSupabase/ChatService.ts", {
+  const svc = run("services/ChatService.ts", {
     "@/services/nvApi": nv,
     "@/services/session": { getJwt: async () => jwt },
     "./realtimeHub": { joinChannel: () => ({ close() {}, send() {} }), syncRealtimeAuth: async () => {} },
@@ -93,7 +93,7 @@ test("thông báo: list 50 tin của mình, đọc 1 / tất cả", async () => 
     fn_nv_app_thong_bao_doc: () => ({ so_dong: 1 }),
   });
   const notif = run("lib/notifications.ts", {});
-  const svc = run("sevicesSupabase/NotificationService.ts", {
+  const svc = run("services/NotificationService.ts", {
     "@/services/nvApi": nv, "@/services/session": { getUser: async () => null },
     "./realtimeHub": {}, "../lib/notifications": notif,
   }).NotificationService;
@@ -119,7 +119,7 @@ test("tài liệu: cấp đầu dự án = con của thư mục gốc; tệp n�
     fn_nv_app_tai_lieu_cay: () => ({ folders, root_project_ids: [] }),
     fn_nv_app_tai_lieu_tep: () => [{ id: 7, name: "a.pdf", type: "pdf", size: 1.5, link: "x/a.pdf", created_at: "2026-11-16" }],
   });
-  const svc = run("sevicesSupabase/DocumentService.ts", { "@/services/nvApi": nv }).DocumentService;
+  const svc = run("services/DocumentService.ts", { "@/services/nvApi": nv }).DocumentService;
   const top = await svc.entries("DOCUMENT", P.toLowerCase(), null);
   assert.deepEqual(plain(top.map((e) => [e.id, !!e.filesOf])), [["1", true], ["3", false], ["2", false]]);
   assert.equal(top[1].cover, "https://upload.beesky.vn/a/b.jpg");

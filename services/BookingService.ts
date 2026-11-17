@@ -2,8 +2,6 @@ import { callNv, errorMessage as nvErrorMessage } from "@/services/nvApi";
 import { DuAnApi, SanPhamApi } from "@/services/SanPhamApi";
 import { uploadFile } from "@/services/TepApi";
 import { listResult, mergeProjectPages, pageArgs } from "../lib/listRpc";
-import { BookingSalesConfig, isLowRiseProduct, mapPriceListItem, sortPriceLists } from "../lib/bookingPrice";
-import { getCustomersByRefs } from "./customerLookup";
 
 /** Ngày dương lịch theo giờ máy (VN) dạng YYYY-MM-DD — không dùng toISOString (UTC lệch ngày 0h–7h). */
 export const localYmd = (d: Date = new Date()) =>
@@ -245,164 +243,6 @@ export const BookingService = {
     } catch (error) {
       console.log("ERROR listBookings:", error);
       return { data: [], total: 0 };
-    }
-  },
-
-  /**
-   * Tạo booking mới — theo web addBookingAPI.
-   * payload: { MaKH, MaSP, SanPhamId, KyHieu, MaSan, MaDA, TenDA, MaKhu,
-   *   TongGiaGomPBT, DTThongThuy, TongGiaGomVAT, PhiBaoTri, TienGiuCho?, ... }
-   * - TienGiuCho / HetHanLuc từ cài đặt bán hàng (tien_booking, thoi_gian_booking)
-   * - Ghi qua RPC fn_booking_create (máy chủ sinh số phiếu, ghi phiếu giữ chỗ + booking,
-   *   đổi căn 2/18 → 11); từ chối → { status: 5000, message: lời báo của máy chủ }
-   * - LockId (tuỳ chọn): phiếu lock khi booking từ căn đã lock
-   */
-  createBooking: async (payload: any = {}) => {
-    try {
-      const maKH = payload?.MaKH ?? payload?.maKH;
-      const maSP = payload?.MaSP ?? payload?.maSP;
-      if (!maKH) return { status: 5000, message: "Vui lòng chọn khách hàng" };
-      if (!maSP) return { status: 5000, message: "Thiếu mã sản phẩm" };
-
-      // uuid căn: màn tạo booking luôn có (SanPhamId = ID chi tiết căn); thiếu thì tra chi tiết căn theo mã
-      let spUid: string | null = UUID_RE.test(String(payload?.SanPhamId ?? "")) ? String(payload.SanPhamId) : null;
-      let kyHieu = payload?.KyHieu ?? payload?.kyHieu ?? null;
-      if (!spUid) {
-        const d = await SanPhamApi.detail(String(maSP));
-        spUid = d?.product?.ID ?? null;
-        kyHieu = kyHieu ?? d?.product?.KyHieu ?? null;
-      }
-      if (!spUid) return { status: 5000, message: "Không tìm thấy sản phẩm" };
-
-      // Mã khách (ma_so_kh) ⇒ uuid qua RPC tra khách (cloud_customers đã khoá đọc thẳng)
-      let khUid: string | null = null;
-      {
-        const v = String(maKH).trim();
-        if (UUID_RE.test(v)) khUid = v;
-        else {
-          try {
-            const rows = await getCustomersByRefs([v]);
-            khUid = (rows.find((r: any) => String(r?.ma_so_kh ?? "").trim() === v) || rows[0])?.id || null;
-          } catch {}
-        }
-      }
-      if (!khUid) return { status: 5000, message: "Không tìm thấy khách hàng" };
-
-      const num = (v: any) => {
-        if (v == null || v === "") return null;
-        const n = Number(String(v).replace(/,/g, ""));
-        return Number.isFinite(n) ? n : null;
-      };
-      const sanId = payload?.MaSan ?? payload?.maSan;
-
-      // fn_nv_app_booking_tao (bọc fn_booking_create của web): máy chủ tự điền công ty, người nhập, ngày giữ chỗ, tiền giữ chỗ
-      // (chính sách > cài đặt bán hàng) và hạn (thời gian booking) như web; kiểm căn (2, hoặc 18 kèm lock còn hạn), ghi phiếu
-      // giữ chỗ + booking, đổi căn sang 11. Từ chối ⇒ không ghi gì, trả nguyên lời báo của máy chủ.
-      const body = {
-        san_pham_id: spUid,
-        ma_sp: maSP,
-        ky_hieu: kyHieu,
-        khach_hang_id: khUid,
-        san_id: UUID_RE.test(String(sanId ?? "")) ? String(sanId) : null,
-        so_phieu: payload?.SoPhieu ?? null,
-        ghi_chu: payload?.GhiChu ?? payload?.ghiChu ?? null,
-        price_list_id: payload?.MaDotGia ?? null,
-        sales_policy_id: payload?.MaCS ?? null,
-        pricing_config_id: payload?.MaCSTong ?? null,
-        payment_schedule_id: payload?.MaTDTT ?? null,
-        promotion_ids: (payload?.KhuyenMai || [])
-          .map((km: any) => km?.ID ?? km?.MaKM ?? km)
-          .filter(Boolean),
-        chinh_sach: payload?.ChinhSach ?? [],
-        lich_thanh_toan: payload?.LichThanhToan ?? [],
-        khuyen_mai: payload?.KhuyenMai ?? [],
-        payload,
-        tt_hop_dong: {
-          MaSP: maSP,
-          MaDA: payload?.MaDA ?? payload?.maDA,
-          MaCan: payload?.KyHieu ?? null,
-          TongGiaGomVAT: payload?.TongGiaGomVAT ?? payload?.TongGiaGomPBT,
-          // Như web salesConfigPayload → Payload.TTHopDong
-          MaDotGia: payload?.MaDotGia ?? null,
-          MaCS: payload?.MaCS ?? null,
-          MaCSTong: payload?.MaCSTong ?? null,
-          MaTDTT: payload?.MaTDTT ?? null,
-        },
-        tt_khach_hang: { MaKH: maKH },
-        lock_id: payload?.LockId ?? null,
-        gia: {
-          dien_tich: num(payload?.DTThongThuy),
-          don_gia_gom_vat: num(payload?.DonGiaTT),
-          don_gia_chua_vat: num(payload?.DonGiaChuaVAT),
-          tong_chua_vat: num(payload?.TongGiaChuaVAT),
-          tien_vat: num(payload?.TienVAT),
-          tong_gom_vat: num(payload?.TongGiaGomVAT),
-          phi_bao_tri: num(payload?.PhiBaoTri),
-          gia_tri_hd: num(payload?.TongGiaGomPBT ?? payload?.TongGiaGomVAT),
-          don_gia_dat: num(payload?.DonGiaDat),
-          tong_gia_dat: num(payload?.TongGiaDat),
-          don_gia_xd: num(payload?.DonGiaXD),
-          thanh_tien_xd: num(payload?.ThanhTienXD),
-        },
-      };
-
-      let created: any;
-      try {
-        created = (await callNv<any>("fn_nv_app_booking_tao", { p_payload: body })) || {};
-      } catch (e) {
-        console.log("ERROR fn_nv_app_booking_tao:", nvErrorMessage(e));
-        return { status: 5000, message: nvErrorMessage(e, "Tạo booking thất bại") };
-      }
-
-      return {
-        status: 2000,
-        data: created.booking_id || created.phieu_giu_cho_id,
-        id: created.booking_id,
-        soPhieu: created.so_phieu,
-        maPGC: created.phieu_giu_cho_id,
-      };
-    } catch (error) {
-      console.log("ERROR createBooking:", error);
-      return { status: 5000, message: "Tạo booking thất bại" };
-    }
-  },
-
-  /**
-   * Cấu hình bán hàng web tự chọn khi mở form booking (useSalesConfigOptions + BookingFormDialog):
-   * bảng giá hiện hành ưu tiên cao nhất theo dự án + loại BĐS, chính sách bán hàng gắn với bảng giá đó,
-   * dòng giá của sản phẩm trong bảng giá. Không có / lỗi → null hết (dùng giá sản phẩm).
-   * product: ProductService.normalizeProduct (uuid ở "ID").
-   */
-  getBookingSalesConfig: async (product: any): Promise<BookingSalesConfig> => {
-    const empty: BookingSalesConfig = { priceListId: null, priceItem: null, policy: null };
-    try {
-      const productId = String(product?.ID ?? product?.id ?? product?.Id ?? "");
-      if (!UUID_RE.test(productId)) return empty;
-      const projectId = await DuAnApi.resolveId(product?.MaDA);
-      if (!projectId) return empty;
-
-      const isLow = isLowRiseProduct({ product, maSP: product?.KyHieu });
-      const list0 = async (fn: string, body: Record<string, any>): Promise<any[]> => {
-        const res = await callNv<any>(fn, body);
-        return Array.isArray(res) ? res : [];
-      };
-      // Công ty lấy từ phiên ở máy chủ (cùng các hàm web dùng cho form booking)
-      const [lists, policies] = await Promise.all([
-        list0("fn_nv_app_bang_gia_hien_hanh", { p_du_an_id: projectId, p_loai: isLow ? "Thấp tầng" : "Chung cư" }),
-        list0("fn_nv_app_chinh_sach_list", { p_du_an_id: projectId, p_form_code: isLow ? "THAPTANG" : "CAOTANG" }),
-      ]);
-      const list = sortPriceLists(lists)[0];
-      if (!list?.id) return empty;
-      const priceListId = String(list.id);
-      const policy = list.sales_policy_id
-        ? policies.find((c: any) => String(c.id) === String(list.sales_policy_id)) ?? null
-        : null;
-      // Dòng giá theo product_id như web fn_get_price_list_item_by_product (không dò mã căn)
-      const item = await callNv<any>("fn_nv_app_gia_trong_bang_gia", { p_bang_gia_id: priceListId, p_san_pham_id: productId, p_ma_sp: null });
-      return { priceListId, priceItem: mapPriceListItem(item ?? null), policy };
-    } catch (e) {
-      console.log("ERROR getBookingSalesConfig:", nvErrorMessage(e));
-      return empty;
     }
   },
 
@@ -699,16 +539,15 @@ export const BookingService = {
   },
 
   /**
-   * Tải 1 ảnh chứng từ lên nơi lưu tài liệu của công ty (giống web uploadTenantFile):
-   * edge function `upload-file` tự chọn R2/S3/.NET theo upload_configs; lỗi thì lùi về API .NET.
+   * Tải 1 ảnh chứng từ lên nơi lưu tài liệu của công ty (giống web uploadTenantFile): fn_nv_app_tai_tep (lõi UploadFileService
+   * web, kho theo cấu hình công ty).
    * Trả về giá trị lưu vào Images: URL tuyệt đối (R2/S3) hoặc link tương đối (.NET).
    */
   uploadBookingImage: async (file: { uri: string; name?: string; type?: string }) =>
     uploadTenantFile(file, "booking"),
 
   /**
-   * Lưu ảnh chứng từ vào booking — cùng bản ghi web đọc/ghi
-   * (cloud_generic_records, endpoint admin/hop-dong/anh-giu-cho, payload { MaPGC, Images }).
+   * Lưu ảnh chứng từ vào booking — fn_nv_app_booking_chung_tu_them, cùng bản ghi chứng từ web đọc / ghi.
    */
   addBookingImages: async (payload: { MaPGC: string; Images: string[] }) => {
     const maPGC = String(payload.MaPGC ?? "").trim();

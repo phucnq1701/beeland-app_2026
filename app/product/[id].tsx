@@ -25,10 +25,10 @@ import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { isFeatureAllowed, PRICE_SHEET_CREATE_LOCKED } from "@/lib/featureConfig";
 import { isOpenForSale, OPEN_FOR_SALE_MESSAGE } from "@/lib/productStatus";
 import { colors, elevation, radius, space } from "@/theme";
-import { BookingService } from "@/sevicesSupabase/BookingService";
-import { getTypeAccount } from "@/sevicesSupabase/cloudTenant";
-import { ProductService } from "@/sevicesSupabase/ProductService";
-import { PriceServices, ActivePriceListItem } from "@/sevicesSupabase/PriceServices";
+import { BookingService } from "@/services/BookingService";
+import { getSessionInfo } from "@/services/session";
+import { ProductService } from "@/services/ProductService";
+import { PriceServices, ActivePriceListItem } from "@/services/PriceServices";
 
 /** Ảnh dùng khi sản phẩm chưa có ảnh (ảnh mặc định của dự án). */
 const DEFAULT_IMAGE =
@@ -59,8 +59,8 @@ export default function ProductDetailScreen() {
   const [txPerm, setTxPerm] = useState<{ lock: boolean; booking: boolean } | null>(null);
   const [isAgencyAccount, setIsAgencyAccount] = useState<boolean | null>(null);
   useEffect(() => {
-    getTypeAccount()
-      .then((t) => setIsAgencyAccount(t === "AGENCY"))
+    getSessionInfo()
+      .then((s) => setIsAgencyAccount(s.isAgency))
       .catch(() => setIsAgencyAccount(null));
   }, []);
   const [bannerProduct, setBannerProduct] = useState<{ HinhAnh?: string }[]>([]);

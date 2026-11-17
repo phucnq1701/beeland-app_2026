@@ -47,7 +47,7 @@ import {
   vietQrUrl,
   type ContractVA,
   type GatewayAccount,
-} from "@/sevicesSupabase/PaymentGatewayService";
+} from "@/services/PaymentGatewayService";
 
 const errMsg = (e: any, fallback: string) =>
   e instanceof Error && e.message ? e.message : fallback;

@@ -37,13 +37,13 @@ import {
 import { SummaryKey } from "@/lib/productOverview";
 import { applyRealtimeChange, resolveCatalogStatus, rowToRealtimeChange, unitStatusOf } from "@/lib/productRealtime";
 import { colors, space } from "@/theme";
-import { ProductService } from "@/sevicesSupabase/ProductService";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
-import { FilterService } from "@/sevicesSupabase/FilterService";
-import { PriceServices } from "@/sevicesSupabase/PriceServices";
+import { ProductService } from "@/services/ProductService";
+import { ProjectService } from "@/services/ProjectService";
+import { FilterService } from "@/services/FilterService";
+import { PriceServices } from "@/services/PriceServices";
 
-import { subscribeTableChanges } from "@/sevicesSupabase/realtimeHub";
-import { getCompanyId } from "@/sevicesSupabase/cloudTenant";
+import { subscribeTableChanges } from "@/services/realtimeHub";
+import { getSessionInfo } from "@/services/session";
 
 type ViewMode = "list" | "grid" | "overview";
 
@@ -123,7 +123,7 @@ export default function ProductsScreen({
     let cancelled = false;
     let clearTimer: ReturnType<typeof setTimeout> | null = null;
     void (async () => {
-      const companyId = await getCompanyId();
+      const { companyId } = await getSessionInfo();
       if (cancelled || !companyId) return;
       unsubscribe = subscribeTableChanges(
         `product-status-${companyId}`,

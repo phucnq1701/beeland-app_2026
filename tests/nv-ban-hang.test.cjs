@@ -12,7 +12,7 @@ function load(handler, { detail } = {}) {
     callNv: async (fn, args) => { calls.push({ fn, args }); return handler(fn, args); },
     errorMessage: (e, f) => e?.message || f || "lỗi",
   };
-  const svc = loadTs("sevicesSupabase/BookingService.ts", { modules: {
+  const svc = loadTs("services/BookingService.ts", { modules: {
     "@/services/nvApi": nvApi,
     "@/services/TepApi": { uploadFile: async () => "https://kho/tep.jpg" },
     "@/services/SanPhamApi": {

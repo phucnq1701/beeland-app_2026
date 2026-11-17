@@ -19,7 +19,7 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import { X, ChevronLeft, ChevronRight } from "lucide-react-native";
 import * as Sharing from "expo-sharing";
 import * as MediaLibrary from "expo-media-library";
-import { DocumentService, type DocFile } from "@/sevicesSupabase/DocumentService";
+import { DocumentService, type DocFile } from "@/services/DocumentService";
 import { useToast } from "@/components/ui";
 import { useViewerChrome } from "@/components/ImageViewerModal";
 

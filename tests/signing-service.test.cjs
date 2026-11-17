@@ -32,10 +32,10 @@ function harness(handlers = {}) {
     },
   };
   const signing = run("lib/signing.ts", {});
-  const svc = run("sevicesSupabase/SigningService.ts", {
+  const svc = run("services/SigningService.ts", {
     "@/services/nvApi": nv,
     "./customerLookup": { getCustomersByIds: (ids) => nv.callNv("fn_nv_app_khach_hang_theo_id", { p_ids: ids }) },
-    "./DatCocService": run("sevicesSupabase/DatCocService.ts", { "@/services/nvApi": nv }),
+    "./DatCocService": run("services/DatCocService.ts", { "@/services/nvApi": nv }),
     "../lib/signing": signing,
   }).SigningService;
   const shim = run("lib/web/_shims/integrations/supabase/client.ts", { "@/services/nvApi": nv, "@/services/SanPhamApi": { DuAnApi: {} } });

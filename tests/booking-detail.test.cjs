@@ -42,7 +42,7 @@ function fixture() {
 
 function load(response, { fail } = {}) {
   const calls = [];
-  const svc = loadTs("sevicesSupabase/BookingService.ts", { modules: {
+  const svc = loadTs("services/BookingService.ts", { modules: {
     "@/services/nvApi": {
       callNv: async (fn, args) => { calls.push({ fn, args }); if (fail) throw fail; return response; },
       errorMessage: (e, f) => e?.message || f,

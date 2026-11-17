@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { getSessionInfo } from "@/services/session";
 import { StyleSheet, View } from 'react-native';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { ChevronDown, ChevronUp, Settings2 } from 'lucide-react-native';
@@ -62,7 +63,7 @@ export default function AllManagementScreen() {
     // Không đọc được loại tài khoản → null (coi như đại lý cho an toàn)
     let agency: boolean | null = null;
     try {
-      agency = (await AsyncStorage.getItem('@type_account')) === 'AGENCY';
+      agency = (await getSessionInfo()).isAgency;
     } catch (error) {
       console.log('[AllManagement] Read account type error:', error instanceof Error ? error.message : String(error));
     }

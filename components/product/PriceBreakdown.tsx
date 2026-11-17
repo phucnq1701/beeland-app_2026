@@ -4,7 +4,7 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { KeyValueRow, MoneyText, Text } from "@/components/ui";
 import { isLowRiseProduct } from "@/lib/bookingPrice";
 import { formatArea, formatVND } from "@/lib/format";
-import type { ActivePriceListItem } from "@/sevicesSupabase/PriceServices";
+import type { ActivePriceListItem } from "@/services/PriceServices";
 import { colors, radius, space } from "@/theme";
 
 type Props = {

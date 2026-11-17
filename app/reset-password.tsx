@@ -7,7 +7,7 @@ import { AppHeader, Button, Screen, Text, TextField, useToast } from "@/componen
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { PASSWORD_RULES, isStrongPassword, resetErrorMessage } from "@/lib/staffResetPassword";
 import { colors, space } from "@/theme";
-import { StaffResetPasswordService } from "@/sevicesSupabase/StaffResetPasswordService";
+import { StaffResetPasswordService } from "@/services/StaffResetPasswordService";
 
 /**
  * Quên mật khẩu – bước 3: đặt mật khẩu mới bằng token một lần (`staff-reset-password` {action:"reset"}, hạn 15 phút).

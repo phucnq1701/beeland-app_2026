@@ -4,8 +4,8 @@ import { useLocalSearchParams } from "expo-router";
 import { SalesDocDetail } from "@/components/sales/SalesDocDetail";
 import { formatArea, formatDate, formatVND } from "@/lib/format";
 import { ScheduleRow } from "@/lib/paymentMath";
-import { HopDongService } from "@/sevicesSupabase/HopDongService";
-import { Receipt } from "@/sevicesSupabase/PaymentProgressService";
+import { HopDongService } from "@/services/HopDongService";
+import { Receipt } from "@/services/PaymentProgressService";
 
 /**
  * Chi tiết hợp đồng mua bán – như web ContractDetail: đầu phiếu từ dòng fn_contract_list,

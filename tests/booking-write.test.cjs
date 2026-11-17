@@ -62,7 +62,7 @@ function load({ reject = {}, rpcResult, rpc = {}, settings } = {}) {
       return { data: [{ id: uid(500 + posts.length) }] };
     },
   };
-  const source = fs.readFileSync(path.join(__dirname, "../sevicesSupabase/BookingService.ts"), "utf8");
+  const source = fs.readFileSync(path.join(__dirname, "../services/BookingService.ts"), "utf8");
   const compiled = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
@@ -114,54 +114,6 @@ const bookingInput = {
   DonGiaDat: 0, TongGiaDat: 0, DonGiaXD: 0, ThanhTienXD: 0,
 };
 
-test("createBooking goes through fn_nv_app_booking_tao only (wraps the web fn_booking_create)", async () => {
-  const { service, posts } = load({
-    rpcResult: { phieu_giu_cho_id: uid(200), booking_id: uid(201), so_phieu: "BK-ABC123" },
-  });
-  const res = await service.createBooking(bookingInput);
-  assert.equal(res.status, 2000);
-  assert.equal(res.id, uid(201));
-  assert.equal(res.data, uid(201));
-  assert.equal(res.maPGC, uid(200));
-  assert.equal(res.soPhieu, "BK-ABC123");
-  // Một giao dịch phía máy chủ: không tự ghi bảng, không gọi fn_product_transaction riêng
-  assert.deepEqual(posts.map((p) => p.target), ["fn_nv_app_booking_tao"]);
-  const body = posts[0].body.p_payload;
-  // Công ty / người nhập / ngày / tiền / hạn giữ chỗ do máy chủ điền (63_app_nhan_vien/50) — app không gửi
-  for (const k of ["ma_ctdk_uid", "nguoi_nhap", "nguoi_nhap_id", "ngay_giu_cho", "het_han_luc", "tien_giu_cho"]) {
-    assert.equal(k in body, false, `${k} do máy chủ điền`);
-  }
-  assert.equal(body.san_pham_id, uid(3));
-  assert.equal(body.ma_sp, "SP01");
-  assert.equal(body.ky_hieu, "B2-608");
-  assert.equal(body.khach_hang_id, uid(6), "ma_so_kh is resolved to the customer uuid");
-  assert.equal(body.san_id, uid(5));
-  assert.equal(body.gia.dien_tich, 73.9);
-  assert.equal(body.gia.don_gia_gom_vat, 21815079);
-  assert.equal(body.gia.tong_gom_vat, 1612134338.1);
-  assert.equal(body.gia.phi_bao_tri, 29394003.402);
-  assert.equal(body.gia.gia_tri_hd, 1641528341.502);
-});
-
-test("createBooking stops and returns the server message when fn_booking_create rejects", async () => {
-  const message = 'Sản phẩm đang ở trạng thái "Booking chờ duyệt" nên không lập được phiếu giữ chỗ';
-  const { service, posts } = load({ reject: { fn_nv_app_booking_tao: pgError(message) } });
-  const res = await service.createBooking(bookingInput);
-  assert.equal(res.status, 5000);
-  assert.equal(res.message, message);
-  assert.deepEqual(posts.map((p) => p.target), ["fn_nv_app_booking_tao"], "nothing written outside the RPC");
-});
-
-test("createBooking passes the lock id when booking from a lock", async () => {
-  const { service, posts } = load({
-    rpcResult: { phieu_giu_cho_id: uid(200), booking_id: uid(201), so_phieu: "BK-1" },
-  });
-  await service.createBooking({ ...bookingInput, LockId: uid(77) });
-  assert.equal(posts[0].body.p_payload.lock_id, uid(77));
-});
-
-// Số phiếu lock KyHieu/YYYY/MM/STT: tháng tính theo giờ Việt Nam (web: new Date(yyyy, m, 1) giờ máy VN).
-// Trước đây app đếm từ 00:00 UTC ngày 1 (= 07:00 VN) → 7 giờ đầu tháng số phiếu bị trùng.
 test("lock voucher month starts at 00:00 Vietnam time", () => {
   const { lockVoucherMonth } = loadExports();
   // 02:00 ngày 1/10 giờ VN = 19:00 UTC ngày 30/9
@@ -171,60 +123,3 @@ test("lock voucher month starts at 00:00 Vietnam time", () => {
   const d = lockVoucherMonth(new Date("2026-12-31T16:30:00.000Z"));
   assert.deepEqual({ ...d }, { yyyy: 2026, mm: "12", fromIso: "2026-11-30T17:00:00.000Z" });
 });
-
-test("booking sales config: the highest-priority current price list, its policy and the product's price line", async () => {
-  const { service, posts } = load({
-    rpc: {
-      fn_nv_app_bang_gia_hien_hanh: [
-        { id: "pl-low", priority: 9, sales_policy_id: "cs9" },
-        { id: "pl-top", priority: 1, sales_policy_id: "cs1" },
-      ],
-      fn_nv_app_chinh_sach_list: [
-        { id: "cs1", pricing_config_id: "cf1", payment_schedule_id: "ps1", tien_booking: 50000000 },
-        { id: "cs9" },
-      ],
-      fn_nv_app_gia_trong_bang_gia: { area: 70, unit_price: 20000000, vat_rate: 10, maintenance_rate: 2 },
-    },
-  });
-  const cfg = await service.getBookingSalesConfig({ ID: uid(3), MaDA: uid(4), KyHieu: "B2-608", FormCode: "CAOTANG" });
-  const call = (fn) => posts.find((p) => p.target === fn).body;
-  // Công ty lấy từ phiên ở máy chủ — app không gửi
-  assert.deepEqual({ ...call("fn_nv_app_bang_gia_hien_hanh") }, { p_du_an_id: uid(4), p_loai: "Chung cư" });
-  assert.deepEqual({ ...call("fn_nv_app_chinh_sach_list") }, { p_du_an_id: uid(4), p_form_code: "CAOTANG" });
-  assert.deepEqual({ ...call("fn_nv_app_gia_trong_bang_gia") }, { p_bang_gia_id: "pl-top", p_san_pham_id: uid(3), p_ma_sp: null });
-  assert.equal(cfg.priceListId, "pl-top");
-  assert.equal(cfg.policy.id, "cs1");
-  assert.equal(cfg.priceItem.TongGiaChuaVAT, 1400000000);
-  assert.equal(cfg.priceItem.TongGiaGomPBT, 1570800000);
-});
-
-test("booking sales config for low-rise units and projects without a price list", async () => {
-  const low = load({ rpc: { fn_nv_app_bang_gia_hien_hanh: [], fn_nv_app_chinh_sach_list: [] } });
-  const cfg = await low.service.getBookingSalesConfig({ ID: uid(3), MaDA: uid(4), KyHieu: "LK-01" });
-  const pl = low.posts.find((p) => p.target === "fn_nv_app_bang_gia_hien_hanh").body;
-  assert.equal(pl.p_loai, "Thấp tầng");
-  assert.equal(low.posts.find((p) => p.target === "fn_nv_app_chinh_sach_list").body.p_form_code, "THAPTANG");
-  assert.deepEqual({ ...cfg }, { priceListId: null, priceItem: null, policy: null });
-  assert.equal(low.posts.some((p) => p.target === "fn_nv_app_gia_trong_bang_gia"), false);
-  const failing = load({ reject: { fn_nv_app_bang_gia_hien_hanh: new Error("x") } });
-  assert.deepEqual({ ...(await failing.service.getBookingSalesConfig({ ID: uid(3), MaDA: uid(4) })) }, {
-    priceListId: null, priceItem: null, policy: null,
-  });
-});
-
-test("createBooking: the chosen price list / policy / config / schedule are recorded (booking amount is decided by the server)", async () => {
-  const { service, posts } = load({
-    rpcResult: { phieu_giu_cho_id: uid(200), booking_id: uid(201), so_phieu: "BK-1" },
-  });
-  await service.createBooking({
-    ...bookingInput, TienGiuCho: 50000000, MaDotGia: "pl-top", MaCS: "cs1", MaCSTong: "cf1", MaTDTT: "ps1",
-  });
-  const body = posts.find((p) => p.target === "fn_nv_app_booking_tao").body.p_payload;
-  assert.equal("tien_giu_cho" in body, false);
-  assert.equal(body.price_list_id, "pl-top");
-  assert.equal(body.sales_policy_id, "cs1");
-  assert.equal(body.tt_hop_dong.MaDotGia, "pl-top");
-  assert.equal(body.tt_hop_dong.MaCS, "cs1");
-  assert.equal(body.tt_hop_dong.MaTDTT, "ps1");
-});
-

@@ -1,13 +1,13 @@
 /* global __dirname */
 // Bảng đã khoá đọc thẳng (REVOKE khỏi authenticated) — service chứng từ không được đọc qua rest/v1 hay embed PostgREST
-// (embed làm hỏng cả câu truy vấn). Khách: sevicesSupabase/customerLookup (fn_customer_get_by_ids); đã thu: fn_pgc_collected /
+// (embed làm hỏng cả câu truy vấn). Khách: services/customerLookup (fn_customer_get_by_ids); đã thu: fn_pgc_collected /
 // fn_cash_vouchers_by_pgc. Nguồn: beeland/supabase/migrations/20261020000510_ds_dot5_customer_revoke.sql (+ đợt ds_dot3).
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const DIR = path.join(__dirname, "../sevicesSupabase");
+const DIR = path.join(__dirname, "../services");
 // Màn / service khách hàng do nhánh riêng chuyển sang RPC; customerLookup chỉ nhắc tên bảng trong chú thích
 const SKIP = new Set(["customerLookup.ts"]);
 const LOCKED = ["cloud_customers", "cloud_cash_voucher_details", "cloud_cash_vouchers", "cloud_customer_requests", "cloud_workflows"];

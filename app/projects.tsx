@@ -17,7 +17,7 @@ import {
 } from "@/components/ui";
 import { foldVietnamese } from "@/lib/format";
 import { colors, radius, space } from "@/theme";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { ProjectService } from "@/services/ProjectService";
 
 const DEFAULT_PROJECT_IMAGE =
   "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/css461kotbkumrm0wjakm";

@@ -7,7 +7,7 @@ import { AppHeader, Badge, ErrorState, KeyValueRow, MoneyText, Screen, SkeletonD
 import { formatDate, formatDateTime } from "@/lib/format";
 import { VoucherDetail } from "@/lib/reportDetail";
 import { colors, elevation, radius, space } from "@/theme";
-import { ReportService } from "@/sevicesSupabase/ReportService";
+import { ReportService } from "@/services/ReportService";
 
 /**
  * Chi tiết phiếu thu (mở từ báo cáo Thu tiền) – như web VoucherDetailDrawer:

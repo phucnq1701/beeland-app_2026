@@ -16,39 +16,38 @@ Chi tiết đặt cọc có nút **"Đặt lịch ký"** (chỉ tài khoản đ�
 
 | Việc | App |
 |---|---|
-| Điều kiện hiện nút "Thu tiền cọc QR" (chi tiết đặt cọc) | `lib/depositQr.canCreateDepositQr`: phiếu **chờ duyệt** (`isPendingDeposit`: tên "Đặt cọc chờ duyệt"/"ĐC chờ duyệt"/"Chờ duyệt"/"Chờ xử lý"/trống, hoặc mã 8 – tên "đã duyệt" luôn thắng) và còn tiền cọc phải thu |
+| Điều kiện hiện nút "Thu tiền cọc QR" (chi tiết đặt cọc) | `lib/depositQr.canOfferDepositQr`: quyền `PAYMENT_QR` màn Đặt cọc (`QuyenQR` từ `fn_nv_app_dat_coc_chi_tiet`; lỗi / thiếu ⇒ ẩn, fail-closed) **và** `canCreateDepositQr`: phiếu **chờ duyệt** (`isPendingDeposit`: tên "Đặt cọc chờ duyệt"/"ĐC chờ duyệt"/"Chờ duyệt"/"Chờ xử lý"/trống, hoặc mã 8 – tên "đã duyệt" luôn thắng), còn tiền cọc phải thu, không đang chờ duyệt đổi căn / hoàn cọc |
 | Số tiền QR | `depositQrAmount` = `max(0, TienCoc − DaThu)` (dòng `fn_deposit_list`) |
-| Màn QR | `app/deposit/qr-payment.tsx` (params `data` = JSON đầu phiếu): `payment-gateway` `create` với `module: DATCOC`, `expires_at: null`, `pgc_id` = uuid phiếu giữ chỗ; mở lại dùng VA `DATCOC` đang `ACTIVE`; kiểm tra `paid_amount` mỗi 5 giây / khi quay lại app. Kiểu bo tròn như chi tiết đặt cọc: header `soft` (nút ⋯ `soft`), lề 20, card bo `radius.xxl` bóng nhẹ, ô chưa có QR nền xám nhạt, chọn tài khoản `SelectField raised`, nút dưới dạng viên; thẻ kết quả `QrResult` bo `radius.xxl` (dùng chung với QR booking) |
-| Sau khi thu | Máy chủ `fn_payment_webhook_apply`: tạo phiếu thu; tổng thu ≥ `tien_coc` → `fn_deposit_approve` (tự duyệt). Quay về chi tiết → nạp lại, trạng thái đọc lại từ `cloud_pgc_phieu_giucho.trang_thai_id` |
+| Màn QR | `app/deposit/qr-payment.tsx` (params `data` = JSON đầu phiếu): `fn_nv_app_cong_thanh_toan` `p_action: create` với `module: DATCOC`, `expires_at: null`, `pgc_id` = uuid phiếu giữ chỗ; mở lại dùng VA `DATCOC` đang `ACTIVE`; kiểm tra `paid_amount` mỗi 5 giây / khi quay lại app. Kiểu bo tròn như chi tiết đặt cọc: header `soft` (nút ⋯ `soft`), lề 20, card bo `radius.xxl` bóng nhẹ, ô chưa có QR nền xám nhạt, chọn tài khoản `SelectField raised`, nút dưới dạng viên; thẻ kết quả `QrResult` bo `radius.xxl` (dùng chung với QR booking) |
+| Sau khi thu | Máy chủ `fn_payment_webhook_apply`: tạo phiếu thu; tổng thu ≥ `tien_coc` → `fn_deposit_approve` (tự duyệt). Quay về chi tiết → nạp lại, trạng thái đọc lại từ `fn_nv_app_dat_coc_chi_tiet` (dòng danh sách mới nhất) |
 
 - Trạng thái màn: `getQrScreenState` với `requiresDeadline: false` (không hết hạn, không cần hạn giữ chỗ). Web không đối chiếu lại
   số tiền VA đặt cọc đang mở → app cũng không có trạng thái `mismatch` cho đặt cọc.
 - `MaTT` đọc bằng `statusCodeNum` (bỏ ký tự không phải số trong `item_code`, như bộ lọc `fn_deposit_list`); `Number()` ra NaN khi mã lẫn chữ.
 
-## Dữ liệu (đều như web)
+## Dữ liệu (bộ API riêng, lõi chung web; công ty / phạm vi / che trường từ phiên)
 
-| Việc | App | Máy chủ | Web đối chiếu |
+| Việc | App | Endpoint (= SP web) | Web đối chiếu |
 |---|---|---|---|
-| Danh sách cọc | `DatCocService.get` | RPC `fn_deposit_list` bản mới (`p_project_id` 1 uuid, `p_search`, `p_page`, `p_size`; nhiều dự án ⇒ gọi từng dự án rồi gộp) | `services/DepositListService.ts` |
-| Danh sách HĐMB (gốc) | `HopDongService.get` | RPC `fn_sale_contract_list` (`p_transfer_only false`, `p_project_id` 1 uuid, `p_search`, `p_page`, `p_size`; phạm vi từ JWT; nhiều dự án ⇒ gọi từng dự án rồi gộp) | `contracts/contract-list` `listSaleContractPage` |
-| Trạng thái (chip) | `DatCocService.getTT`, `HopDongService.getTT` | `cloud_catalogs` `pgc_trang_thai`, `ma_ctdk=global` | |
-| Lịch thanh toán 1 phiếu | `PaymentProgressService.getSchedule(pgcId)` | RPC `fn_contract_payment_schedule(p_ma_ctdk_uid, p_pgc_id)` | `services/ContractScheduleService.ts` |
-| Phiếu thu 1 phiếu | `PaymentProgressService.getReceipts(pgcId)` | RPC `fn_cash_vouchers_by_pgc(…, 'THU')` | `components/Sales/PgcCashVouchersTab.tsx` |
-| Thông tin thêm của cọc (email, CCCD, loại căn) | `DatCocService.getDepositDetail` | `cloud_pgc_phieu_giucho`, khách qua RPC `fn_customer_get_by_ids` (`getCustomersByIds`; bảng `cloud_customers` đã khoá), `bds_products` | web `DepositCloudService` (`withCustomers`) |
+| Danh sách cọc | `DatCocService.get` | `fn_nv_app_dat_coc_list` (= `fn_deposit_list` màn Đặt cọc, bỏ phiếu chuyển nhượng; `p_du_an_id` 1 uuid, `p_tu_khoa`, ngày, trang; nhiều dự án ⇒ gọi từng dự án rồi gộp) | `services/DepositListService.ts` |
+| Danh sách HĐMB (gốc) | `HopDongService.get` | `fn_nv_app_hop_dong_list` (= `fn_sale_contract_list`, bỏ chuyển nhượng; như trên) | `contracts/contract-list` `listSaleContractPage` |
+| Trạng thái (chip) | `DatCocService.getTT`, `HopDongService.getTT` → `listPgcStatuses` | `fn_nv_app_trang_thai_list { p_loai: pgc_trang_thai }` (= `fn_status_catalog_list`, màu theo công ty); `MaTT` = `item_code` | |
+| Đầu phiếu cọc (khách, giá, loại căn, hướng, cờ QR) | `DatCocService.getDepositDetail` | `fn_nv_app_dat_coc_chi_tiet` (dòng danh sách mới nhất + chứng từ `fn_sales_doc_get` + `quyen.payment_qr`, `doi_can_cho_duyet`) | web `DepositCloudService` |
+| Lịch thanh toán 1 phiếu | `PaymentProgressService.getSchedule(pgcId)` | `fn_nv_app_lich_tt_phieu { p_id }` (= `fn_contract_payment_schedule`; nhận id phiếu giữ chỗ / HĐ / cọc) | `services/ContractScheduleService.ts` |
+| Phiếu thu 1 phiếu | `PaymentProgressService.getReceipts(pgcId)` | `fn_nv_app_phieu_thu_phieu { p_id }` (= `fn_cash_vouchers_by_pgc`, THU) | `components/Sales/PgcCashVouchersTab.tsx` |
 
 ## Quy tắc tiền (`lib/paymentMath.ts`, test `tests/payment-math.test.cjs` so trực tiếp code web)
 
 - Mọi lịch / phiếu thu theo **uuid phiếu giữ chỗ** (`PhieuGiuChoId`, thiếu thì `MaPGC`), không phải uuid cọc/hợp đồng.
 - "Đã thu" ở tổng quan = cột `da_thu` máy chủ trả trong danh sách. Lịch: lấy nguyên Đã thu / Còn lại / PBT từ hàm máy chủ.
 - Phiếu thu hiển thị/cộng **`so_tien_pgc`** (phần thuộc phiếu này), không phải tổng cả tờ.
-- Lịch dự phòng (hàm máy chủ rỗng, như web `ContractDetail`): lịch lưu `cloud_catalogs` `lich_tt_hd` (`parent_code` = uuid
-  phiếu giữ chỗ, `ma_ctdk` = mã chữ thường) + `allocatePaidToSchedule` (hết gốc từng đợt rồi mới sang PBT) với **tổng cả tờ
-  phiếu thu** (giống web, spec 0.2 #4); phiếu thu lỗi → hiện lịch lưu không phân bổ.
+- Không còn lịch dự phòng dựng ở máy (web cũng bỏ): máy chủ tự đọc lịch lưu `lich_tt_hd`, phân bổ phiếu thu, số tiền điều chỉnh.
+  Lỗi tải lịch ⇒ báo lỗi, không coi là "chưa có lịch".
 - Đại lý xem cọc: chỉ dự án được gán; phạm vi rỗng / chọn ngoài phạm vi → không có dữ liệu.
 
 ## Bẫy đã gặp
 
-- Hàm máy chủ trả `{ rows, total_count }` (bản mới) – chỉ nhận mảng thì danh sách **rỗng** (dùng `rpcRows`).
+- Kết quả danh sách đọc bằng `listResult` / `rpcRows` (`{ rows, total }` hoặc mảng) – chỉ nhận mảng thì danh sách **rỗng**.
 - Lọc ngày: không lọc gửi `null`, có lọc gửi biên giờ VN (`vnDayBound`).
 - `TongGiaTriHDMB` = `gia_tri_hd_sau_ck ?? gia_tri_hd`.
 - Tab "Tài liệu" cũ của chi tiết HĐ là dữ liệu mẫu → đã bỏ.

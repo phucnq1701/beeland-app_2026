@@ -21,7 +21,7 @@ import {
 import { callPhone, openZalo } from "@/components/customer/CustomerListItem";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { colors, elevation, hitSlop, radius, space } from "@/theme";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
+import { CustomerService } from "@/services/CustomerService";
 
 /** Nút liên hệ nhanh: vòng tròn nền nhạt + nhãn bên dưới (kiểu danh bạ). */
 function QuickAction({

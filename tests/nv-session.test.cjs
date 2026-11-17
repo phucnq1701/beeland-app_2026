@@ -58,7 +58,7 @@ test("jwt: đọc exp và payload tiếng Việt", () => {
   assert.equal(jwt.jwtSecondsLeft("rác"), null);
 });
 
-test("đăng nhập: lưu phiên + khoá cũ cho màn chưa chuyển; không gửi JWT; gửi đúng tham số", async () => {
+test("đăng nhập: lưu phiên (khoá cũ lớp Supabase bị dọn, màn đọc getSessionInfo); không gửi JWT; gửi đúng tham số", async () => {
   const t = makeJwt(7 * 86400);
   const s = setup({
     storage: [["@token", "phien-cu"], ["@employee_id", "nv-cu"], ["@last_login", "giu"]],
@@ -73,12 +73,11 @@ test("đăng nhập: lưu phiên + khoá cũ cho màn chưa chuyển; không g�
   assert.equal(s.calls[0].auth, undefined);
   assert.equal(s.storage.get("@supabase_jwt"), t);
   assert.equal(s.storage.get("@token"), "tok-1");
-  assert.equal(s.storage.get("@tenant_id"), "c-1");
-  assert.equal(s.storage.get("@employee_id"), "e-1");
-  assert.equal(s.storage.get("@type_account"), "AGENCY");
   assert.equal(s.storage.get("tenCTDKVT"), "brg");
   assert.equal(s.storage.get("@last_login"), "giu");
-  assert.equal(JSON.parse(s.storage.get("@cloud_profile")).HoTen, "Bảo");
+  for (const k of ["@tenant_id", "@employee_id", "@type_account", "@cloud_profile"]) assert.equal(s.storage.has(k), false, k);
+  const info = await s.session.getSessionInfo();
+  deq({ ...info }, { companyId: "c-1", employeeId: "e-1", maNv: info.maNv, typeAccount: "AGENCY", isAgency: true, companyCode: info.companyCode });
   assert.equal(JSON.parse(s.storage.get("@nv_user")).nhom_quyen, "Đại lý");
 });
 

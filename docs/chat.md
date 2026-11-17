@@ -2,7 +2,8 @@
 
 Cùng dữ liệu và luật với web (`../beeland`: `src/services/chat/*`, `src/pages/customers/quan-ly/beechat/`,
 `src/components/Chat/*`; spec `docs/superpowers/specs/2026-10-08-chat-realtime-design.md`,
-`2026-10-12-chat-app-khach-design.md`). App chỉ gọi RPC / edge có sẵn – không sửa server.
+`2026-10-12-chat-app-khach-design.md`). App gọi `fn_nv_app_chat_*` – SP app gọi thẳng đúng SP chat của web (người gọi / công
+ty từ phiên). Tên hàm web dưới đây (`fn_chat_*`) đổi sang endpoint app qua `CHAT_FN` (`services/ChatService.ts`).
 
 ## Màn
 
@@ -27,16 +28,15 @@ Lối vào: nút tròn **Tin nhắn** ở header Trang chủ (`HomeHeader`, ch�
 
 ## Dữ liệu
 
-- Service `sevicesSupabase/ChatService.ts`: RPC qua `axiosApiSupabase` (`rest/v1/rpc`, JWT tự gắn), trả `{data}`|`{error}` →
-  `Error(message)`. Logic thuần + kiểu: `lib/chat.ts` (test `tests/chat.test.cjs`).
-- **Tệp:** edge `chat-files` cần **JWT ứng dụng** – interceptor axios gắn `@token` cho `functions/v1` nên gọi bằng `fetch`
-  riêng. `upload_url {conversation_id, ten_tep, mime, kich_thuoc}` → `{attachment_id, path, token}` → PUT multipart (XHR) lên
-  `storage/v1/object/upload/sign/chat-files/<path>?token=` → gửi tin kèm `attachment_ids`. `file_url` → link 300 s (cache 240 s),
-  mở bằng `expo-web-browser`. Bucket: ảnh / PDF / Office / txt / csv / zip, ≤ 20 MB (nginx máy chủ cho tới 25 MB từ 2026-10-12;
-  trước đó > 1 MB bị 413). iOS chọn ảnh: `preferredAssetRepresentationMode: Compatible` (HEIC → JPEG).
+- Service `services/ChatService.ts`: `callNv` tới endpoint trong `CHAT_FN`, máy chủ trả `{data}`|`{error}` → `Error(message)`.
+  Logic thuần + kiểu: `lib/chat.ts` (test `tests/chat.test.cjs`).
+- **Tệp:** 1 bước `fn_nv_app_chat_tep_tai` (multipart `conversation_id` + `file`, `postFormNv`; máy chủ ghi tệp vào kho
+  `chat-files` đúng đường dẫn SP cấp) → `attachment_id` → gửi tin kèm `attachment_ids`. Xem: `fn_nv_app_chat_tep_link
+  { p_attachment_id }` → link ký 300 s (cache 240 s), mở bằng `expo-web-browser`. Ảnh / PDF / Office / txt / csv / zip,
+  ≤ 20 MB (`CHAT_FILE_MAX_MB`); 413 ⇒ "Tệp quá lớn". iOS chọn ảnh: `preferredAssetRepresentationMode: Compatible` (HEIC → JPEG).
 - **Gửi lạc quan:** tin tạm `local-<client_msg_id>` hiện ngay; lỗi → "Chưa gửi được · Thử lại · Xoá" (gửi lại cùng
   `client_msg_id` → server không tạo trùng, tệp đã tải không tải lại).
-- **Realtime:** hub SignalR `wss://api-beeland26.beesky.vn/api/realtime` (`sevicesSupabase/realtimeHub.ts`, giao thức như
+- **Realtime:** hub SignalR `wss://api-beeland26.beesky.vn/api/realtime` (`services/realtimeHub.ts`, giao thức như
   web `realtimeShim.ts`: `Join` / `Leave` / `Broadcast`, nhận `broadcast`), kênh private `chat:u:<employee_id>` (JWT qua
   `access_token`; `syncRealtimeAuth()` nối lại khi JWT đổi — thay `setAuth`), 5 sự kiện như web. Mỗi topic Join một lần
   (đếm tham chiếu trong hub), tự nối lại + Join lại khi rớt mạng / JWT hết hạn. Một kênh dùng chung (đếm tham chiếu `useChatSession`). Dự phòng: realtime chưa nối,
@@ -70,7 +70,7 @@ app khách / widget hiện "đang soạn tin"); nội bộ / nhóm – kênh pri
 
 - **Ghim / Tắt thông báo** (công tắc, `fn_chat_pref`) – thành viên.
 - Hội thoại khách: **Gắn hồ sơ khách hàng** (`CustomerLinkSheet`: gợi ý `goi_y_khach_hang` khớp SĐT/email + tìm qua
-  `CustomerService.getCustomers` → `fn_chat_customer_link`), **Bỏ gắn** (confirm). **Kênh app không đổi / bỏ gắn được**
+  `CustomerService.pickCustomers`, ≥ 2 ký tự → `fn_chat_customer_link`), **Bỏ gắn** (confirm). **Kênh app không đổi / bỏ gắn được**
   (hồ sơ là khoá nhận diện khách đăng nhập – server chặn, migration web `20261013130000_chat_app_khong_doi_kh`).
   **Nhãn** (thêm / bỏ, ≤ 20 × 50 ký tự, `fn_chat_customer_tags`). **Xin thông tin liên hệ** khi khách chưa có SĐT / email
   (`fn_chat_request_info`).
@@ -84,14 +84,15 @@ Chấm chưa đọc ở Trang chủ: tải khi về Trang chủ + tải lại ng
 
 - Chưa có (web có): tìm trong tin nhắn (`fn_chat_search`), đổi tên / ảnh nhóm, đổi vai trò thành viên, tạo hồ sơ khách mới
   từ hội thoại, trạng thái online (presence).
+- Tải / xem tệp chat qua endpoint mới chưa thử được trên API chạy máy (thiếu cấu hình kho) – thử lại sau khi deploy API.
 
 ## Thông báo (banner + push) – 2026-10-13
 
 Máy chủ: beeland migration `20261013150000_chat_push` + edge `chat-push` (spec `beeland/docs/superpowers/specs/2026-10-13-chat-push-design.md`).
 
 - **Đăng ký push** (`components/chat/chatPush.ts`): mở app / đăng nhập / quay lại app → xin quyền (lần đầu) → Expo push token
-  (`projectId` EAS) → `fn_chat_push_dang_ky` (máy chủ chụp quyền BeeChat / admin lúc này). Đăng xuất / xoá tài khoản →
-  `fn_chat_push_huy` **trước** khi rời phiên (`account.tsx`). Đăng nhập xong → `resetChatSession()` + `chatAuthChanged(true)`.
+  (`projectId` EAS) → `fn_chat_push_dang_ky` (→ `fn_nv_app_chat_push_dang_ky`; máy chủ chụp quyền BeeChat / admin lúc này).
+  Đăng xuất / xoá tài khoản → `fn_chat_push_huy` **trước** khi rời phiên (`account.tsx`). Đăng nhập xong → `resetChatSession()` + `chatAuthChanged(true)`.
   Android: kênh `chat` ("Tin nhắn", HIGH). `expo-notifications` nạp có điều kiện (bản build cũ / web → chỉ banner realtime).
 - **Ai nhận push** (máy chủ quyết định): thành viên hội thoại trừ người gửi; tắt tiếng thì chỉ nhận khi được @nhắc; hội thoại
   khách chưa ai tham gia → NV có quyền BeeChat (kênh app) / admin (kênh khác).

@@ -96,6 +96,9 @@ function harness(tables = {}, { failGet = {}, claims = {}, deleted = [], rpc = {
     "./axiosApiSupabase": { default: http },
     "./axiosApi": { default: {} },
     "./cloudTenant": cloudTenant,
+    "@/services/session": {
+      getSessionInfo: async () => ({ companyId: tenant, employeeId: ME, maNv: "NV01", typeAccount: "SYSTEM", isAgency: false, companyCode: "beesky1" }),
+    },
     "../lib/customerRules": rules,
     "../lib/listRpc": run("lib/listRpc.ts", {}),
     "@react-native-async-storage/async-storage": {
@@ -105,13 +108,13 @@ function harness(tables = {}, { failGet = {}, claims = {}, deleted = [], rpc = {
   const catalog = run("lib/web/config/fieldConfigCatalog.ts", {});
   map["@/lib/web/config/fieldConfigCatalog"] = catalog;
   map["@/lib/web/lib/fieldConfigRules"] = run("lib/web/lib/fieldConfigRules.ts", { "../config/fieldConfigCatalog": catalog });
-  const rulesExports = run("sevicesSupabase/CustomerRulesService.ts", map);
+  const rulesExports = run("services/CustomerRulesService.ts", map);
   map["./CustomerRulesService"] = rulesExports;
-  map["./customerLookup"] = run("sevicesSupabase/customerLookup.ts", map);
+  map["./customerLookup"] = run("services/customerLookup.ts", map);
   return {
     calls,
     rulesService: rulesExports.CustomerRulesService,
-    customerService: () => run("sevicesSupabase/CustomerService.ts", map).CustomerService,
+    customerService: () => run("services/CustomerService.ts", map).CustomerService,
   };
 }
 

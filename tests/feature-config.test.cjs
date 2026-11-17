@@ -86,10 +86,10 @@ test("resolveHomeFeatureIds: normal accounts keep a deliberate empty selection b
   assert.deepEqual(plain(f.resolveHomeFeatureIds({ ...base, stored: "garbage" })), ["1", "2", "4", "5", "6", "8"]);
 });
 
-test("Lịch hẹn (id 3) is hidden everywhere for now but keeps its route for later", () => {
+test("Lịch hẹn (id 3) đã bỏ hẳn 2026-11-17: không có màn, không hiện, lựa chọn cũ bị bỏ qua", () => {
   const ids = ["1", "2", "3", "5", "6"];
+  assert.equal(f.routeForFeature("3"), null);
   assert.equal(f.visibleFeatureIds(ids, { isAgency: false, menuOnly: false, menuEligible: ids }).includes("3"), false);
-  assert.equal(f.FEATURE_ROUTES["3"], "/appointments");
   assert.deepEqual(
     [...f.resolveHomeFeatureIds({ stored: { selectedIds: ["3", "1"] }, isAgency: false, allIds: ids, menuEligible: ids, max: 6 })],
     ["1"]

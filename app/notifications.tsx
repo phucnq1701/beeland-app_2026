@@ -6,7 +6,7 @@ import { Bell, BellOff } from "lucide-react-native";
 import { AppHeader, Button, EmptyState, ErrorState, Screen, Skeleton, Text, useToast } from "@/components/ui";
 import { notificationRoute, relativeTime, type AppNotification } from "@/lib/notifications";
 import { colors, radius, space } from "@/theme";
-import { NotificationService } from "@/sevicesSupabase/NotificationService";
+import { NotificationService } from "@/services/NotificationService";
 
 /**
  * Thông báo — hộp thư thông báo theo kịch bản của chính người đăng nhập, CÙNG nguồn chuông web (từ 2026-11-15 web chỉ hiện nguồn

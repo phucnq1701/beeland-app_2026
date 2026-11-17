@@ -45,14 +45,14 @@ import {
 import { formatDate } from "@/lib/format";
 import { toYmd } from "@/lib/reportPeriod";
 import { colors, elevation, radius, space } from "@/theme";
-import { getMaNv } from "@/sevicesSupabase/cloudTenant";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
+import { getSessionInfo } from "@/services/session";
+import { CustomerService } from "@/services/CustomerService";
 import {
   CustomerRequestService,
   type EmployeeOption,
   type RequestCatalogs,
-} from "@/sevicesSupabase/CustomerRequestService";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
+} from "@/services/CustomerRequestService";
+import { ProjectService } from "@/services/ProjectService";
 
 type FileItem = { stored: string; url: string; fileName: string };
 
@@ -159,7 +159,7 @@ export default function RequestFormScreen() {
         ProjectService.getProjects({}).catch(() => ({ data: [] })),
         CustomerRequestService.catalogs(),
         CustomerRequestService.employees().catch(() => [] as EmployeeOption[]),
-        getMaNv().catch(() => ""),
+        getSessionInfo().then((s) => s.maNv).catch(() => ""),
       ]);
       const plist: any[] = (projRes as any)?.data ?? [];
       setProjects(plist);

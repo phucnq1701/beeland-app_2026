@@ -6,8 +6,8 @@ import { Lock } from "lucide-react-native";
 import { AppHeader, EmptyState, ErrorState, Screen, SkeletonDetail } from "@/components/ui";
 import { CustomerForm } from "@/components/customer/CustomerForm";
 import { CustomerFormValues } from "@/lib/customerRules";
-import { CUSTOMER_TX_LOCK_MESSAGE, CustomerRulesService } from "@/sevicesSupabase/CustomerRulesService";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
+import { CUSTOMER_TX_LOCK_MESSAGE, CustomerRulesService } from "@/services/CustomerRulesService";
+import { CustomerService } from "@/services/CustomerService";
 
 /** Chi tiết khách (fn_customer_get, đã chuẩn hoá) → giá trị form. */
 function toFormValues(d: any): Partial<CustomerFormValues> {

@@ -7,7 +7,6 @@
 export const FEATURE_ROUTES: Record<string, string> = {
   '1': '/projects',
   '2': '/products',
-  '3': '/appointments',
   '4': '/locked-units',
   '5': '/bookings',
   '6': '/customers',
@@ -22,9 +21,9 @@ export const FEATURE_ROUTES: Record<string, string> = {
 
 /**
  * Tính năng tạm ẨN (đã có màn nhưng chưa dùng đợt này) – không hiện ở Trang chủ, Tất cả quản lý, tab menu.
- * Bật lại: bỏ id khỏi danh sách. '3' = Lịch hẹn (ẩn trong đợt redesign; màn và dữ liệu giữ nguyên).
+ * Bật lại: bỏ id khỏi danh sách. (Lịch hẹn '3' đã bỏ hẳn 2026-11-17: màn gọi API .NET cũ đã ngừng — làm lại thì theo web + API riêng.)
  */
-export const HIDDEN_FEATURE_IDS: readonly string[] = ['3'];
+export const HIDDEN_FEATURE_IDS: readonly string[] = [];
 
 export function routeForFeature(id: string): string | null {
   return FEATURE_ROUTES[id] ?? null;

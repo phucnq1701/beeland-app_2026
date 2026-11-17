@@ -25,8 +25,8 @@ import { BOOKING_TABS, BookingTabKey, bookingStateBadge, statesForTab } from "@/
 import { formatDate } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, elevation, radius, space } from "@/theme";
-import { BookingService } from "@/sevicesSupabase/BookingService";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { BookingService } from "@/services/BookingService";
+import { ProjectService } from "@/services/ProjectService";
 
 /** Số booking mỗi lần gọi fn_booking_list; cuộn tới cuối thì tải thêm */
 const PAGE_SIZE = 20;

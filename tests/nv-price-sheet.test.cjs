@@ -1,4 +1,4 @@
-// Phiếu tính giá trên bộ API riêng app (sevicesSupabase/PriceSheetService.ts ⇒ fn_nv_app_*): đúng endpoint, không gửi công ty,
+// Phiếu tính giá trên bộ API riêng app (services/PriceSheetService.ts ⇒ fn_nv_app_*): đúng endpoint, không gửi công ty,
 // quyền fail-closed, không còn duyệt trên app.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
@@ -9,7 +9,7 @@ const uid = (n) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 
 function load(handler) {
   const calls = [];
-  const svc = loadTs("sevicesSupabase/PriceSheetService.ts", { modules: {
+  const svc = loadTs("services/PriceSheetService.ts", { modules: {
     "@/lib/bookingPrice": loadTs("lib/bookingPrice.ts"),
     "@/services/nvApi": {
       callNv: async (fn, args) => { calls.push({ fn, args }); return handler(fn, args); },

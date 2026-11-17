@@ -5,8 +5,8 @@ import { Building2 } from "lucide-react-native";
 import { Button, EmptyState, SearchBar, SegmentedControl, SelectField, StatusBadge, Text } from "@/components/ui";
 import { formatArea } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { ProductService } from "@/sevicesSupabase/ProductService";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { ProductService } from "@/services/ProductService";
+import { ProjectService } from "@/services/ProjectService";
 import { colors, elevation, radius, space } from "@/theme";
 
 const PAGE = 30;

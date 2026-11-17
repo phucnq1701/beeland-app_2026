@@ -10,7 +10,7 @@ import {
   AppHeader, Avatar, BottomActionBar, Button, Card, ErrorState, Screen, SkeletonDetail, Text, confirm, useFontsLoaded, useToast,
 } from "@/components/ui";
 import { addTag, CHAT_TAG_LEN, CHAT_TAGS_MAX, detailTitle, NGUON_LABEL, type ChatContact, type ChatConversationDetail, type ChatMe, type ChatMember } from "@/lib/chat";
-import { ChatService } from "@/sevicesSupabase/ChatService";
+import { ChatService } from "@/services/ChatService";
 import { colors, elevation, fontStyleFor, MAX_FONT_SCALE, radius, space } from "@/theme";
 
 const ROLE_LABEL: Record<string, string> = { owner: "Trưởng nhóm", admin: "Quản trị", member: "" };

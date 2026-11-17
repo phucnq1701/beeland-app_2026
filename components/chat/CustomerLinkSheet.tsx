@@ -6,8 +6,8 @@ import { BottomSheet, SearchBar, Text, useToast } from "@/components/ui";
 import type { ChatConversationDetail } from "@/lib/chat";
 import { maskPhone } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { ChatService } from "@/sevicesSupabase/ChatService";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
+import { ChatService } from "@/services/ChatService";
+import { CustomerService } from "@/services/CustomerService";
 import { colors, radius, space } from "@/theme";
 
 type Row = { id: string; ten: string; sub: string };

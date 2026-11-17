@@ -7,7 +7,7 @@ import { CustomerFormValues, PROTECTION_LABEL, ProtectionLevel, duplicateFieldLa
 import { maskPhone } from "@/lib/format";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { colors, space } from "@/theme";
-import { CustomerRulesService, DuplicateMatch, DuplicateResult } from "@/sevicesSupabase/CustomerRulesService";
+import { CustomerRulesService, DuplicateMatch, DuplicateResult } from "@/services/CustomerRulesService";
 
 const PROTECTION_TONE: Record<ProtectionLevel, BadgeTone> = {
   none: "neutral",

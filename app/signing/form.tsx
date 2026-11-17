@@ -57,9 +57,9 @@ import { primeWebSession } from "@/lib/web/_shims/lib/session";
 import { installWebRuntime } from "@/lib/web/_shims/runtime";
 import { onWebToast } from "@/lib/web/_shims/sonner";
 import { colors, elevation, radius, space } from "@/theme";
-import { uploadTenantFile } from "@/sevicesSupabase/BookingService";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
-import { SigningService } from "@/sevicesSupabase/SigningService";
+import { uploadTenantFile } from "@/services/BookingService";
+import { CustomerService } from "@/services/CustomerService";
+import { SigningService } from "@/services/SigningService";
 
 const NONE = "__none__";
 type Opt = { value: any; label: string };
@@ -247,8 +247,8 @@ function SigningForm() {
     setAttachSheet(false);
   };
   const [uploading, setUploading] = useState(false);
-  const files: Attach[] = Array.isArray(form?.TaiLieu) ? form.TaiLieu : [];
-  const hoSo: any[] = sp.hoSo || [];
+  const files: Attach[] = useMemo(() => (Array.isArray(form?.TaiLieu) ? form.TaiLieu : []), [form?.TaiLieu]);
+  const hoSo: any[] = useMemo(() => sp.hoSo || [], [sp.hoSo]);
   const groups = useMemo(() => {
     const ids = new Set(hoSo.map((h) => h.id));
     const list = hoSo.map((h) => ({ id: h.id as string | null, name: h.name as string, note: [h.note, h.ghiChu].filter(Boolean).join("; ") }));

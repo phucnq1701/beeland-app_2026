@@ -5,7 +5,7 @@ import { FlatList, Pressable, StyleSheet, View } from "react-native";
 import { Avatar, EmptyState, ErrorState, SearchBar, SegmentedControl, SkeletonList, Text } from "@/components/ui";
 import type { ChatContact, ChatMe } from "@/lib/chat";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { ChatService } from "@/sevicesSupabase/ChatService";
+import { ChatService } from "@/services/ChatService";
 import { colors, elevation, radius, space } from "@/theme";
 
 type Tab = "noi_bo" | "dai_ly";

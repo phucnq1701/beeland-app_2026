@@ -15,7 +15,7 @@ import {
   Text,
 } from "@/components/ui";
 import { colors, elevation, radius, space } from "@/theme";
-import { CloudProfileService, CloudProfile } from "@/sevicesSupabase/CloudProfileService";
+import { CloudProfileService, CloudProfile } from "@/services/CloudProfileService";
 
 export default function ProfileScreen() {
   const router = useRouter();

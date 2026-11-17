@@ -1,4 +1,4 @@
-import { getFreshJwt } from "@/services/session";
+import { getFreshJwt, getSessionInfo, getSessionToken } from "@/services/session";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Landmark } from "lucide-react-native";
@@ -18,10 +18,10 @@ import { MENU_TAB_FEATURE_IDS } from "@/components/utils/menuTabs";
 import { formatDate, maskPhone } from "@/lib/format";
 import { resolveHomeFeatureIds, routeForFeature } from "@/lib/featureConfig";
 import { features, Feature } from "@/mocks/features";
-import { BookingService } from "@/sevicesSupabase/BookingService";
-import { CustomerService as CustomerSupabaseService } from "@/sevicesSupabase/CustomerService";
-import { DatCocService } from "@/sevicesSupabase/DatCocService";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { BookingService } from "@/services/BookingService";
+import { CustomerService as CustomerSupabaseService } from "@/services/CustomerService";
+import { DatCocService } from "@/services/DatCocService";
+import { ProjectService } from "@/services/ProjectService";
 import { colors, radius, space } from "@/theme";
 
 const STORAGE_KEY = "@home_features_config";
@@ -63,13 +63,12 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const checkAgency = async () => {
-      const typeAccount = await AsyncStorage.getItem("@type_account");
-      setIsAgency(typeAccount === "AGENCY");
+      setIsAgency((await getSessionInfo()).isAgency);
     };
     checkAgency();
 
     const checkToken = async () => {
-      const token = await AsyncStorage.getItem("@token");
+      const token = await getSessionToken();
       if (!token) {
         router.replace("/login");
         return;
@@ -117,8 +116,7 @@ export default function HomeScreen() {
   const loadDeposits = async () => {
     setDepositsState({ loading: true, error: false });
     try {
-      const typeAccount = await AsyncStorage.getItem("@type_account");
-      if (typeAccount === "AGENCY") {
+      if ((await getSessionInfo()).isAgency) {
         const resDC = await DatCocService.get({ Offset: 1, Limit: 5 });
         setDeposits((resDC?.data || []).slice(0, 5));
       } else {
@@ -152,7 +150,7 @@ export default function HomeScreen() {
     // Không đọc được loại tài khoản → null (resolveHomeFeatureIds coi như đại lý cho an toàn)
     let agency: boolean | null = null;
     try {
-      agency = (await AsyncStorage.getItem("@type_account")) === "AGENCY";
+      agency = (await getSessionInfo()).isAgency;
     } catch (error) {
       console.log("[Home] Read account type error:", errText(error));
     }

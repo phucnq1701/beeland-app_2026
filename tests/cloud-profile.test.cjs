@@ -1,10 +1,10 @@
-// Hồ sơ người đăng nhập (sevicesSupabase/CloudProfileService.ts) lấy từ phiên app nhân viên (services/session.ts).
+// Hồ sơ người đăng nhập (services/CloudProfileService.ts) lấy từ phiên app nhân viên (services/session.ts).
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { loadTs } = require("./helpers/loadTs.cjs");
 
 function load({ jwt = "jwt", user }) {
-  return loadTs("sevicesSupabase/CloudProfileService.ts", { modules: {
+  return loadTs("services/CloudProfileService.ts", { modules: {
     "@/services/session": { getFreshJwt: async () => jwt, getUser: async () => user },
   } });
 }

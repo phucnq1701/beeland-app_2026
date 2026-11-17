@@ -5,7 +5,7 @@ import { ProgressRowItem, progressSummary } from "@/components/reports/ProgressR
 import { ReportList } from "@/components/reports/ReportList";
 import { ProgressRow } from "@/lib/paymentMath";
 import { progressDocLink } from "@/lib/reportDetail";
-import { ReportService } from "@/sevicesSupabase/ReportService";
+import { ReportService } from "@/services/ReportService";
 
 /** Đợt thanh toán sắp đến hạn: còn nợ, chưa quá hạn, hạn trong kỳ (tiến độ thanh toán như web). */
 export default function PaymentDueReportScreen() {

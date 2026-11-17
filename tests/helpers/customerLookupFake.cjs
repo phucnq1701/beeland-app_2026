@@ -1,6 +1,6 @@
 /* global __dirname */
 /**
- * Nạp sevicesSupabase/customerLookup.ts thật với callNv giả: fn_nv_app_khach_hang_theo_id (= fn_customer_get_by_ids) đọc từ
+ * Nạp services/customerLookup.ts thật với callNv giả: fn_nv_app_khach_hang_theo_id (= fn_customer_get_by_ids) đọc từ
  * `getRows()` (mảng khách trong fixture), lọc theo p_ids (uuid) hoặc p_ma (ma_so_kh / di_dong) như máy chủ. Dùng cho harness vm của các service
  * chứng từ (bảng cloud_customers đã khoá đọc thẳng — app không được gọi rest/v1/cloud_customers).
  * `calls` (tuỳ chọn) nhận { fn, body } mỗi lần gọi RPC.
@@ -24,7 +24,7 @@ function loadCustomerLookup(getRows, { calls, fail } = {}) {
       );
     },
   };
-  const source = fs.readFileSync(path.join(__dirname, "../../sevicesSupabase/customerLookup.ts"), "utf8");
+  const source = fs.readFileSync(path.join(__dirname, "../../services/customerLookup.ts"), "utf8");
   const compiled = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;

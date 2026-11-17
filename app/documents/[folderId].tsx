@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { FileItem, FileListScreen } from "@/components/media/FileListScreen";
 import { useToast } from "@/components/ui";
 import { getDocumentType, getRawDocumentUrl, OFFICE_TYPES } from "@/components/utils/documentLinks";
-import { DocumentService } from "@/sevicesSupabase/DocumentService";
+import { DocumentService } from "@/services/DocumentService";
 
 type Doc = FileItem & { link: string };
 

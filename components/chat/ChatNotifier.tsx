@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "@/components/ui/Text";
 import { bannerFromEvent, bannerFromPush, chatTarget, createSeen, type ChatBanner } from "@/lib/chatNotify";
 import { useReducedMotion } from "@/lib/useReducedMotion";
-import type { ChatEvent } from "@/sevicesSupabase/ChatService";
+import type { ChatEvent } from "@/services/ChatService";
 import { getFreshJwt } from "@/services/session";
 import { colors, elevation, motion, radius, space } from "@/theme";
 

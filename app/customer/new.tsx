@@ -3,7 +3,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import { AppHeader, confirm } from "@/components/ui";
 import { CustomerForm } from "@/components/customer/CustomerForm";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
+import { CustomerService } from "@/services/CustomerService";
 
 /**
  * Thêm khách hàng. Mở từ màn tạo booking (returnToBooking=1): lưu xong / chọn khách trùng thì quay về

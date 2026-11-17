@@ -28,8 +28,8 @@ import {
   FIELD_CONFIG_LOAD_FAILED,
   FormRules,
   IDENTITY_LOCK_HINT,
-} from "@/sevicesSupabase/CustomerRulesService";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
+} from "@/services/CustomerRulesService";
+import { CustomerService } from "@/services/CustomerService";
 
 import { DuplicateSheet } from "./DuplicateSheet";
 

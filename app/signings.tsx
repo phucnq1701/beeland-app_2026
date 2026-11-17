@@ -22,8 +22,8 @@ import { formatDate } from "@/lib/format";
 import { groupByDay, STATUS_OPTIONS, todayVN, type SigningRow, type SigningState } from "@/lib/signing";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, elevation, radius, space } from "@/theme";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
-import { SigningService } from "@/sevicesSupabase/SigningService";
+import { ProjectService } from "@/services/ProjectService";
+import { SigningService } from "@/services/SigningService";
 
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
 const TAB_BAR_SPACE = 100;

@@ -12,7 +12,6 @@ import { loadMenuTabIds } from '@/components/utils/menuTabs';
 
 import ProjectsScreen from '@/app/projects';
 import ProductsScreen from '@/app/products';
-import AppointmentsScreen from '@/app/appointments';
 import LockedUnitsScreen from '@/app/locked-units';
 import BookingsScreen from '@/app/bookings';
 import CustomersScreen from '@/app/customers';
@@ -28,7 +27,6 @@ import PriceSheetsScreen from '@/app/price-sheets';
 const SCREEN_MAP: Record<string, ComponentType<{ embedded?: boolean }>> = {
   '1': ProjectsScreen,
   '2': ProductsScreen,
-  '3': AppointmentsScreen,
   '4': LockedUnitsScreen,
   '5': BookingsScreen,
   '6': CustomersScreen,

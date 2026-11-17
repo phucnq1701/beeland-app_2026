@@ -17,7 +17,7 @@ import {
 import { CustomerListItem } from "@/components/customer/CustomerListItem";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, space } from "@/theme";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
+import { CustomerService } from "@/services/CustomerService";
 import { errorMessage } from "@/services/nvApi";
 
 type CustomerTab = "all" | "personal" | "business";

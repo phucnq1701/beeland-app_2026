@@ -8,7 +8,7 @@ const deq = (a, b) => assert.deepEqual(JSON.parse(JSON.stringify(a)), b);
 
 function load(handler) {
   const calls = [];
-  const mod = loadTs("sevicesSupabase/PaymentGatewayService.ts", { modules: {
+  const mod = loadTs("services/PaymentGatewayService.ts", { modules: {
     "@/services/nvApi": { callNv: async (fn, args, opt) => { calls.push({ fn, args, opt }); return handler(args); } },
   } });
   return { svc: mod.PaymentGatewayService, mod, calls };

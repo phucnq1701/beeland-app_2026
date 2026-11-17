@@ -1,9 +1,9 @@
 import React, { useCallback, useRef, useState } from "react";
+import { getSessionInfo } from "@/services/session";
 import { useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ChevronRight, LayoutGrid, LogOut, Trash2, User } from "lucide-react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Application from "expo-application";
 import * as Updates from "expo-updates";
 
@@ -27,13 +27,13 @@ import { routeForFeature, visibleFeatureIds } from "@/lib/featureConfig";
 import { shortBundleId } from "@/lib/otaUpdate";
 import { features } from "@/mocks/features";
 import { colors, elevation, radius, space } from "@/theme";
-import { CloudProfileService, CloudProfile } from "@/sevicesSupabase/CloudProfileService";
-import { logoutCurrentSession } from "@/sevicesSupabase/LogoutService";
+import { CloudProfileService, CloudProfile } from "@/services/CloudProfileService";
+import { logoutCurrentSession } from "@/services/LogoutService";
 import {
   deleteCurrentEmployee,
   clearDeletedEmployeeSession,
   DeletedEmployeeSession,
-} from "@/sevicesSupabase/AccountDeletionService";
+} from "@/services/AccountDeletionService";
 
 /** Chừa chỗ cho tab bar nổi. */
 const TAB_BAR_SPACE = 100;
@@ -88,8 +88,8 @@ export default function AccountScreen() {
     setData(null);
     setLoadingProfile(true);
     setProfileError(null);
-    void AsyncStorage.getItem('@type_account').then((type: string | null) => {
-      if (active) setIsAgency(type === 'AGENCY');
+    void getSessionInfo().then((s) => {
+      if (active) setIsAgency(s.isAgency);
     });
     void CloudProfileService.userInfo().then((res) => {
       if (active && !deleteBusy.current && !deletedSession.current) setData(res.data);

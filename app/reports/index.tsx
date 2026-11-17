@@ -9,7 +9,7 @@ import { AppHeader, ErrorState, Screen, Skeleton, Text } from "@/components/ui";
 import { formatVNDShort } from "@/lib/format";
 import { PERIOD_LABEL } from "@/lib/reportPeriod";
 import { colors, elevation, radius, space } from "@/theme";
-import { ReportService } from "@/sevicesSupabase/ReportService";
+import { ReportService } from "@/services/ReportService";
 
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
 const TAB_BAR_SPACE = 100;

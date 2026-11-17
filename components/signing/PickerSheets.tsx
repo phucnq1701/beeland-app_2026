@@ -6,8 +6,8 @@ import { BottomSheet, Button, SearchBar, Text } from "@/components/ui";
 import { type Deposit } from "@/lib/signing";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, radius, space } from "@/theme";
-import { CustomerService } from "@/sevicesSupabase/CustomerService";
-import { SigningService } from "@/sevicesSupabase/SigningService";
+import { CustomerService } from "@/services/CustomerService";
+import { SigningService } from "@/services/SigningService";
 
 function Row({
   title,

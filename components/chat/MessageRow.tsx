@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { Avatar, Skeleton, Text, useToast } from "@/components/ui";
 import { formatFileSize, isImageMime, isOutgoing, systemText, type ChatAttachment, type ChatMessage, type ChatRow } from "@/lib/chat";
-import { ChatService } from "@/sevicesSupabase/ChatService";
+import { ChatService } from "@/services/ChatService";
 import { colors, elevation, radius, space } from "@/theme";
 
 const IMAGE_W = 200;

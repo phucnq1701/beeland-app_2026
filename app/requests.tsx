@@ -19,8 +19,8 @@ import { isOverdue, mapCatalog, type CustomerRequest } from "@/lib/customerReque
 import { PERIOD_LABEL, periodRange, type PeriodType } from "@/lib/reportPeriod";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, elevation, radius, space } from "@/theme";
-import { CustomerRequestService, type RequestCatalogs } from "@/sevicesSupabase/CustomerRequestService";
-import { ProjectService } from "@/sevicesSupabase/ProjectService";
+import { CustomerRequestService, type RequestCatalogs } from "@/services/CustomerRequestService";
+import { ProjectService } from "@/services/ProjectService";
 
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
 const TAB_BAR_SPACE = 100;

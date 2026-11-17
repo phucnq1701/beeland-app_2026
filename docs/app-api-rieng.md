@@ -34,7 +34,7 @@ xuyên luồng trên máy ảo, xong mới sang luồng sau.
 | L2 | Khách hàng | DS / chi tiết / thêm / sửa, trùng khách, yêu cầu KH, luật nhập | XONG 16-11 (SP 78–96; chờ deploy API) |
 | L3 | Lịch ký & báo cáo | đặt lịch ký (đại lý), lịch hẹn (ẩn), báo cáo | XONG 16-11 (SP A0–A3, B0–B9; lịch hẹn ẩn để L5; chờ deploy API) |
 | L4 | Liên lạc & tài khoản | chat, thông báo, tài liệu / ảnh, đổi-quên MK, xoá TK, realtime, upload chung | XONG 16-11 (SP C0–E6; tệp chat chưa thử được ở API local; chờ deploy API) |
-| L5 | Dọn & test toàn bộ | bỏ sevicesSupabase / sevices cũ, đổi khoá lưu, kịch bản e2e toàn app | |
+| L5 | Dọn & test toàn bộ | bỏ sevicesSupabase / sevices cũ, đổi khoá lưu, kịch bản e2e toàn app | XONG 17-11 |
 
 Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-inventory/` (A sản phẩm, B bán hàng, C khách hàng, D lõi).
 
@@ -186,3 +186,20 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
   Ảnh / tệp chat KHÔNG thử được ở API local (thiếu cấu hình kho — edge chat-files web cũng lỗi y vậy) ⇒ thử sau deploy API.
 - lib/web đồng bộ web main a33e9790 (kho quà hạn mức nhóm). 328 test đạt.
 - Còn lại (L5): xoá axiosApiSupabase.ts / cloudTenant còn dùng, màn Lịch hẹn ẩn, receipt/[id] mẫu.
+
+### 2026-11-17 — L5 Dọn & thử toàn app XONG
+- User chốt: xoá màn Lịch hẹn (gọi API .NET cũ đã ngừng; tính năng id 3 bỏ hẳn) + thư mục sevices/; xoá màn mẫu Phiếu thu
+  (receipts, receipt/[id]) và Bàn giao (handovers, handover/[id]) + mock. Chi tiết phiếu thu thật vẫn là reports/receipt/[id].
+- Bỏ cloudTenant.ts + axiosApiSupabase.ts; gộp sevicesSupabase/ vào services/. Khoá lưu: màn đọc `getSessionInfo()` (người dùng
+  phiên, thiếu thì claim JWT); saveSession không ghi + dọn 12 khoá cũ (@type_account, @company_id…). GIỮ tên @supabase_jwt / @token /
+  @nv_user để bản cập nhật không đăng xuất người dùng.
+- Code chết: BookingService.createBooking / getBookingSalesConfig, lib/bookingPayload, lib/agencySan, phần lib/bookingPrice và
+  lib/signing không còn dùng (form dùng logic web), components/utils/common.ts; test tương ứng bỏ / rút gọn. Không còn tệp nào
+  không ai import (scratchpad unused.cjs). App gọi 117 endpoint = BE có 117 (không thừa / thiếu).
+- BE: cs-sp.json sinh lại bằng công cụ (c4d29dea). Unit test BE: 2 lỗi KHÔNG thuộc app (manual 160/180 dùng sqlcmd,
+  CashVoucherHieuLuc — code khác trên main).
+- Thử máy ảo (tài khoản admin BRG, chỉ xem): Trang chủ, Dự án, Sản phẩm + chi tiết căn, Lock căn, Booking + chi tiết, Khách hàng +
+  chi tiết, Hợp đồng + chi tiết, Đặt cọc, Báo cáo, Yêu cầu KH, Phiếu tính giá, Tài khoản; trước đó L1–L4 (booking thật, lịch ký,
+  thông báo, chat, tài liệu). API local: mọi lệnh 200. CHƯA thử tài khoản đại lý trên máy ảo (không có mật khẩu đại lý thử).
+- docs/*.md + CLAUDE.md viết lại theo bộ API riêng. tsc sạch, lint 0 lỗi, 304 test đạt, lib/web khớp web.
+- Còn chờ: user build + restart API thật (SP 76–E6 + endpoint C# L2–L4), thử ảnh / tệp chat trên API thật, thử bằng tài khoản đại lý.
