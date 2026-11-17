@@ -13,7 +13,7 @@
 - Mỗi lệnh `fn_nv_app_<tên>` ↔ SP `dbo.usp_nv_app_<tên>` + action C# (repo BE `_wt/be-app-nv`, `database/sp/63_app_nhan_vien/`,
   module `AppNhanVien`). **Lõi chung:** SP app gọi lại SP / hàm lõi của web (phạm vi, quyền, che trường, trạng thái); đọc thì chọn
   cột app cần, ghi thì gọi đúng SP ghi của web. Danh sách SP + nhật ký: `docs/app-api-rieng.md`, bảng kê: `docs/app-api-inventory/`.
-- **Máy chủ lấy công ty / nhân viên / nhóm quyền / phạm vi từ JWT** – app không gửi mã công ty, id nhân viên, người thao tác.
+- **Máy chủ lấy công ty / nhân viên / nhóm quyền / phạm vi từ JWT** (menu + nút theo nhóm quyền như web: `docs/permissions.md`) – app không gửi mã công ty, id nhân viên, người thao tác.
   Tham số endpoint đặt tên tiếng Việt (`p_du_an_id`, `p_tu_khoa`, `p_trang`, `p_so_dong`…); dự án luôn gửi **uuid**.
 - Ngoài BEELAND chỉ còn: phiên bản app trên store `services/UserService.checkVersion` → `https://api-bms.beesky.vn/api/app/get-version`.
 - Không có môi trường test riêng: mọi thao tác ghi đi vào dữ liệu thật.

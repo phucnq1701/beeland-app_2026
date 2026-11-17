@@ -20,6 +20,8 @@ import { PERIOD_LABEL, periodRange, type PeriodType } from "@/lib/reportPeriod";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, elevation, radius, space } from "@/theme";
 import { CustomerRequestService, type RequestCatalogs } from "@/services/CustomerRequestService";
+import { FORM } from "@/lib/permissions";
+import { usePerm } from "@/services/PermissionService";
 import { ProjectService } from "@/services/ProjectService";
 
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
@@ -45,6 +47,7 @@ const EMPTY_CATALOGS: RequestCatalogs = {
  */
 export default function RequestsScreen({ embedded }: { embedded?: boolean }) {
   const router = useRouter();
+  const perm = usePerm(FORM.requests);
   const [query, setQuery] = useState("");
   const debounced = useDebouncedValue(query, 400);
   const [status, setStatus] = useState<string | null>(null);
@@ -314,21 +317,24 @@ export default function RequestsScreen({ embedded }: { embedded?: boolean }) {
           contentContainerStyle={{ paddingBottom: bottomPad }}
         />
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Tiếp nhận yêu cầu mới"
-          onPress={add}
-          style={({ pressed }) => [
-            styles.fab,
-            { bottom: embedded ? TAB_BAR_SPACE : space.xl },
-            pressed ? styles.fabPressed : null,
-          ]}
-        >
-          <Plus size={20} color={colors.onPrimary} />
-          <Text variant="subhead" color="onPrimary">
-            Tiếp nhận
-          </Text>
-        </Pressable>
+        {/* Tiếp nhận theo nhóm quyền (/customers/requests ADD) như web */}
+        {perm.can("ADD") ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Tiếp nhận yêu cầu mới"
+            onPress={add}
+            style={({ pressed }) => [
+              styles.fab,
+              { bottom: embedded ? TAB_BAR_SPACE : space.xl },
+              pressed ? styles.fabPressed : null,
+            ]}
+          >
+            <Plus size={20} color={colors.onPrimary} />
+            <Text variant="subhead" color="onPrimary">
+              Tiếp nhận
+            </Text>
+          </Pressable>
+        ) : null}
       </Screen>
     </>
   );

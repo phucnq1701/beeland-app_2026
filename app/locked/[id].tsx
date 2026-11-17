@@ -23,6 +23,8 @@ import { colors, elevation, radius, space } from "@/theme";
 import { BookingService } from "@/services/BookingService";
 import { ProductService } from "@/services/ProductService";
 import { PriceServices } from "@/services/PriceServices";
+import { FORM } from "@/lib/permissions";
+import { usePerm } from "@/services/PermissionService";
 
 /** Ảnh dùng khi sản phẩm chưa có ảnh. */
 const DEFAULT_IMAGE =
@@ -32,6 +34,8 @@ export default function LockDetailScreen() {
   const { id, maSP } = useLocalSearchParams<any>();
 
   const router = useRouter();
+
+  const lockPerm = usePerm(FORM.locks);
   const insets = useSafeAreaInsets();
 
   const [data, setData] = useState<any>(null);
@@ -39,6 +43,8 @@ export default function LockDetailScreen() {
   const [dataProduct, setDataProduct] = useState<any>(null);
   // Quyền BOOKING của form màn sản phẩm theo loại căn (như web useProductTxPerm) — chưa tải / không có ⇒ ẩn nút.
   const [canBook, setCanBook] = useState(false);
+  // Nội bộ: như màn Lock căn web (/sales/locks BOOKING); đại lý giữ luật cũ (quyền BOOKING theo loại căn) — user chốt 2026-11-17
+  const bookAllowed = lockPerm.agency ? canBook : lockPerm.can("BOOKING");
 
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [, setIsLocked] = useState<boolean>(false);
@@ -228,7 +234,7 @@ export default function LockDetailScreen() {
         </ScrollView>
         {back}
 
-        {active && canBook ? (
+        {active && bookAllowed ? (
           <BottomActionBar>
             <Button
               size="lg"

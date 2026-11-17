@@ -36,10 +36,12 @@ function setup({ storage: init = [], server } = {}) {
   } };
   const jwt = loadTs("lib/jwt.ts", { globals: { decodeURIComponent } });
   const sessionKeys = loadTs("lib/sessionKeys.ts");
+  const featureConfig = loadTs("lib/featureConfig.ts");
+  const permissions = loadTs("lib/permissions.ts");
   const config = loadTs("services/config.ts", { globals: { process: { env: {} } } });
   const session = loadTs("services/session.ts", { modules: {
     "@react-native-async-storage/async-storage": asyncStorage, axios, "@/lib/jwt": jwt, "@/lib/sessionKeys": sessionKeys,
-    "./config": config,
+    "./config": config, "@/lib/featureConfig": featureConfig, "@/lib/permissions": permissions,
   } });
   const api = loadTs("services/nvApi.ts", { modules: { axios, "./config": config, "./session": session } });
   const auth = loadTs("services/AuthApi.ts", { modules: { "./nvApi": api, "./session": session } });

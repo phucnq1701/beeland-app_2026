@@ -1,7 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 
+import { setMenuGate } from "@/lib/featureConfig";
 import { jwtPayload, jwtSecondsLeft } from "@/lib/jwt";
+import { menuFormGate, moduleAllowed } from "@/lib/permissions";
 import { SESSION_KEYS } from "@/lib/sessionKeys";
 
 import { NV_API_BASE } from "./config";
@@ -42,6 +44,9 @@ export interface NvUser {
   nhom_quyen_id: string | null;
   nhom_quyen: string | null;
   toan_quyen: boolean;
+  /** Đường dẫn form được cấp / form công ty đăng ký (như localStorage menu / menu_congty của web). Phiên cũ: không có. */
+  menu?: string[] | null;
+  menu_cong_ty?: string[] | null;
 }
 
 export interface NvSession {
@@ -108,6 +113,9 @@ export async function getSessionInfo(): Promise<SessionInfo> {
   const c = jwtPayload(await getJwt());
   const pick = (a: unknown, b: unknown) => String(a ?? "").trim() || String(b ?? "").trim();
   const typeAccount = pick(u?.loai_tk, c.type_account).toUpperCase();
+  // Menu theo nhóm quyền như web — đặt cho lib/featureConfig (Trang chủ, Tất cả quản lý, tab menu, Tài khoản đều đọc phiên trước)
+  const formGate = menuFormGate({ menu: u?.menu, menuCongTy: u?.menu_cong_ty, fullAccess: u?.toan_quyen === true });
+  setMenuGate((id) => moduleAllowed(id, formGate));
   return {
     companyId: pick(u?.company_id, c.company_id),
     employeeId: pick(u?.employee_id, c.employee_id),

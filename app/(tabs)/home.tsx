@@ -16,7 +16,7 @@ import { bookingStateBadge } from "@/lib/bookingState";
 import { getScopedKey } from "@/components/utils/accountScope";
 import { MENU_TAB_FEATURE_IDS } from "@/components/utils/menuTabs";
 import { formatDate, maskPhone } from "@/lib/format";
-import { resolveHomeFeatureIds, routeForFeature } from "@/lib/featureConfig";
+import { isFeatureAllowed, resolveHomeFeatureIds, routeForFeature } from "@/lib/featureConfig";
 import { features, Feature } from "@/mocks/features";
 import { BookingService } from "@/services/BookingService";
 import { CustomerService as CustomerSupabaseService } from "@/services/CustomerService";
@@ -60,10 +60,20 @@ export default function HomeScreen() {
   const [bookingsState, setBookingsState] = useState<SectionState>(IDLE);
   const [depositsState, setDepositsState] = useState<SectionState>(IDLE);
   const [customersState, setCustomersState] = useState<SectionState>(IDLE);
+  // Mục nào hiện ở Trang chủ (theo quyền module như web). Chưa đọc phiên ⇒ ẩn để không nháy mục ngoài quyền.
+  const [showSection, setShowSection] = useState({ projects: false, bookings: false, deposits: false, customers: false });
 
   useEffect(() => {
     const checkAgency = async () => {
-      setIsAgency((await getSessionInfo()).isAgency);
+      const agency = (await getSessionInfo()).isAgency;
+      setIsAgency(agency);
+      // Mục gần đây theo quyền module như menu (getSessionInfo đã đặt luật menu theo nhóm quyền)
+      setShowSection({
+        projects: isFeatureAllowed("1", agency),
+        bookings: isFeatureAllowed("5", agency),
+        deposits: isFeatureAllowed("13", agency),
+        customers: isFeatureAllowed("6", agency),
+      });
     };
     checkAgency();
 
@@ -247,100 +257,106 @@ export default function HomeScreen() {
           />
         </View>
 
-        <View style={styles.carousel}>
-          <View style={styles.carouselHead}>
-            <HomeSectionHeader
-              title="Dự án nổi bật"
-              actionLabel="Xem tất cả"
-              onAction={() => router.push("/projects")}
+        {showSection.projects ? (
+          <View style={styles.carousel}>
+            <View style={styles.carouselHead}>
+              <HomeSectionHeader
+                title="Dự án nổi bật"
+                actionLabel="Xem tất cả"
+                onAction={() => router.push("/projects")}
+              />
+            </View>
+            <ProjectCarousel
+              projects={duAn}
+              loading={projectsState.loading}
+              error={projectsState.error}
+              onRetry={() => void loadProjects()}
+              onPress={openProject}
             />
           </View>
-          <ProjectCarousel
-            projects={duAn}
-            loading={projectsState.loading}
-            error={projectsState.error}
-            onRetry={() => void loadProjects()}
-            onPress={openProject}
-          />
-        </View>
+        ) : null}
 
-        <RecentSection
-          title="Booking gần đây"
-          items={booking}
-          loading={bookingsState.loading}
-          error={bookingsState.error}
-          onRetry={() => void loadBookings()}
-          onSeeAll={() => router.push("/bookings")}
-          emptyText="Chưa có booking nào."
-          renderItem={(b: any) => (
-            <ListItem
-              leading={<Avatar name={b.khachHang || "?"} size={44} round />}
-              title={b.khachHang || "—"}
-              subtitle={[b.maSanPham, b.tenDA].filter(Boolean).join(" · ")}
-              meta={formatDate(b.ngayGiuCho)}
-              trailing={
-                <>
-                  <MoneyText value={b.tongGiaGomVAT ?? b.tong_gia} short />
-                  <Badge {...bookingStateBadge(b.state)} />
-                </>
-              }
-              onPress={() =>
-                router.push({
-                  pathname: "/booking/[id]",
-                  params: { id: b.id ?? b.maPGC },
-                })
-              }
-            />
-          )}
-        />
-
-        {isAgency ? (
+        {showSection.bookings ? (
           <RecentSection
-            title="Đặt cọc gần đây"
-            items={deposits}
-            loading={depositsState.loading}
-            error={depositsState.error}
-            onRetry={() => void loadDeposits()}
-            onSeeAll={() => router.push("/deposits")}
-            emptyText="Chưa có phiếu đặt cọc nào."
-            renderItem={(d: any) => (
+            title="Booking gần đây"
+            items={booking}
+            loading={bookingsState.loading}
+            error={bookingsState.error}
+            onRetry={() => void loadBookings()}
+            onSeeAll={() => router.push("/bookings")}
+            emptyText="Chưa có booking nào."
+            renderItem={(b: any) => (
               <ListItem
-                leading={
-                  <View style={styles.depositIcon}>
-                    <Landmark size={20} color={colors.brand} />
-                  </View>
-                }
-                title={d.KhachHang || "—"}
-                subtitle={[d.MaSanPham, d.TenDA].filter(Boolean).join(" · ")}
-                meta={formatDate(d.NgayDatCoc)}
+                leading={<Avatar name={b.khachHang || "?"} size={44} round />}
+                title={b.khachHang || "—"}
+                subtitle={[b.maSanPham, b.tenDA].filter(Boolean).join(" · ")}
+                meta={formatDate(b.ngayGiuCho)}
                 trailing={
                   <>
-                    <MoneyText value={d.TienCoc} short />
-                    {d.TenTT ? <StatusBadge label={d.TenTT} color={d.MauNen} /> : null}
+                    <MoneyText value={b.tongGiaGomVAT ?? b.tong_gia} short />
+                    <Badge {...bookingStateBadge(b.state)} />
                   </>
                 }
                 onPress={() =>
                   router.push({
-                    pathname: "/deposit/[id]",
-                    params: {
-                      id: String(d.MaPDC ?? ""),
-                      data: JSON.stringify({
-                        ...d,
-                        maDC: String(d.MaPDC ?? ""),
-                        soPhieu: d.SoPhieu || "",
-                        tenKH: d.KhachHang || "",
-                        maSP: d.MaSanPham || "",
-                        soTienCoc: d.TienCoc || 0,
-                        trangThai: d.TenTT || "",
-                        tenDA: d.TenDA || "",
-                      }),
-                    },
+                    pathname: "/booking/[id]",
+                    params: { id: b.id ?? b.maPGC },
                   })
                 }
               />
             )}
           />
-        ) : (
+        ) : null}
+
+        {isAgency ? (
+          showSection.deposits ? (
+            <RecentSection
+              title="Đặt cọc gần đây"
+              items={deposits}
+              loading={depositsState.loading}
+              error={depositsState.error}
+              onRetry={() => void loadDeposits()}
+              onSeeAll={() => router.push("/deposits")}
+              emptyText="Chưa có phiếu đặt cọc nào."
+              renderItem={(d: any) => (
+                <ListItem
+                  leading={
+                    <View style={styles.depositIcon}>
+                      <Landmark size={20} color={colors.brand} />
+                    </View>
+                  }
+                  title={d.KhachHang || "—"}
+                  subtitle={[d.MaSanPham, d.TenDA].filter(Boolean).join(" · ")}
+                  meta={formatDate(d.NgayDatCoc)}
+                  trailing={
+                    <>
+                      <MoneyText value={d.TienCoc} short />
+                      {d.TenTT ? <StatusBadge label={d.TenTT} color={d.MauNen} /> : null}
+                    </>
+                  }
+                  onPress={() =>
+                    router.push({
+                      pathname: "/deposit/[id]",
+                      params: {
+                        id: String(d.MaPDC ?? ""),
+                        data: JSON.stringify({
+                          ...d,
+                          maDC: String(d.MaPDC ?? ""),
+                          soPhieu: d.SoPhieu || "",
+                          tenKH: d.KhachHang || "",
+                          maSP: d.MaSanPham || "",
+                          soTienCoc: d.TienCoc || 0,
+                          trangThai: d.TenTT || "",
+                          tenDA: d.TenDA || "",
+                        }),
+                      },
+                    })
+                  }
+                />
+              )}
+            />
+          ) : null
+        ) : showSection.customers ? (
           <RecentSection
             title="Khách hàng gần đây"
             items={khachHang}
@@ -364,7 +380,7 @@ export default function HomeScreen() {
               />
             )}
           />
-        )}
+        ) : null}
       </View>
     </Screen>
   );

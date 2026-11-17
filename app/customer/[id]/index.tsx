@@ -22,6 +22,8 @@ import { callPhone, openZalo, isCallablePhone } from "@/components/customer/Cust
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { colors, elevation, hitSlop, radius, space } from "@/theme";
 import { CustomerService } from "@/services/CustomerService";
+import { FORM } from "@/lib/permissions";
+import { usePerm } from "@/services/PermissionService";
 
 /** Nút liên hệ nhanh: vòng tròn nền nhạt + nhãn bên dưới (kiểu danh bạ). */
 function QuickAction({
@@ -107,6 +109,7 @@ function toDetail(d: any): Detail {
 
 export default function CustomerDetailScreen() {
   const router = useRouter();
+  const perm = usePerm(FORM.customers);
   const toast = useToast();
   const { id } = useLocalSearchParams();
   const [customer, setCustomer] = useState<Detail | null>(null);
@@ -171,22 +174,27 @@ export default function CustomerDetailScreen() {
       variant="soft"
       title="Khách hàng"
       actions={
-        customer && !customer.limited ? (
+        // Sửa / Xoá theo nhóm quyền (/customers/list EDIT / DELETE) như web
+        customer && !customer.limited && (perm.can("EDIT") || perm.can("DELETE")) ? (
           <View style={styles.headerActions}>
-            <IconButton
-              icon={Pencil}
-              variant="soft"
-              accessibilityLabel="Sửa khách hàng"
-              onPress={() => router.push(`/customer/${customer.id}/edit` as any)}
-            />
-            <IconButton
-              icon={Trash2}
-              variant="soft"
-              accessibilityLabel="Xoá khách hàng"
-              color={colors.danger}
-              disabled={deleting}
-              onPress={() => void handleDelete()}
-            />
+            {perm.can("EDIT") ? (
+              <IconButton
+                icon={Pencil}
+                variant="soft"
+                accessibilityLabel="Sửa khách hàng"
+                onPress={() => router.push(`/customer/${customer.id}/edit` as any)}
+              />
+            ) : null}
+            {perm.can("DELETE") ? (
+              <IconButton
+                icon={Trash2}
+                variant="soft"
+                accessibilityLabel="Xoá khách hàng"
+                color={colors.danger}
+                disabled={deleting}
+                onPress={() => void handleDelete()}
+              />
+            ) : null}
           </View>
         ) : null
       }

@@ -23,6 +23,8 @@ import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { colors, elevation, radius, space } from "@/theme";
 import { ProjectService } from "@/services/ProjectService";
 import { SigningService } from "@/services/SigningService";
+import { FORM } from "@/lib/permissions";
+import { usePerm } from "@/services/PermissionService";
 
 /** Chừa chỗ cho tab bar nổi khi màn được nhúng trong tab menu. */
 const TAB_BAR_SPACE = 100;
@@ -35,6 +37,7 @@ const TAB_BAR_SPACE = 100;
  */
 export default function SigningsScreen({ embedded }: { embedded?: boolean }) {
   const router = useRouter();
+  const perm = usePerm(FORM.signings);
   const [view, setView] = useState<"list" | "calendar">("list");
   const [query, setQuery] = useState("");
   const debounced = useDebouncedValue(query, 300);
@@ -301,21 +304,24 @@ export default function SigningsScreen({ embedded }: { embedded?: boolean }) {
           />
         )}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Thêm lịch ký"
-          onPress={add}
-          style={({ pressed }) => [
-            styles.fab,
-            { bottom: embedded ? TAB_BAR_SPACE : space.xl },
-            pressed ? styles.fabPressed : null,
-          ]}
-        >
-          <Plus size={20} color={colors.onPrimary} />
-          <Text variant="subhead" color="onPrimary">
-            Thêm lịch ký
-          </Text>
-        </Pressable>
+        {/* Thêm theo nhóm quyền (/sales/signing-appointments ADD) như web */}
+        {perm.can("ADD") ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Thêm lịch ký"
+            onPress={add}
+            style={({ pressed }) => [
+              styles.fab,
+              { bottom: embedded ? TAB_BAR_SPACE : space.xl },
+              pressed ? styles.fabPressed : null,
+            ]}
+          >
+            <Plus size={20} color={colors.onPrimary} />
+            <Text variant="subhead" color="onPrimary">
+              Thêm lịch ký
+            </Text>
+          </Pressable>
+        ) : null}
       </Screen>
     </>
   );

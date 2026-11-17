@@ -10,6 +10,8 @@ import { radius } from "@/theme";
 import { formatDate } from "@/lib/format";
 import { DatCocService } from "@/services/DatCocService";
 import { Receipt } from "@/services/PaymentProgressService";
+import { FORM } from "@/lib/permissions";
+import { usePerm } from "@/services/PermissionService";
 
 /**
  * Chi tiết đặt cọc — chỉ việc của khâu cọc (sếp 2026-11-17: module nào chỉ hiện thứ của module đó, app làm nhanh luồng chính):
@@ -18,6 +20,7 @@ import { Receipt } from "@/services/PaymentProgressService";
  */
 export default function DepositDetailScreen() {
   const router = useRouter();
+  const perm = usePerm(FORM.deposits);
   const returningFromPayment = useRef(false);
   const { data: dataParam } = useLocalSearchParams<{ id: string; data?: string }>();
   const row = useMemo(() => {
@@ -71,7 +74,8 @@ export default function DepositDetailScreen() {
   // Lịch ký khoá theo uuid PHIẾU GIỮ CHỖ (pgc_id), không phải id phiếu cọc (web openSigningForDeposit)
   const pgcId = String(h.PhieuGiuChoId ?? "");
   // Chỉ hiện khi máy chủ cho đặt: phiếu đã duyệt cọc, chưa sang hợp đồng (mã 13 / 24 / 25)
-  const canSign = !loading && !!pgcId && canBookSigning(h);
+  // + quyền Đặt lịch ký của màn Đặt cọc (/sales/deposits SIGNING) như web (nút "Đặt lịch ký" ở danh sách cọc)
+  const canSign = !loading && !!pgcId && canBookSigning(h) && perm.can("SIGNING");
   const goToSigning = () =>
     router.push({
       pathname: "/signing/form",

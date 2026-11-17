@@ -25,6 +25,8 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { dateKey, labelOf, statusMeta, timeOf, weekdayIndex } from "@/lib/signing";
 import { colors, elevation, radius, space } from "@/theme";
 import { SigningService, type SigningDetail } from "@/services/SigningService";
+import { FORM } from "@/lib/permissions";
+import { usePerm } from "@/services/PermissionService";
 
 const WEEKDAY_FULL = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"];
 
@@ -35,6 +37,7 @@ const WEEKDAY_FULL = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Th
  */
 export default function SigningDetailScreen() {
   const router = useRouter();
+  const perm = usePerm(FORM.signings);
   const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [data, setData] = useState<SigningDetail | null>(null);
@@ -111,7 +114,7 @@ export default function SigningDetailScreen() {
       title="Lịch ký"
       subtitle={data?.MaCan ? `${data.MaCan}${data.TenKH ? " · " + data.TenKH : ""}` : undefined}
       actions={
-        data ? (
+        data && (perm.can("EDIT") || perm.can("DELETE")) ? (
           <IconButton
             icon={MoreVertical}
             variant="soft"
@@ -194,10 +197,12 @@ export default function SigningDetailScreen() {
         refreshing={refreshing}
         onRefresh={() => void load(true)}
         footer={
-          <BottomActionBar>
-            {/* App không cập nhật trạng thái lịch ký (xác nhận / từ chối làm trên web) */}
-            <Button icon={Pencil} title="Sửa lịch ký" onPress={edit} style={[styles.flex, styles.pill]} />
-          </BottomActionBar>
+          // Sửa theo nhóm quyền (/sales/signing-appointments EDIT) như web. App không cập nhật trạng thái (xác nhận / từ chối trên web)
+          perm.can("EDIT") ? (
+            <BottomActionBar>
+              <Button icon={Pencil} title="Sửa lịch ký" onPress={edit} style={[styles.flex, styles.pill]} />
+            </BottomActionBar>
+          ) : undefined
         }
       >
         <View style={styles.body}>
@@ -316,23 +321,27 @@ export default function SigningDetailScreen() {
         }}
         title="Tuỳ chọn lịch ký"
       >
-        <SheetOption
-          icon={Pencil}
-          label="Sửa lịch ký"
-          onPress={() => {
-            pendingMenu.current = "edit";
-            setMenuOpen(false);
-          }}
-        />
-        <SheetOption
-          icon={Trash2}
-          label="Xoá lịch ký"
-          destructive
-          onPress={() => {
-            pendingMenu.current = "delete";
-            setMenuOpen(false);
-          }}
-        />
+        {perm.can("EDIT") ? (
+          <SheetOption
+            icon={Pencil}
+            label="Sửa lịch ký"
+            onPress={() => {
+              pendingMenu.current = "edit";
+              setMenuOpen(false);
+            }}
+          />
+        ) : null}
+        {perm.can("DELETE") ? (
+          <SheetOption
+            icon={Trash2}
+            label="Xoá lịch ký"
+            destructive
+            onPress={() => {
+              pendingMenu.current = "delete";
+              setMenuOpen(false);
+            }}
+          />
+        ) : null}
       </BottomSheet>
     </>
   );

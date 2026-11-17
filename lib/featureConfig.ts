@@ -38,10 +38,19 @@ export const AGENCY_FEATURE_IDS = ['1', '2', '5', '13', '14', '16'] as const;
  */
 export const AGENCY_ONLY_FEATURE_IDS: readonly string[] = [];
 
-/** Tài khoản (đại lý / nội bộ) có được dùng tính năng này không. */
-export function isFeatureAllowed(id: string, isAgency: boolean): boolean {
+/**
+ * Cổng menu theo phân quyền web (lib/permissions: menuFormGate + moduleAllowed) cho tài khoản NỘI BỘ. `getSessionInfo()` đặt theo
+ * phiên hiện tại (mọi nơi dựng menu đều đọc phiên trước) — null = chưa có ⇒ không lọc. Đại lý giữ danh sách cố định như cũ.
+ */
+let menuGate: ((id: string) => boolean) | null = null;
+export function setMenuGate(gate: ((id: string) => boolean) | null): void {
+  menuGate = gate;
+}
+
+/** Tài khoản (đại lý / nội bộ) có được dùng tính năng này không. Nội bộ: thêm luật menu theo nhóm quyền như web. */
+export function isFeatureAllowed(id: string, isAgency: boolean, gate: ((id: string) => boolean) | null = menuGate): boolean {
   if (isAgency) return (AGENCY_FEATURE_IDS as readonly string[]).includes(id);
-  return !AGENCY_ONLY_FEATURE_IDS.includes(id);
+  return !AGENCY_ONLY_FEATURE_IDS.includes(id) && (gate ? gate(id) : true);
 }
 
 /**
