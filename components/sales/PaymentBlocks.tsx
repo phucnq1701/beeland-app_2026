@@ -105,7 +105,20 @@ export function MoneySummary({
   );
 }
 
-/** Lịch thanh toán từng đợt – số liệu lấy nguyên từ máy chủ (PaymentProgressService.getSchedule). */
+/** Hạn đã qua (trước hôm nay) */
+function isPastDue(d: unknown): boolean {
+  if (!d) return false;
+  const t = new Date(String(d));
+  if (Number.isNaN(t.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return t.getTime() < today.getTime();
+}
+
+/**
+ * Lịch thanh toán từng đợt – số liệu lấy nguyên từ máy chủ (PaymentProgressService.getSchedule).
+ * Mỗi đợt 1 khối gọn: tên + số phải thu; dòng dưới: hạn (đỏ "Quá hạn" khi qua hạn còn nợ, + đã thu nếu thu dở) và Đã đủ / Còn X.
+ */
 export function PaymentSchedule({ rows, error }: { rows: ScheduleRow[]; error?: boolean }) {
   return (
     <>
@@ -117,53 +130,53 @@ export function PaymentSchedule({ rows, error }: { rows: ScheduleRow[]; error?: 
           </Text>
         ) : (
           rows.map((r, i) => {
-            const owed = r.ConLai + r.ConNoPBT;
+            const owed = r.ConLai;
+            const owedPbt = r.ConNoPBT;
+            const late = owed + owedPbt > 0 && isPastDue(r.NgayTT);
+            const partial = owed > 0 && r.DaThu > 0;
             return (
               <View key={`${r.DotTT}-${i}`} style={[styles.item, i < rows.length - 1 ? styles.divider : null]}>
                 <View style={styles.itemHead}>
-                  <Text variant="subhead" style={styles.flex} numberOfLines={1}>
+                  <Text variant="subhead" style={styles.flex} numberOfLines={2}>
                     {r.DotTTText || `Đợt ${r.DotTT}`}
                     {r.TyLeTT ? ` · ${r.TyLeTT}%` : ""}
                   </Text>
-                  <Badge label={owed > 0 ? "Còn nợ" : "Đã đủ"} tone={owed > 0 ? "warning" : "success"} />
+                  <MoneyText value={r.PhaiThu} variant="subhead" />
                 </View>
-                <Text variant="caption" color="textSecondary">
-                  {r.NgayTT ? `Hạn ${formatDate(r.NgayTT)}` : "Chưa có hạn"}
-                  {r.DienGiai ? ` · ${r.DienGiai}` : ""}
-                </Text>
-                {/* Từng dòng nhãn – số (3 cột ngang làm số đầy đủ bị xuống dòng) */}
-                <View style={styles.amounts}>
-                  <Amount label="Phải thu" value={r.PhaiThu} />
-                  <Amount label="Đã thu" value={r.DaThu} paid />
-                  <Amount label="Còn lại" value={r.ConLai} emphasize />
-                  {r.PhaiThuPBT ? (
-                    <View style={styles.pbt}>
-                      <Amount label="Phí bảo trì" value={r.PhaiThuPBT} />
-                      <Amount label="Đã thu PBT" value={r.DaThuPBT} paid />
-                      <Amount label="Còn PBT" value={r.ConNoPBT} emphasize />
-                    </View>
-                  ) : null}
+                <View style={styles.itemHead}>
+                  <Text variant="caption" color={late ? "danger" : "textSecondary"} style={styles.flex} numberOfLines={2}>
+                    {r.NgayTT ? `${late ? "Quá hạn" : "Hạn"} ${formatDate(r.NgayTT)}` : "Chưa có hạn"}
+                    {partial ? ` · đã thu ${formatVND(r.DaThu)}` : ""}
+                  </Text>
+                  {owed > 0 ? (
+                    <Text variant="caption" weight="semibold" color={late ? "danger" : "warning"}>
+                      Còn {formatVND(owed)}
+                    </Text>
+                  ) : (
+                    <Badge label="Đã đủ" tone="success" />
+                  )}
                 </View>
+                {r.PhaiThuPBT ? (
+                  <View style={styles.itemHead}>
+                    <Text variant="caption" color="textSecondary" style={styles.flex}>
+                      Phí bảo trì {formatVND(r.PhaiThuPBT)}
+                    </Text>
+                    <Text variant="caption" weight="semibold" color={owedPbt > 0 ? (late ? "danger" : "warning") : "success"}>
+                      {owedPbt > 0 ? `Còn ${formatVND(owedPbt)}` : "Đã đủ"}
+                    </Text>
+                  </View>
+                ) : null}
+                {r.DienGiai ? (
+                  <Text variant="caption" color="textTertiary" numberOfLines={2}>
+                    {r.DienGiai}
+                  </Text>
+                ) : null}
               </View>
             );
           })
         )}
       </View>
     </>
-  );
-}
-
-/** Một dòng tiền: nhãn trái, số phải. `emphasize` = dòng còn lại (đậm, cam khi còn nợ); `paid` = xanh khi > 0. */
-function Amount({ label, value, emphasize, paid }: { label: string; value: number; emphasize?: boolean; paid?: boolean }) {
-  const color = emphasize ? (value > 0 ? "warning" : "success") : paid && value > 0 ? "success" : "text";
-  return (
-    <View style={styles.amountRow}>
-      <Text variant="caption" color="textSecondary" weight={emphasize ? "semibold" : undefined} style={styles.flex}>
-        {label}
-      </Text>
-      {/* Bảng tiền: hiện đủ số đồng, không rút gọn */}
-      <MoneyText value={value} variant={emphasize ? "subhead" : "caption"} color={color} />
-    </View>
   );
 }
 
@@ -230,23 +243,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.showcase.surface,
   },
   card: { borderRadius: radius.xxl, backgroundColor: colors.surface, ...elevation.soft },
-  amounts: {
-    gap: space.xs + 2,
-    marginTop: space.sm + 2,
-    paddingHorizontal: space.md + 2,
-    paddingVertical: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surfaceMuted,
-  },
-  amountRow: { flexDirection: "row", alignItems: "center", gap: space.md },
-  pbt: {
-    gap: space.xs + 2,
-    marginTop: space.xs + 2,
-    paddingTop: space.sm + 2,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.borderStrong,
-  },
-  item: { paddingHorizontal: space.lg + 2, paddingVertical: space.lg, gap: 2 },
+  item: { paddingHorizontal: space.lg + 2, paddingVertical: space.md + 2, gap: space.xs },
   itemHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
   divider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   empty: { padding: space.lg },
