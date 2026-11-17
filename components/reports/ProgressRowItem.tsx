@@ -28,7 +28,7 @@ export function progressSummary(rows: ProgressRow[], label: string) {
   );
 }
 
-/** Một đợt thanh toán: khách, hợp đồng · căn · dự án, đợt + hạn, còn lại, tình trạng (như cột web). */
+/** Một đợt thanh toán: khách, căn · dự án, hạn + đợt, còn lại, tình trạng (như cột web). */
 export function ProgressRowItem({ row, onPress }: { row: ProgressRow; onPress?: () => void }) {
   const aging = agingOf(row);
   return (
@@ -44,10 +44,11 @@ export function ProgressRowItem({ row, onPress }: { row: ProgressRow; onPress?: 
           {row.hoTenKH || "—"}
         </Text>
         <Text variant="caption" color="textSecondary" numberOfLines={1}>
-          {[row.soHD, row.kyHieu, row.tenDA].filter(Boolean).join(" · ")}
+          {/* Căn · dự án là thứ nhân viên nhận ra ngay; số chứng từ dài (HD-C1-1001-2026-0001) xem ở chi tiết */}
+          {[row.kyHieu || row.soHD, row.tenDA].filter(Boolean).join(" · ")}
         </Text>
         <Text variant="caption" color="textTertiary" numberOfLines={1}>
-          {[row.dotTT, row.ngayDenHan ? `Hạn ${formatDate(row.ngayDenHan)}` : null].filter(Boolean).join(" · ")}
+          {[row.ngayDenHan ? `Hạn ${formatDate(row.ngayDenHan)}` : null, row.dotTT].filter(Boolean).join(" · ")}
         </Text>
       </View>
       <View style={styles.right}>

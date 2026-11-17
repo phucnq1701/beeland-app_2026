@@ -30,7 +30,7 @@ export function MoneySummary({
   if (focus === "deposit") {
     const d = Number(deposit) || 0;
     const p = Number(paid) || 0;
-    const r = d > 0 ? Math.min(1, p / d) : 0;
+    const r = d > 0 ? Math.min(1, Math.max(0, p / d)) : 0;
     return (
       <View style={styles.hero}>
         {children}
@@ -68,7 +68,7 @@ export function MoneySummary({
   }
   const v = Number(value) || 0;
   const p = Number(paid) || 0;
-  const ratio = v > 0 ? Math.min(1, p / v) : 0;
+  const ratio = v > 0 ? Math.min(1, Math.max(0, p / v)) : 0;
   return (
     <View style={styles.hero}>
       {children}
