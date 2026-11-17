@@ -456,24 +456,27 @@ function PriceSheetEditorScreen() {
                 </View>
               ) : null}
 
-              <InfoCard
-                title="Sau chiết khấu"
-                rows={
-                  isLow
-                    ? [
-                        ["Tổng giá đất", money(c.tongTienDatVAT)],
-                        ["Tiền xây dựng gồm VAT", money(c.tongGiaXDVAT)],
-                        ["Tổng giá trị HĐMB", money(c.tongGiaTriHDMB)],
-                      ]
-                    : [
-                        ["Tổng giá chưa VAT", money(c.giaTriSauCK)],
-                        ["VAT", money(c.tienVAT)],
-                        ["Tổng giá gồm VAT", money(c.tongGomVAT)],
-                        ["Kinh phí bảo trì", money(c.phiBaoTri)],
-                        ["Tổng giá trị HĐMB", money(c.tongGiaTriHD)],
-                      ]
-                }
-              />
+              {/* Không có chiết khấu ⇒ trùng thẻ Giá niêm yết, ẩn cho gọn */}
+              {Number(c.tienChietKhau) ? (
+                <InfoCard
+                  title="Sau chiết khấu"
+                  rows={
+                    isLow
+                      ? [
+                          ["Tổng giá đất", money(c.tongTienDatVAT)],
+                          ["Tiền xây dựng gồm VAT", money(c.tongGiaXDVAT)],
+                          ["Tổng giá trị HĐMB", money(c.tongGiaTriHDMB)],
+                        ]
+                      : [
+                          ["Tổng giá chưa VAT", money(c.giaTriSauCK)],
+                          ["VAT", money(c.tienVAT)],
+                          ["Tổng giá gồm VAT", money(c.tongGomVAT)],
+                          ["Kinh phí bảo trì", money(c.phiBaoTri)],
+                          ["Tổng giá trị HĐMB", money(c.tongGiaTriHD)],
+                        ]
+                  }
+                />
+              ) : null}
             </>
           ) : null}
 

@@ -8,7 +8,7 @@ import { colors, elevation, radius, space } from "@/theme";
 
 const pct = (n: any) => {
   const v = Number(n) || 0;
-  return `${Number(v.toFixed(2))}%`;
+  return `${String(Number(v.toFixed(2))).replace(".", ",")}%`;
 };
 
 /** Thẻ navy đầu phiếu: tổng giá trị HĐMB sau CK, giá niêm yết, chiết khấu */
@@ -130,7 +130,7 @@ export function ScheduleList({ items, emptyText }: { items: ScheduleItem[]; empt
             {items.map((r, i) => (
               <View key={`${r.name}-${i}`} style={[styles.item, styles.divider]}>
                 <View style={styles.line0}>
-                  <Text variant="subhead" style={styles.flex} numberOfLines={1}>
+                  <Text variant="subhead" style={styles.flex} numberOfLines={2}>
                     {r.name}
                     {r.ratio ? ` · ${pct(r.ratio)}` : ""}
                   </Text>

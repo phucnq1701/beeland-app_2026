@@ -97,6 +97,9 @@ export function WebRoundCard({
               Không trừ giá HĐ: CK tính bằng 0
             </Text>
           ) : null}
+          {showsTongCK(!!round.enabled, Number(tongCK) || 0) ? (
+            <MoneyText value={-(Number(tongCK) || 0)} variant="label" color="success" accessibilityLabel={`Tổng chiết khấu ${round.name}`} />
+          ) : null}
         </View>
         <Switch
           value={!!round.enabled}
@@ -117,57 +120,45 @@ export function WebRoundCard({
               disabled={!!pending || !!disabled}
               style={({ pressed }) => [styles.opt, pressed ? styles.pressed : null]}
             >
-              <View style={styles.flex}>
-                <Text variant="caption" color="textSecondary">
-                  Chi tiết
-                </Text>
-                <Text variant="body" numberOfLines={1}>
-                  {items.length ? optLabel : noItemsText}
-                </Text>
-              </View>
+              <Text variant="body" numberOfLines={1} color={picked.length ? undefined : "textSecondary"} style={styles.flex}>
+                {items.length ? optLabel : noItemsText}
+              </Text>
               {picked.length ? <Text variant="label">{optionValueText(round.loai, sumPicked(picked, pct))}</Text> : null}
               <ChevronRight size={18} color={colors.textTertiary} />
             </Pressable>
           ) : null}
-          <View style={styles.inputs}>
-            <TextField
-              label="CK %"
-              variant="soft"
-              keyboardType="decimal-pad"
-              value={pctText}
-              editable={!locked}
-              onChangeText={(t) => {
-                setPctText(t);
-                onPercent(parsePercent(t));
-              }}
-              containerStyle={styles.pct}
-              suffix={<Text color="textSecondary">%</Text>}
-            />
-            <TextField
-              label="CK tiền"
-              variant="soft"
-              keyboardType="number-pad"
-              value={cashText}
-              editable={!locked}
-              onChangeText={(t) => {
-                const n = parseVND(t) ?? 0;
-                setCashText(n ? formatNumberVN(n) : "");
-                onCash(n);
-              }}
-              containerStyle={styles.flex}
-              suffix={<Text color="textSecondary">₫</Text>}
-            />
-          </View>
-          <View style={styles.result}>
-            <Text variant="caption" color="textSecondary" style={styles.flex}>
-              Tổng chiết khấu
-            </Text>
-            {showsTongCK(!!round.enabled, Number(tongCK) || 0) ? (
-              <MoneyText value={Number(tongCK) || 0} variant="subhead" color="success" />
-            ) : (
-              <Text color="textSecondary">-</Text>
-            )}
-          </View>
+          {/* Dòng có mức chi tiết: web khoá ô CK (số đã hiện ở dòng mức) ⇒ chỉ dòng không có mức mới nhập tay */}
+          {hasOptions ? null : (
+            <View style={styles.inputs}>
+              <TextField
+                label="CK %"
+                variant="soft"
+                keyboardType="decimal-pad"
+                value={pctText}
+                editable={!locked}
+                onChangeText={(t) => {
+                  setPctText(t);
+                  onPercent(parsePercent(t));
+                }}
+                containerStyle={styles.pct}
+                suffix={<Text color="textSecondary">%</Text>}
+              />
+              <TextField
+                label="CK tiền"
+                variant="soft"
+                keyboardType="number-pad"
+                value={cashText}
+                editable={!locked}
+                onChangeText={(t) => {
+                  const n = parseVND(t) ?? 0;
+                  setCashText(n ? formatNumberVN(n) : "");
+                  onCash(n);
+                }}
+                containerStyle={styles.flex}
+                suffix={<Text color="textSecondary">₫</Text>}
+              />
+            </View>
+          )}
         </>
       ) : null}
 
@@ -239,7 +230,7 @@ export function WebRoundCard({
 }
 
 const styles = StyleSheet.create({
-  card: { padding: space.lg, gap: space.md, borderRadius: radius.xxl, backgroundColor: colors.surface, ...elevation.soft },
+  card: { padding: space.lg, gap: space.sm, borderRadius: radius.xxl, backgroundColor: colors.surface, ...elevation.soft },
   off: { opacity: 0.7 },
   head: { flexDirection: "row", alignItems: "center", gap: space.md },
   flex: { flex: 1 },
@@ -249,13 +240,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    minHeight: 52,
+    minHeight: 44,
     paddingHorizontal: space.md,
     borderRadius: radius.lg,
     backgroundColor: colors.surfaceMuted,
   },
   pressed: { opacity: 0.7 },
-  result: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceMuted },
   sheet: { gap: space.sm, paddingBottom: space.lg },
   item: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingVertical: space.sm, minHeight: 44 },
   dim: { opacity: 0.6 },

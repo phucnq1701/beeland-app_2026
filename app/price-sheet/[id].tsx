@@ -137,7 +137,10 @@ export default function PriceSheetDetailScreen() {
   const g = tt.GiaTriHopDong || {};
   const st = priceSheetStatus(sheet.status);
   const total = t.totalContractValue ?? sheet.gia_tri_hd_sau_ck ?? sheet.base_price;
-  const discounts: any[] = Array.isArray(snap.discounts) ? snap.discounts : [];
+  // Chỉ dòng chiết khấu có số (chính sách 13 dòng mà áp 1 dòng ⇒ không liệt kê 12 dòng 0 ₫)
+  const discounts: any[] = (Array.isArray(snap.discounts) ? snap.discounts : []).filter(
+    (d: any) => Number(d?.amount) || Number(d?.rate)
+  );
   const lich: any[] = Array.isArray(sheet.payload?.LichThanhToan) ? sheet.payload.LichThanhToan : [];
   const schedule = lich.length
     ? lich.map((l, i) => ({
@@ -216,7 +219,6 @@ export default function PriceSheetDetailScreen() {
           <InfoCard
             title="Thông tin"
             rows={[
-              ["Căn", sheet.product_code],
               ["Loại", snap.productType || sheet.product_name],
               ["Diện tích thông thủy", snap.area || sheet.area ? formatArea(snap.area || sheet.area) : null],
               ["Chính sách", sheet.ten_chinh_sach || snap.policyName],
@@ -230,27 +232,16 @@ export default function PriceSheetDetailScreen() {
             ]}
           />
 
-          <InfoCard
-            title="Giá niêm yết"
-            rows={[
-              ["Tổng giá chưa VAT", money(g.TongChuaVAT)],
-              ["Tiền VAT", money(g.TienVAT)],
-              ["Tổng giá gồm VAT", money(g.TongGomVAT)],
-              ["Kinh phí bảo trì", money(g.TienPhiBaoTri)],
-              ["Tổng gồm VAT + KPBT", money(g.TongGiaGomVATPBT ?? t.totalListedPrice)],
-            ]}
-          />
+          {discounts.length ? <DiscountList items={discounts} /> : null}
 
-          <DiscountList items={discounts} />
-
+          {/* Giá trị HĐ sau chiết khấu (cộng đúng bằng tổng ở trên); giá niêm yết + chiết khấu đã nằm ở thẻ đầu */}
           <InfoCard
-            title="Giá trị sau chiết khấu"
+            title="Giá trị hợp đồng"
             rows={[
-              ["Tổng giá trị HĐMB (gồm VAT, KPBT)", money(total)],
-              ["Tổng gồm VAT chưa KPBT", money(t.totalWithVATNoMaintenance)],
-              ["Tổng giá trị chưa VAT", money(tt.GiaTriHopDongSauCK?.TongChuaVAT ?? t.totalNoVAT)],
-              ["Thuế GTGT", money(t.vatAmount)],
-              ["Kinh phí bảo trì", money(t.maintenanceFee)],
+              ["Giá chưa VAT", money(tt.GiaTriHopDongSauCK?.TongChuaVAT ?? t.totalNoVAT ?? g.TongChuaVAT)],
+              ["Thuế GTGT", money(t.vatAmount ?? g.TienVAT)],
+              ["Kinh phí bảo trì", money(t.maintenanceFee ?? g.TienPhiBaoTri)],
+              ["Tổng cộng", money(total)],
             ]}
           />
 
