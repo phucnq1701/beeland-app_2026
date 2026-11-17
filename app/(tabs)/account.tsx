@@ -262,7 +262,8 @@ export default function AccountScreen() {
                 leading={<RowIcon icon={LayoutGrid} />}
                 title="Cấu hình trang chủ & menu"
                 chevron
-                onPress={() => router.push("/all-management")}
+                // Mở thẳng chế độ Sửa (màn Tất cả quản lý mặc định là lưới module từ 2026-11-17)
+                onPress={() => router.push({ pathname: "/all-management", params: { edit: "1" } })}
               />
             </View>
             {settingsDisabled ? null : <BiometricLoginSetting style={styles.divider} />}

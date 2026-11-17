@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { getSessionInfo } from "@/services/session";
 import { StyleSheet, View } from 'react-native';
-import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { ChevronDown, ChevronUp, Settings2 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -46,7 +46,9 @@ export default function AllManagementScreen() {
   const router = useRouter();
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<ConfigTab>('home');
-  const [isEditMode, setIsEditMode] = useState<boolean>(false);
+  // Vào từ Tài khoản › "Cấu hình trang chủ & menu" (edit=1) ⇒ mở thẳng chế độ Sửa; từ Trang chủ › "Tất cả" ⇒ lưới module
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
+  const [isEditMode, setIsEditMode] = useState<boolean>(edit === '1');
   const [saving, setSaving] = useState(false);
 
   // Cấu hình các mục trên trang chủ (tối đa 6)
