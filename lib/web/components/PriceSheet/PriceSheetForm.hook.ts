@@ -1,5 +1,5 @@
 // ⚠️ TỰ SINH — thân component PriceSheetForm của web src/components/PriceSheet/PriceSheetForm.tsx chép NGUYÊN VĂN thành hook (scripts/sync-web-pricing.cjs).
-// Bỏ câu return JSX + 2 câu giao diện: 3166, 4646. KHÔNG SỬA TAY.
+// Bỏ câu return JSX + 2 câu giao diện: 3178, 4672. KHÔNG SỬA TAY.
 // @ts-nocheck
 /* eslint-disable */
 import { templateModeSections, templateModeSteps, salesCompanyRules, validateTemplateName, allowsSaveFallback } from "./templateMode";
@@ -37,6 +37,7 @@ import { useOptionUsage } from "../Products/ContractForm/useOptionUsage";
 import { priceSheetSourcePgc, priorDocOfSheet, priorOptionCtx } from "../Products/ContractForm/priorOptionState";
 import { useExceptionAllowIds } from "../Sales/salesConfig/useExceptionAllowIds";
 import { allocationRequiredIds, type OptionCtx, withAllocationRequired } from "../Products/ContractForm/optionConditions";
+import { useCustomerConditions } from "../Products/ContractForm/useCustomerConditions";
 import { listedGomVATPBT, clearRoundOptions, policyRoundFields, shouldSaveRound, savedDetailForRound, savedRoundExtras } from "../Products/ContractForm/discountOptions";
 import { useOptionReconcile } from "../Products/ContractForm/useOptionReconcile";
 import { useTemplateReplay, tickTemplateOptions, isTemplateReplayBusy, TEMPLATE_REPLAY_BUSY_MESSAGE } from "./useTemplateReplay";
@@ -54,6 +55,7 @@ import { useProductPriceConfig } from "./useProductPriceConfig";
 import { policyExpiryDate, clampSheetExpiry } from "../../lib/priceSheetExpiry";
 import { scheduleOutOfEffect, OUT_OF_EFFECT_WARNING } from "../Products/ContractForm/paymentScheduleOptions";
 import { pickPriceListForPolicy } from "../Sales/salesConfig/policyScope";
+import { CUSTOMER_FIRST_TIP } from "../Products/ContractForm/stepGate";
 import { DateHelper } from "../../utils/DateHelper";
 import { templateTraceOf, withTemplateTrace } from "./templateSheet";
 import { buildPriceSheetPrintData } from "./print/printData";
@@ -607,7 +609,9 @@ export function useWebPriceSheetForm({
     if (!wasOpen || open) return;
     // Số phiếu của phiếu vừa sửa / vừa lưu không được mang sang lần "Thêm" sau (effect sinh mã giữ số đang có)
     expiryPolicyRef.current = "";
-    setFormData((prev) => ({ ...prev, soHopDong: "", ngayKy: new Date(), ngayHetHan: null }));
+    // Khách của phiếu vừa đóng không mang sang phiếu mới (cổng chọn khách — review I4); mở phiếu cũ thì nạp lại khách từ phiếu
+    setFormData((prev) => ({ ...prev, soHopDong: "", ngayKy: new Date(), ngayHetHan: null, MaKH: null, MaSoKH: "", TenKH: "", TenCongTy: "" } as any));
+    setSelectedCustomerId("");
     setCurrentStep(0);
     setCustomer360({});
     setIsEditMode(false);
@@ -1504,6 +1508,11 @@ export function useWebPriceSheetForm({
   const optionNgay = formData.ngayKy ? dayjs(formData.ngayKy).format("YYYY-MM-DD") : undefined;
   const priorSheet = useMemo(() => priorDocOfSheet(initialSheet), [initialSheet]);
   const allocRequired = useMemo(() => allocationRequiredIds(chinhSachBHDetails), [chinhSachBHDetails]);
+  const custProv = useCustomerConditions(
+    optionChecked ? [(formData as any)?.MaKH, ...(coOwners ?? []).map((c: any) => c?.MaKH)] : [],
+    priceSheetSourcePgc(loadDocMaPGC, initialSheet) ?? null, // Mua nhiều: không tự đếm căn của chứng từ nguồn
+    `${open ? 1 : 0}|${(initialSheet as any)?.id ?? ""}|${loadDocMaPGC ?? ""}`, // form giữ mount khi đóng: mốc «đổi khách» theo từng lần mở (review C1)
+  );
   const optionCtx = useMemo<OptionCtx | undefined>(
     () =>
       optionChecked
@@ -1515,22 +1524,24 @@ export function useWebPriceSheetForm({
             tangId: criteria.tangId,
             giaGomVAT: listedGomVATPBT(formData),
             lichTTId: selectedTemplateId || undefined,
-            pending: criteria.loading || optionUsage.loading,
+            pending: criteria.loading || optionUsage.loading || custProv.loading || custProv.failed,
+            tinhIds: custProv.tinhIds,
+            soHdmb: custProv.soHdmb,
             ngay: optionNgay,
             usage: optionUsage.usage,
             congTyBanHangId, usageByCompany: optionUsage.usageByCompany,
-            khoStock: optionUsage.khoStock, projectId: String(effectiveMaDA ?? (product as any)?.MaDA ?? "") || undefined,
+            khoStock: optionUsage.khoStock, chonKho: policyRounds.flatMap((r) => (r.luaChonDaChon ?? []).map((p) => String(p.ID ?? ""))), projectId: String(effectiveMaDA ?? (product as any)?.MaDA ?? "") || undefined,
             ...priorOptionCtx(priorSheet, selectedPolicyId, true),
             allocationRequiredIds: allocRequired,
             viewer: optionViewer,
           }
         : undefined,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [optionChecked, criteria.loaiCan, criteria.toaId, criteria.phongNguId, criteria.viTriId, criteria.tangId, criteria.loading, (formData as any).rawTongGiaDaVAT, formData.dienTichThongThuy, formData.donGiaSuDungDat, selectedTemplateId, optionNgay, optionUsage.usage, optionUsage.loading, congTyBanHangId, optionUsage.usageByCompany, optionUsage.khoStock, effectiveMaDA, priorSheet, selectedPolicyId, allocRequired, optionViewer]
+    [optionChecked, criteria.loaiCan, criteria.toaId, criteria.phongNguId, criteria.viTriId, criteria.tangId, criteria.loading, (formData as any).rawTongGiaDaVAT, formData.dienTichThongThuy, formData.donGiaSuDungDat, selectedTemplateId, optionNgay, optionUsage.usage, optionUsage.loading, congTyBanHangId, optionUsage.usageByCompany, optionUsage.khoStock, policyRounds, effectiveMaDA, priorSheet, selectedPolicyId, allocRequired, optionViewer, custProv.tinhIds, custProv.soHdmb, custProv.loading]
   );
   const optionCtxRef = useRef(optionCtx);
   optionCtxRef.current = optionCtx;
-  useOptionReconcile(policyRounds, setPolicyRounds, optionCtx ? { ...optionCtx, onlyAllocated: !!(contractId || loadDocMaPGC || initialSheet) && !financialEdited } : {}, !!optionCtx && !criteria.loading && !optionUsage.loading && (!contractId && !loadDocMaPGC && !initialSheet || financialEdited || companyChanged), markFinancialEdited);
+  useOptionReconcile(policyRounds, setPolicyRounds, optionCtx ? { ...optionCtx, onlyAllocated: !!(contractId || loadDocMaPGC || initialSheet) && !financialEdited && !custProv.changed } : {}, !!optionCtx && !criteria.loading && !optionUsage.loading && !custProv.loading && !custProv.failed && (!contractId && !loadDocMaPGC && !initialSheet || financialEdited || companyChanged || custProv.changed), markFinancialEdited);
   const policyRoundsRef = useRef(policyRounds);
   policyRoundsRef.current = policyRounds;
   const replayIdle = policyCatalogReady && !loadingPriceCalc && !loadingPriceList && !loadingSchedule;
@@ -3211,10 +3222,19 @@ export function useWebPriceSheetForm({
       setCoOwnerDuplicatePhone(duplicate || null);
     }
   }, [coOwnerForm.phone, customers, selectedCoOwnerCustomerId]);
+  const hasCustomer = !!(formData as any)?.MaKH;
+  const stepGate = { hasCustomer, customerStepId: "customer", off: !sections.customer || !!initialSheet || !!readOnlyReason };
+  const customerStepIndex = Math.max(0, steps.findIndex((s) => s.id === "customer"));
   const handleSave = async (submitApproval = false) => {
     if (isSavingRef.current) return;
     if (readOnlyReason) {
       toast.info(readOnlyReason);
+      return;
+    }
+    // Spec 2026-11-16-csbh-so-luong-kho-tab-khach §2: phải chọn khách (có mã KH) trước khi lưu nháp / gửi duyệt; phiếu mẫu không có bước khách
+    if (sections.customer && !hasCustomer) {
+      toast.error(CUSTOMER_FIRST_TIP);
+      setCurrentStep(customerStepIndex);
       return;
     }
     if (templateReplayBusy) {
@@ -4240,5 +4260,5 @@ export function useWebPriceSheetForm({
       })),
     };
   };
-  return { sections, steps, maPGC, prefillMaPGC, initialMaKH, tenMau, setTenMau, fetchedProduct, setFetchedProduct, product, lastProductFetchKeyRef, loadDocMaPGC, isDocPrefill, currentStep, setCurrentStep, customer360, setCustomer360, patchCustomer360, isEditMode, setIsEditMode, editContractData, setEditContractData, effectiveMaDA, setEffectiveMaDA, hasApprovalFlow, setHasApprovalFlow, approvalProjectKey, formContentRef, summaryScrollRef, selectedPolicyId, setSelectedPolicyId, expiryPolicyRef, selectedPolicyIdRef, discounts, setDiscounts, selectedDiscountIds, setSelectedDiscountIds, priceSheets, setPriceSheets, selectedPriceSheetId, setSelectedPriceSheetId, priceLists, setPriceLists, selectedPriceListId, setSelectedPriceListId, selectedPriceListIdRef, loadChinhSachKeyRef, policyDetailCacheRef, configRoundsCacheRef, scheduleDetailCacheRef, getPolicyDetail, getScheduleDetail, policyHandledRef, scheduleHandledRef, paymentTemplates, setPaymentTemplates, selectedTemplateId, setSelectedTemplateId, policyRounds, setPolicyRounds, configRoundsTemplate, setConfigRoundsTemplate, policyDetailCount, setPolicyDetailCount, policyDetailCountRef, policyDetailRowsRef, policyRoundsRunRef, scheduleSnapshotRef, restoreTemplateIdRef, restorePriceCfgIdRef, policyConfigs, setPolicyConfigs, selectedPolicyConfigId, setSelectedPolicyConfigId, inventoryProducts, setInventoryProducts, cauHinhCS, setCauHinhCS, handoverStandard, setHandoverStandard, htlsProgram, setHtlsProgram, productPriceInputs, setProductPriceInputs, lichThanhToan, setLichThanhToan, bangGia, setBangGia, chinhSachBH, setChinhSachBH, chinhSachBHDetails, setChinhSachBHDetails, selectedPolicyRow, reopenDetails, khuyenMai, setKhuyenMai, selectedInventoryProductId, setSelectedInventoryProductId, productSelectionCollapsed, setProductSelectionCollapsed, selectedPromotionId, setSelectedPromotionId, selectedPromotion, setSelectedPromotion, selectKey, setSelectKey, pendingRestoreChinhSach, setPendingRestoreChinhSach, pendingRestoreLichTT, setPendingRestoreLichTT, restoredChinhSachSnapshot, setRestoredChinhSachSnapshot, financialEdited, setFinancialEdited, restorePolicyConfigIdRef, skipPolicyAutoCalcRef, bookingRestoreInfo, setBookingRestoreInfo, bookingRestoreDoneRef, restoreRoundsRef, autoAppliedPolicyKeyRef, restoreRoundsTick, setRestoreRoundsTick, restoredSnapshotRef, markFinancialEdited, loading, setLoading, coOwners, setCoOwners, customerFormRef, handleAddCoOwnerFromForm, removeCoOwnerByPascal, showCoOwnerDialog, setShowCoOwnerDialog, coOwnerType, setCoOwnerType, coOwnerForm, setCoOwnerForm, customers, setCustomers, customerSearch, setCustomerSearch, showCustomerDropdown, setShowCustomerDropdown, duplicateCMND, setDuplicateCMND, duplicatePhone, setDuplicatePhone, selectedCustomerId, setSelectedCustomerId, coOwnerDuplicateCMND, setCoOwnerDuplicateCMND, coOwnerDuplicatePhone, setCoOwnerDuplicatePhone, coOwnerSearch, setCoOwnerSearch, showCoOwnerCustomerDropdown, setShowCoOwnerCustomerDropdown, selectedCoOwnerCustomerId, setSelectedCoOwnerCustomerId, formData, setFormData, listNhanVienKD, listSanGiaoDich, quyDanhOptions, nganHangOptions, congTyBanHangId, setCongTyBanHangId, congTyBanHangTen, setCongTyBanHangTen, salesCompanyOptions, nameOfCongTyBanHang, salesCompanyLocked, salesCompanyRequired, salesCompanyAutoId, salesCompanyLoadFailed, optionViewer, salesCompanyRule, gate, companyChanged, markCompanyChanged, resetCompanyChanged, paymentSchedule, setPaymentSchedule, printTemplate, savedPrintScheduleRef, appliedDiscounts, setAppliedDiscounts, paymentSchedules, setPaymentSchedules, promotionsRaw, setPromotionsRaw, isSaving, setIsSaving, isSavingRef, interestIncentive, setInterestIncentive, rightTab, setRightTab, loadingPolicies, setLoadingPolicies, policiesLoadedMaDA, setPoliciesLoadedMaDA, catalogMaDA, policyCatalogReady, productUuid, unitFund, loadingPriceCalc, setLoadingPriceCalc, loadingSchedule, setLoadingSchedule, loadingPriceList, setLoadingPriceList, savingCoOwner, setSavingCoOwner, prevOpenRef, customerOptions, setCustomerOptions, loadingKH, setLoadingKH, searchTimeoutRef, customerSearchReqIdRef, coOwnerSearchReqIdRef, coOwnerOptions, setCoOwnerOptions, loadingCoOwnerKH, setLoadingCoOwnerKH, coOwnerSearchTimeoutRef, coOwnerRef, contractData, setContractData, latestCalculationsRef, latestHdmbLanRef, latestVatCuoiPbtRef, formulaCtx, getPaymentFormulaVars, calculatePaymentScheduleRow, getRestoredRoundResults, recalcPaymentScheduleSequential, dueDatesOf, calculations, hdmbLanSig, calcBaseSigRef, mapApiDetailsToFormulas, criteria, optionHighRise, optionChecked, optionUsage, exceptionIds, optionNgay, priorSheet, allocRequired, optionCtx, optionCtxRef, policyRoundsRef, replayIdle, templateReplayStep, templateReplayBusy, loadRoundsFromApi, applyCsbhDetailsToRounds, maxRounds, canAddRound, handlePolicyConfigChange, lateRestoreConfigRef, depositFromDoc, ngayTinhKey, PRICE_FIELD_MAP, handleProductPriceInputs, isLowProductForPrice, priceCfg, priceCodeValues, priceSyncRef, isRestoringSheet, serializeSchedule, isScheduleDirty, applyPolicyRounds, handleSelectCSBH, getProductDefaults, policyPickedRef, handleBG, handleSave, removePaymentRow, handleTemplateSelect, openCoOwnerDialog, saveCoOwner, removeCoOwner, handleCoOwnerApiCustomerSelect, handleCoOwnerApiBusinessSelect, handleCustomerSelect, buildAdvisorContext };
+  return { sections, steps, maPGC, prefillMaPGC, initialMaKH, tenMau, setTenMau, fetchedProduct, setFetchedProduct, product, lastProductFetchKeyRef, loadDocMaPGC, isDocPrefill, currentStep, setCurrentStep, customer360, setCustomer360, patchCustomer360, isEditMode, setIsEditMode, editContractData, setEditContractData, effectiveMaDA, setEffectiveMaDA, hasApprovalFlow, setHasApprovalFlow, approvalProjectKey, formContentRef, summaryScrollRef, selectedPolicyId, setSelectedPolicyId, expiryPolicyRef, selectedPolicyIdRef, discounts, setDiscounts, selectedDiscountIds, setSelectedDiscountIds, priceSheets, setPriceSheets, selectedPriceSheetId, setSelectedPriceSheetId, priceLists, setPriceLists, selectedPriceListId, setSelectedPriceListId, selectedPriceListIdRef, loadChinhSachKeyRef, policyDetailCacheRef, configRoundsCacheRef, scheduleDetailCacheRef, getPolicyDetail, getScheduleDetail, policyHandledRef, scheduleHandledRef, paymentTemplates, setPaymentTemplates, selectedTemplateId, setSelectedTemplateId, policyRounds, setPolicyRounds, configRoundsTemplate, setConfigRoundsTemplate, policyDetailCount, setPolicyDetailCount, policyDetailCountRef, policyDetailRowsRef, policyRoundsRunRef, scheduleSnapshotRef, restoreTemplateIdRef, restorePriceCfgIdRef, policyConfigs, setPolicyConfigs, selectedPolicyConfigId, setSelectedPolicyConfigId, inventoryProducts, setInventoryProducts, cauHinhCS, setCauHinhCS, handoverStandard, setHandoverStandard, htlsProgram, setHtlsProgram, productPriceInputs, setProductPriceInputs, lichThanhToan, setLichThanhToan, bangGia, setBangGia, chinhSachBH, setChinhSachBH, chinhSachBHDetails, setChinhSachBHDetails, selectedPolicyRow, reopenDetails, khuyenMai, setKhuyenMai, selectedInventoryProductId, setSelectedInventoryProductId, productSelectionCollapsed, setProductSelectionCollapsed, selectedPromotionId, setSelectedPromotionId, selectedPromotion, setSelectedPromotion, selectKey, setSelectKey, pendingRestoreChinhSach, setPendingRestoreChinhSach, pendingRestoreLichTT, setPendingRestoreLichTT, restoredChinhSachSnapshot, setRestoredChinhSachSnapshot, financialEdited, setFinancialEdited, restorePolicyConfigIdRef, skipPolicyAutoCalcRef, bookingRestoreInfo, setBookingRestoreInfo, bookingRestoreDoneRef, restoreRoundsRef, autoAppliedPolicyKeyRef, restoreRoundsTick, setRestoreRoundsTick, restoredSnapshotRef, markFinancialEdited, loading, setLoading, coOwners, setCoOwners, customerFormRef, handleAddCoOwnerFromForm, removeCoOwnerByPascal, showCoOwnerDialog, setShowCoOwnerDialog, coOwnerType, setCoOwnerType, coOwnerForm, setCoOwnerForm, customers, setCustomers, customerSearch, setCustomerSearch, showCustomerDropdown, setShowCustomerDropdown, duplicateCMND, setDuplicateCMND, duplicatePhone, setDuplicatePhone, selectedCustomerId, setSelectedCustomerId, coOwnerDuplicateCMND, setCoOwnerDuplicateCMND, coOwnerDuplicatePhone, setCoOwnerDuplicatePhone, coOwnerSearch, setCoOwnerSearch, showCoOwnerCustomerDropdown, setShowCoOwnerCustomerDropdown, selectedCoOwnerCustomerId, setSelectedCoOwnerCustomerId, formData, setFormData, listNhanVienKD, listSanGiaoDich, quyDanhOptions, nganHangOptions, congTyBanHangId, setCongTyBanHangId, congTyBanHangTen, setCongTyBanHangTen, salesCompanyOptions, nameOfCongTyBanHang, salesCompanyLocked, salesCompanyRequired, salesCompanyAutoId, salesCompanyLoadFailed, optionViewer, salesCompanyRule, gate, companyChanged, markCompanyChanged, resetCompanyChanged, paymentSchedule, setPaymentSchedule, printTemplate, savedPrintScheduleRef, appliedDiscounts, setAppliedDiscounts, paymentSchedules, setPaymentSchedules, promotionsRaw, setPromotionsRaw, isSaving, setIsSaving, isSavingRef, interestIncentive, setInterestIncentive, rightTab, setRightTab, loadingPolicies, setLoadingPolicies, policiesLoadedMaDA, setPoliciesLoadedMaDA, catalogMaDA, policyCatalogReady, productUuid, unitFund, loadingPriceCalc, setLoadingPriceCalc, loadingSchedule, setLoadingSchedule, loadingPriceList, setLoadingPriceList, savingCoOwner, setSavingCoOwner, prevOpenRef, customerOptions, setCustomerOptions, loadingKH, setLoadingKH, searchTimeoutRef, customerSearchReqIdRef, coOwnerSearchReqIdRef, coOwnerOptions, setCoOwnerOptions, loadingCoOwnerKH, setLoadingCoOwnerKH, coOwnerSearchTimeoutRef, coOwnerRef, contractData, setContractData, latestCalculationsRef, latestHdmbLanRef, latestVatCuoiPbtRef, formulaCtx, getPaymentFormulaVars, calculatePaymentScheduleRow, getRestoredRoundResults, recalcPaymentScheduleSequential, dueDatesOf, calculations, hdmbLanSig, calcBaseSigRef, mapApiDetailsToFormulas, criteria, optionHighRise, optionChecked, optionUsage, exceptionIds, optionNgay, priorSheet, allocRequired, custProv, optionCtx, optionCtxRef, policyRoundsRef, replayIdle, templateReplayStep, templateReplayBusy, loadRoundsFromApi, applyCsbhDetailsToRounds, maxRounds, canAddRound, handlePolicyConfigChange, lateRestoreConfigRef, depositFromDoc, ngayTinhKey, PRICE_FIELD_MAP, handleProductPriceInputs, isLowProductForPrice, priceCfg, priceCodeValues, priceSyncRef, isRestoringSheet, serializeSchedule, isScheduleDirty, applyPolicyRounds, handleSelectCSBH, getProductDefaults, policyPickedRef, handleBG, hasCustomer, stepGate, customerStepIndex, handleSave, removePaymentRow, handleTemplateSelect, openCoOwnerDialog, saveCoOwner, removeCoOwner, handleCoOwnerApiCustomerSelect, handleCoOwnerApiBusinessSelect, handleCustomerSelect, buildAdvisorContext };
 }

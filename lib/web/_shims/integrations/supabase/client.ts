@@ -40,6 +40,11 @@ export const RPC_MAP: Record<string, { fn: string; args: (a: Args | undefined) =
     fn: "fn_nv_app_ton_kho_qua",
     args: (a) => pick(a, { p_chinh_sach_id: "p_policy_id", p_tru_pgc_id: "p_exclude_pgc" }),
   },
+  // Điều kiện mức «Tỉnh» / «Mua nhiều» (web main 2026-11-17, useCustomerConditions) ⇒ bọc đúng SP web usp_sales_customer_conditions
+  fn_sales_customer_conditions: {
+    fn: "fn_nv_app_dieu_kien_khach",
+    args: (a) => pick(a, { p_customer_ids: "p_customer_ids", p_exclude_pgc: "p_exclude_pgc" }),
+  },
   fn_exception_request_active: { fn: "fn_nv_app_ngoai_le_hieu_luc", args: (a) => pick(a, { p_pgc_id: "p_pgc_id" }) },
   fn_customer_get_by_ids: { fn: "fn_nv_app_khach_hang_theo_id", args: (a) => pick(a, { p_ids: "p_ids", p_ma: "p_refs", p_co_anh: "p_with_images" }) },
   fn_customer_picker: {
