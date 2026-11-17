@@ -14,13 +14,14 @@ import {
   Card,
   EmptyState,
   IconButton,
+  KeyValueRow,
   SkeletonDetail,
   StatusBadge,
   Text,
   useToast,
 } from "@/components/ui";
 import { formatCountdown } from "@/lib/countdown";
-import { formatVNDShort } from "@/lib/format";
+import { formatArea, formatVNDShort } from "@/lib/format";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { isFeatureAllowed, PRICE_SHEET_CREATE_LOCKED } from "@/lib/featureConfig";
 import { isOpenForSale, OPEN_FOR_SALE_MESSAGE } from "@/lib/productStatus";
@@ -247,6 +248,25 @@ export default function ProductDetailScreen() {
     : Number(activePrice?.total_payment) > 0 ? Number(activePrice?.total_payment) : 0;
   const heroPrice = Number(data?.TongGiaTriHDMB) > 0 ? Number(data.TongGiaTriHDMB) : listPrice;
   const price = heroPrice > 0 ? formatVNDShort(heroPrice) : "Liên hệ";
+  const txt = (v: unknown) => {
+    const t = String(v ?? "").trim();
+    return t && t !== "0" ? t : null;
+  };
+  const unitRows = (
+    [
+      ["Loại sản phẩm", txt(data?.LoaiBDS)],
+      ["Loại căn", txt(data?.TenLoaiCanHo)],
+      ["Phòng ngủ", txt(data?.TenLoaiPN) ?? (Number(data?.SoPN) > 0 ? `${Number(data.SoPN)} PN` : null)],
+      ["Tòa / khu", txt(data?.TenKhu)],
+      ["Tầng", txt(data?.TenTang)],
+      ["Vị trí", txt(data?.TenViTri)],
+      ["Hướng cửa", txt(data?.TenHuongCua)],
+      ["Hướng ban công", txt(data?.TenHuongBC)],
+      ["View", txt(data?.TenView)],
+      ["Diện tích thông thủy", Number(data?.DienTichThongThuy) > 0 ? formatArea(data.DienTichThongThuy) : null],
+      ["Diện tích tim tường", Number(data?.DTTimDuong) > 0 ? formatArea(data.DTTimDuong) : null],
+    ] as [string, string | null][]
+  ).filter((r): r is [string, string] => !!r[1]);
 
   return (
     <>
@@ -299,6 +319,18 @@ export default function ProductDetailScreen() {
                       : "Căn đang được lock. Nếu bạn là người lock, tạo booking ở mục Căn đã lock."
                     : `${OPEN_FOR_SALE_MESSAGE} – căn đang ở trạng thái “${statusName || "không xác định"}”.`}
                 </Text>
+              ) : null}
+
+              {/* Thông tin căn nhân viên hay được khách hỏi (dữ liệu có sẵn từ fn_nv_app_san_pham_chi_tiet) — chỉ dòng có dữ liệu */}
+              {unitRows.length ? (
+                <>
+                  <HomeSectionHeader title="Thông tin căn" />
+                  <Card style={styles.card}>
+                    {unitRows.map(([label, value], i) => (
+                      <KeyValueRow key={label} label={label} value={value} last={i === unitRows.length - 1} />
+                    ))}
+                  </Card>
+                </>
               ) : null}
 
               <HomeSectionHeader

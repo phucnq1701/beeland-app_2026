@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 
 import {
   BottomActionBar,
@@ -73,6 +73,7 @@ export function CustomerForm({
   const toast = useToast();
   const [values, setValues] = useState<CustomerFormValues>({ ...EMPTY_CUSTOMER_FORM, ...initial });
   const [errors, setErrors] = useState<Errors>({});
+  const scrollRef = useRef<ScrollView>(null);
   const [statusOptions, setStatusOptions] = useState<Option[]>([]);
   const [sourceOptions, setSourceOptions] = useState<Option[]>([]);
   const [loadingCatalogs, setLoadingCatalogs] = useState(true);
@@ -211,7 +212,13 @@ export function CustomerForm({
     if (Object.keys(all).length || !req.ok) {
       savingRef.current = false;
       hapticError();
-      if (!Object.keys(all).length) toast.show({ type: "error", message: req.message });
+      // Bấm lưu ở cuối form ⇒ trước đây không thấy gì thay đổi: cuộn lên đầu (trường bắt buộc ở trên) + báo các lỗi
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      const msgs = Object.values(all).filter(Boolean) as string[];
+      toast.show({
+        type: "error",
+        message: msgs.length ? `${msgs.slice(0, 2).join(" · ")}${msgs.length > 2 ? ` (+${msgs.length - 2} mục khác)` : ""}` : req.message,
+      });
       return;
     }
 
@@ -280,6 +287,7 @@ export function CustomerForm({
   return (
     <Screen
       header={header}
+      scrollRef={scrollRef}
       keyboardAware
       hideFooterWithKeyboard
       padded={false}

@@ -216,3 +216,17 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
 ### 2026-11-17 — Đồng bộ lib/web theo web main 10fe7251 (điều kiện Tỉnh / Mua nhiều, khách hàng bước đầu)
 - Chi tiết + cách quay lại: `docs/price-sheets.md` mục "Nhật ký đồng bộ web". BE SP E8 `usp_nv_app_dieu_kien_khach` (đã nạp) + endpoint
   (cần deploy API TRƯỚC khi phát hành app).
+
+### 2026-11-17 — Sửa trải nghiệm theo đợt thử vai nhân viên mới (8 mục "Nên sửa", nhánh `app-nv-sua-ux-nv-moi`)
+Chỉ giao diện app — không đổi BE, web, luồng nghiệp vụ hay dữ liệu gửi máy chủ. Quay lại: `git revert` commit đợt này (hoặc từng tệp).
+| # | Đổi gì | Tệp |
+|---|---|---|
+| 3 | Chi tiết căn thêm thẻ "Thông tin căn" (loại SP, loại căn, phòng ngủ, tòa, tầng, vị trí, hướng cửa / ban công, view, diện tích) — chỉ dòng có dữ liệu, lấy từ `fn_nv_app_san_pham_chi_tiet` sẵn có | `app/product/[id].tsx` |
+| 11 | Giao dịch của khách: tiêu đề = mã căn (trước "—": SP chỉ trả `so_phieu_gc`, cọc / HĐ tạo thẳng trống); số phiếu xuống dòng phụ khi có | `app/customer/[id]/contracts.tsx` |
+| 14 | Thông báo phiếu thu (form 815) mở chi tiết phiếu thu `/reports/receipt/[id]` | `lib/notifications.ts` (+ test) |
+| 1 | Kính lúp Trang chủ ⇒ Sản phẩm với ô tìm focus sẵn (param `search=1`) | `app/(tabs)/home.tsx`, `app/products.tsx` |
+| 4 | Sản phẩm: mở / đóng Bộ lọc tắt bàn phím; vuốt danh sách tắt bàn phím | `app/products.tsx` |
+| 9 | Thêm / sửa khách: thiếu thông tin ⇒ cuộn lên đầu + toast nêu lỗi (Screen thêm prop tuỳ chọn `scrollRef`) | `components/customer/CustomerForm.tsx`, `components/ui/Screen.tsx` |
+| 7 | Tạo booking: "Tổng giá HĐ" rơi về Tổng giá gồm PBT của bảng giá (chỉ hiển thị) thay vì "—" | `app/booking/create.tsx` |
+| 13 | Sơ đồ phân lô: thanh tiêu đề kiểu chuẩn + dòng hướng dẫn "Chọn Khu và Tầng…"; nội dung là trang web, không sửa | `app/diagram/[mada].tsx` |
+Kiểm: tsc 0 lỗi, lint sạch, 316 test. Máy ảo: chưa kiểm lại sau sửa — máy ảo đang được dùng cho app Bee Poker (không thao tác để khỏi ảnh hưởng).

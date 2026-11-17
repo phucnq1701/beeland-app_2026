@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, FlatList, Keyboard, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import {
   Stack,
   useRouter,
@@ -92,7 +92,7 @@ export default function ProductsScreen({
     lastErrorRef.current = { msg, at: now };
     toast.show({ type: "error", message: msg });
   };
-  const { MaDA } = useLocalSearchParams();
+  const { MaDA, search: openSearch } = useLocalSearchParams<{ MaDA?: string; search?: string }>();
 
 
   const [products2, setProducts2] = useState<any[]>([]);
@@ -582,6 +582,7 @@ export default function ProductsScreen({
           onChangeText={handleSearchChange}
           placeholder="Mã sản phẩm, số căn hộ"
           variant="soft"
+          autoFocus={openSearch === "1"}
         />
 
         {filterExpanded && (
@@ -724,7 +725,11 @@ export default function ProductsScreen({
                 <FilterToggleButton
                   open={filterExpanded}
                   activeCount={activeFilterCount}
-                  onPress={() => setFilterExpanded(!filterExpanded)}
+                  onPress={() => {
+                    // Mở / đóng bộ lọc ⇒ tắt bàn phím ô tìm (trước đây bàn phím che phần lọc, bấm ra ngoài không tắt)
+                    Keyboard.dismiss();
+                    setFilterExpanded(!filterExpanded);
+                  }}
                 />
               </View>
             }
@@ -744,6 +749,7 @@ export default function ProductsScreen({
             onEndReached={() => void loadMore()}
             onEndReachedThreshold={0.4}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             contentContainerStyle={bottomPad}
             refreshControl={
               <RefreshControl
@@ -758,6 +764,7 @@ export default function ProductsScreen({
           <ScrollView
             stickyHeaderIndices={[0]}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             contentContainerStyle={bottomPad}
           >
             {listHeader}

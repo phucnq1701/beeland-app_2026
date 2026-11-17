@@ -26,7 +26,7 @@ test("notificationRoute: chỉ màn app có và tải được theo id; còn l�
   assert.deepEqual(plain(n.notificationRoute({ formCode: 9002, relatedId: "u1" })), { pathname: "/signing/[id]", params: { id: "u1" } });
   assert.deepEqual(plain(n.notificationRoute({ formCode: 832, relatedId: "r1" })), { pathname: "/request/[id]", params: { id: "r1" } });
   assert.equal(n.notificationRoute({ formCode: 27, relatedId: "b1" }), null, "booking: thông báo mang id phiếu giữ chỗ");
-  assert.equal(n.notificationRoute({ formCode: 815, relatedId: "p1" }), null, "phiếu thu: chưa có màn chi tiết thật");
+  assert.deepEqual(plain(n.notificationRoute({ formCode: 815, relatedId: "p1" })), { pathname: "/reports/receipt/[id]", params: { id: "p1" } }, "phiếu thu ⇒ chi tiết phiếu thu (fn_nv_app_phieu_thu_chi_tiet)");
   assert.equal(n.notificationRoute({ formCode: 803, relatedId: "g1" }), null, "giỏ hàng: app không có màn");
   assert.equal(n.notificationRoute({ formCode: 28, relatedId: "d1" }), null, "đặt cọc: màn app cần dòng danh sách");
   assert.equal(n.notificationRoute({ formCode: 815, relatedId: null }), null);
