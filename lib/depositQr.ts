@@ -63,3 +63,13 @@ export function canCreateDepositQr(row: QrRow | null | undefined): boolean {
 export function canOfferDepositQr(row: QrRow | null | undefined): boolean {
   return row?.QuyenQR === true && canCreateDepositQr(row);
 }
+
+/**
+ * Đặt lịch ký từ phiếu cọc được không — như máy chủ (usp_signing_appointment_upsert: dbo._pgc_da_coc): phiếu giữ chỗ ở mã 13
+ * (Đặt cọc đã duyệt) / 24 / 25, tức đã duyệt cọc và chưa sang hợp đồng. Phiếu chờ duyệt ⇒ máy chủ từ chối ⇒ app ẩn nút.
+ */
+const SIGNABLE_CODES = [13, 24, 25];
+export function canBookSigning(row: { MaTT?: unknown } | null | undefined): boolean {
+  const c = statusCodeNum(row?.MaTT);
+  return c != null && SIGNABLE_CODES.includes(c);
+}

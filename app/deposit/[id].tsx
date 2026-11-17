@@ -5,7 +5,7 @@ import { CalendarCheck, QrCode } from "lucide-react-native";
 
 import { SalesDocDetail } from "@/components/sales/SalesDocDetail";
 import { BottomActionBar, Button } from "@/components/ui";
-import { canOfferDepositQr } from "@/lib/depositQr";
+import { canBookSigning, canOfferDepositQr } from "@/lib/depositQr";
 import { radius } from "@/theme";
 import { formatDate } from "@/lib/format";
 import { DatCocService } from "@/services/DatCocService";
@@ -70,6 +70,8 @@ export default function DepositDetailScreen() {
   const canCollect = !loading && canOfferDepositQr(h);
   // Lịch ký khoá theo uuid PHIẾU GIỮ CHỖ (pgc_id), không phải id phiếu cọc (web openSigningForDeposit)
   const pgcId = String(h.PhieuGiuChoId ?? "");
+  // Chỉ hiện khi máy chủ cho đặt: phiếu đã duyệt cọc, chưa sang hợp đồng (mã 13 / 24 / 25)
+  const canSign = !loading && !!pgcId && canBookSigning(h);
   const goToSigning = () =>
     router.push({
       pathname: "/signing/form",
@@ -107,10 +109,10 @@ export default function DepositDetailScreen() {
       refreshing={refreshing}
       onRefresh={() => void load(true)}
       footer={
-        loading || (!canCollect && !pgcId) ? undefined : (
+        !canCollect && !canSign ? undefined : (
           <BottomActionBar>
-            {/* Như web (menu dòng đặt cọc "Đặt lịch ký"): mọi tài khoản (sếp 2026-11-17), mở form đã điền sẵn phiếu */}
-            {pgcId ? (
+            {/* Mọi tài khoản (sếp 2026-11-17), mở form đã điền sẵn phiếu */}
+            {canSign ? (
               <Button
                 variant={canCollect ? "secondary" : "primary"}
                 title="Đặt lịch ký"

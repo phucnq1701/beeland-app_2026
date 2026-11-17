@@ -12,6 +12,15 @@ import { mapDeposit, mapListRow, SigningState, uid, type Deposit, type SigningRo
 export type SigningDetail = SigningRow & {
   TaiLieu: { fileName: string; url: string; uploadedAt?: string; hoSoId?: string | null; hoSoTen?: string | null }[];
   DongSoHuuIds: string[];
+  /** Giờ ca, điểm ký (nơi khách đến ký) — chỉ có ở chi tiết */
+  TuGio: string | null;
+  DenGio: string | null;
+  TenDiemKy: string | null;
+  DiaChiDiemKy: string | null;
+  DienThoaiDiemKy: string | null;
+  HuongDanDiemKy: string | null;
+  /** Lịch thanh toán của giao dịch (khoá phương án TT) */
+  TenLichTT: string | null;
   /** Dòng máy chủ gốc (fn_signing_appointment_get) — form web nạp lại từ đây */
   raw: any;
 };
@@ -63,6 +72,13 @@ export const SigningService = {
       ...mapListRow(row),
       TaiLieu: Array.isArray(row.tai_lieu) ? row.tai_lieu : [],
       DongSoHuuIds: Array.isArray(row.dong_so_huu_ids) ? row.dong_so_huu_ids.map(String) : [],
+      TuGio: row.tu_gio ?? null,
+      DenGio: row.den_gio ?? null,
+      TenDiemKy: row.ten_diem_ky ?? null,
+      DiaChiDiemKy: row.dia_chi_diem_ky ?? null,
+      DienThoaiDiemKy: row.dien_thoai_diem_ky ?? null,
+      HuongDanDiemKy: row.huong_dan_diem_ky ?? null,
+      TenLichTT: row.ten_lich_tt ?? null,
       raw: row,
     };
   },

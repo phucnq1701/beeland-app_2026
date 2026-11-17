@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Linking, Share, StyleSheet, View } from "react-native";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { MoreVertical, Pencil, Trash2 } from "lucide-react-native";
+import { MapPin, MoreVertical, Pencil, Phone, Send, Trash2 } from "lucide-react-native";
 
 import { AttachmentList } from "@/components/signing/AttachmentList";
 import {
@@ -30,7 +30,8 @@ const WEEKDAY_FULL = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Th
 
 /**
  * Chi tiết lịch ký (fn_nv_app_lich_ky_chi_tiet = fn_signing_appointment_get) – sửa, xoá như lưới web; xác nhận / từ chối chỉ trên web.
- * Kiểu bo tròn như chi tiết booking: header `soft`, khối ngày ký navy bo `radius.x3`, card bo `radius.xxl`.
+ * Khối đầu = cái cần nhất khi đi ký: giờ (từ – đến), ngày, ca · thủ tục, ĐIỂM KÝ + địa chỉ; nút Gọi khách / Gửi lịch cho khách.
+ * Bên dưới chỉ hiện dòng có dữ liệu (không lặp thông tin ở khối đầu, không dòng "—").
  */
 export default function SigningDetailScreen() {
   const router = useRouter();
@@ -146,6 +147,44 @@ export default function SigningDetailScreen() {
   const meta = statusMeta(data.State);
   const day = data.NgayBookKy ? dateKey(data.NgayBookKy) : "";
   const idLabel = data.IsPersonal ? "CCCD / Hộ chiếu" : "Số ĐKKD";
+  const timeText = data.TuGio ? `${data.TuGio}${data.DenGio ? ` – ${data.DenGio}` : ""}` : timeOf(data.NgayBookKy);
+  const dayText = day ? `${WEEKDAY_FULL[weekdayIndex(day)]}, ${formatDate(data.NgayBookKy)}` : "";
+  const place = [data.TenDiemKy, data.DiaChiDiemKy].filter(Boolean).join(" — ");
+  const plan = data.TenLichTT || planLabel || (data.MaPhuongAnTT != null ? String(data.MaPhuongAnTT) : null);
+  const rows = (list: [string, string | null | undefined, boolean?][]) =>
+    list.filter(([, v]) => v != null && String(v).trim() !== "") as [string, string, boolean?][];
+  const deal = rows([
+    ["Phiếu đặt cọc", data.SoPhieu],
+    ["Căn", [data.MaCan, data.TenDA].filter(Boolean).join(" · ")],
+    ["Phân loại", data.PhanLoai],
+    ["Đại lý phụ trách", data.DaiLy],
+    ["Lịch thanh toán", plan],
+    ["Hình thức thanh toán", data.HinhThucTT],
+    ["Bảo lãnh", data.BaoLanh],
+    ["Ghi chú", data.GhiChu],
+  ]);
+  const cust = rows([
+    [data.IsPersonal ? "Họ và tên" : "Tên công ty", data.TenKH],
+    [idLabel, data.SoGiayTo, true],
+    ["Điện thoại", data.DienThoai, true],
+    ["Email", data.Email],
+  ]);
+
+  const shareToCustomer = async () => {
+    const text = [
+      `Lịch ký${data.TenLoaiThuTuc ? ` ${data.TenLoaiThuTuc}` : ""}${data.MaCan ? ` căn ${data.MaCan}` : ""}`,
+      data.TenKH ? `Khách hàng: ${data.TenKH}` : null,
+      dayText ? `Thời gian: ${timeText}, ${dayText}${data.TenCa ? ` (${data.TenCa})` : ""}` : null,
+      data.TenDiemKy ? `Địa điểm: ${data.TenDiemKy}${data.DiaChiDiemKy ? ` — ${data.DiaChiDiemKy}` : ""}` : null,
+      data.DienThoaiDiemKy ? `Liên hệ điểm ký: ${data.DienThoaiDiemKy}` : null,
+      data.HuongDanDiemKy ? `Hướng dẫn: ${data.HuongDanDiemKy}` : null,
+    ].filter(Boolean).join("\n");
+    try {
+      await Share.share({ message: text });
+    } catch {
+      toast.show({ type: "error", message: "Không mở được chia sẻ" });
+    }
+  };
 
   return (
     <>
@@ -166,17 +205,18 @@ export default function SigningDetailScreen() {
           <View style={styles.hero}>
             <View style={styles.heroTop}>
               <Text variant="caption" color={colors.showcase.textMuted} style={styles.flex}>
-                Ngày giờ ký
+                {data.TenLoaiThuTuc || "Lịch ký"}
               </Text>
               <Badge label={meta.label} tone={meta.tone} />
             </View>
             {day ? (
               <>
                 <Text variant="display" color="onInverse" numeric>
-                  {timeOf(data.NgayBookKy)}
+                  {timeText}
                 </Text>
                 <Text variant="subhead" color="onInverse">
-                  {WEEKDAY_FULL[weekdayIndex(day)]}, {formatDate(data.NgayBookKy)}
+                  {dayText}
+                  {data.TenCa ? ` · ${data.TenCa}` : ""}
                 </Text>
               </>
             ) : (
@@ -184,32 +224,54 @@ export default function SigningDetailScreen() {
                 Chưa có ngày ký
               </Text>
             )}
-            <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
-              {[data.TenCa, data.TenLoaiThuTuc].filter(Boolean).join(" · ") || "—"}
-            </Text>
+            {data.TenDiemKy ? (
+              <View style={styles.place}>
+                <MapPin size={16} color={colors.showcase.textMuted} />
+                <View style={styles.flex}>
+                  <Text variant="body" weight="semibold" color="onInverse">
+                    {data.TenDiemKy}
+                  </Text>
+                  {data.DiaChiDiemKy ? (
+                    <Text variant="caption" color={colors.showcase.textMuted}>
+                      {data.DiaChiDiemKy}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
           </View>
 
-          <Card style={styles.card}>
-            <Text variant="subhead" style={styles.cardTitle}>
-              Thông tin book ký
-            </Text>
-            <KeyValueRow label="Phiếu đặt cọc" value={data.SoPhieu || "—"} />
-            <KeyValueRow label="Dự án" value={data.TenDA || "—"} />
-            <KeyValueRow label="Mã căn" value={data.MaCan || "—"} />
-            <KeyValueRow label="Loại thủ tục" value={data.TenLoaiThuTuc || "—"} />
-            <KeyValueRow label="Ca làm việc" value={data.TenCa || "—"} />
-            <KeyValueRow label="Đại lý phụ trách" value={data.DaiLy || "—"} />
-            <KeyValueRow label="Phân loại" value={data.PhanLoai || "—"} last />
-          </Card>
+          <View style={styles.actions}>
+            {data.DienThoai ? (
+              <Button
+                variant="secondary"
+                icon={Phone}
+                title="Gọi khách"
+                onPress={() => void Linking.openURL(`tel:${data.DienThoai}`)}
+                style={[styles.flex, styles.pill]}
+              />
+            ) : null}
+            <Button variant="secondary" icon={Send} title="Gửi lịch cho khách" onPress={() => void shareToCustomer()} style={[styles.flex, styles.pill]} />
+          </View>
+
+          {deal.length ? (
+            <Card style={styles.card}>
+              <Text variant="subhead" style={styles.cardTitle}>
+                Giao dịch
+              </Text>
+              {deal.map(([l, v], i) => (
+                <KeyValueRow key={l} label={l} value={v} last={i === deal.length - 1} />
+              ))}
+            </Card>
+          ) : null}
 
           <Card style={styles.card}>
             <Text variant="subhead" style={styles.cardTitle}>
               {data.IsPersonal ? "Khách hàng" : "Doanh nghiệp"}
             </Text>
-            <KeyValueRow label={data.IsPersonal ? "Họ và tên" : "Tên công ty"} value={data.TenKH || "—"} />
-            <KeyValueRow label={idLabel} value={data.SoGiayTo || "—"} copyValue={data.SoGiayTo || undefined} />
-            <KeyValueRow label="Điện thoại" value={data.DienThoai || "—"} copyValue={data.DienThoai || undefined} />
-            <KeyValueRow label="Email" value={data.Email || "—"} last />
+            {cust.map(([l, v, copy], i) => (
+              <KeyValueRow key={l} label={l} value={v} copyValue={copy ? v : undefined} last={i === cust.length - 1 && !coOwners.length} />
+            ))}
             {coOwners.length ? (
               <View style={styles.owners}>
                 <Text variant="caption" weight="semibold" color="textSecondary">
@@ -227,19 +289,6 @@ export default function SigningDetailScreen() {
                 ))}
               </View>
             ) : null}
-          </Card>
-
-          <Card style={styles.card}>
-            <Text variant="subhead" style={styles.cardTitle}>
-              Thanh toán
-            </Text>
-            <KeyValueRow
-              label="Phương án TT"
-              value={planLabel || (data.MaPhuongAnTT != null ? String(data.MaPhuongAnTT) : "—")}
-            />
-            <KeyValueRow label="Hình thức TT" value={data.HinhThucTT || "—"} />
-            <KeyValueRow label="Bảo lãnh" value={data.BaoLanh || "—"} />
-            <KeyValueRow label="Ghi chú" value={data.GhiChu || "—"} last />
           </Card>
 
           <Card style={styles.card}>
@@ -302,6 +351,16 @@ const styles = StyleSheet.create({
     ...elevation.soft,
   },
   heroTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  place: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.sm,
+    marginTop: space.md,
+    paddingTop: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.showcase.surface,
+  },
+  actions: { flexDirection: "row", gap: space.sm },
   card: { borderWidth: 0, borderRadius: radius.xxl, paddingHorizontal: space.lg + 2, ...elevation.soft },
   cardTitle: { marginBottom: space.xs },
   owners: { marginTop: space.md, gap: space.sm },

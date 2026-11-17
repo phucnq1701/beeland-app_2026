@@ -74,18 +74,21 @@ export function SalesDocDetail({
         <View style={styles.body}>
           {/* Card navy: khách + trạng thái ở đầu, tiền bên dưới */}
           <MoneySummary value={value} paid={paid} deposit={deposit} focus={moneyFocus}>
+            {/* Trạng thái 1 dòng riêng ⇒ tên khách + căn dùng cả bề ngang (không bị huy hiệu ép xuống dòng) */}
             <View style={styles.hero}>
-              <View style={styles.flex}>
-                <Text variant="heading" color={colors.showcase.text} numberOfLines={2} accessibilityRole="header">
-                  {customer || "—"}
+              {status ? (
+                <View style={styles.badgeRow}>
+                  <StatusBadge label={status} color={statusColor} />
+                </View>
+              ) : null}
+              <Text variant="heading" color={colors.showcase.text} numberOfLines={2} accessibilityRole="header">
+                {customer || "—"}
+              </Text>
+              {subtitle ? (
+                <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
+                  {subtitle}
                 </Text>
-                {subtitle ? (
-                  <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={2}>
-                    {subtitle}
-                  </Text>
-                ) : null}
-              </View>
-              {status ? <StatusBadge label={status} color={statusColor} /> : null}
+              ) : null}
             </View>
           </MoneySummary>
 
@@ -118,10 +121,9 @@ export function SalesDocDetail({
 
 const styles = StyleSheet.create({
   body: { paddingHorizontal: space.xl, paddingTop: space.sm, gap: space.md },
+  badgeRow: { flexDirection: "row", marginBottom: space.xs },
   hero: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.md,
+    gap: 2,
     marginBottom: space.md,
     paddingBottom: space.md,
     borderBottomWidth: StyleSheet.hairlineWidth,

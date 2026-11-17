@@ -38,3 +38,12 @@ test("canCreateDepositQr: pending and still owes deposit", () => {
   assert.equal(d.canCreateDepositQr({ TenTT: "Đặt cọc chờ duyệt", TienCoc: 100, DaThu: 100 }), false);
   assert.equal(d.canCreateDepositQr({ TenTT: "Đặt cọc đã duyệt", TienCoc: 100, DaThu: 0 }), false);
 });
+
+test("canBookSigning: chỉ phiếu đã duyệt cọc, chưa sang hợp đồng (mã 13 / 24 / 25 — như máy chủ _pgc_da_coc)", () => {
+  assert.equal(d.canBookSigning({ MaTT: 13 }), true);
+  assert.equal(d.canBookSigning({ MaTT: "24" }), true);
+  assert.equal(d.canBookSigning({ MaTT: 25 }), true);
+  assert.equal(d.canBookSigning({ MaTT: 8 }), false, "chờ duyệt");
+  assert.equal(d.canBookSigning({ MaTT: 14 }), false);
+  assert.equal(d.canBookSigning({}), false);
+});
