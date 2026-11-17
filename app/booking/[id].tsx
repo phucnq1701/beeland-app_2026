@@ -389,7 +389,7 @@ export default function BookingDetailScreen() {
             <ProgressSteps steps={BOOKING_STEPS} current={progress.current} cancelled={progress.cancelled} />
           </Card>
 
-          {/* Chỉ dòng có dữ liệu; "Đã thu" luôn hiện (0 ₫ khi chưa thu) */}
+          {/* Chỉ dòng có dữ liệu; "Đã thu" chỉ khi khác số ở thẻ đầu (thu dở / thu khác mức chuẩn) — không lặp lại */}
           <Card style={styles.card}>
             {(
               [
@@ -398,7 +398,12 @@ export default function BookingDetailScreen() {
                 ["Điện thoại", maskPhone(data?.customer?.dienThoai)],
                 ["Sàn giao dịch", data?.san?.tenCongTy],
                 ["Nhân viên", data?.nhanVien],
-                ["Đã thu", formatVND(Number(data?.daThu) || 0)],
+                [
+                  "Đã thu",
+                  Number(data?.daThu) > 0 && Number(data?.daThu) !== Number(standardAmount)
+                    ? formatVND(Number(data?.daThu))
+                    : null,
+                ],
                 ["Ngày booking", formatDateTime(data?.ngayGiuCho ?? data?.ngayNhap)],
               ] as [string, string | null | undefined][]
             )

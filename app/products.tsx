@@ -235,6 +235,10 @@ export default function ProductsScreen({
             });
           });
         });
+        // Căn chưa xếp tầng / vị trí vẫn tính vào thống kê khu
+        block.unplaced?.forEach((item: any) => {
+          units.push({ id: item.KyHieu, floor: null, column: item.MaVT, status: mapStatusByTT(item), raw: item });
+        });
 
         return {
           name: block.tenKhu,

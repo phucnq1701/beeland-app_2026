@@ -39,6 +39,7 @@ const BlockGrid = ({
   }));
 
   const locations = rawBlock.location || [];
+  const unplaced: any[] = rawBlock.unplaced || [];
 
   const unitColor = (unit: any): string =>
     unit.ColorTT ||
@@ -125,6 +126,20 @@ const BlockGrid = ({
           </View>
         </ScrollView>
       </View>
+
+      {/* Căn chưa có tầng / vị trí trong danh mục: không đặt được vào lưới nhưng vẫn bấm xem được */}
+      {unplaced.length ? (
+        <View style={styles.unplaced}>
+          <Text variant="label" color="textTertiary">
+            Chưa xếp tầng / vị trí
+          </Text>
+          <View style={styles.wrap}>
+            {unplaced.map((unit: any) => (
+              <UnitCell key={String(unit.ID ?? unit.MaSP)} id={unit.MaSP} code={unit.KyHieu} bg={unitColor(unit)} onPress={handlePressProduct} />
+            ))}
+          </View>
+        </View>
+      ) : null}
     </Card>
   );
 };
@@ -133,6 +148,8 @@ export default memo(BlockGrid);
 
 const styles = StyleSheet.create({
   title: { marginBottom: space.sm },
+  unplaced: { gap: space.xs, marginTop: space.sm, paddingTop: space.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  wrap: { flexDirection: "row", flexWrap: "wrap", gap: CELL_GAP },
   flex: { flex: 1 },
   row: { flexDirection: "row" },
   floorCol: { width: 40 },

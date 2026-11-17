@@ -245,33 +245,49 @@ export function buildGrid(r: any) {
   const tangOrder = new Map<string, number>();
   tang.forEach((t, i) => tangOrder.set(String(t.id).toLowerCase(), i));
   const location = viTri.map((x) => ({ maVT: x.id, tenVT: x.ten || x.ma || x.id }));
+  // id vị trí (thường) → id đúng như danh mục: căn trả uuid hoa / thường khác danh mục vẫn vào đúng cột
+  const vtId = new Map<string, string>(location.map((l) => [String(l.maVT).toLowerCase(), l.maVT]));
 
   const blocks = new Map<string, any>();
   for (const c of can) {
     if (c?.ma_khu == null) continue;
     const kKey = String(c.ma_khu).toLowerCase();
-    if (!blocks.has(kKey)) blocks.set(kKey, { maKhu: c.ma_khu, tenKhu: c.ten_khu || String(c.ma_khu), location, floor: [] });
+    if (!blocks.has(kKey)) blocks.set(kKey, { maKhu: c.ma_khu, tenKhu: c.ten_khu || String(c.ma_khu), location, floor: [], unplaced: [] });
     const block = blocks.get(kKey);
+    const cell = {
+      ID: c.id,
+      MaSP: c.ma_sp,
+      KyHieu: c.ky_hieu,
+      MaVT: c.vi_tri == null ? c.vi_tri : vtId.get(String(c.vi_tri).toLowerCase()) ?? c.vi_tri,
+      MaTT: c.ma_tt,
+      GiaBan: c.tong_gia_gom_vat,
+      MauNen: c.mau_nen || c.tt_mau || "",
+      TenTT: c.tt_ten || "",
+      ColorTT: c.tt_mau || "",
+    };
+    // Thiếu tầng / vị trí (hoặc vị trí không có trong danh mục) ⇒ không đặt được vào ô ⇒ nhóm "Chưa xếp" (trước đây thành hàng "null" toàn ô khoá)
+    if (c.ma_tang == null || c.vi_tri == null || !vtId.has(String(c.vi_tri).toLowerCase())) {
+      block.unplaced.push(cell);
+      continue;
+    }
     const fKey = String(c.ma_tang ?? "").toLowerCase();
     let floor = block.floor.find((f: any) => String(f.maTang ?? "").toLowerCase() === fKey);
     if (!floor) {
       floor = { maTang: c.ma_tang, tenTang: c.ten_tang || String(c.ma_tang), detailFloor: [] };
       block.floor.push(floor);
     }
-    floor.detailFloor.push({
-      ID: c.id,
-      MaSP: c.ma_sp,
-      KyHieu: c.ky_hieu,
-      MaVT: c.vi_tri,
-      MaTT: c.ma_tt,
-      GiaBan: c.tong_gia_gom_vat,
-      MauNen: c.mau_nen || c.tt_mau || "",
-      TenTT: c.tt_ten || "",
-      ColorTT: c.tt_mau || "",
-    });
+    floor.detailFloor.push(cell);
   }
+  // Danh mục vị trí là của cả dự án (mỗi tòa có bộ 01, 02… riêng) ⇒ mỗi tòa chỉ giữ cột căn của tòa dùng, theo thứ tự danh mục;
+  // trước đây mọi tòa nhận hết cột ⇒ cột đầu của tòa khác trống (ô khoá), căn thật nằm tận bên phải.
   return Array.from(blocks.values()).map((b) => ({
     ...b,
+    location: (() => {
+      const used = new Set<string>();
+      for (const f of b.floor) for (const d of f.detailFloor) if (d.MaVT != null) used.add(String(d.MaVT).toLowerCase());
+      const own = location.filter((l) => used.has(String(l.maVT).toLowerCase()));
+      return own;
+    })(),
     floor: [...b.floor].sort((a: any, c: any) => {
       const ai = tangOrder.get(String(a.maTang).toLowerCase());
       const ci = tangOrder.get(String(c.maTang).toLowerCase());
