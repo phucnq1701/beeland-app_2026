@@ -18,7 +18,7 @@ import {
   confirm,
   useToast,
 } from "@/components/ui";
-import { callPhone, openZalo } from "@/components/customer/CustomerListItem";
+import { callPhone, openZalo, isCallablePhone } from "@/components/customer/CustomerListItem";
 import { hapticError, hapticSuccess } from "@/lib/haptics";
 import { colors, elevation, hitSlop, radius, space } from "@/theme";
 import { CustomerService } from "@/services/CustomerService";
@@ -229,9 +229,10 @@ export default function CustomerDetailScreen() {
             <Text variant="title" style={styles.center} accessibilityRole="header">
               {c.name || "—"}
             </Text>
-            {c.company ? (
+            {/* Đơn vị (sàn / công ty) sở hữu khách — có nhãn; bỏ khi trùng tên (khách doanh nghiệp) */}
+            {c.company && c.company.trim().toLowerCase() !== (c.name || "").trim().toLowerCase() ? (
               <Text variant="caption" color="textSecondary" style={styles.center}>
-                {c.company}
+                Đơn vị: {c.company}
               </Text>
             ) : null}
             <View style={styles.badges}>
@@ -245,9 +246,9 @@ export default function CustomerDetailScreen() {
               </Text>
             ) : null}
 
-            {c.phone || c.email ? (
+            {isCallablePhone(c.phone) || c.email ? (
               <View style={styles.quick}>
-                {c.phone ? (
+                {isCallablePhone(c.phone) ? (
                   <>
                     <QuickAction
                       icon={Phone}

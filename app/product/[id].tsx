@@ -48,8 +48,14 @@ export default function ProductDetailScreen() {
   // Chặn bấm "Tạo booking" 2 lần mở 2 màn tạo booking
   const navigating = useRef(false);
 
-  const [isLocked, setIsLocked] = useState<boolean>(false);
-  const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
+  // Lock theo MỐC hết hạn (giờ máy) — không đếm lùi rời rạc: tránh lúc vừa vào màn bị coi là "đã hết" rồi tắt nhầm lock
+  const [lockUntil, setLockUntil] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const remainingSeconds = lockUntil ? Math.max(0, Math.ceil((lockUntil - nowMs) / 1000)) : 0;
+  const isLocked = !!lockUntil && remainingSeconds > 0;
+  const sweeping = useRef(false);
+  // Phiếu lock do CHÍNH người dùng vừa tạo ở màn này ⇒ cho tạo booking ngay từ lock (như màn Căn đã lock)
+  const [myLockId, setMyLockId] = useState<string | null>(null);
   const [data, setData] = useState<any>(null);
   // Lập phiếu tính giá (tính năng 17): chỉ tài khoản nội bộ có quyền ADD
   // Quyền ADD của /products/price-sheet do API chi tiết căn trả (perms.priceSheet) — không gọi riêng nữa.
@@ -102,10 +108,9 @@ export default function ProductDetailScreen() {
       // Ưu tiên bảng giá: lấy giá hiệu lực theo sản phẩm (không chặn UI chính)
       void getActivePrice(result.data);
 
-      if (seconds > 0) {
-        setIsLocked(true);
-        setRemainingSeconds(seconds);
-      }
+      // Trạng thái lock luôn theo máy chủ (còn hạn ⇒ mốc mới; hết / không có ⇒ bỏ)
+      setLockUntil(seconds > 0 ? Date.now() + seconds * 1000 : null);
+      setNowMs(Date.now());
     }
     setLoading(false);
   };
@@ -136,38 +141,31 @@ export default function ProductDetailScreen() {
     if (lockMinutes) {
       const minutes = parseInt(lockMinutes, 10);
       if (!isNaN(minutes) && minutes > 0) {
-        setIsLocked(true);
-        setRemainingSeconds(minutes * 60);
+        setLockUntil(Date.now() + minutes * 60 * 1000);
+        setNowMs(Date.now());
       }
     }
   }, [lockMinutes]);
 
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
+  // Đồng hồ: chỉ chạy khi có mốc lock. Quá mốc ⇒ quét hết hạn 1 lần rồi nạp lại trạng thái từ máy chủ
   useEffect(() => {
-    if (!isLocked) return;
-
-    // Hết giờ lock → quét hết hạn (trả SP về Mở bán) + tải lại trạng thái
-    if (remainingSeconds <= 0) {
-      void (async () => {
+    if (!lockUntil) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [lockUntil]);
+  useEffect(() => {
+    if (!lockUntil || remainingSeconds > 0 || sweeping.current) return;
+    sweeping.current = true;
+    void (async () => {
+      try {
         await BookingService.sweepExpiredLocks();
         await getProducts();
-        setIsLocked(false);
-      })();
-      return;
-    }
-
-    timerRef.current = setInterval(() => {
-      setRemainingSeconds((prev) => Math.max(0, prev - 1));
-    }, 1000);
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
+      } finally {
+        sweeping.current = false;
       }
-    };
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLocked, remainingSeconds]);
+  }, [lockUntil, remainingSeconds]);
 
   const back = (
     <View style={[styles.back, { top: insets.top + space.sm }]}>
@@ -217,8 +215,11 @@ export default function ProductDetailScreen() {
       if (res?.status === 2000) {
         const seconds = res?.data || 0;
 
-        setIsLocked(true);
-        setRemainingSeconds(seconds);
+        if (seconds > 0) {
+          setLockUntil(Date.now() + seconds * 1000);
+          setNowMs(Date.now());
+        }
+        setMyLockId((res as any)?.lockId ?? null);
         hapticSuccess();
         toast.show({ type: "success", message: `Đã lock căn ${data?.KyHieu ?? ""}`.trim() });
         // Tải lại để cập nhật trạng thái SP (Đã Lock)
@@ -292,7 +293,9 @@ export default function ProductDetailScreen() {
               {!canTransact ? (
                 <Text variant="caption" color="textSecondary">
                   {isLocked
-                    ? "Căn đang được lock. Tạo booking từ mục Lock căn (như trên web)."
+                    ? myLockId
+                      ? "Bạn vừa lock căn này — tạo booking trước khi hết giờ lock."
+                      : "Căn đang được lock. Nếu bạn là người lock, tạo booking ở mục Căn đã lock."
                     : `${OPEN_FOR_SALE_MESSAGE} – căn đang ở trạng thái “${statusName || "không xác định"}”.`}
                 </Text>
               ) : null}
@@ -330,7 +333,24 @@ export default function ProductDetailScreen() {
               onPress={() => void handleLock()}
             />
           ) : null}
-          {txPerm?.booking && data?.isHienThiBook ? (
+          {isLocked && txPerm?.booking ? (
+            <Button
+              size="lg"
+              icon={CalendarPlus}
+              title={myLockId ? "Tạo booking" : "Căn đã lock"}
+              style={[styles.flex, styles.pill]}
+              onPress={() => {
+                if (navigating.current) return;
+                navigating.current = true;
+                if (myLockId) {
+                  // Như màn Căn đã lock: kèm id phiếu lock để máy chủ khép đúng phiếu này khi tạo booking
+                  router.push({ pathname: "/booking/create", params: { dataBooking: JSON.stringify({ ...data, LockId: myLockId }) } });
+                } else {
+                  router.push("/locked-units");
+                }
+              }}
+            />
+          ) : txPerm?.booking && data?.isHienThiBook ? (
             <Button
               testID="action-book"
               size="lg"

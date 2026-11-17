@@ -22,6 +22,7 @@ import { formatDateTime } from "@/lib/format";
 import { colors, elevation, radius, space } from "@/theme";
 import { BookingService } from "@/services/BookingService";
 import { ProductService } from "@/services/ProductService";
+import { PriceServices } from "@/services/PriceServices";
 
 /** Ảnh dùng khi sản phẩm chưa có ảnh. */
 const DEFAULT_IMAGE =
@@ -87,11 +88,16 @@ export default function LockDetailScreen() {
 
     setBannerProduct(result?.data ?? []);
   };
+  // Giá hiệu lực theo bảng giá (như chi tiết căn) — thiếu thì PriceBreakdown lùi về giá trên căn
+  const [activePrice, setActivePrice] = useState<any>(null);
   const getProducts = async () => {
     const result = await ProductService.getDetailProducts({ maSP: maSP, fresh: true });
     setCanBook(!!result?.perms?.booking);
     if (result?.data) {
       setDataProduct(result.data);
+      PriceServices.getActivePriceForProduct({ productId: result.data.ID, maSP: result.data.MaSP ?? maSP })
+        .then((r: any) => setActivePrice(r?.data ?? null))
+        .catch(() => setActivePrice(null));
     }
   };
 
@@ -213,7 +219,7 @@ export default function LockDetailScreen() {
                 <>
                   <HomeSectionHeader title="Giá sản phẩm" />
                   <Card style={styles.card}>
-                    <PriceBreakdown activePrice={null} data={dataProduct} loading={false} />
+                    <PriceBreakdown activePrice={activePrice} data={dataProduct} loading={false} />
                   </Card>
                 </>
               ) : null}

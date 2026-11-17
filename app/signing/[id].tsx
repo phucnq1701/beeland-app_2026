@@ -149,12 +149,11 @@ export default function SigningDetailScreen() {
   const idLabel = data.IsPersonal ? "CCCD / Hộ chiếu" : "Số ĐKKD";
   const timeText = data.TuGio ? `${data.TuGio}${data.DenGio ? ` – ${data.DenGio}` : ""}` : timeOf(data.NgayBookKy);
   const dayText = day ? `${WEEKDAY_FULL[weekdayIndex(day)]}, ${formatDate(data.NgayBookKy)}` : "";
-  const place = [data.TenDiemKy, data.DiaChiDiemKy].filter(Boolean).join(" — ");
   const plan = data.TenLichTT || planLabel || (data.MaPhuongAnTT != null ? String(data.MaPhuongAnTT) : null);
   const rows = (list: [string, string | null | undefined, boolean?][]) =>
     list.filter(([, v]) => v != null && String(v).trim() !== "") as [string, string, boolean?][];
   const deal = rows([
-    ["Phiếu đặt cọc", data.SoPhieu],
+    data.Nguon === "HOP_DONG" ? ["Hợp đồng", data.SoHopDong] : ["Phiếu đặt cọc", data.SoPhieu],
     ["Căn", [data.MaCan, data.TenDA].filter(Boolean).join(" · ")],
     ["Phân loại", data.PhanLoai],
     ["Đại lý phụ trách", data.DaiLy],

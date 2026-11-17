@@ -295,7 +295,7 @@ function PriceSheetEditorScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <Screen header={header} padded={false} keyboardAware footer={footer}>
+      <Screen header={header} padded={false} keyboardAware hideFooterWithKeyboard footer={footer}>
         <View style={styles.body}>
           <ProgressSteps steps={STEPS} current={step} />
           {busyText ? (

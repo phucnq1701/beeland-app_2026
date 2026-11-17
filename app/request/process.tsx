@@ -70,6 +70,7 @@ export default function RequestProcessScreen() {
         header={<AppHeader variant="soft" title="Cập nhật xử lý" subtitle="Ghi lịch sử, đổi trạng thái" />}
         padded={false}
         keyboardAware
+        hideFooterWithKeyboard
         footer={
           <BottomActionBar>
             <Button variant="secondary" title="Huỷ" onPress={() => router.back()} style={styles.pill} />

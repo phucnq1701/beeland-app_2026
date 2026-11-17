@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "reac
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { Camera, ChevronRight, FileUp, Image as ImageIcon, ShieldCheck, UserSearch, X } from "lucide-react-native";
+import { Camera, ChevronRight, FileUp, Image as ImageIcon, UserSearch, X } from "lucide-react-native";
 
 import { CustomerPickerSheet, type PickedCustomer } from "@/components/signing/PickerSheets";
 import { AttachmentList } from "@/components/signing/AttachmentList";
@@ -417,6 +417,7 @@ export default function RequestFormScreen() {
         header={header}
         padded={false}
         keyboardAware
+        hideFooterWithKeyboard
         footer={
           <BottomActionBar>
             <Button variant="secondary" title="Huỷ" onPress={() => router.back()} style={styles.pill} />

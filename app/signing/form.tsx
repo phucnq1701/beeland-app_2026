@@ -382,6 +382,7 @@ function SigningForm() {
         header={header}
         padded={false}
         keyboardAware
+        hideFooterWithKeyboard
         footer={
           <BottomActionBar>
             <Button variant="secondary" title="Huỷ" onPress={() => router.back()} style={styles.pill} />
@@ -931,7 +932,7 @@ function DocRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={`${label}: ${value || placeholder}${locked ? " (đã khoá)" : ""}`}
       disabled={locked}
       onPress={onPress}
       style={({ pressed }) => [styles.picker, pressed ? styles.pressed : null]}
@@ -1036,19 +1037,29 @@ function ContractPickerSheet({
         ) : !rows.length ? (
           <EmptyState title="Không có hợp đồng phù hợp" description="Thử từ khoá khác." />
         ) : (
-          rows.map((c) => (
-            <Pressable key={c.id} accessibilityRole="button" onPress={() => onPick(c)} style={({ pressed }) => [styles.option, pressed ? styles.pressed : null]}>
-              <View style={styles.flex}>
-                <Text variant="body" weight="semibold">
-                  {c.loai_hd === "HDGV" ? "HĐ góp vốn" : "HĐMB"} {c.so_hd || "—"}
-                </Text>
-                <Text variant="caption" color="textSecondary" numberOfLines={1}>
-                  {[c.khach_hang, c.ma_can].filter(Boolean).join(" · ")}
-                </Text>
-              </View>
-              <ChevronRight size={18} color={colors.textTertiary} />
-            </Pressable>
-          ))
+          <ScrollView style={styles.sheetList} keyboardShouldPersistTaps="handled">
+            <View style={styles.list}>
+              {rows.map((c) => (
+                <Pressable
+                  key={c.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Hợp đồng ${c.so_hd || ""}, ${c.khach_hang || ""}, căn ${c.ma_can || ""}`}
+                  onPress={() => onPick(c)}
+                  style={({ pressed }) => [styles.option, pressed ? styles.pressed : null]}
+                >
+                  <View style={styles.flex}>
+                    <Text variant="body" weight="semibold" numberOfLines={1}>
+                      {c.so_hd || "—"}
+                    </Text>
+                    <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                      {[c.ma_can, c.khach_hang, c.loai_hd === "HDGV" ? "HĐ góp vốn" : "HĐMB"].filter(Boolean).join(" · ")}
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.textTertiary} />
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
         )}
       </View>
     </BottomSheet>
@@ -1140,4 +1151,5 @@ const styles = StyleSheet.create({
   cell: { width: `${100 / 7}%` },
   cellBox: { paddingVertical: space.xs, borderRadius: radius.md },
   sheet: { gap: space.sm, paddingBottom: space.lg },
+  sheetList: { maxHeight: 440 },
 });

@@ -21,6 +21,9 @@ export type SigningDetail = SigningRow & {
   HuongDanDiemKy: string | null;
   /** Lịch thanh toán của giao dịch (khoá phương án TT) */
   TenLichTT: string | null;
+  /** Nguồn lịch: DAT_COC | HOP_DONG; số HĐ khi nguồn hợp đồng */
+  Nguon: string | null;
+  SoHopDong: string | null;
   /** Dòng máy chủ gốc (fn_signing_appointment_get) — form web nạp lại từ đây */
   raw: any;
 };
@@ -79,6 +82,8 @@ export const SigningService = {
       DienThoaiDiemKy: row.dien_thoai_diem_ky ?? null,
       HuongDanDiemKy: row.huong_dan_diem_ky ?? null,
       TenLichTT: row.ten_lich_tt ?? null,
+      Nguon: row.nguon ?? null,
+      SoHopDong: row.so_hop_dong ?? null,
       raw: row,
     };
   },
