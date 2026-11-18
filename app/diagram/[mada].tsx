@@ -3,8 +3,8 @@ import { StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { WebView } from "react-native-webview";
 
-import { AppHeader, ErrorState, Screen, SkeletonDetail } from "@/components/ui";
-import { colors } from "@/theme";
+import { AppHeader, ErrorState, Screen, SkeletonDetail, Text } from "@/components/ui";
+import { colors, space } from "@/theme";
 import { getFreshJwt } from "@/services/session";
 
 // Trang sơ đồ phân lô — đọc dữ liệu bằng cloud_jwt (xem API doc mục "Sơ đồ phân lô")
@@ -54,7 +54,13 @@ export default function DiagramViewer() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <Screen scroll={false} padded={false} header={<AppHeader title="Sơ đồ phân lô" />}>
+      {/* Thanh tiêu đề kiểu chuẩn như các màn khác (trước đây kiểu cũ). Nội dung là trang web sơ đồ — không sửa ở app. */}
+      <Screen scroll={false} padded={false} header={<AppHeader variant="soft" title="Sơ đồ phân lô" />}>
+        {!error && uri ? (
+          <Text variant="caption" color="textSecondary" style={styles.hint}>
+            Chọn Khu và Tầng để xem sơ đồ. Dự án chưa có sơ đồ phân lô thì bản đồ để trống.
+          </Text>
+        ) : null}
         {error ? (
           <ErrorState title="Không hiển thị được sơ đồ" description={error} onRetry={retry} />
         ) : uri ? (
@@ -87,4 +93,5 @@ export default function DiagramViewer() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   loading: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.bg },
+  hint: { paddingHorizontal: space.xl, paddingBottom: space.sm },
 });

@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, FlatList, Keyboard, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import {
   Stack,
   useRouter,
@@ -92,7 +92,7 @@ export default function ProductsScreen({
     lastErrorRef.current = { msg, at: now };
     toast.show({ type: "error", message: msg });
   };
-  const { MaDA } = useLocalSearchParams();
+  const { MaDA, search: openSearch } = useLocalSearchParams<{ MaDA?: string; search?: string }>();
 
 
   const [products2, setProducts2] = useState<any[]>([]);
@@ -103,6 +103,8 @@ export default function ProductsScreen({
   trangThaiRef.current = TrangThai;
   const [dataGrid, setDataGrid] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  // Tổng số căn theo bộ lọc hiện tại (máy chủ trả total) — hiện trên danh sách, chế độ Danh sách
+  const [listTotal, setListTotal] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const offSetRef = useRef(1);
@@ -266,8 +268,11 @@ export default function ProductsScreen({
       const resDA = await ProjectService.getProjects({});
       notifyError(resDA);
       setDuAn(resDA?.data || []);
+      // Mã dự án lấy đúng giá trị (kiểu) trong danh sách dự án — mã là chuỗi ("3"), so với Number(MaDA) thì ô Dự án
+      // trong Bộ lọc không sáng và bị đếm là "đang lọc"
+      const fromList = (resDA?.data || []).find((p: any) => MaDA != null && String(p?.MaDA) === String(MaDA))?.MaDA;
       const ma = Number(MaDA);
-      const finalMa = isNaN(ma) ? resDA?.data?.[0]?.MaDA : ma;
+      const finalMa = fromList ?? (isNaN(ma) ? resDA?.data?.[0]?.MaDA : ma);
 
       // Cập nhật defaultFilterRef để khớp với trạng thái ban đầu thực tế
       // (bộ đếm bộ lọc không tính dự án ban đầu)
@@ -304,6 +309,7 @@ export default function ProductsScreen({
       // Cập nhật con trỏ phân trang + còn dữ liệu để tải thêm hay không
       offSetRef.current = data.length + 1;
       const total = (res as any)?.total ?? data.length;
+      setListTotal(Number(total) || (data.length < PAGE_SIZE ? data.length : null));
       const more =
         data.length >= PAGE_SIZE && (total === 0 || data.length < total);
       hasMoreRef.current = more;
@@ -342,6 +348,7 @@ export default function ProductsScreen({
 
       offSetRef.current = data.length + 1;
       const total = (res as any)?.total ?? data.length;
+      setListTotal(Number(total) || (data.length < PAGE_SIZE ? data.length : null));
       const more =
         data.length >= PAGE_SIZE && (total === 0 || data.length < total);
       hasMoreRef.current = more;
@@ -381,6 +388,7 @@ export default function ProductsScreen({
 
       offSetRef.current = data.length + 1;
       const total = (res as any)?.total ?? data.length;
+      setListTotal(Number(total) || (data.length < PAGE_SIZE ? data.length : null));
       const more =
         data.length >= PAGE_SIZE && (total === 0 || data.length < total);
       hasMoreRef.current = more;
@@ -531,7 +539,7 @@ export default function ProductsScreen({
   const activeFilterCount = useMemo(() => {
     const defaultMaDA = getDefaultMaDA();
     return [
-      filterCondition?.MaDA != null && filterCondition.MaDA !== defaultMaDA,
+      filterCondition?.MaDA != null && String(filterCondition.MaDA) !== String(defaultMaDA),
       filterCondition?.MaKhu != null,
       filterCondition?.FormCode != null,
       filterCondition?.MaTT != null,
@@ -582,6 +590,7 @@ export default function ProductsScreen({
           onChangeText={handleSearchChange}
           placeholder="Mã sản phẩm, số căn hộ"
           variant="soft"
+          autoFocus={openSearch === "1"}
         />
 
         {filterExpanded && (
@@ -591,7 +600,7 @@ export default function ProductsScreen({
               options={duAn.map((project: any) => ({
                 key: project?.MaDA,
                 label: project?.TenDA,
-                selected: filterCondition?.MaDA === project?.MaDA,
+                selected: filterCondition?.MaDA != null && String(filterCondition.MaDA) === String(project?.MaDA),
                 onPress: () => applyChangeFilter("MaDA", project?.MaDA),
               }))}
             />
@@ -668,6 +677,12 @@ export default function ProductsScreen({
             { value: "overview", label: "Tổng quan" },
           ]}
         />
+        {/* Số căn theo bộ lọc (gồm cả căn chưa xếp tầng — Tổng quan chỉ đếm căn trên sơ đồ), như "3 dự án" ở màn Dự án */}
+        {viewMode === "list" && listTotal != null && !loading ? (
+          <Text variant="caption" color="textSecondary">
+            {listTotal} căn
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -714,6 +729,11 @@ export default function ProductsScreen({
           <AppHeader
             variant="soft"
             title="Sản phẩm"
+            // Dòng phụ: dự án đang xem — mỗi dòng căn không lặp tên dự án nữa
+            subtitle={
+              duAn.find((p: any) => filterCondition?.MaDA != null && String(p?.MaDA) === String(filterCondition.MaDA))?.TenDA ||
+              undefined
+            }
             // Khi nhúng trong tab menu: không có nút back (đã ở root tab)
             hideBack={embedded}
             actions={
@@ -724,7 +744,11 @@ export default function ProductsScreen({
                 <FilterToggleButton
                   open={filterExpanded}
                   activeCount={activeFilterCount}
-                  onPress={() => setFilterExpanded(!filterExpanded)}
+                  onPress={() => {
+                    // Mở / đóng bộ lọc ⇒ tắt bàn phím ô tìm (trước đây bàn phím che phần lọc, bấm ra ngoài không tắt)
+                    Keyboard.dismiss();
+                    setFilterExpanded(!filterExpanded);
+                  }}
                 />
               </View>
             }
@@ -744,6 +768,7 @@ export default function ProductsScreen({
             onEndReached={() => void loadMore()}
             onEndReachedThreshold={0.4}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             contentContainerStyle={bottomPad}
             refreshControl={
               <RefreshControl
@@ -758,6 +783,7 @@ export default function ProductsScreen({
           <ScrollView
             stickyHeaderIndices={[0]}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             contentContainerStyle={bottomPad}
           >
             {listHeader}

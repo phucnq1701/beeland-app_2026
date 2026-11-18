@@ -127,8 +127,10 @@ export default function CustomerTransactionsScreen() {
       <View style={styles.card}>
         <View style={styles.clip}>
           <ListItem
-            title={item.soPhieu || "—"}
-            subtitle={[item.tenDA, item.kyHieu].filter(Boolean).join(" · ") || undefined}
+            // Tiêu đề = mã căn (thứ nhân viên nhận ra ngay). Số phiếu chỉ có với phiếu giữ chỗ (SP trả so_phieu_gc; cọc / HĐ tạo thẳng
+            // để trống) ⇒ đưa xuống dòng phụ khi có, không còn tiêu đề "—"
+            title={item.kyHieu || item.soPhieu || "—"}
+            subtitle={[item.tenDA, item.kyHieu ? item.soPhieu : null].filter(Boolean).join(" · ") || undefined}
             meta={[item.stageLabel, item.createdAt ? formatDate(item.createdAt) : null].filter(Boolean).join(" · ")}
             onPress={() => void openTransaction(item)}
             trailing={

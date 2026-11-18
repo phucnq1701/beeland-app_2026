@@ -152,7 +152,10 @@ export default function CreateBookingScreen() {
   const companyReason = salesCompanyLockReason(!!r.salesCompanyLocked, !!r.salesCompanyRequired);
   const noAgencyHint = !r.agencyLocked && r.congTyBanHangId && r.agencyOptions.length === 0;
   // Hiển thị: căn chưa có tổng giá HĐ (web hiện "—") ⇒ lấy giá trị HĐ theo bảng giá đang chọn (như màn booking cũ của app); chỉ để xem
-  const contractValue = Number(r.data?.TongGiaTriHDMB) || Number(r.priceInfo?.GiaTriHD) || 0;
+  // + Tổng giá gồm PBT của bảng giá (cùng số "Tổng giá gồm PBT" ở khối giá bên dưới / giá đầu màn chi tiết căn) — trước đây
+  //   bảng giá không có GiaTriHD ⇒ khung đầu hiện "—" dù bên dưới đã có giá
+  const contractValue =
+    Number(r.data?.TongGiaTriHDMB) || Number(r.priceInfo?.GiaTriHD) || Number(r.priceInfo?.TongGiaGomPBT) || 0;
   const unitPrice = Number(r.price) || contractValue;
   const selected = r.selectedCustomer;
   const query = String(r.searchQuery ?? "");

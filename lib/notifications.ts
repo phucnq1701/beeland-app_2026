@@ -47,6 +47,7 @@ const FORM_ROUTES: Record<number, string> = {
   804: '/price-sheet/[id]', // Phiếu tính giá
   824: '/customer/[id]', // Khách hàng
   832: '/request/[id]', // Yêu cầu khách hàng
+  815: '/reports/receipt/[id]', // Phiếu thu (ban_ghi_id = id phiếu thu; vd "Phiếu thu PT-…: duyệt")
   9002: '/signing/[id]', // Đặt lịch ký
 };
 

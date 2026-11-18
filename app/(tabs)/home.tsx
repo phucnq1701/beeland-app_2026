@@ -238,7 +238,8 @@ export default function HomeScreen() {
       onRefresh={onRefresh}
       header={
         <HomeHeader
-          onSearchPress={() => router.push("/products")}
+          // Kính lúp ⇒ màn Sản phẩm với ô tìm focus sẵn (gõ ngay được)
+          onSearchPress={() => router.push({ pathname: "/products", params: { search: "1" } })}
           onBellPress={() => router.push("/notifications")}
           onChatPress={() => router.push("/chat")}
           chatUnread={chatUnread}

@@ -10,6 +10,8 @@ export type ListItemProps = {
   title: string;
   subtitle?: string;
   meta?: string;
+  /** Dòng meta màu đỏ (cảnh báo, vd. booking hết hạn giữ chỗ). */
+  metaDanger?: boolean;
   leading?: React.ReactNode;
   trailing?: React.ReactNode;
   chevron?: boolean;
@@ -17,7 +19,7 @@ export type ListItemProps = {
   accessibilityLabel?: string;
 };
 
-function ListItemBase({ title, subtitle, meta, leading, trailing, chevron, onPress, accessibilityLabel }: ListItemProps) {
+function ListItemBase({ title, subtitle, meta, metaDanger, leading, trailing, chevron, onPress, accessibilityLabel }: ListItemProps) {
   const body = (
     <>
       {leading}
@@ -31,7 +33,7 @@ function ListItemBase({ title, subtitle, meta, leading, trailing, chevron, onPre
           </Text>
         ) : null}
         {meta ? (
-          <Text variant="caption" color="textTertiary" numberOfLines={1}>
+          <Text variant="caption" color={metaDanger ? "danger" : "textTertiary"} numberOfLines={1}>
             {meta}
           </Text>
         ) : null}

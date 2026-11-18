@@ -21,6 +21,8 @@ export type ScreenProps = {
   keyboardAware?: boolean;
   /** Chừa thêm khoảng trống cuối nội dung (vd 100 khi có tab bar nổi). */
   bottomInset?: number;
+  /** Ref vùng cuộn (scroll = true) — vd form báo lỗi thì cuộn lên đầu. */
+  scrollRef?: React.Ref<ScrollView>;
 };
 
 /**
@@ -39,12 +41,14 @@ export function Screen({
   padded = true,
   keyboardAware,
   bottomInset = 0,
+  scrollRef,
 }: ScreenProps) {
   const kb = useKeyboardShown(!!hideFooterWithKeyboard);
   const bg = tone === 'showcase' ? colors.showcase.paper : colors.bg;
 
   const body = scroll ? (
     <ScrollView
+      ref={scrollRef}
       style={styles.flex}
       contentContainerStyle={[styles.content, padded && styles.padded, bottomInset ? { paddingBottom: bottomInset } : null]}
       keyboardShouldPersistTaps="handled"

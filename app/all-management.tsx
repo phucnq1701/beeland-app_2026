@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { getSessionInfo } from "@/services/session";
 import { StyleSheet, View } from 'react-native';
-import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { ChevronDown, ChevronUp, Settings2 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -46,7 +46,9 @@ export default function AllManagementScreen() {
   const router = useRouter();
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<ConfigTab>('home');
-  const [isEditMode, setIsEditMode] = useState<boolean>(false);
+  // Vào từ Tài khoản › "Cấu hình trang chủ & menu" (edit=1) ⇒ mở thẳng chế độ Sửa; từ Trang chủ › "Tất cả" ⇒ lưới module
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
+  const [isEditMode, setIsEditMode] = useState<boolean>(edit === '1');
   const [saving, setSaving] = useState(false);
 
   // Cấu hình các mục trên trang chủ (tối đa 6)
@@ -121,10 +123,9 @@ export default function AllManagementScreen() {
 
   const handleTabSwitch = (tab: ConfigTab) => {
     if (tab === activeTab) return;
-    // Huỷ các thay đổi chưa lưu khi chuyển tab
+    // Huỷ các thay đổi chưa lưu khi chuyển tab (vẫn ở chế độ Sửa — nút chuyển chỉ hiện khi đang Sửa)
     setSelectedIds(originalSelectedIds);
     setMenuSelectedIds(menuOriginalIds);
-    setIsEditMode(false);
     setActiveTab(tab);
   };
 
@@ -132,6 +133,7 @@ export default function AllManagementScreen() {
     if (isEditMode) {
       setSelectedIds(originalSelectedIds);
       setMenuSelectedIds(menuOriginalIds);
+      setActiveTab('home');
     }
     setIsEditMode(!isEditMode);
   };
@@ -149,6 +151,7 @@ export default function AllManagementScreen() {
         setMenuOriginalIds(menuSelectedIds);
       }
       setIsEditMode(false);
+      setActiveTab('home');
       toast.show({ type: 'success', message: 'Đã lưu cấu hình' });
     } catch (error) {
       console.log('[AllManagement] Save config error:', error instanceof Error ? error.message : String(error));
@@ -227,6 +230,21 @@ export default function AllManagementScreen() {
         }
         padded={false}
       >
+        {/* Xem (mặc định): 1 lưới đủ mọi module được dùng, như Trang chủ — nhân viên chỉ cần tìm và mở module.
+            Cấu hình Trang chủ / Tab menu chỉ hiện khi bấm "Sửa" (2026-11-17, docs/app-api-rieng.md). */}
+        {!isEditMode ? (
+          <View style={styles.body}>
+            <FeatureGrid
+              columns={3}
+              items={features
+                .filter((f) => selectableIds.includes(f.id))
+                .map((f) => ({ key: f.id, feature: f, onPress: () => handleFeaturePress(f.id) }))}
+            />
+            <Text variant="caption" color="textSecondary" style={styles.footnote}>
+              Bấm “Sửa” để chọn mục hiện ở Trang chủ và thanh tab.
+            </Text>
+          </View>
+        ) : (
         <View style={styles.body}>
           <SegmentedControl
             variant="soft"
@@ -320,6 +338,7 @@ export default function AllManagementScreen() {
             </>
           ) : null}
         </View>
+        )}
       </Screen>
     </>
   );
@@ -339,6 +358,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySubtle,
   },
   empty: { padding: space.lg },
+  footnote: { textAlign: 'center', marginTop: space.sm },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowIcon: {
     width: 44,

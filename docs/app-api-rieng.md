@@ -216,3 +216,35 @@ Bảng kê chi tiết từng lệnh gọi (2026-11-16): xem `docs/app-api-invent
 ### 2026-11-17 — Đồng bộ lib/web theo web main 10fe7251 (điều kiện Tỉnh / Mua nhiều, khách hàng bước đầu)
 - Chi tiết + cách quay lại: `docs/price-sheets.md` mục "Nhật ký đồng bộ web". BE SP E8 `usp_nv_app_dieu_kien_khach` (đã nạp) + endpoint
   (cần deploy API TRƯỚC khi phát hành app).
+
+### 2026-11-17 — Sửa trải nghiệm theo đợt thử vai nhân viên mới (8 mục "Nên sửa", nhánh `app-nv-sua-ux-nv-moi`)
+Chỉ giao diện app — không đổi BE, web, luồng nghiệp vụ hay dữ liệu gửi máy chủ. Quay lại: `git revert` commit đợt này (hoặc từng tệp).
+| # | Đổi gì | Tệp |
+|---|---|---|
+| 3 | Chi tiết căn thêm thẻ "Thông tin căn" (loại SP, loại căn, phòng ngủ, tòa, tầng, vị trí, hướng cửa / ban công, view, diện tích) — chỉ dòng có dữ liệu, lấy từ `fn_nv_app_san_pham_chi_tiet` sẵn có | `app/product/[id].tsx` |
+| 11 | Giao dịch của khách: tiêu đề = mã căn (trước "—": SP chỉ trả `so_phieu_gc`, cọc / HĐ tạo thẳng trống); số phiếu xuống dòng phụ khi có | `app/customer/[id]/contracts.tsx` |
+| 14 | Thông báo phiếu thu (form 815) mở chi tiết phiếu thu `/reports/receipt/[id]` | `lib/notifications.ts` (+ test) |
+| 1 | Kính lúp Trang chủ ⇒ Sản phẩm với ô tìm focus sẵn (param `search=1`) | `app/(tabs)/home.tsx`, `app/products.tsx` |
+| 4 | Sản phẩm: mở / đóng Bộ lọc tắt bàn phím; vuốt danh sách tắt bàn phím | `app/products.tsx` |
+| 9 | Thêm / sửa khách: thiếu thông tin ⇒ cuộn lên đầu + toast nêu lỗi (Screen thêm prop tuỳ chọn `scrollRef`) | `components/customer/CustomerForm.tsx`, `components/ui/Screen.tsx` |
+| 7 | Tạo booking: "Tổng giá HĐ" rơi về Tổng giá gồm PBT của bảng giá (chỉ hiển thị) thay vì "—" | `app/booking/create.tsx` |
+| 13 | Sơ đồ phân lô: thanh tiêu đề kiểu chuẩn + dòng hướng dẫn "Chọn Khu và Tầng…"; nội dung là trang web, không sửa | `app/diagram/[mada].tsx` |
+Kiểm: tsc 0 lỗi, lint sạch, 316 test. Máy ảo: kiểm ở đợt rà từng màn bên dưới (máy ảo riêng "BeeLand NV test" — máy chung đang chạy Bee Poker).
+
+### 2026-11-17 — Rà từng màn (giao diện / trải nghiệm), cùng nhánh `app-nv-sua-ux-nv-moi`
+User chọn sửa 1–9 theo đề xuất. Chỉ giao diện app — không đổi BE, web, luồng nghiệp vụ hay dữ liệu gửi máy chủ; mọi số liệu lấy từ
+endpoint sẵn có. Quay lại: `git revert` commit đợt này (hoặc từng tệp trong bảng).
+| # | Đổi gì | Tệp |
+|---|---|---|
+| 1 | Bộ lọc Sản phẩm: vào từ dự án thì ô Dự án sáng đúng (mã dự án là chuỗi "3", trước so với `Number(MaDA)` ⇒ không sáng + bị đếm là đang lọc) | `app/products.tsx` |
+| 2 | Chi tiết căn: bỏ "Diện tích thông thủy" khỏi thẻ Thông tin căn (đã có ở Chi tiết giá — lặp do đợt 8 mục) | `app/product/[id].tsx` |
+| 3 | Tất cả quản lý: mặc định 1 lưới đủ module được dùng (như Trang chủ); cấu hình Trang chủ / Tab menu (thanh chuyển, danh sách đánh số, mũi tên) chỉ hiện khi bấm "Sửa"; đổi tab khi đang Sửa không thoát Sửa; Tài khoản › "Cấu hình trang chủ & menu" mở thẳng chế độ Sửa (param `edit=1`) | `app/all-management.tsx`, `app/(tabs)/account.tsx` |
+| 4 | Danh sách Booking: dòng 3 = ngày trước số phiếu (trước ngày bị cắt); booking chờ duyệt đã quá hạn giữ chỗ ⇒ "dd/mm/yyyy · Hết hạn" màu đỏ (cùng luật băng "Đã hết hạn giữ chỗ" ở chi tiết: `lib/bookingProgress`, trường `het_han_luc / giai_doan / da_thu / tien_booking` có sẵn trong `fn_nv_app_booking_list`); badge vẫn 3 trạng thái như user chốt 10-16. `ListItem` thêm prop tuỳ chọn `metaDanger` | `app/bookings.tsx`, `components/ui/ListItem.tsx` |
+| 5 | Chi tiết booking: tiêu đề "Booking <mã căn>", số phiếu BK-… ở dòng phụ; nút đáy "Chứng từ" ⇒ "Tải chứng từ" (khác mục xem "Chứng từ") | `app/booking/[id].tsx` |
+| 6 | Sản phẩm: dòng căn bỏ tên dự án (danh sách luôn theo 1 dự án); tiêu đề phụ = tên dự án; dòng "N căn" trên danh sách (gồm căn chưa xếp tầng — Tổng quan chỉ đếm căn trên sơ đồ nên có thể ít hơn); Tổng quan ghi "C6 · Tầng 23" thay "23" (`floorLabel`, + test) | `app/products.tsx`, `components/product/ProductListItem.tsx`, `lib/productOverview.ts`, `tests/product-overview.test.cjs` |
+| 7 | Khách hàng: Cá nhân / Doanh nghiệp chuyển vào Bộ lọc (trước là thanh chuyển + hàng chip, 2 hàng đều bắt đầu "Tất cả"); nút Thêm thành nút nổi "Thêm khách hàng" như "Thêm lịch ký" (đầu màn chỉ còn Bộ lọc, tiêu đề không bị cắt); vẫn theo quyền ADD | `app/customers.tsx` |
+| 8 | Chi tiết căn: cuộn qua ảnh ⇒ thanh tiêu đề nền đặc "Căn X" + trạng thái (trước nút quay lại nổi đè lên nội dung) | `app/product/[id].tsx` |
+| 9 | Chi tiết dự án: ô "Tình trạng căn" (Tổng / Mở bán / Giữ chỗ / Đã bán / Khóa khi > 0) — cùng dữ liệu + luật Sản phẩm › Tổng quan (`fn_nv_app_so_do` + danh mục trạng thái, nhóm như sơ đồ web `webUnitStatus`), bấm ⇒ danh sách căn; ẩn địa chỉ trùng tên dự án. Thẻ ở danh sách Dự án chưa thêm số căn (cần thêm cột ở `usp_nv_app_du_an_list` — chờ user) | `app/project/[id].tsx` |
+Kiểm: tsc 0 lỗi, lint 0 lỗi (4 cảnh báo cũ ở tệp không đụng), 317 test. Máy ảo riêng (iOS 18.2, trỏ API prod, chỉ xem — không tạo / sửa
+dữ liệu): đã chụp lại từng mục sau sửa.
+Lưu ý nghiệp vụ (không sửa): nhóm sơ đồ web xếp căn HĐMB / đặt cọc vào "Khóa" ⇒ dự án CS2 hiện "Đã bán 0 · Khóa 28" (Tổng quan cũng vậy).
