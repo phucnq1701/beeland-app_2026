@@ -121,11 +121,12 @@ export default function AllManagementScreen() {
   );
   const setActiveSelected = activeTab === 'home' ? setSelectedIds : setMenuSelectedIds;
 
+  // Vào từ Tài khoản (edit=1) ⇒ Huỷ / Lưu xong quay lại Tài khoản (không rơi về lưới module)
+  const openedForEdit = edit === '1';
+
   const handleTabSwitch = (tab: ConfigTab) => {
     if (tab === activeTab) return;
-    // Huỷ các thay đổi chưa lưu khi chuyển tab (vẫn ở chế độ Sửa — nút chuyển chỉ hiện khi đang Sửa)
-    setSelectedIds(originalSelectedIds);
-    setMenuSelectedIds(menuOriginalIds);
+    // Giữ lựa chọn chưa lưu của cả 2 tab — "Lưu cấu hình" lưu cả hai (trước đây chuyển tab bỏ âm thầm phần đã chọn)
     setActiveTab(tab);
   };
 
@@ -134,6 +135,10 @@ export default function AllManagementScreen() {
       setSelectedIds(originalSelectedIds);
       setMenuSelectedIds(menuOriginalIds);
       setActiveTab('home');
+      if (openedForEdit && router.canGoBack()) {
+        router.back();
+        return;
+      }
     }
     setIsEditMode(!isEditMode);
   };
@@ -142,17 +147,20 @@ export default function AllManagementScreen() {
     if (saving) return;
     setSaving(true);
     try {
-      if (activeTab === 'home') {
+      // Lưu tab nào có thay đổi (cả thứ tự)
+      if (selectedIds.join('|') !== originalSelectedIds.join('|')) {
         const config = { selectedIds };
         await AsyncStorage.setItem(await getScopedKey(STORAGE_KEY), JSON.stringify(config));
         setOriginalSelectedIds(selectedIds);
-      } else {
+      }
+      if (menuSelectedIds.join('|') !== menuOriginalIds.join('|')) {
         await saveMenuTabIds(menuSelectedIds);
         setMenuOriginalIds(menuSelectedIds);
       }
       setIsEditMode(false);
       setActiveTab('home');
       toast.show({ type: 'success', message: 'Đã lưu cấu hình' });
+      if (openedForEdit && router.canGoBack()) router.back();
     } catch (error) {
       console.log('[AllManagement] Save config error:', error instanceof Error ? error.message : String(error));
       toast.show({ type: 'error', message: 'Không thể lưu cấu hình' });

@@ -258,3 +258,13 @@ Chỉ giao diện app — không đổi BE, web, luồng nghiệp vụ hay dữ 
 Kiểm máy ảo riêng (chỉ xem): thông báo "Lịch ký mới 20/11/2026 10:00" (lịch đã xoá) ⇒ màn mới; lịch ký còn tồn tại mở bình thường; lọc dự án / đặt lại / Lập phiếu đúng.
 Chưa làm (chờ user): số căn ở thẻ danh sách Dự án (cần thêm cột `usp_nv_app_du_an_list`). Ghi nhận dữ liệu: > 50 hội thoại khách chưa đọc
 là dữ liệu thử tải "LT#…" ngày 09/10 (Trang chủ báo "50 chưa đọc" là đúng).
+
+### 2026-11-18 — Rà lại 1–9 trước khi merge: 2 lỗi đã sửa (nhánh `app-nv-sua-ux-dot3`)
+Chỉ giao diện app — không đổi BE, web, dữ liệu gửi máy chủ. Quay lại: `git revert` commit đợt này.
+| Mục | Lỗi | Sửa | Tệp |
+|---|---|---|---|
+| 3 Tất cả quản lý | Đang Sửa, chuyển Trang chủ ↔ Tab menu bỏ âm thầm phần đã chọn của tab kia; "Lưu cấu hình" chỉ lưu tab đang mở ⇒ chọn cả 2 tab rồi Lưu thì mất 1 phần | Chuyển tab giữ lựa chọn; Lưu ghi tab nào có thay đổi (cả thứ tự). Vào từ Tài khoản (`edit=1`) ⇒ Huỷ / Lưu xong quay lại Tài khoản (trước rơi về lưới module) | `app/all-management.tsx` |
+| 9 Chi tiết dự án | Ô "Tình trạng căn" đếm như Tổng quan (chỉ căn trên sơ đồ: CS2 = 56) nhưng bấm lại mở Danh sách ("83 căn") ⇒ số lệch | Bấm ô số ⇒ Sản phẩm mở thẳng Tổng quan (param mới `view=overview`, số khớp); "Xem căn" vẫn mở Danh sách | `app/project/[id].tsx`, `app/products.tsx` |
+Kiểm máy ảo riêng: bỏ "Hợp đồng" ở Trang chủ → sang Tab menu → quay lại vẫn 5/6; Huỷ ⇒ về Tài khoản, cấu hình không đổi; Lưu khi đang ở
+Tab menu ⇒ Trang chủ mất "Hợp đồng" (đã lưu) rồi đã thêm lại như cũ; CS2: chi tiết dự án 56 / 18 / 9 = Tổng quan 56 / 18 / 9.
+tsc 0 lỗi, lint sạch, 317 test.
