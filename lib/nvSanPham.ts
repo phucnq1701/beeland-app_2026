@@ -52,6 +52,8 @@ export function mapProject(r: any) {
     is_active: statusText.toLowerCase() === "đang bán",
     statusText: statusText || "Không xác định",
     ap_dung: true,
+    // Số căn đã xếp trên sơ đồ theo tên trạng thái (thẻ danh sách Dự án nhóm bằng projectUnitCounts); API cũ chưa có ⇒ null
+    trangThaiCan: Array.isArray(r?.trang_thai_can) ? r.trang_thai_can : null,
   };
 }
 

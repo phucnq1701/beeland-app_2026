@@ -268,3 +268,17 @@ Chỉ giao diện app — không đổi BE, web, dữ liệu gửi máy chủ. Q
 Kiểm máy ảo riêng: bỏ "Hợp đồng" ở Trang chủ → sang Tab menu → quay lại vẫn 5/6; Huỷ ⇒ về Tài khoản, cấu hình không đổi; Lưu khi đang ở
 Tab menu ⇒ Trang chủ mất "Hợp đồng" (đã lưu) rồi đã thêm lại như cũ; CS2: chi tiết dự án 56 / 18 / 9 = Tổng quan 56 / 18 / 9.
 tsc 0 lỗi, lint sạch, 317 test.
+
+### 2026-11-18 — Thẻ danh sách Dự án hiện số căn (nhánh app `app-nv-du-an-so-can`, BE `app-nv-du-an-so-can`)
+User chọn làm (đề xuất ở đợt rà từng màn). Không đổi web, không đổi luồng nghiệp vụ; chỉ thêm 1 trường đọc.
+- **BE:** `usp_nv_app_du_an_list` (10) trả thêm `trang_thai_can: [{ ten, so_can }]` cho mỗi dự án = số căn **đã xếp trên sơ đồ** theo tên
+  trạng thái — cùng phạm vi + cùng luật "đã xếp" với `usp_nv_app_so_do` / `buildGrid` (có khu, tầng, vị trí thuộc danh mục vị trí của dự án;
+  đại lý chỉ căn trong giỏ hợp lệ). SP trả JSON ⇒ không đổi C#, không cần restart API. **Đã nạp BEELAND26 18-11** (deploy.py, chỉ SP này).
+- **App:** `mapProject` giữ `trangThaiCan`; `projectUnitCounts` (lib/productStatus.ts) nhóm bằng `groupFromName` (= luật sơ đồ web
+  `webUnitStatus`) ⇒ thẻ hiện "N căn · M mở bán", số khớp ô "Tình trạng căn" ở chi tiết dự án + Sản phẩm › Tổng quan. API cũ (không có
+  trường) / dự án 0 căn ⇒ không hiện dòng.
+Kiểm: so tổng từng dự án với `usp_nv_app_so_do` (rollback) — admin BRG 3/3, nội bộ MSR 5/5, đại lý `999@msr` 4/4 khớp; thời gian SP ~10 → ~21 ms;
+máy ảo qua API prod: CS2 "56 căn · 18 mở bán", CS3 "25 căn · 0 mở bán", Newtown "33 căn · 0 mở bán". tsc 0 lỗi, lint sạch, 318 test.
+Lưu ý nghiệp vụ (không sửa): CS3 / Newtown trạng thái "Chưa bán" ⇒ theo luật sơ đồ web xếp vào "Khóa" nên "0 mở bán" (Tổng quan web/app cũng vậy).
+Quay lại: app `git revert` commit này (thẻ về như cũ); BE: trả `10_usp_nv_app_du_an_list.sql` về bản trước (`git revert` bên BE) rồi
+`deploy.py` (app mới gặp SP cũ ⇒ không có trường ⇒ chỉ ẩn dòng số căn, không lỗi).

@@ -3,7 +3,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-nat
 import { Stack, useRouter } from "expo-router";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowUpRight, Building2, MapPin, SearchX } from "lucide-react-native";
+import { ArrowUpRight, Building2, LayoutGrid, MapPin, SearchX } from "lucide-react-native";
 
 import {
   AppHeader,
@@ -16,6 +16,7 @@ import {
   Text,
 } from "@/components/ui";
 import { foldVietnamese } from "@/lib/format";
+import { projectUnitCounts } from "@/lib/productStatus";
 import { colors, radius, space } from "@/theme";
 import { ProjectService } from "@/services/ProjectService";
 
@@ -39,11 +40,14 @@ const ProjectCard = memo(function ProjectCard({
   const uri = item?.icon && String(item.icon).trim() !== "" ? item.icon : DEFAULT_PROJECT_IMAGE;
   const district = String(item?.district ?? "").trim();
   const place = district && district.toLowerCase() !== String(item?.TenDA ?? "").trim().toLowerCase() ? district : "";
+  // Số căn trên sơ đồ + số căn mở bán (cùng số với chi tiết dự án / Tổng quan); API cũ / dự án chưa có căn ⇒ không hiện
+  const counts = projectUnitCounts(item?.trangThaiCan);
+  const unitsLine = counts && counts.total > 0 ? `${counts.total} căn · ${counts.available} mở bán` : "";
   return (
     <Pressable
       testID={`project-card-${index}`}
       accessibilityRole="button"
-      accessibilityLabel={`Dự án ${item?.TenDA ?? ""}`}
+      accessibilityLabel={`Dự án ${item?.TenDA ?? ""}${unitsLine ? `, ${unitsLine}` : ""}`}
       onPress={() => onPress(item)}
       style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
     >
@@ -71,6 +75,14 @@ const ProjectCard = memo(function ProjectCard({
             <MapPin size={14} color={colors.showcase.textMuted} strokeWidth={2} />
             <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
               {place}
+            </Text>
+          </View>
+        ) : null}
+        {unitsLine ? (
+          <View style={styles.place}>
+            <LayoutGrid size={14} color={colors.showcase.textMuted} strokeWidth={2} />
+            <Text variant="caption" color={colors.showcase.textMuted} numberOfLines={1}>
+              {unitsLine}
             </Text>
           </View>
         ) : null}
