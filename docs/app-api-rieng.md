@@ -248,3 +248,23 @@ endpoint sẵn có. Quay lại: `git revert` commit đợt này (hoặc từng t
 Kiểm: tsc 0 lỗi, lint 0 lỗi (4 cảnh báo cũ ở tệp không đụng), 317 test. Máy ảo riêng (iOS 18.2, trỏ API prod, chỉ xem — không tạo / sửa
 dữ liệu): đã chụp lại từng mục sau sửa.
 Lưu ý nghiệp vụ (không sửa): nhóm sơ đồ web xếp căn HĐMB / đặt cọc vào "Khóa" ⇒ dự án CS2 hiện "Đã bán 0 · Khóa 28" (Tổng quan cũng vậy).
+
+### 2026-11-17 — Rà 5 màn còn lại: 2 mục user chọn sửa (nhánh `app-nv-sua-ux-dot3`, xếp trên `app-nv-sua-ux-nv-moi`)
+Chỉ giao diện app — không đổi BE, web, luồng nghiệp vụ hay dữ liệu gửi máy chủ. Quay lại: `git revert` commit đợt này.
+| # | Đổi gì | Tệp |
+|---|---|---|
+| 1 | Chi tiết lịch ký: lịch đã bị xoá / ngoài phạm vi (máy chủ ném `[P0002] Không tìm thấy lịch ký`, vd mở từ thông báo cũ) ⇒ "Lịch ký không còn tồn tại" + nút "Xem danh sách lịch ký" thay vì "Không tải được dữ liệu · Thử lại". `SigningService.get` gắn cờ `notFound` (lỗi khác giữ nguyên) | `services/SigningService.ts`, `app/signing/[id].tsx` |
+| 2 | Danh sách Phiếu tính giá: Dự án + Loại sản phẩm chuyển vào Bộ lọc (trước luôn hiện ⇒ đầu màn 4 tầng); nút + thành nút nổi "Lập phiếu" (vẫn theo quyền ADD + cờ `PRICE_SHEET_CREATE_LOCKED`); dòng 3 = ngày trước mã phiếu (mã dài làm ngày bị cắt) | `app/price-sheets.tsx` |
+Kiểm máy ảo riêng (chỉ xem): thông báo "Lịch ký mới 20/11/2026 10:00" (lịch đã xoá) ⇒ màn mới; lịch ký còn tồn tại mở bình thường; lọc dự án / đặt lại / Lập phiếu đúng.
+Chưa làm (chờ user): số căn ở thẻ danh sách Dự án (cần thêm cột `usp_nv_app_du_an_list`). Ghi nhận dữ liệu: > 50 hội thoại khách chưa đọc
+là dữ liệu thử tải "LT#…" ngày 09/10 (Trang chủ báo "50 chưa đọc" là đúng).
+
+### 2026-11-18 — Rà lại 1–9 trước khi merge: 2 lỗi đã sửa (nhánh `app-nv-sua-ux-dot3`)
+Chỉ giao diện app — không đổi BE, web, dữ liệu gửi máy chủ. Quay lại: `git revert` commit đợt này.
+| Mục | Lỗi | Sửa | Tệp |
+|---|---|---|---|
+| 3 Tất cả quản lý | Đang Sửa, chuyển Trang chủ ↔ Tab menu bỏ âm thầm phần đã chọn của tab kia; "Lưu cấu hình" chỉ lưu tab đang mở ⇒ chọn cả 2 tab rồi Lưu thì mất 1 phần | Chuyển tab giữ lựa chọn; Lưu ghi tab nào có thay đổi (cả thứ tự). Vào từ Tài khoản (`edit=1`) ⇒ Huỷ / Lưu xong quay lại Tài khoản (trước rơi về lưới module) | `app/all-management.tsx` |
+| 9 Chi tiết dự án | Ô "Tình trạng căn" đếm như Tổng quan (chỉ căn trên sơ đồ: CS2 = 56) nhưng bấm lại mở Danh sách ("83 căn") ⇒ số lệch | Bấm ô số ⇒ Sản phẩm mở thẳng Tổng quan (param mới `view=overview`, số khớp); "Xem căn" vẫn mở Danh sách | `app/project/[id].tsx`, `app/products.tsx` |
+Kiểm máy ảo riêng: bỏ "Hợp đồng" ở Trang chủ → sang Tab menu → quay lại vẫn 5/6; Huỷ ⇒ về Tài khoản, cấu hình không đổi; Lưu khi đang ở
+Tab menu ⇒ Trang chủ mất "Hợp đồng" (đã lưu) rồi đã thêm lại như cũ; CS2: chi tiết dự án 56 / 18 / 9 = Tổng quan 56 / 18 / 9.
+tsc 0 lỗi, lint sạch, 317 test.

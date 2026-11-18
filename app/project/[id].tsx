@@ -105,6 +105,9 @@ export default function ProjectOptionsScreen() {
   const place =
     placeRaw && placeRaw.trim().toLowerCase() !== String(projectData.TenDA ?? "").trim().toLowerCase() ? placeRaw : "";
   const openProducts = () => router.push(`/products?MaDA=${projectData.MaDA}` as any);
+  // Ô số liệu đếm như Sản phẩm › Tổng quan (chỉ căn đã xếp trên sơ đồ) ⇒ mở đúng Tổng quan để số khớp
+  // (Danh sách đếm cả căn chưa xếp tầng nên tổng có thể lớn hơn)
+  const openOverview = () => router.push(`/products?MaDA=${projectData.MaDA}&view=overview` as any);
 
   return (
     <>
@@ -149,7 +152,7 @@ export default function ProjectOptionsScreen() {
                   accessibilityLabel={
                     stats ? `Tình trạng căn: ${stats.map((x) => `${x.label} ${x.count}`).join(", ")}` : "Đang tải tình trạng căn"
                   }
-                  onPress={openProducts}
+                  onPress={openOverview}
                   style={({ pressed }) => [styles.stats, pressed ? styles.pressed : null]}
                 >
                   {(stats ?? [

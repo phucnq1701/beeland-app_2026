@@ -4,10 +4,12 @@
  * Form Thêm / Sửa lịch ký dùng thẳng logic form web chép (lib/web: useWebSigningForm + useWebShiftPicker — quỹ → điểm ký → thủ tục →
  * ngày → ca, nguồn Đặt cọc / Hợp đồng, hồ sơ, lưu fn_signing_appointment_upsert).
  */
-import { callNv, errorMessage } from "@/services/nvApi";
+import { callNv, errorMessage, NvApiError } from "@/services/nvApi";
 import { getCustomersByIds } from "./customerLookup";
 import { rpcRows } from "./DatCocService";
 import { mapDeposit, mapListRow, SigningState, uid, type Deposit, type SigningRow } from "../lib/signing";
+
+export const SIGNING_NOT_FOUND = "Không tìm thấy lịch ký";
 
 export type SigningDetail = SigningRow & {
   TaiLieu: { fileName: string; url: string; uploadedAt?: string; hoSoId?: string | null; hoSoTen?: string | null }[];
@@ -64,13 +66,21 @@ export const SigningService = {
   /** Chi tiết 1 lịch ký theo uuid hoặc seq — fn_nv_app_lich_ky_chi_tiet (= fn_signing_appointment_get). */
   get: async (idOrSeq: string | number): Promise<SigningDetail> => {
     const isUuid = !!uid(idOrSeq);
-    const d = await rpc<any>(
-      "fn_nv_app_lich_ky_chi_tiet",
-      { p_id: isUuid ? String(idOrSeq) : null, p_seq: isUuid ? null : Number(idOrSeq) },
-      "Không tải được lịch ký"
-    );
+    const notFound = () => Object.assign(new Error(SIGNING_NOT_FOUND), { notFound: true });
+    let d: any;
+    try {
+      d = await callNv<any>("fn_nv_app_lich_ky_chi_tiet", {
+        p_id: isUuid ? String(idOrSeq) : null,
+        p_seq: isUuid ? null : Number(idOrSeq),
+      });
+    } catch (e) {
+      // Máy chủ (_signing_get_scoped) ném [P0002] "Không tìm thấy lịch ký" khi lịch đã bị xoá / ngoài phạm vi ⇒ gắn cờ để màn
+      // chi tiết báo rõ thay vì "Không tải được dữ liệu · Thử lại" (vd mở từ thông báo cũ). Lỗi khác giữ nguyên.
+      if (e instanceof NvApiError && (e.code === "P0002" || e.message.trim() === SIGNING_NOT_FOUND)) throw notFound();
+      throw new Error(errorMessage(e, "Không tải được lịch ký"));
+    }
     const row = Array.isArray(d) ? d[0] : d;
-    if (!row) throw new Error("Không tìm thấy lịch ký");
+    if (!row) throw notFound();
     return {
       ...mapListRow(row),
       TaiLieu: Array.isArray(row.tai_lieu) ? row.tai_lieu : [],

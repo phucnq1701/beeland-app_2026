@@ -76,7 +76,9 @@ export default function ProductsScreen({
   embedded,
 }: { embedded?: boolean } = {}) {
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const { MaDA, search: openSearch, view } = useLocalSearchParams<{ MaDA?: string; search?: string; view?: string }>();
+  // view=overview: mở thẳng Tổng quan (từ ô "Tình trạng căn" ở chi tiết dự án — cùng cách đếm nên số khớp nhau)
+  const [viewMode, setViewMode] = useState<ViewMode>(view === "overview" ? "overview" : "list");
   const [filterExpanded, setFilterExpanded] = useState<boolean>(false);
   const [legendOpen, setLegendOpen] = useState<boolean>(false);
   const [selectedOverviewStatus, setSelectedOverviewStatus] = useState<SummaryKey>("all");
@@ -92,7 +94,6 @@ export default function ProductsScreen({
     lastErrorRef.current = { msg, at: now };
     toast.show({ type: "error", message: msg });
   };
-  const { MaDA, search: openSearch } = useLocalSearchParams<{ MaDA?: string; search?: string }>();
 
 
   const [products2, setProducts2] = useState<any[]>([]);
