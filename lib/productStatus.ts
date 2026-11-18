@@ -60,6 +60,24 @@ export function groupFromName(name: unknown): WebGroup {
   return webUnitStatus({ TenTT: name });
 }
 
+export type ProjectUnitCounts = { total: number } & Record<WebGroup, number>;
+
+/**
+ * Số căn của dự án theo nhóm sơ đồ web, từ `trang_thai_can` của fn_nv_app_du_an_list ([{ ten, so_can }] = căn đã xếp trên sơ đồ
+ * theo tên trạng thái) — cùng luật + cùng tập căn với chi tiết dự án / Sản phẩm › Tổng quan. Không có trường (API cũ) ⇒ null.
+ */
+export function projectUnitCounts(rows: unknown): ProjectUnitCounts | null {
+  if (!Array.isArray(rows)) return null;
+  const out: ProjectUnitCounts = { total: 0, available: 0, hold: 0, sold: 0, blocked: 0 };
+  for (const r of rows) {
+    const n = Math.max(0, Math.floor(Number((r as any)?.so_can) || 0));
+    if (!n) continue;
+    out.total += n;
+    out[groupFromName((r as any)?.ten)] += n;
+  }
+  return out;
+}
+
 const OPEN_FOR_SALE_CODE = '2';
 const OPEN_FOR_SALE_NAMES = new Set(['mo ban', 'moban', 'open', 'open_for_sale']);
 

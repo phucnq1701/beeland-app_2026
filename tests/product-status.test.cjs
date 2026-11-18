@@ -69,3 +69,18 @@ test("projectStatus reads TenTT or MaTT like the old home carousel", () => {
   assert.deepEqual(plain(s.projectStatus({})), { label: "Đang bán", tone: "success" });
   assert.deepEqual(plain(s.projectStatus({ ten_tt: "Sắp mở bán" })), { label: "Sắp mở bán", tone: "success" });
 });
+
+test("projectUnitCounts: nhóm số căn thẻ dự án theo luật sơ đồ web (dữ liệu CS2 17-11)", () => {
+  const rows = [
+    { ten: "Booking chờ duyệt", so_can: 7 }, { ten: "Đã đặt cọc", so_can: 2 }, { ten: "ĐC chờ duyệt", so_can: 15 },
+    { ten: "HĐMB", so_can: 6 }, { ten: "HĐMB Chờ duyệt", so_can: 3 }, { ten: "Mở bán", so_can: 18 },
+    { ten: "TTĐC Chờ duyệt", so_can: 3 }, { ten: "TTĐM Chờ duyệt", so_can: 1 }, { ten: "Thanh lý chờ duyệt", so_can: 1 },
+  ];
+  assert.deepEqual(plain(s.projectUnitCounts(rows)), { total: 56, available: 18, hold: 9, sold: 0, blocked: 29 });
+  // Căn chưa có trạng thái (ten null) ⇒ Khóa như sơ đồ; số lỗi / âm bỏ qua
+  assert.deepEqual(plain(s.projectUnitCounts([{ ten: null, so_can: 2 }, { ten: "Mở bán", so_can: "x" }, { ten: "Mở bán", so_can: -3 }])),
+    { total: 2, available: 0, hold: 0, sold: 0, blocked: 2 });
+  assert.deepEqual(plain(s.projectUnitCounts([])), { total: 0, available: 0, hold: 0, sold: 0, blocked: 0 });
+  // API cũ chưa trả trường ⇒ null (thẻ không hiện dòng số căn)
+  assert.equal(s.projectUnitCounts(undefined), null);
+});

@@ -18,6 +18,8 @@ test("dự án: ảnh nền > icon > ảnh dự án; đường dẫn tương đ�
   assert.equal(p.is_active, true);
   assert.equal(lib.mapProject({ id: uid(2), ten_viet_tat: "VT" }).TenDA, "VT");
   assert.equal(lib.mapProject({ id: uid(2) }).MaDA, uid(2));
+  assert.equal(lib.mapProject({ id: uid(2) }).trangThaiCan, null);
+  deq(lib.mapProject({ id: uid(2), trang_thai_can: [{ ten: "Mở bán", so_can: 3 }] }).trangThaiCan, [{ ten: "Mở bán", so_can: 3 }]);
 });
 
 test("bộ lọc: khu + trạng thái (màu mặc định khi trống, giữ mã danh mục cho realtime)", () => {
